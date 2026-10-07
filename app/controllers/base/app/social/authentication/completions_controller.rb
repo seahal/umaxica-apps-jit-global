@@ -25,10 +25,12 @@ module Base
             end
 
             render "base/shared/result_continuation", layout: false,
-                                                      locals: { action_url: "#{request.path}?id=#{CGI.escape(provider)}",
-                                                                result_ref: result_reference,
-                                                                transaction_ref: nil,
-                                                                ri: params[:ri], }
+                                                      locals: {
+                                                        action_url: "#{request.path}?id=#{CGI.escape(provider)}",
+                                                        result_ref: result_reference,
+                                                        transaction_ref: nil,
+                                                        ri: params[:ri],
+                                                      }
           rescue ActionController::BadRequest
             render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
           end

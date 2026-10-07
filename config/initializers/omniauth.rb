@@ -332,6 +332,9 @@ end
 # OmniAuth request phase accepts only the Rails authenticity-token-protected form submission.
 # Callback state validation is enforced by SocialCallbackGuard and CallbackStateStore.
 OmniAuth.config.allowed_request_methods = [:post]
+Rails.application.config.to_prepare do
+  OmniAuth.config.request_validation_phase = OmniauthRailsCsrfVerifier.new
+end
 OmniAuth.config.after_request_phase = proc { |env| SocialCallbackGuard.capture_request_state!(env) }
 
 # =============================================================================
@@ -380,10 +383,15 @@ end
 OmniAuth.config.on_failure =
   proc do |env|
     request = Rack::Request.new(env)
-    message = env["omniauth.error.type"]&.to_s || "unknown_error"
+    error = env["omniauth.error"]
+    message =
+      if error.is_a?(ActionController::InvalidCrossOriginRequest)
+        "csrf_detected"
+      else
+        env["omniauth.error.type"]&.to_s || "unknown_error"
+      end
     strategy = env["omniauth.error.strategy"]&.name || "unknown"
 
-    error = env["omniauth.error"]
     if error && OmniAuthFatalFailure.defect?(error)
       OmniAuthFatalFailure.log!(error, strategy: strategy)
       next OmniAuthFatalFailure.response

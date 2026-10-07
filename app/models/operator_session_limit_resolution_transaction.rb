@@ -4,6 +4,18 @@
 class OperatorSessionLimitResolutionTransaction < OrgTicketRecord
   include SessionLimitResolutionTransactionable
 
+  self.belongs_to_required_by_default = false
+
+  validates :actor_ref, :browser_binding_digest, :started_at, :expires_at,
+            presence: true
+  validates :challenge_digest, presence: true, uniqueness: true
+  # belongs_to_required_by_default is disabled, so keep these explicit checks.
+  # rubocop:disable Rails/RedundantPresenceValidationOnBelongsTo
+  validates :state_id, :sign_in_flow_id, presence: true
+  # rubocop:enable Rails/RedundantPresenceValidationOnBelongsTo
+  validates :state_id,
+            inclusion: { in: SessionLimitResolutionTransactionable::TRANSITIONS.keys }
+
   belongs_to :state, class_name: "OperatorSessionLimitResolutionState",
                      inverse_of: :operator_session_limit_resolution_transactions
   belongs_to :sign_in_flow, class_name: "OperatorSignInFlow",

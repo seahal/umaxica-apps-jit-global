@@ -56,14 +56,18 @@ class StepUpPasskeyChallengeTest < ActiveSupport::TestCase
   test "a challenge is bound to the concrete transaction and consumed once" do
     actor = clients(:one)
     token = ClientToken.create!(user: actor)
-    issuance = issue_base_step_up_admission!(
+    token.rotate_refresh_token!
+    issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
+        step_up_required: true, phishing_resistant_required: false,
+        user_verification_required: false, full_reauthentication_required: false,
         scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-        require_session_binding: true,
+        require_session_binding: true, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil,
       ),
-      return_to: "/identity/birthdate",
+      return_to: "/identity/birthdate", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: token,
     )
     record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
     reference = record.issue_bound_passkey_challenge!(

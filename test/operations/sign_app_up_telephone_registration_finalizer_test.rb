@@ -38,18 +38,24 @@ class SignAppUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
       sign_count: 0,
     )
 
-    assert_difference -> { ClientChronicle.where(event_id: ClientChronicleEvent::SIGNED_UP_WITH_TELEPHONE).count }, 1 do
-      result = SignAppUpTelephoneRegistrationFinalizer.call(telephone: telephone)
+    operation_ref = SecureRandom.uuid
+    context = ActorValuesContext.empty.with(tld: :app, surface: :sign)
+    assert_difference "ClientContactAuditOutbox.count", 1 do
+      result = SignAppUpTelephoneRegistrationFinalizer.call(
+        telephone: telephone, actor_context: context, operation_ref: operation_ref,
+      )
 
       assert_equal user, result.user
     end
 
-    activity = ClientChronicle.order(:created_at).last
+    activity = ClientContactAuditOutbox.find_by!(operation_ref: operation_ref)
 
-    assert_equal ClientChronicleEvent::SIGNED_UP_WITH_TELEPHONE, activity.event_id
-    assert_equal user, activity.actor
-    assert_equal user.id.to_s, activity.subject_id
-    assert_equal "Client", activity.subject_type
+    assert_equal "finalized", activity.event_name
+    assert_equal "telephone", activity.contact_kind
+    assert_equal user.public_id, activity.owner_ref
+    assert_equal telephone.public_id, activity.contact_ref
+    assert_nil activity.actor_ref
+    assert_nil activity.acknowledged_at
     assert_equal ClientTelephoneStatus::VERIFIED_WITH_SIGN_UP, telephone.reload.user_telephone_status_id
     assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, user.reload.status_id
     assert_equal "0", telephone.otp_counter
@@ -76,7 +82,10 @@ class SignAppUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
 
     assert_no_difference -> { ClientChronicle.where(event_id: ClientChronicleEvent::SIGNED_UP_WITH_TELEPHONE).count } do
       assert_raises(SignAppUpTelephoneRegistrationFinalizer::PasskeyMissingError) do
-        SignAppUpTelephoneRegistrationFinalizer.call(telephone: telephone)
+        SignAppUpTelephoneRegistrationFinalizer.call(
+          telephone: telephone,
+          actor_context: ActorValuesContext.empty.with(tld: :app, surface: :sign), operation_ref: SecureRandom.uuid,
+        )
       end
     end
 

@@ -41,6 +41,7 @@ Keep social ceremony results and candidates one-shot. If a browser retries the s
 `social_ceremony_result` after Acme has consumed it, the retry must fail closed instead of creating
 or reusing a session.
 
+
 ## Consequences
 
 - Logs must classify successful provider callback plus Acme `429` as cooldown enforcement.

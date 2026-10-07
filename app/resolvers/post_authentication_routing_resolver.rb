@@ -12,6 +12,7 @@ class PostAuthenticationRoutingResolver
       rp_continuation: rp_continuation,
     ).call
   end
+  public_class_method :call
 
   def initialize(flow:, default_path:, oidc_continuation:, rp_continuation:)
     @flow = flow
@@ -19,6 +20,8 @@ class PostAuthenticationRoutingResolver
     @oidc_continuation = oidc_continuation
     @rp_continuation = rp_continuation
   end
+
+  public
 
   def call
     raise ArgumentError, "post-auth routing requires a completed sign-in flow" unless flow.sign_in_completed?

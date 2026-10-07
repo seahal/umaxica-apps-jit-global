@@ -7,6 +7,8 @@ class ClientSecretManualReattemptIssuer
   class Denied < StandardError; end
 
   class << self
+    public
+
     def call!(actor_context:, token:, predecessor:, purge_after:)
       validate_input!(actor_context, token, predecessor, purge_after)
 
@@ -40,29 +42,48 @@ class ClientSecretManualReattemptIssuer
       actor = context.subject
       current = ClientToken.lock.find_by(id: token.id, public_id: token.public_id, user_id: actor.id)
       raise Denied, "Secret reattempt session is unavailable" unless current
+
+      validate_predecessor!(actor, current, predecessor)
+
+      successor_attempt = predecessor.attempt_number + 1
+      successor = find_successor(actor, predecessor, successor_attempt)
+      return successor if successor
+
+      ensure_predecessor_is_latest!(actor, predecessor)
+      now = Client.database_now
+      ensure_current_step_up!(actor, current, now)
+      ensure_manual_secret_capacity!(actor, now)
+      create_successor!(context, actor, current, predecessor, successor_attempt, now)
+    end
+
+    def validate_predecessor!(actor, current, predecessor)
       raise Denied, "Secret reattempt belongs to another Client" unless predecessor.client_id == actor.id
       raise Denied, "Only manual Secret allocations can be reattempted" unless predecessor.origin == "manual"
       raise Denied,
             "Secret reattempt requires the original session" unless predecessor.browser_session_ref == current.public_id
       raise Denied, "Secret reattempt requires the exact predecessor" unless payload_failed?(predecessor)
+    end
 
-      successor_attempt = predecessor.attempt_number + 1
-      successor = ClientSecretIssuance.lock.find_by(
+    def find_successor(actor, predecessor, successor_attempt)
+      ClientSecretIssuance.lock.find_by(
         origin_operation_id: predecessor.origin_operation_id,
         attempt_number: successor_attempt,
         client_id: actor.id,
         origin: "manual",
       )
-      return successor if successor
+    end
 
+    def ensure_predecessor_is_latest!(actor, predecessor)
       latest_attempt = ClientSecretIssuance.where(
         client_id: actor.id, origin_operation_id: predecessor.origin_operation_id, origin: "manual",
       ).maximum(:attempt_number)
-      unless latest_attempt == predecessor.attempt_number
-        raise Denied, "Secret reattempt requires the exact latest predecessor"
-      end
+      return if latest_attempt == predecessor.attempt_number
 
-      now = Client.database_now
+      raise Denied, "Secret reattempt requires the exact latest predecessor"
+
+    end
+
+    def ensure_current_step_up!(actor, current, now)
       requirement = StepUpRequirement.new(
         scope: "settings_secret_credential", step_up_required: true, allowed_methods: %i(passkey totp email_otp),
         phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
@@ -74,11 +95,15 @@ class ClientSecretManualReattemptIssuer
           StepUpResolver.call(token: current, requirement: requirement, now: now).satisfied?
         raise Denied, "Secret reattempt requires current scoped Step-Up"
       end
+    end
 
+    def ensure_manual_secret_capacity!(actor, now)
       capacity = ClientSecretCapacityQuery.call(client: actor, at: now)
       raise ClientSecretManualReservationIssuer::CapacityFull,
             "twenty active Secrets prevent reattempt" if capacity.manual_count.zero?
+    end
 
+    def create_successor!(context, actor, current, predecessor, successor_attempt, now)
       deadline = [now + ClientSecretLifetimesValue.issuance_ttl, current.last_step_up_at + StepUpRequirement::DEFAULT_TTL].min.round(6)
       raise ArgumentError, "Secret reattempt expiry must advance the database timestamp" unless deadline > now
 

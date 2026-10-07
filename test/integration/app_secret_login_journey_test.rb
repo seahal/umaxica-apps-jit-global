@@ -72,10 +72,20 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
           "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
         )
       root_access_token = base_headers.fetch("Authorization").delete_prefix("Bearer ")
-      base.cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = root_access_token
+      installed_root = base.cookies.merge(
+        "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(root_access_token)}",
+        URI.parse("https://#{base_host}/"),
+      )
+
       base.get(new_base_app_identity_passkey_path(ri: "jp"), headers: base_headers)
 
+      assert_equal [["#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(root_access_token)}"], 200],
+                   [installed_root, base.response.status]
+      csrf = base.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      base.post(base_app_identity_passkeys_path(ri: "jp"), params: { authenticity_token: csrf }, headers: base_headers)
+
       assert_equal 303, base.response.status, base.response.body
+      sync_response_cookie!(base, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?))
       registration_uri = URI.parse(base.response.location)
 
       assert_equal auth_host, registration_uri.host
@@ -266,7 +276,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "manual HTTP delivery and storage confirmation lead to one canonical Base Secret login" do
+  test "manual HTTP delivery and storage confirmation lead to one canonical Base Secret login" do # rubocop:disable Minitest/MultipleAssertions -- Verifies each observable boundary in one browser journey.
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     issuer = JitSecurityJwtRegistry.surface("BASE_APP")
@@ -406,7 +416,10 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     assert_no_difference("ClientToken.count") do
       browser.post(
         auth_app_sign_in_secret_path(ri: "jp"), params: {
-          :identifier => identifier, :secret => raw, :authenticity_token => csrf, "cf-turnstile-response" => "synthetic",
+          :identifier => identifier,
+          :secret => raw,
+          :authenticity_token => csrf,
+          "cf-turnstile-response" => "synthetic",
         }, headers: auth_headers,
       )
     end
@@ -641,7 +654,9 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     assert_equal 200, base.response.status
     form = Nokogiri::HTML(base.response.body).at_css("form")
     completion_params = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    step_up_transaction = ClientStepUpCeremonyTransaction.find_by!(transaction_id: completion_params.fetch("transaction_ref"))
+    step_up_transaction = ClientStepUpCeremonyTransaction.find_by!(
+      transaction_id: completion_params.fetch("transaction_ref"),
+    )
     base.post(
       form["action"], params: completion_params,
                       headers: base_headers,
@@ -806,6 +821,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       params: form.css("input[name]").to_h { |input| [input["name"], input["value"]] },
       headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
     )
+    sync_response_cookie!(base, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?))
 
     decode_base_jump_target!(base.response.location, base_host: base_host)
   end

@@ -98,3 +98,12 @@ previously shipped as defects, so static tests reject their reintroduction.
   `WebAuthn.configure` state.
 - `from_get` and `from_create` always receive an explicit `relying_party:` argument.
 - Origin comparison requires an exact scheme, host, and effective port match.
+
+## Delivered reconciliation (2026-10-06)
+
+These invariants now cover the shared assertion path as well as registration: decoded returned
+`userHandle` bytes must equal the stored opaque Identity handle, and actor-known assertions must
+belong to the current Identity. Passkey registration is a separate bootstrap or credential-
+registration transaction and never silently becomes step-up freshness. The implementation and
+tests are current for app, com and org; real authenticator/provider deployment verification is
+still an operational prerequisite.

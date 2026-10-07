@@ -10,9 +10,14 @@ module Auth
             class OtpsController < ::Auth::Com::ApplicationController
               AUTHENTICATION_MODE = :guest
 
+              prepend_before_action :require_sign_in_ceremony_admission!
+              ensure_fqdn_gate_first!
+
               def create
                 result = SignInOtpResender.new(
                   kind: :email, state: otp_params[:state], surface: :com,
+                  browser_binding: admitted_auth_ceremony_session.sid_digest,
+                  ceremony: admitted_auth_ceremony_session,
                 ).call
                 render_result(result)
               end

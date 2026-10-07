@@ -4,6 +4,7 @@
 module BaseAppAvatarSocialGraphActions
   extend ActiveSupport::Concern
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_action :authenticate_client!
   end

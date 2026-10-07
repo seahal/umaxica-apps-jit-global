@@ -50,4 +50,16 @@ Rails.application.configure do
         host: event.payload[:host],
       }.compact
     end
+
+  config.lograge.before_format =
+    lambda do |data, _payload|
+      data[:path] = ObservabilityRedactor.scrub_path(data[:path]) if data.key?(:path)
+      if data.key?(:location)
+        location = data.fetch(:location)
+        data[:location] =
+          location.start_with?("/") ? ObservabilityRedactor.scrub_path(location) :
+                 ObservabilityRedactor.scrub_url(location)
+      end
+      data
+    end
 end

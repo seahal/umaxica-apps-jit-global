@@ -78,7 +78,9 @@ export default function TotpShow({
           type="button"
           variant="danger"
           onPress={() =>
-            confirm({ message: destroy.confirm, confirmLabel: destroy.label }, () => router.delete(destroy.action))
+            confirm({ message: destroy.confirm, confirmLabel: destroy.label }, () =>
+              router.delete(destroy.action),
+            )
           }
         >
           {destroy.label}

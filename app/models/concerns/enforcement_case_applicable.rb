@@ -27,6 +27,7 @@ module EnforcementCaseApplicable
 
   class InvalidStateTransitionError < StandardError; end
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     validates :public_id, presence: true, uniqueness: true, length: { maximum: 21 }
     validates :kind, presence: true, inclusion: { in: KINDS }

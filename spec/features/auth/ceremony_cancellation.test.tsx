@@ -29,7 +29,7 @@ describe("CeremonyCancellation", () => {
     expect(token?.value).toBe("");
 
     meta.content = "token-at-submit";
-    fireEvent.submit(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.submit(token!.form!);
 
     expect(token?.value).toBe("token-at-submit");
   });
@@ -43,7 +43,7 @@ describe("CeremonyCancellation", () => {
       />,
     );
 
-    fireEvent.submit(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.submit(screen.getByRole("button", { name: "Cancel" }).closest("form")!);
 
     expect(
       container.querySelector<HTMLInputElement>('input[name="authenticity_token"]')?.value,

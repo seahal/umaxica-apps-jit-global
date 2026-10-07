@@ -41,6 +41,10 @@ The current access log pipeline is:
 - `config/initializers/lograge.rb`
 - `config.lograge.enabled = !Rails.env.test?`
 - `config.lograge.formatter = Lograge::Formatters::Json.new`
+- The `before_format` boundary redacts Base/Auth admission confirmation references in request and
+  redirect paths. Parameter filtering also covers admission references, ceremony sid values, and
+  browser-proof digests; the Rails performance path sanitizer applies the same path redaction before
+  writing telemetry. Query stripping alone does not protect an opaque reference in a path segment.
 - `config.lograge.logger` writes one JSON object per line to stdout, and in development also to
   `log/development.access.jsonl` so Alloy can ship it to Loki
   (`adr/application-logging-boundary.md`). The line is identical; only the destinations differ.
@@ -144,8 +148,8 @@ must not be emitted.
 Storage does not merge the layers; it only makes them queryable in one place.
 
 ```text
-Lograge access logs      -> log/development.access.jsonl -> Alloy -> Loki    (24h)
-Rails.logger application -> log/development.log          -> Alloy -> Loki    (24h)
+Lograge access logs      -> log/development.access.jsonl -> Alloy -> Loki    (14d)
+Rails.logger application -> log/development.log          -> Alloy -> Loki    (14d)
 OpenTelemetry traces     -> OTLP 127.0.0.1:4318          -> Alloy -> Tempo   (24h)
 metrics                  -> Alloy self-metrics           -> Alloy -> Prometheus (24h)
 audit / security records -> database tables                                  (authoritative)
@@ -156,7 +160,7 @@ only — never through Cloudflare Tunnel, Tailscale, or the LAN.
 
 Two rules follow from this and are not negotiable:
 
-- **Audit and security records never move to Loki.** Loki is a bounded 24h development copy of
+- **Audit and security records never move to Loki.** Loki is a bounded 14-day development copy of
   diagnostic output. It is not a record of fact, it is not retained, and it is not access-controlled
   the way the audit tables are. A durable record belongs in the database whether or not the same
   event also produces a log line.

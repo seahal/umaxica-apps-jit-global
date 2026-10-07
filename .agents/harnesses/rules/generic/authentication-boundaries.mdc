@@ -1,0 +1,30 @@
+---
+name: authentication-boundaries
+description: Preserve Rails forgery protection, browser-bound ceremony admission, explicit step-up requirements, and Auth's ceremony-only role.
+---
+
+# Authentication Boundary Contract
+
+## CSRF and browser binding
+
+- Use the Rails forgery-protection implementation for state-changing browser requests. Do not add
+  custom acceptance in `verified_request?`, `valid_request_origin?`, a controller override, a null
+  session, or a skipped callback.
+- A browser-bound admission may add a nonce or digest as defense in depth, but it never replaces
+  Rails CSRF, Origin and Fetch Metadata checks. The nonce is server-issued, bound to the initiating
+  browser and operation, single-use, and refused when stale, cross-browser, mismatched or replayed.
+- GET and HEAD do not create reservations, candidates, proofs, grants or ceremony state.
+
+## Auth and step-up ownership
+
+- Auth is a ceremony/workflow boundary. Do not add a general Auth login session, shared-domain
+  authentication cookie, RP credential fallback, or authority token issuer. The D-82 Base/Auth
+  admission binding is the only accepted exception.
+- A step-up requirement is an explicit object. Preserve its purpose, allowed methods, freshness,
+  user-verification, phishing-resistance, full-reauthentication, actor, resource, tenant, session
+  and transaction bindings through admission, result delivery and final mutation.
+- AAL labels are historical evidence labels only. They must not authorize an operation, substitute
+  for a missing requirement, or be translated into a stronger requirement.
+
+Unexpected, missing or contradictory evidence is an explicit refusal. Do not infer a substitute
+credential, session, browser, actor or assurance level.

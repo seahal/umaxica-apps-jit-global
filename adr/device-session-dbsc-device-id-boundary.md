@@ -152,3 +152,12 @@ lookup code may need to accept legacy token public identifiers as a fallback.
 - GH issue #610
 - `docs/architecture/dbsc.md`
 - `docs/architecture/dpop.md`
+
+## Delivered reconciliation (2026-10-06)
+
+Device sessions are the parent boundary for token rotation and RP sessions. Token references are
+non-null after deterministic backfill and validated foreign keys; unusable device sessions do not
+count toward active-session capacity. Logout and refresh serialize through the stable device
+session, and the current pointer is updated without reintroducing nullable-token or legacy
+`session_version` behavior. The historical fallback language above is superseded for the migrated
+schema; old data is handled by the forward migration and disposable upgrade evidence.

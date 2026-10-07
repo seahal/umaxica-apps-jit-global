@@ -127,8 +127,16 @@
     linear-gradient(to left, var(--ui-surface) 30%, transparent),
     linear-gradient(to right, color-mix(in srgb, var(--ui-fg) 20%, transparent), transparent),
     linear-gradient(to left, color-mix(in srgb, var(--ui-fg) 20%, transparent), transparent);
-  background-position: left center, right center, left center, right center;
-  background-size: 2rem 100%, 2rem 100%, 1rem 100%, 1rem 100%;
+  background-position:
+    left center,
+    right center,
+    left center,
+    right center;
+  background-size:
+    2rem 100%,
+    2rem 100%,
+    1rem 100%,
+    1rem 100%;
   background-repeat: no-repeat;
   background-attachment: local, local, scroll, scroll;
   scrollbar-color: var(--ui-control-border) var(--ui-surface);
@@ -137,5 +145,7 @@
   background: transparent;
 }
 @media (forced-colors: active) {
-  .ui-table-scroll { background-image: none; }
+  .ui-table-scroll {
+    background-image: none;
+  }
 }

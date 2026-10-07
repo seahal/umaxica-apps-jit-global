@@ -88,6 +88,32 @@ app/values/step_up_requirement.rb
 | `SUPPORTED_AALS`, `aal_matches?`, `aal_rank`, `aal_supported?`, `achieved_aal` | Removed from runtime authorization APIs. | No production references remain outside this ledger and deprecation comments. |
 | External OIDC `acr` | Preserved as an external authentication-context claim; it is not translated into the internal step-up policy. | Only an explicitly accepted OIDC claims migration may change it. |
 
+## Delivered verification status
+
+The operation matrix above describes the delivered Phase 15–18 contract, not an unfinished target.
+Requirement construction is strict, is carried through admission, Auth, result delivery and Base
+acceptance, and is rechecked against the current actor, resource, tenant and session immediately
+before the protected mutation. Cancellation, conflict, stale-result, continuation and method-choice
+paths are terminal or explicitly restarted; they do not promote a redirect or return target to
+proof.
+
+| Requirement | Source | Implementation boundary | Verification | Status |
+| --- | --- | --- | --- | --- |
+| Strict requirement and unsupported legacy demand refusal | D-70, D-74 | `StepUpRequirement`, resolver and wire contracts | Phase 15 requirement and resolver tests | PASS |
+| One-event evidence and current-policy recheck | D-71, D-77 | ceremony transaction, result handoff and Base freshness committer | Phase 15 freshness and Phase 17 continuation tests | PASS |
+| Bootstrap separation and no re-bootstrap after credential history | D-72 | `BaseStepUpAdmissionIssuer`, bootstrap eligibility query | Phase 15 and Phase 18 registration tests | PASS |
+| Terminal, cancellation and conflict transitions | D-73, D-79 | `StepUpCeremonyTransactionable`, cancellation handoff and continuation controllers | Phase 17 targeted run | PASS |
+| Per-operation method inventory and removal safety | D-74, T15 | `AuthenticationCredentialInventory`, `AuthMethodGuard` and Base management boundaries | Phase 22 inventory/guard run | PASS |
+| Browser and deployment prerequisites | D-80/D-82 and rollout contract | Rails forgery protection, admission binding, FQDN/RP ID/Origin and provider configuration | Local integration and isolated DDL evidence; real-provider deployment | NOT VERIFIED |
+
+The product-specific boundaries are informed by OWASP ASVS 5.0.0 verification areas for session,
+authentication and access control, and by NIST SP 800-63B-4 §§3.1.2 and 4.3 for look-up secrets and
+authentication intent. These citations are supporting references, not a claim of whole-system ASVS
+or NIST conformance. See
+[RFC 9700 §4.7.1](https://www.rfc-editor.org/rfc/rfc9700.html#section-4.7.1) and the
+[OWASP CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+for the browser-bound admission threat model.
+
 ## Traceability status
 
 | Requirement | Source | Implementation | Test evidence | Status |

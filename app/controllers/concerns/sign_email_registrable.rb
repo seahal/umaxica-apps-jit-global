@@ -133,7 +133,12 @@ module SignEmailRegistrable
     result = nil
     begin
       @user_email.transaction do
-        result = verify_otp_code_and_consume(@user_email, submitted_code)
+        result = verify_otp_code_and_consume(
+          @user_email, submitted_code,
+          verification_scope: { surface: :app,
+                                purpose: :credential_registration,
+                                channel: :email, },
+        )
         if result[:success]
           @user_email.user_email_status_id = verified_email_status_id if commit_verified_status
 

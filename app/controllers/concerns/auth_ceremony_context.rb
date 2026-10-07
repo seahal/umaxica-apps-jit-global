@@ -20,6 +20,12 @@ module AuthCeremonyContext
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   end
 
+  def require_sign_up_ceremony_admission!
+    return if auth_ceremony_matches_intent?("sign_up")
+
+    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+  end
+
   def auth_ceremony_surface
     self.class.const_get(:AUTH_CEREMONY_SURFACE)
   end

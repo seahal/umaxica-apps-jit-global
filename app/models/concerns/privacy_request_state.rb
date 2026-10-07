@@ -8,6 +8,7 @@ module PrivacyRequestState
   JURISDICTIONS = %w(jp us_ca eu_eea unknown).freeze
   REQUEST_SOURCES = %w(self_service support_manual authorized_agent guardian).freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     include PublicId
     include Retainable

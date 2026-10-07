@@ -26,3 +26,11 @@ or store logout state.
 
 - `docs/security/session-token-authority.md`
 - `docs/security/redirect-vs-ceremony-result.md`
+
+## Delivered reconciliation (2026-10-06)
+
+Base is the physical authority and the first-party browser RP layer owns only its RP session and
+cookies. Surface-local logout launches and receives the authority ceremony; it does not use an RP
+credential as authority proof. Parent revocation, cleanup and finalization are durable and
+idempotent, while already-issued access JWTs follow their expiry contract. The older Acme-only
+ownership statements are retained as migration history, not as the active boundary.

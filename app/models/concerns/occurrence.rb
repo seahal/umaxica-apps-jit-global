@@ -6,6 +6,7 @@ module Occurrence
 
   include Retainable
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     validates :public_id,
               length: { is: 21 },

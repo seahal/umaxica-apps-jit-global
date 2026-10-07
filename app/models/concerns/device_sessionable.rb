@@ -9,6 +9,7 @@ module DeviceSessionable
   STATUS_ACTIVE = 1
   STATUS_REVOKED = 104
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     validates :public_id, uniqueness: true, length: { maximum: 21 }
     validates :status_id, presence: true

@@ -6,12 +6,6 @@
 module BrowserRpSafeRequestRefresh
   extend ActiveSupport::Concern
 
-  included do
-    include BrowserRpAuthentication
-
-    before_action :authenticate_browser_rp_safe_request!
-  end
-
   public
 
   def authenticate_browser_rp_safe_request!

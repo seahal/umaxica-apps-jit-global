@@ -51,7 +51,10 @@ class VisitorEmail < ComPrincipalRecord
   include PromotionalEmailUnsubscribable
   include ContactBinding
 
-  self.filter_attributes += %w(address)
+  scope :effective_binding, -> { where.not(binding_finalized_at: nil).where(binding_released_at: nil) }
+  validate :effective_binding_has_digest
+
+  self.filter_attributes += %w(address sign_up_otp_context credential_registration_otp_context)
 
   MAX_EMAILS_PER_VISITOR = 4
 

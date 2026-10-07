@@ -4,6 +4,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { SurfaceChrome } from "@/types/inertia";
+
 import { A_FUNCTION, containing } from "../../support/matchers";
 import { present } from "../../support/present";
 import { finishVisit, startVisit } from "../../support/visit";
@@ -15,10 +17,26 @@ import { finishVisit, startVisit } from "../../support/visit";
 // the arguments Inertia actually passes rather than against `any`.
 const patch = vi.fn<typeof inertiaRouter.patch>();
 const deleteRequest = vi.fn<typeof inertiaRouter.delete>();
-const THEME_CHROME = { theme_controls: { endpoint_url: "/api/v0/preferences/theme" } };
+const THEME_CHROME: SurfaceChrome = {
+  family_label: null,
+  surface: "app",
+  brand: { name: "Umaxica", href: "https://umaxica.app/" },
+  banner: null,
+  restricted_mode: null,
+  footer_navigation: null,
+  cookie_controls: null,
+  theme_controls: {
+    hidden: false,
+    endpoint_url: "/api/v0/preferences/theme",
+    title: "テーマ設定",
+    description: "表示テーマを選びます。",
+    options: { system: "システム", light: "ライト", dark: "ダーク" },
+  },
+  copyright: "(c) Umaxica",
+};
 const pageProps: {
   errors: Record<string, string>;
-  chrome: { theme_controls: { endpoint_url: string } | null };
+  chrome: SurfaceChrome;
 } = { errors: {}, chrome: THEME_CHROME };
 
 vi.mock("@/features/turnstile/TurnstileWidget", () => ({
@@ -226,7 +244,7 @@ describe("PreferenceSelect interaction", () => {
   });
 
   it("refuses to apply a theme when the page chrome declares no theme endpoint", () => {
-    pageProps.chrome = { theme_controls: null };
+    pageProps.chrome = { ...THEME_CHROME, theme_controls: null };
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -245,7 +263,7 @@ describe("PreferenceSelect interaction", () => {
     expect(() =>
       present(options, "the recorded visit options").onSuccess?.({
         component: "base/app/preference/option",
-        props: { errors: {} },
+        props: { errors: {}, chrome: THEME_CHROME },
         url: "/preference/theme/edit?ri=jp",
         version: "",
         clearHistory: false,

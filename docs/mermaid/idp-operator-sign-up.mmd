@@ -5,6 +5,10 @@ stateDiagram-v2
     state "CREDENTIAL_PENDING id=30" as CREDENTIAL_PENDING
     state "CHECKPOINT_PENDING id=40" as CHECKPOINT_PENDING
     state "COMPLETED id=100" as COMPLETED
+    state "FAILED id=900 (tombstone)" as FAILED
+    state "EXPIRED id=910" as EXPIRED
+    state "CANCELLED id=920" as CANCELLED
+    state "HALTED id=930" as HALTED
     [*] --> STARTED
     STARTED --> CONTACT_PENDING: advance_sign_up_to_contact!
     STARTED --> CREDENTIAL_PENDING: advance_sign_up_to_credential!
@@ -16,9 +20,24 @@ stateDiagram-v2
     CONTACT_PENDING --> COMPLETED: complete_sign_up!
     CREDENTIAL_PENDING --> COMPLETED: complete_sign_up!
     CHECKPOINT_PENDING --> COMPLETED: complete_sign_up!
+    STARTED --> EXPIRED: expire_sign_up!
+    STARTED --> CANCELLED: cancel_sign_up!
+    STARTED --> HALTED: halt_sign_up!
+    CONTACT_PENDING --> EXPIRED: expire_sign_up!
+    CONTACT_PENDING --> CANCELLED: cancel_sign_up!
+    CONTACT_PENDING --> HALTED: halt_sign_up!
+    CREDENTIAL_PENDING --> EXPIRED: expire_sign_up!
+    CREDENTIAL_PENDING --> CANCELLED: cancel_sign_up!
+    CREDENTIAL_PENDING --> HALTED: halt_sign_up!
+    CHECKPOINT_PENDING --> EXPIRED: expire_sign_up!
+    CHECKPOINT_PENDING --> CANCELLED: cancel_sign_up!
+    CHECKPOINT_PENDING --> HALTED: halt_sign_up!
     COMPLETED --> [*]
+    FAILED --> [*]
+    EXPIRED --> [*]
+    CANCELLED --> [*]
+    HALTED --> [*]
     note right of STARTED
-        Model-permitted edges are distinguished from service events.
-        Result failed is not necessarily stored FAILED.
-        Expiry after finalization is not a model edge.
+        The operator flow has no Auth handoff carrier.
+        Terminal transitions are named and absorbing.
     end note

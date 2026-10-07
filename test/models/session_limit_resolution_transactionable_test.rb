@@ -247,7 +247,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
     threads =
       2.times.map do
-        Thread.new do
+        Concurrent::Future.execute do
           AppTicketRecord.connection_pool.with_connection do
             barrier.wait
             binding = SecureRandom.urlsafe_base64(32)
@@ -261,11 +261,11 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
           results << e
         end
       end
-    threads.each(&:join)
+    threads.each(&:wait)
 
     outcomes = 2.times.map { results.pop }
 
-    assert outcomes.all? { |outcome| outcome.is_a?(SessionLimitResolutionTransactionable::Issuance) }, outcomes.inspect
+    assert_empty outcomes.reject { |outcome| outcome.is_a?(SessionLimitResolutionTransactionable::Issuance) }
     assert_equal 1, ClientSessionLimitResolutionTransaction.open.where(sign_in_flow_id: flow.id).count
     assert_equal 1, ClientSessionLimitResolutionTransaction.where(sign_in_flow_id: flow.id).count
     assert outcomes.map(&:challenge).all? { |challenge| challenge.present? }
@@ -289,7 +289,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
     threads =
       [first_token, second_token].map do |token|
-        Thread.new do
+        Concurrent::Future.execute do
           AppTicketRecord.connection_pool.with_connection do
             barrier.wait
             results << resolution_for_thread(issuance.transaction.id).select_session!(
@@ -301,7 +301,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
           results << e
         end
       end
-    threads.each(&:join)
+    threads.each(&:wait)
 
     outcomes = 2.times.map { results.pop }
 

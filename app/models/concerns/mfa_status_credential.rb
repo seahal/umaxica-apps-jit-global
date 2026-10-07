@@ -25,7 +25,14 @@ module MfaStatusCredential
     return unless owner&.respond_to?(:refresh_mfa_status!)
     return if owner.destroyed?
 
-    operation = -> { owner.refresh_mfa_status! }
+    # Credential commits can follow an owner promotion in the same transaction.
+    # Load persisted state under the owner lock without saving or discarding cached edits.
+    operation =
+      lambda do
+        owner.class.transaction do
+          owner.class.lock.find(owner.id).refresh_mfa_status!
+        end
+      end
     defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
   end
 end

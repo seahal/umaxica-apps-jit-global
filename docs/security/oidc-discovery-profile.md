@@ -74,3 +74,11 @@ URLs, key selection) does not depend on it and must never be broken by it.
 environments (`enforce_public_key_hygiene?`). Development and test may mint local keys; production,
 staging, review, and other non-local environments must provide deployable key identifiers. See
 `docs/operations/jwt-key-rotation.md` for rotation guidance.
+
+## Delivered reconciliation (2026-10-06)
+
+Base is the active OIDC discovery, authorization, token, UserInfo and logout authority. The
+discovery document is generated from the registered allowlist and advertises only supported grant
+types and endpoints. UserInfo accepts Bearer credentials on GET or POST and applies scope-filtered
+claims. The old Acme vocabulary at the top is historical; the current route and client registry
+are defined by the Base authority ADR and live route tests.

@@ -245,3 +245,11 @@ The purposes are deliberately distinct so a future decision can relax exactly on
 requires updating `docs/security/webauthn-security-invariants.md` and `adr/passkey-uv-policy.md`
 first. Only a user-verified, user-present assertion supports the AAL2-aligned claim
 (`Webauthn::AuthenticationContext#aal2_aligned?`).
+
+## Delivered reconciliation (2026-10-06)
+
+The AAL strings described here remain historical labels for protocol, storage and signed evidence.
+They do not authorize a session, operation or credential mutation. Current policy travels as an
+explicit step-up requirement and is rechecked at the protected mutation. Email OTP, TOTP and
+passkey method behavior is described by `docs/security/step-up-operation-inventory.md`; a caller
+cannot substitute an AAL label for that requirement.

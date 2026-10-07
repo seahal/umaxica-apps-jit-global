@@ -273,7 +273,7 @@ loki.process "access" {
 // ----------------------------------------------------------------------------
 // Export: logs to Loki
 // ----------------------------------------------------------------------------
-// Retention is Loki's (podman/loki/loki.yaml, 24h). Rotation of the files on
+// Retention is Loki's (podman/loki/loki.yaml, 14 days). Rotation of the files on
 // disk is Rails' (config/initializers/lograge.rb sizes and rotates the access
 // log; `log/development.log` is the framework's own file). Neither side keeps
 // development logs indefinitely.

@@ -45,6 +45,23 @@
 require "test_helper"
 
 class VisitorPasskeyTest < ActiveSupport::TestCase
+  test "passkey-only Visitor creates a usable credential with zero contacts" do
+    actor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+
+    assert_empty actor.visitor_emails
+    assert_empty actor.visitor_telephones
+
+    credential = actor.visitor_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "passkey-only-public-key",
+    )
+
+    assert_predicate credential, :persisted?
+    assert_equal VisitorPasskeyStatus::ACTIVE, credential.status_id
+    assert_equal actor.id, credential.visitor_id
+    assert_empty actor.visitor_emails.reload
+    assert_empty actor.visitor_telephones.reload
+  end
+
   test "retained terminal history does not consume the four Passkey slots" do
     actor = Visitor.create!
     actor.visitor_emails.create!(address: "slots-#{SecureRandom.hex(5)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED)
@@ -133,15 +150,19 @@ class VisitorPasskeyTest < ActiveSupport::TestCase
     assert_includes extra.errors[:base], "exceeds maximum passkeys per visitor (4)"
   end
 
-  test "requires verified recovery identity on create" do
-    unverified_visitor = Visitor.create!(
+  test "creation does not require a verified recovery identity" do
+    contactless_visitor = Visitor.create!(
       status_id: VisitorStatus::ACTIVE,
       visibility_id: VisitorVisibility::VISITOR,
     )
-    passkey = VisitorPasskey.new(@valid_params.merge(visitor: unverified_visitor))
+    passkey = VisitorPasskey.new(@valid_params.merge(visitor: contactless_visitor))
 
-    assert_not passkey.valid?
-    assert_includes passkey.errors[:base], Visitor::RECOVERY_IDENTITY_REQUIRED_MESSAGE
+    assert_not contactless_visitor.has_verified_recovery_identity?
+    assert_predicate passkey, :valid?
+    passkey.save!
+
+    assert_predicate passkey, :persisted?
+    assert_equal contactless_visitor.id, passkey.visitor_id
   end
 
   test "sets defaults on create" do

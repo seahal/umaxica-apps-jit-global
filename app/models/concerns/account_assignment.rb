@@ -6,6 +6,7 @@ module AccountAssignment
 
   include ::PublicId
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     scope :active, -> { where(revoked_at: nil) }
 

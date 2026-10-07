@@ -37,3 +37,11 @@ Downstream tokens must be:
 ## Related
 
 - `docs/security/session-token-authority.md`
+
+## Delivered reconciliation (2026-10-06)
+
+Base-issued credentials are the only downstream browser/RP token authority in this cycle. Issuer,
+audience, subject and RP-session binding are checked before a token is accepted; Auth ceremony
+results are not downstream access tokens. A parent security context can authorize an explicitly
+bound RP operation but never authenticates a missing RP credential. Legacy Sign/Acme wording above
+is migration history and is superseded by the Base/Warp registry.

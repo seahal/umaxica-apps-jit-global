@@ -53,8 +53,11 @@ const props = {
   panel: {
     options_url: "/verification/passkey/options?ri=jp",
     verification_url: "/verification/passkey?ri=jp",
-    region: "jp", identifier_param: null, field: null,
-    turnstile_site_key: "public-key", turnstile_error_message: "Turnstile failed",
+    region: "jp",
+    identifier_param: null,
+    field: null,
+    turnstile_site_key: "public-key",
+    turnstile_error_message: "Turnstile failed",
     submit_label: "パスキーで認証",
   },
   back: { label: "戻る", href: "/verification?ri=jp" },
@@ -100,18 +103,33 @@ describe("PasskeyVerification interaction", () => {
   it("submits the serialized assertion when the authenticator answers", async () => {
     passkeysSupported.mockReturnValue(true);
     getAssertion.mockResolvedValue(SERIALIZED_ASSERTION);
-    const fetchMock = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ options: { challenge: "abc" }, challenge_id: "challenge-1" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ status: "ok", redirect_url: "/verification/handoff?ri=jp" }), { status: 200 }));
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ options: { challenge: "abc" }, challenge_id: "challenge-1" }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ status: "ok", redirect_url: "/verification/handoff?ri=jp" }),
+          { status: 200 },
+        ),
+      );
     vi.stubGlobal("fetch", fetchMock);
     mount(<PasskeyVerification {...props} />);
     await click();
     expect(getAssertion).toHaveBeenCalledWith({ challenge: "abc" });
     expect(fetchMock.mock.calls[0]?.[0]).toBe(props.panel.options_url);
     expect(fetchMock.mock.calls[1]?.[0]).toBe(props.panel.verification_url);
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
-      challenge_id: "challenge-1", credential: SERIALIZED_ASSERTION, ri: "jp",
-    });
+    expect(fetchMock.mock.calls[1]?.[1]?.body).toBe(
+      JSON.stringify({
+        challenge_id: "challenge-1",
+        credential: SERIALIZED_ASSERTION,
+        ri: "jp",
+      }),
+    );
     expect(window.location.href).toBe("/verification/handoff?ri=jp");
   });
 
@@ -128,7 +146,12 @@ describe("PasskeyVerification interaction", () => {
 
   it("refuses an options response with a missing challenge", async () => {
     passkeysSupported.mockReturnValue(true);
-    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ options: {} }), { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(JSON.stringify({ options: {} }), { status: 200 })),
+    );
     mount(<PasskeyVerification {...props} />);
     await click();
     expect(getAssertion).not.toHaveBeenCalled();
@@ -138,7 +161,14 @@ describe("PasskeyVerification interaction", () => {
   it("reports a cancelled ceremony without submitting", async () => {
     passkeysSupported.mockReturnValue(true);
     getAssertion.mockRejectedValue(new DOMException("cancelled", "NotAllowedError"));
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ options: { challenge: "abc" }, challenge_id: "challenge-1" }), { status: 200 }));
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ options: { challenge: "abc" }, challenge_id: "challenge-1" }),
+          { status: 200 },
+        ),
+      );
     vi.stubGlobal("fetch", fetchMock);
     mount(<PasskeyVerification {...props} />);
 

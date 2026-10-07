@@ -23,13 +23,14 @@ vi.mock("@inertiajs/react", () => ({
 
 const { default: SocialLinkStatus } = await import("@/features/auth/settings/SocialLinkStatus");
 const { default: SocialLinkManage } = await import("@/features/auth/settings/SocialLinkManage");
-const { default: PasskeysIndex } = await import("@/pages/auth/app/settings/passkeys/index");
-const { default: PasskeysShow } = await import("@/pages/auth/app/settings/passkeys/show");
-const { default: PasskeysNew } = await import("@/pages/auth/app/settings/passkeys/new");
-const { default: PasskeysEdit } = await import("@/pages/auth/app/settings/passkeys/edit");
-const { default: TotpsIndex } = await import("@/pages/auth/app/settings/totps/index");
+const { default: PasskeysIndex } = await import("@/pages/base/app/identity/passkeys/index");
+const { default: PasskeysShow } = await import("@/pages/base/app/identity/passkeys/show");
+const { default: PasskeysNew } =
+  await import("@/pages/auth/app/verification/registration/passkeys/new");
+const { default: PasskeysEdit } = await import("@/pages/base/app/identity/passkeys/show");
+const { default: TotpsIndex } = await import("@/pages/base/app/identity/totps/index");
 const { default: TotpsNew } = await import("@/pages/auth/app/settings/totps/new");
-const { default: TotpsEdit } = await import("@/pages/auth/app/settings/totps/edit");
+const { default: TotpsEdit } = await import("@/pages/base/app/identity/totps/show");
 
 const turnstile = {
   site_key: "site-key",
@@ -123,19 +124,12 @@ describe("social link screens", () => {
 describe("passkey settings screens", () => {
   const indexProps = {
     title: "Passkeys",
+    description: "Manage passkeys",
     back_link: { label: "もどる", href: "/settings" },
     new_link: { label: "追加", href: "/settings/passkeys/new?ri=jp" },
-    columns: {
-      description: "名前",
-      created_at: "作成日",
-      last_used_at: "最終利用",
-      actions: "操作",
-    },
+    remove_label: "削除",
+    remove_confirm: "削除しますか",
     empty_message: "登録がありません",
-    edit_label: "編集",
-    destroy_label: "削除",
-    destroy_confirm: "削除しますか",
-    turnstile,
   };
 
   it("lists every registered passkey with its actions", () => {
@@ -148,16 +142,16 @@ describe("passkey settings screens", () => {
             description: "MacBook",
             created_at: "2026/01/01",
             last_used_at: "-",
-            edit_href: "/settings/passkeys/pk_1/edit?ri=jp",
-            destroy_href: "/settings/passkeys/pk_1?ri=jp",
+            show_href: "/settings/passkeys/pk_1?ri=jp",
+            destroy_action: "/settings/passkeys/pk_1?ri=jp",
           },
         ]}
       />,
     );
 
     expect(html).toContain("MacBook");
-    expect(html).toContain('href="/settings/passkeys/pk_1/edit?ri=jp"');
-    expect(html).toContain("最終利用");
+    expect(html).toContain('href="/settings/passkeys/pk_1?ri=jp"');
+    expect(html).toContain("削除");
     expect(html).not.toContain("登録がありません");
   });
 
@@ -178,15 +172,30 @@ describe("passkey settings screens", () => {
         title="Passkey"
         description="登録済みのPasskey"
         back_link={{ label: "もどる", href: "/settings/passkeys?ri=jp" }}
-        passkey_description={null}
-        details={[{ key: "created_at", label: "作成日", value: "2026/01/01" }]}
-        edit_link={{ label: "編集", href: "/settings/passkeys/pk_1/edit?ri=jp" }}
+        passkey={{
+          public_id: "pk_1",
+          description: "",
+          created_at: "2026/01/01",
+          last_used_at: "-",
+        }}
+        form={{
+          action: "/settings/passkeys/pk_1?ri=jp",
+          description: "",
+          label: "名前",
+          submit_label: "保存",
+        }}
+        destroy={{
+          action: "/settings/passkeys/pk_1?ri=jp",
+          label: "削除",
+          confirm: "削除しますか",
+        }}
+        error={null}
       />,
     );
 
-    expect(html).toContain("作成日");
-    expect(html).toContain('href="/settings/passkeys/pk_1/edit?ri=jp"');
-    expect(html).not.toContain("削除");
+    expect(html).toContain("Created: 2026/01/01");
+    expect(html).toContain("保存");
+    expect(html).toContain("削除");
   });
 
   it("names the passkey when the server sent a description", () => {
@@ -195,9 +204,24 @@ describe("passkey settings screens", () => {
         title="Passkey"
         description="登録済みのPasskey"
         back_link={{ label: "もどる", href: "/settings/passkeys?ri=jp" }}
-        passkey_description="MacBook"
-        details={[{ key: "created_at", label: "作成日", value: "2026/01/01" }]}
-        edit_link={{ label: "編集", href: "/settings/passkeys/pk_1/edit?ri=jp" }}
+        passkey={{
+          public_id: "pk_1",
+          description: "MacBook",
+          created_at: null,
+          last_used_at: null,
+        }}
+        form={{
+          action: "/settings/passkeys/pk_1?ri=jp",
+          description: "MacBook",
+          label: "名前",
+          submit_label: "保存",
+        }}
+        destroy={{
+          action: "/settings/passkeys/pk_1?ri=jp",
+          label: "削除",
+          confirm: "削除しますか",
+        }}
+        error={null}
       />,
     );
 
@@ -209,8 +233,6 @@ describe("passkey settings screens", () => {
       <PasskeysNew
         title="Passkeyを追加"
         description="認証器を登録します"
-        back_link={{ label: "もどる", href: "/settings/passkeys?ri=jp" }}
-        cancel_link={{ label: "キャンセル", href: "/settings/passkeys" }}
         panel={{
           options_url: "/settings/passkeys/options",
           verification_url: "/settings/passkeys/verification",
@@ -220,6 +242,7 @@ describe("passkey settings screens", () => {
           description_placeholder: "MacBook",
           submit_label: "登録",
         }}
+        cancel={{ label: "キャンセル", action: "/settings/passkeys", method: "post" }}
       />,
     );
 
@@ -234,34 +257,36 @@ describe("passkey settings screens", () => {
         title="Passkeyの編集"
         description="名前を変更します"
         back_link={{ label: "もどる", href: "/settings/passkeys?ri=jp" }}
+        passkey={{
+          public_id: "pk_1",
+          description: "MacBook",
+          created_at: null,
+          last_used_at: null,
+        }}
         form={{
           action: "/settings/passkeys/pk_1?ri=jp",
-          scope: "client_passkey",
-          description_label: "名前",
           description: "MacBook",
+          label: "名前",
           submit_label: "保存",
         }}
-        cancel_link={{ label: "キャンセル", href: "/settings/passkeys" }}
         destroy={{
           action: "/settings/passkeys/pk_1?ri=jp",
-          submit_label: "削除",
-          confirm_message: "削除しますか",
+          label: "削除",
+          confirm: "削除しますか",
         }}
-        turnstile={turnstile}
-        error_header="1件のエラー"
-        error_messages={["名前を入力してください"]}
+        error="名前を入力してください"
       />,
     );
 
-    expect(html).toContain("1件のエラー");
     expect(html).toContain("名前を入力してください");
-    expect(html).toContain('name="cf-turnstile-response"');
+    expect(html).toContain("保存");
   });
 });
 
 describe("totp settings screens", () => {
   const indexProps = {
     title: "Totps",
+    description: "Manage authenticator apps",
     back_link: { label: "もどる", href: "/settings" },
     new_link: { label: "追加", href: "/settings/totps/new?ri=jp" },
     columns: { title: "名前", last_otp_at: "最終利用", status: "状態", actions: "Actions" },
@@ -279,7 +304,7 @@ describe("totp settings screens", () => {
             title: "iPhone",
             last_otp_at: "-",
             status: "有効",
-            edit_href: "/settings/totps/totp_1/edit?ri=jp",
+            show_href: "/settings/totps/totp_1?ri=jp",
           },
         ]}
       />,
@@ -287,7 +312,7 @@ describe("totp settings screens", () => {
 
     expect(html).toContain("iPhone");
     expect(html).toContain("有効");
-    expect(html).toContain('href="/settings/totps/totp_1/edit?ri=jp"');
+    expect(html).toContain('href="/settings/totps/totp_1?ri=jp"');
     expect(html).not.toContain("登録がありません");
   });
 
@@ -459,26 +484,22 @@ describe("totp settings screens", () => {
   it("shows the rename form and the removal action", () => {
     const html = renderToStaticMarkup(
       <TotpsEdit
-        title="認証アプリの編集"
+        title="認証アプリ"
         description="名前を変更します"
         back_link={{ label: "もどる", href: "/settings/totps?ri=jp" }}
+        totp={{ public_id: "totp_1", title: "iPhone", last_otp_at: "-", status: "有効" }}
         form={{
           action: "/settings/totps/totp_1?ri=jp",
-          scope: "user_totp_credential",
-          title_label: "名前",
-          title_placeholder: "iPhone",
-          title_hint: "わかりやすい名前",
           title: "iPhone",
+          label: "名前",
           submit_label: "保存",
         }}
-        cancel_link={{ label: "キャンセル", href: "/settings/totps?ri=jp" }}
         destroy={{
           action: "/settings/totps/totp_1?ri=jp",
-          submit_label: "削除",
-          confirm_message: "削除しますか",
+          label: "削除",
+          confirm: "削除しますか",
         }}
-        error_header={null}
-        error_messages={[]}
+        error={null}
       />,
     );
 

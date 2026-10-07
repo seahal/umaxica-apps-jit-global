@@ -142,7 +142,11 @@ module Auth
               end
 
               def complete_update_and_redirect
-                redirect_to(auth_com_sign_up_guard_telephone_path(ri: params[:ri], pt: signed_pt_param))
+                redirect_to(
+                  auth_com_sign_up_guard_telephone_path(
+                    **sign_up_flow_binding_params, ri: params[:ri], pt: signed_pt_param,
+                  ),
+                )
               end
 
               def render_otp_ceremony_result(result)

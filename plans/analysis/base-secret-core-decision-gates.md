@@ -85,3 +85,11 @@ item with its dependent operation. Review the three distinct axes: application
 boundary, login continuation, and deployment readiness. A completed boundary lane
 does not establish continuation or production routing; an unresolved refresh choice
 does not prevent completing independent Base or Secret behavior.
+
+## Reconciliation after `two.md` (2026-10-06)
+
+The gates for issuance lifetimes, capacity, identity-first claim, source/outbox authority snapshots,
+delivery reconciliation and app Secret DDL were resolved by the accepted implementation plan and
+its Phase 21–23 tests/evidence. The old rows that say Secret collection or failure coverage is
+incomplete are historical. Deployment FQDN/RP ID/Origin, real provider/OTP delivery, external edge
+routing and shared migration approval remain operational gates and are not silently inferred.

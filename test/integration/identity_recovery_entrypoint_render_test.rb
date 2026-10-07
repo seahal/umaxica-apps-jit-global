@@ -181,7 +181,9 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
 
   def create_verified_client_email(client, address:)
     ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
-    ClientEmail.create!(user: client, address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED)
+    ClientEmail.create!(
+      user: client, address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+    ).tap(&:finalize_binding!)
   end
 
   def create_visitor
@@ -196,7 +198,7 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     VisitorEmail.create!(
       visitor: visitor, address: address, confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
   end
 
   def otp_code_for(email)

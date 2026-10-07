@@ -21,7 +21,7 @@ module Valkey
 
       def issue!(locator:, transaction_ref:, surface:, actor_ref:, session_ref:, expires_at:, now: Time.current)
         payload = normalize_payload(
-          locator:, transaction_ref:, surface:, actor_ref:, session_ref:, expires_at:, now:,
+          transaction_ref:, surface:, actor_ref:, session_ref:, expires_at:, now:,
         )
         key = storage_key(locator:, transaction_ref:)
         encoded = JSON.generate(payload)
@@ -70,7 +70,7 @@ module Valkey
         @connection.key("base-step-up-marker:#{digest}")
       end
 
-      def normalize_payload(locator:, transaction_ref:, surface:, actor_ref:, session_ref:, expires_at:, now:)
+      def normalize_payload(transaction_ref:, surface:, actor_ref:, session_ref:, expires_at:, now:)
         raise ArgumentError, "Base step-up marker expires_at is invalid" unless expires_at.respond_to?(:to_time)
         raise ArgumentError, "Base step-up marker is expired" unless expires_at.to_time > now
 
@@ -90,7 +90,9 @@ module Valkey
       end
 
       def validate_payload!(payload)
-        raise TypeError unless payload.is_a?(Hash) && payload.keys.sort == FIELDS.sort && payload.fetch("version") == VERSION
+        unless payload.is_a?(Hash) && payload.keys.sort == FIELDS.sort && payload.fetch("version") == VERSION
+          raise TypeError
+        end
         raise TypeError if payload.values_at("transaction_ref", "surface", "actor_ref", "session_ref").any?(&:blank?)
 
         payload

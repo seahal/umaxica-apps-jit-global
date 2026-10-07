@@ -7,6 +7,7 @@ module MfaStatusTrackable
   class InvalidMfaStatus < StandardError; end
   REFERENCE_CLASSES = Concurrent::Map.new
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_validation :assign_calculated_mfa_status, if: :mfa_status_placeholder?
     after_create :refresh_mfa_status!

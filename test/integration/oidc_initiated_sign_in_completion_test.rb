@@ -42,7 +42,48 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "the sign-in entry stores the authorization transaction in Auth continuity" do
-    admit_sign_in!
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
+    @base_browser = open_session
+    @base_browser.host!(base_host)
+    @base_browser.https!
+    @base_browser.get("/oauth/authorize", params: parameters)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    @base_browser.post(
+      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
+                          headers: base_headers,
+    )
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
+    host!(@host)
+    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
+                            headers: auth_headers,
+    )
+    confirmation = URI.parse(response.location)
+    @base_browser.get(confirmation.request_uri)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    entry = URI.parse(@base_browser.response.location)
+    host!(@host)
+    get(entry.request_uri)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
+    )
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     record = ClientAuthCeremonySession.order(created_at: :desc).first
@@ -54,7 +95,48 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "the primary factor sends the ceremony to the sign-in checkpoint" do
-    admit_sign_in!
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
+    @base_browser = open_session
+    @base_browser.host!(base_host)
+    @base_browser.https!
+    @base_browser.get("/oauth/authorize", params: parameters)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    @base_browser.post(
+      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
+                          headers: base_headers,
+    )
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
+    host!(@host)
+    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
+                            headers: auth_headers,
+    )
+    confirmation = URI.parse(response.location)
+    @base_browser.get(confirmation.request_uri)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    entry = URI.parse(@base_browser.response.location)
+    host!(@host)
+    get(entry.request_uri)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
+    )
+
+    assert_response :see_other
+    follow_redirect!
 
     token_count = ClientToken.where(user_id: @user.id).count
     submit_email_otp!
@@ -74,29 +156,52 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     credential = client_secret_credentials(:one)
 
     assert_equal credential.id, ClientSecretLookupQuery.call(client: @user, secret: "a" * 32).id
-    @transaction = OidcAuthorizationTransactionCoordinator.issue!(
-      surface: "app", intent: "sign_in", ttl: 10.seconds, login_challenge_ttl: 10.seconds,
-      params: {
-        response_type: "code",
-        client_id: "core-app",
-        redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris_by_realm.fetch("client").first,
-        code_challenge: "challenge",
-        code_challenge_method: "S256",
-        state: "state",
-        nonce: "nonce",
-        scope: "openid profile",
-      },
-    ).transaction
-    reference = BaseAuthAdmissionCoordinator.issue_handoff!(
-      transaction: @transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
-    ).reference
-    redeem_auth_ceremony_entry!(
-      auth_app_sign_in_path, reference: reference,
-                             params: { ri: "jp" }, headers: { "Host" => @host },
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
+    @base_browser = open_session
+    @base_browser.host!(base_host)
+    @base_browser.https!
+    @base_browser.get("/oauth/authorize", params: parameters)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    @base_browser.post(
+      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
+                          headers: base_headers,
+    )
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
+    host!(@host)
+    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
+                            headers: auth_headers,
+    )
+    confirmation = URI.parse(response.location)
+    @base_browser.get(confirmation.request_uri)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    entry = URI.parse(@base_browser.response.location)
+    host!(@host)
+    get(entry.request_uri)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
     )
 
     assert_response :see_other
     follow_redirect!
+    deadline = ClientOidcAuthorizationTransaction.database_now + 10.seconds
+    @transaction.update!(expires_at: deadline, login_challenge_expires_at: deadline)
+
+    assert_response :success
     get new_auth_app_sign_in_secret_path(ri: "jp")
 
     assert_response :success
@@ -109,27 +214,22 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert credential.reload.claimed_at
     ceremony = ClientAuthCeremonySession.find(credential.claim_ceremony_session_id)
 
-    assert_equal "secret", ceremony.authentication_method
-    assert_nil credential.consumed_at
-    assert_nil ClientSecretLookupQuery.call(client: @user, secret: "a" * 32)
+    assert_equal ["secret", nil, nil],
+                 [ceremony.authentication_method, credential.consumed_at,
+                  ClientSecretLookupQuery.call(client: @user, secret: "a" * 32),]
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
 
     assert_response :success
-    assert_equal "passcode", @transaction.reload.auth_method
-    assert_equal "secret", @transaction.secret_sign_in_flow.authentication_method
-    assert_equal @user.public_id, @transaction.actor_ref
-    assert_nil @transaction.secret_sign_in_flow.session_issued_at
-    assert_nil @transaction.secret_sign_in_flow.token_id
-    assert_equal "SELECTOR_PENDING",
-                 @transaction.secret_sign_in_flow.state_name_for(@transaction.secret_sign_in_flow.state_id)
-    assert_predicate ceremony.reload, :completed?
-    assert_nil ceremony.revoked_at
-    assert_nil ceremony.cancelled_at
-    assert_equal "authentication_handoff", ceremony.admission_purpose
-    assert_equal "normal", @transaction.secret_sign_in_flow.authentication_context
-    assert_equal @user.id, @transaction.secret_sign_in_flow.principal_id
-    assert_equal @transaction.transaction_id, ceremony.authorization_transaction_ref
+    flow = @transaction.reload.secret_sign_in_flow
+
+    assert_equal ["passcode", "secret", @user.public_id, nil, nil, "SELECTOR_PENDING"],
+                 [@transaction.auth_method, flow.authentication_method, @transaction.actor_ref,
+                  flow.session_issued_at, flow.token_id, flow.state_name_for(flow.state_id),]
+    assert_equal [true, nil, nil, "authentication_handoff"],
+                 [ceremony.reload.completed?, ceremony.revoked_at, ceremony.cancelled_at, ceremony.admission_purpose]
+    assert_equal ["normal", @user.id, @transaction.transaction_id],
+                 [flow.authentication_context, flow.principal_id, ceremony.authorization_transaction_ref]
     action = @oidc_result_action
     assert_difference("ClientToken.count", 1) do
       post_oidc_result!(action: action)
@@ -145,8 +245,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
       post_oidc_result!(action: action)
     end
     assert_response :redirect
-    assert_equal root_token_ref, @transaction.reload.browser_session_ref
-    assert_equal consumed_at, credential.reload.consumed_at
+    assert_equal [root_token_ref, consumed_at], [@transaction.reload.browser_session_ref, credential.reload.consumed_at]
     ChronicleRetentionPolicy.find_by(code: "security") ||
       ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
     # Wait for the explicit one-second retention deadline, not a concurrency ordering.
@@ -155,21 +254,23 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     end
     ClientSecretLifecycleJob.perform_now(batch_size: 500)
 
-    assert_not ClientSecretCredential.exists?(credential.id)
-    assert ClientSecretSignInReceipt.exists?(operation_id: credential.claim_operation_id)
+    assert_equal [false, true],
+                 [ClientSecretCredential.exists?(credential.id),
+                  ClientSecretSignInReceipt.exists?(operation_id: credential.claim_operation_id),]
     OidcAuthorizationTransactionPurger.call(
       now: oidc_purge_now(@transaction),
     )
 
-    assert ClientOidcAuthorizationTransaction.exists?(@transaction.id),
-           "a surviving successful receipt retains its authorization proof"
-    assert_equal ClientTokenStatus::ACTIVE, @transaction.secret_sign_in_flow.token.reload.user_token_status_id
+    assert_equal [true, ClientTokenStatus::ACTIVE],
+                 [ClientOidcAuthorizationTransaction.exists?(@transaction.id),
+                  @transaction.secret_sign_in_flow.token.reload.user_token_status_id,],
+                 "a surviving successful receipt retains its authorization proof and active root"
     assert_equal :pending, ClientSecretSignInReceiptPurger.call!(
       receipt: ClientSecretSignInReceipt.find_by!(operation_id: credential.claim_operation_id),
       retention_after: 1.second,
     )
     flow = @transaction.secret_sign_in_flow
-    # Existing public coordinator TTL arguments bound this real continuation.
+    # Shortening the persisted parent deadline bounds the real continuation without extending its binding.
     deadline = [flow.expires_at, @transaction.expires_at, @transaction.login_challenge_expires_at].max + 1.second
     Timeout.timeout(15) do
       sleep 0.01 while ClientSignInFlow.database_now < deadline
@@ -194,13 +295,54 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     ClientSecretLifecycleJob.perform_now(batch_size: 500)
 
-    assert_not ClientSecretSignInReceipt.exists?(receipt.id)
-    assert_equal ClientTokenStatus::ACTIVE, flow.token.reload.user_token_status_id
+    assert_equal [false, ClientTokenStatus::ACTIVE],
+                 [ClientSecretSignInReceipt.exists?(receipt.id), flow.token.reload.user_token_status_id]
   end
 
   test "expired OIDC Secret flow rejects a delayed result without releasing its claim" do
     credential = client_secret_credentials(:one)
-    admit_sign_in!
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
+    @base_browser = open_session
+    @base_browser.host!(base_host)
+    @base_browser.https!
+    @base_browser.get("/oauth/authorize", params: parameters)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    @base_browser.post(
+      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
+                          headers: base_headers,
+    )
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
+    host!(@host)
+    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
+                            headers: auth_headers,
+    )
+    confirmation = URI.parse(response.location)
+    @base_browser.get(confirmation.request_uri)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    entry = URI.parse(@base_browser.response.location)
+    host!(@host)
+    get(entry.request_uri)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
+    )
+
+    assert_response :see_other
+    follow_redirect!
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
@@ -273,7 +415,48 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
   test "terminally failed OIDC Secret flow rejects delayed result before its deadline" do
     credential = client_secret_credentials(:one)
-    admit_sign_in!
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
+    @base_browser = open_session
+    @base_browser.host!(base_host)
+    @base_browser.https!
+    @base_browser.get("/oauth/authorize", params: parameters)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    @base_browser.post(
+      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
+                          headers: base_headers,
+    )
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
+    host!(@host)
+    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
+                            headers: auth_headers,
+    )
+    confirmation = URI.parse(response.location)
+    @base_browser.get(confirmation.request_uri)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    entry = URI.parse(@base_browser.response.location)
+    host!(@host)
+    get(entry.request_uri)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
+    )
+
+    assert_response :see_other
+    follow_redirect!
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
@@ -302,7 +485,48 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
   test "expired OIDC Secret limitation refuses session revocation" do
     client_secret_credentials(:one)
-    admit_sign_in!
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
+    @base_browser = open_session
+    @base_browser.host!(base_host)
+    @base_browser.https!
+    @base_browser.get("/oauth/authorize", params: parameters)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    @base_browser.post(
+      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
+                          headers: base_headers,
+    )
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
+    host!(@host)
+    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
+                            headers: auth_headers,
+    )
+    confirmation = URI.parse(response.location)
+    @base_browser.get(confirmation.request_uri)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    entry = URI.parse(@base_browser.response.location)
+    host!(@host)
+    get(entry.request_uri)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
+    )
+
+    assert_response :see_other
+    follow_redirect!
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
@@ -335,7 +559,48 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
   test "canceling OIDC Secret session limit ends its flow and rejects old results" do
     credential = client_secret_credentials(:one)
-    admit_sign_in!
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
+    @base_browser = open_session
+    @base_browser.host!(base_host)
+    @base_browser.https!
+    @base_browser.get("/oauth/authorize", params: parameters)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    @base_browser.post(
+      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
+                          headers: base_headers,
+    )
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
+    host!(@host)
+    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
+                            headers: auth_headers,
+    )
+    confirmation = URI.parse(response.location)
+    @base_browser.get(confirmation.request_uri)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    entry = URI.parse(@base_browser.response.location)
+    host!(@host)
+    get(entry.request_uri)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
+    )
+
+    assert_response :see_other
+    follow_redirect!
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
@@ -373,7 +638,48 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
   test "OIDC Secret session limit continuation preserves claim and commits its receipt" do
     credential = client_secret_credentials(:one)
-    admit_sign_in!
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
+    @base_browser = open_session
+    @base_browser.host!(base_host)
+    @base_browser.https!
+    @base_browser.get("/oauth/authorize", params: parameters)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    @base_browser.post(
+      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
+                          headers: base_headers,
+    )
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
+    host!(@host)
+    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
+                            headers: auth_headers,
+    )
+    confirmation = URI.parse(response.location)
+    @base_browser.get(confirmation.request_uri)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    entry = URI.parse(@base_browser.response.location)
+    host!(@host)
+    get(entry.request_uri)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
+    )
+
+    assert_response :see_other
+    follow_redirect!
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
@@ -422,7 +728,48 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "the local handoff POST binds the signed-in actor to the authorization transaction" do
-    admit_sign_in!
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
+    @base_browser = open_session
+    @base_browser.host!(base_host)
+    @base_browser.https!
+    @base_browser.get("/oauth/authorize", params: parameters)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    @base_browser.post(
+      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
+                          headers: base_headers,
+    )
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
+    host!(@host)
+    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
+                            headers: auth_headers,
+    )
+    confirmation = URI.parse(response.location)
+    @base_browser.get(confirmation.request_uri)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    entry = URI.parse(@base_browser.response.location)
+    host!(@host)
+    get(entry.request_uri)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
+    )
+
+    assert_response :see_other
+    follow_redirect!
     submit_email_otp!
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
@@ -436,7 +783,48 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "the local handoff POST hands the browser to the Base authorization endpoint" do
-    admit_sign_in!
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
+    @base_browser = open_session
+    @base_browser.host!(base_host)
+    @base_browser.https!
+    @base_browser.get("/oauth/authorize", params: parameters)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    @base_browser.post(
+      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
+                          headers: base_headers,
+    )
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
+    host!(@host)
+    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
+                            headers: auth_headers,
+    )
+    confirmation = URI.parse(response.location)
+    @base_browser.get(confirmation.request_uri)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    entry = URI.parse(@base_browser.response.location)
+    host!(@host)
+    get(entry.request_uri)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
+    )
+
+    assert_response :see_other
+    follow_redirect!
     submit_email_otp!
 
     follow_redirect_to_oidc_handoff!
@@ -457,7 +845,48 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "the checkpoint clears the login challenge from the session" do
-    admit_sign_in!
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
+    @base_browser = open_session
+    @base_browser.host!(base_host)
+    @base_browser.https!
+    @base_browser.get("/oauth/authorize", params: parameters)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    @base_browser.post(
+      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
+                          headers: base_headers,
+    )
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
+    host!(@host)
+    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
+                            headers: auth_headers,
+    )
+    confirmation = URI.parse(response.location)
+    @base_browser.get(confirmation.request_uri)
+    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
+    sync_response_cookie!(
+      @base_browser, JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
+    )
+    entry = URI.parse(@base_browser.response.location)
+    host!(@host)
+    get(entry.request_uri)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
+    )
+
+    assert_response :see_other
+    follow_redirect!
     submit_email_otp!
 
     follow_redirect!
@@ -520,6 +949,13 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     target = URI.parse(response.location)
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+    cookies.delete(cookie_name)
+    installed = cookies.merge(
+      "#{cookie_name}=#{Rack::Utils.escape(@base_browser.cookies[cookie_name])}", URI.parse("https://#{base_host}/"),
+    )
+
+    assert_equal ["#{cookie_name}=#{Rack::Utils.escape(@base_browser.cookies[cookie_name])}"], installed
     host!(target.host)
     https!
     get(target.request_uri, headers: { "Host" => base_host })
@@ -563,31 +999,15 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     follow_redirect!
   end
 
-  def admit_sign_in!
-    @transaction = OidcAuthorizationTransactionCoordinator.issue!(
-      surface: "app", intent: "sign_in", params: oidc_authorize_params(realm: "client"),
-    ).transaction
-    reference = BaseAuthAdmissionCoordinator.issue_handoff!(
-      transaction: @transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
-    ).reference
-    redeem_auth_ceremony_entry!(
-      auth_app_sign_in_path, reference: reference,
-                             params: { ri: "jp" }, headers: { "Host" => @host },
-    )
-
-    assert_response :see_other
-    follow_redirect!
-  end
-
   def oidc_authorize_params(realm:)
     {
       response_type: "code",
       client_id: "core-app",
       redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris_by_realm.fetch(realm).first,
-      code_challenge: "challenge",
+      code_challenge: "a" * 43,
       code_challenge_method: "S256",
-      state: "state",
-      nonce: "nonce",
+      state: SecureRandom.urlsafe_base64(32),
+      nonce: SecureRandom.urlsafe_base64(32),
       scope: "openid profile",
     }
   end

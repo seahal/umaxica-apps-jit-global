@@ -277,7 +277,7 @@ module Auth
     test "checkpoint continuation uses db-backed sign-in cycle when locator is present" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING", step: "checkpoint")
+      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
 
@@ -295,7 +295,7 @@ module Auth
     test "checkpoint continuation advances db-backed cycle while request is readonly" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING", step: "checkpoint")
+      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
 
@@ -310,7 +310,7 @@ module Auth
     test "checkpoint continuation can carry dashboard as pt" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING", step: "checkpoint")
+      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       cycle.update!(return_to: "/?ri=jp")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
@@ -328,7 +328,7 @@ module Auth
     test "checkpoint continuation keeps blocking db-backed cycle at checkpoint" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING", step: "checkpoint")
+      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
       harness.checkpoint_participant = BlockingParticipant.new(cycle)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
@@ -343,7 +343,7 @@ module Auth
     test "dashboard continuation consumes db-backed return path before rendering welcome page" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING", step: "dashboard")
+      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
       harness.send(:issue_welcome_gate_and_path, pt: "/after", sequence_id: cycle.public_id)
@@ -384,7 +384,7 @@ module Auth
     test "dashboard continuation falls back when persisted return path points to dashboard" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING", step: "dashboard")
+      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING")
       cycle.update!(return_to: "/?ri=jp")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
@@ -401,7 +401,7 @@ module Auth
     test "dashboard continuation lands on Dashboard, never Home, when resolved return path is welcome" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING", step: "dashboard")
+      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING")
       cycle.update!(return_to: "/welcome?ri=jp")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
@@ -418,7 +418,7 @@ module Auth
     test "dashboard continuation redirects checkpoint-pending cycle back to checkpoint" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING", step: "checkpoint")
+      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
 
@@ -435,7 +435,7 @@ module Auth
     test "dashboard continuation requires dashboard policy before advancing" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING", step: "dashboard")
+      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING")
       harness = db_sequence_harness(user, token)
       harness.allowed_policy = { show_dashboard?: false }
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
@@ -451,7 +451,7 @@ module Auth
     test "db-backed sequence rejects wrong participant without advancing" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING", step: "dashboard")
+      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
 
@@ -616,7 +616,7 @@ module Auth
       end
     end
 
-    def db_sign_in_flow(user, token, status_name:, step: nil)
+    def db_sign_in_flow(user, token, status_name:)
       ClientSignInFlow.create!(
         principal_id: user.id,
         token: token,

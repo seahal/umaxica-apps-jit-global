@@ -11,3 +11,13 @@ stateDiagram-v2
     active --> active: repository.activate!
     consent_revoked --> active: repository.activate!
     account_deleted --> [*]
+    state "released_at present (historical binding)" as released
+    active --> released: release binding
+    consent_revoked --> released: release binding
+    released --> [*]
+    note right of active
+        Resolution uses verified issuer and subject only.
+        Active uniqueness is one subject per Client and one active
+        social binding per Client across Google and Apple.
+        A released subject cannot be reattached by an old callback.
+    end note

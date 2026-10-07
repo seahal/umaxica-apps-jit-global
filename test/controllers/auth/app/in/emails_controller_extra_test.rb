@@ -15,6 +15,7 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
   setup do
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    admit_auth_local_entry!(surface: "app")
     ActionMailer::Base.deliveries.clear
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
@@ -84,9 +85,9 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
     email = ClientEmail.create!(
       user: user,
       address: "app-json-success@example.com",
-      user_email_status_id: 1,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     post auth_app_sign_in_email_url,
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
@@ -102,7 +103,10 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
     assert_response :ok
     json = response.parsed_body
 
-    assert json.key?("access_token") || json.key?("tokens")
+    assert_equal "authentication_evidence_recorded", json.fetch("status")
+    assert_equal auth_app_sign_in_check_path(ri: "jp"), json.fetch("redirect_url")
+    assert_not json.key?("access_token")
+    assert_not json.key?("tokens")
   end
 
   test "patch update failure with JSON" do
@@ -110,9 +114,9 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
     email = ClientEmail.create!(
       user: user,
       address: "app-json-fail@example.com",
-      user_email_status_id: 1,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     post auth_app_sign_in_email_url,
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
@@ -134,17 +138,15 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
          params: { user_email: { address: "unknown@example.com" }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
-    # We need to make the dummy ClientEmail valid.
-    # But ClientEmail requires a user.
-    # The controller does ClientEmail.new(address: ...) which is invalid.
-    # So it will render :edit with errors.
-
-    patch auth_app_sign_in_email_url,
-          params: { user_email: { pass_code: "123456" } },
-          headers: { "Host" => @host }
+    assert_no_difference ["Client.count", "ClientEmail.count", "ClientToken.count"] do
+      patch auth_app_sign_in_email_url,
+            params: { user_email: { pass_code: "123456" } },
+            headers: { "Host" => @host }
+    end
 
     assert_response :unprocessable_content
-    assert_includes inertia_props.fetch("form_errors"), "Userを入力してください"
+    assert_not_empty inertia_props.fetch("form_errors")
+    assert_not_includes inertia_props.fetch("form_errors"), "Userを入力してください"
   end
 end
 

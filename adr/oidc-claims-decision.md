@@ -141,3 +141,12 @@ Expected gaps include:
 ## Implementation follow-up
 
 This memo should be treated as the design reference for the next implementation pass.
+
+## Delivered reconciliation (2026-10-06)
+
+The planned callback contract is now implemented for the current Base RP paths: validate the
+authorization response and token response, validate issuer/client/audience/nonce/PKCE, call the
+scope-filtered UserInfo endpoint with the returned access token, then resolve the canonical
+Identity and RP session before setting cookies. Discovery advertises only accepted endpoints and
+grants. The earlier “not yet consistently implemented” list is superseded for these paths; real
+provider and deployment verification remain operational prerequisites.

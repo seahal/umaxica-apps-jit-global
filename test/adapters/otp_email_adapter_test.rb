@@ -98,9 +98,15 @@ class OtpEmailAdapterTest < ActiveSupport::TestCase
       fake_message
     end
 
-    OtpEmailAdapter.new(fake_mailer).deliver(record: record, otp_code: "654321", purpose: :sign_in)
+    generation = SecureRandom.uuid
+    OtpEmailAdapter.new(fake_mailer).deliver(
+      record: record, otp_code: "654321", purpose: :sign_in,
+      auth_ceremony_session_ref: "1", auth_email_otp_generation: generation,
+    )
 
     assert_equal :sign_in, calls.first.fetch(:purpose).to_sym
+    assert_equal "1", calls.first.fetch(:auth_ceremony_session_ref)
+    assert_equal generation, calls.first.fetch(:auth_email_otp_generation)
     assert_includes calls, :delivered
   end
 

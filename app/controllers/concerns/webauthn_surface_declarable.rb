@@ -15,6 +15,7 @@ module WebauthnSurfaceDeclarable
 
   class SurfaceNotDeclaredError < StandardError; end
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     class_attribute :declared_webauthn_surface_key, instance_writer: false, default: nil # rubocop:disable ThreadSafety/ClassAndModuleAttributes
   end

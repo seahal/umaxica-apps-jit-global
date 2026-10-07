@@ -12,11 +12,16 @@
       <p>Choose whether to continue the verification already started in this session or start it again.</p>
       <form method="post" action="<%= request.path %>" data-turbo="false">
         <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+        <%= hidden_field_tag :scope, scope %>
+        <%= hidden_field_tag :pt, pt %>
+        <%= hidden_field_tag :restart_of, restart_of if restart_of %>
         <%= hidden_field_tag :conflict_action, "continue" %>
         <button type="submit">Continue existing verification</button>
       </form>
       <form method="post" action="<%= request.path %>" data-turbo="false">
         <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+        <%= hidden_field_tag :scope, scope %>
+        <%= hidden_field_tag :pt, pt %>
         <%= hidden_field_tag :conflict_action, "cancel_and_start" %>
         <button type="submit">Cancel and start new verification</button>
       </form>

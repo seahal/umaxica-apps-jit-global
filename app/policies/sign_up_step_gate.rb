@@ -124,6 +124,9 @@ class SignUpStepGate
     current_step = self.class.current_step_for(ticket, registry)
     return context(ticket, registry, current_step: current_step) if mode == :entry
     return failure("step does not belong to ticket") unless registry.requirement?(step)
+    if committed_email_finalization_retry?(ticket, registry, current_step)
+      return context(ticket, registry, current_step: current_step)
+    end
     return refusal(:phase, ticket: ticket, registry: registry, current_step: current_step) unless current_step == step
     if mode == :create && CREATE_STEPS.exclude?(step)
       return failure("challenge issuance is not allowed for this step")
@@ -188,6 +191,29 @@ class SignUpStepGate
     return true if ticket.expired? || (ticket.respond_to?(:lapsed?) && ticket.lapsed?)
 
     ticket.respond_to?(:sign_up_terminal?) && ticket.sign_up_terminal?
+  end
+
+  def committed_email_finalization_retry?(ticket, registry, current_step)
+    return false unless mode == :update && family == "email" && step == :birthdate && current_step.nil?
+    return false unless ticket.sign_up_checkpoint_pending? && ticket.pending_contact_type == "email" &&
+      registry.missing_requirements(ticket.completed_requirements).empty?
+
+    owner_model, contact_model, outbox_model, owner_key =
+      case surface
+      when :app then [Client, ClientEmail, ClientContactAuditOutbox, :user_id]
+      when :com then [Visitor, VisitorEmail, VisitorContactAuditOutbox, :visitor_id]
+      else return false
+      end
+    owner = owner_model.find_by(id: ticket.principal_id)
+    contact = contact_model.find_by(:id => ticket.pending_contact_id, owner_key => ticket.principal_id)
+    return false unless owner&.active? && contact&.binding_effective?
+
+    # This admits reconciliation, not another checkpoint write. The controller rechecks the
+    # original Source intent under owner/contact locks and skips the cleared birthdate mutation.
+    outbox_model.where(
+      contact_kind: "email", event_name: "finalized", owner_ref: owner.public_id,
+      contact_ref: contact.public_id, operation_ref: ticket.public_id, actor_ref: nil,
+    ).count == 1
   end
 
   def context(ticket, registry, current_step:)

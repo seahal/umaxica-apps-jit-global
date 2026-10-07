@@ -411,3 +411,11 @@ Mappings marked "case by case" depend on the call site. No runtime rename is imp
 - `docs/security/sign-in-compensation.md`
 - `docs/security/sign-up-compensation.md`
 - `adr/sign-up-cycle-cancellation-retention.md`
+
+## Delivered reconciliation (2026-10-06)
+
+The current runtime now uses the migration-owned state reference and named transition surface for
+the changed sign-in, sign-up and sign-out axes. Terminal facts are absorbing; expiry uses the owning
+database clock; session-limit resolution is a durable child transaction; sign-up completion enters
+ordinary sign-in admission; and sign-out records mutation progress without claiming access-token
+retirement. The old commit-specific “target not implemented” reading rule above is superseded.

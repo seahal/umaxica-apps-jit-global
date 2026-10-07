@@ -15,7 +15,7 @@ class AuthenticationLogoutAllSessionsTest < ActiveSupport::TestCase
   test "does not require a session version on the resource" do
     resource = Object.new
     def resource.session_version
-      raise "session_version is not an authority"
+      raise RuntimeError, "session_version is not an authority"
     end
 
     assert AuthenticationLogoutAllSessions.call(resource: resource)

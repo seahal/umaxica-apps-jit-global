@@ -66,10 +66,6 @@ class VisitorPasskey < ComPrincipalRecord
   validate :validate_slot_limit, on: :create
   before_validation :set_defaults, on: :create
   around_create :create_with_slot_lock
-  validates_with RecoveryIdentityRequiredValidator,
-                 on: :create,
-                 owner: :visitor,
-                 message: Visitor::RECOVERY_IDENTITY_REQUIRED_MESSAGE
 
   def to_param
     public_id

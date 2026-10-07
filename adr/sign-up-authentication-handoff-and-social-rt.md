@@ -241,3 +241,11 @@ without being forced into a broken Sign In path.
 - Com signup remains social-free.
 - Org `GET /sign/up/new` does not create an operator or issue a session.
 - Org operator lifecycle request creation requires an authenticated operator and AAL2 step-up.
+
+## Delivered reconciliation (2026-10-06)
+
+Sign-up completion enters ordinary sign-in admission and completes at session issuance; it does
+not use a special Secret or social handoff state to bypass the canonical lifecycle. Browser-bound
+admission, cancellation, continuation and contact OTP evidence are retained by the owning flow.
+The earlier Acme/Sign authority language and “AAL2 step-up” shorthand are historical; current
+authorization uses explicit operation requirements and the surface-specific policy.

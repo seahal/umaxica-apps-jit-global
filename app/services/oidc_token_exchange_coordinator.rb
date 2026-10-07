@@ -1080,13 +1080,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
   end
 
   def current_root_token_for(device_session)
-    case device_session
-    when ClientDeviceSession then ClientToken.find_by(id: device_session.current_refresh_token_id)
-    when VisitorDeviceSession then VisitorToken.find_by(id: device_session.current_refresh_token_id)
-    when OperatorDeviceSession then OperatorToken.find_by(id: device_session.current_refresh_token_id)
-    else
-      raise ArgumentError, "unsupported Device Session class: #{device_session.class.name}"
-    end
+    device_session.current_refresh_token
   end
 
   def root_token_actor_matches?(root_token, resource)

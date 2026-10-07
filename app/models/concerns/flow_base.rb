@@ -12,6 +12,7 @@ class FlowInvalidTransition < FlowError; end
 module FlowBase
   extend ActiveSupport::Concern
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     class_attribute :cycle_status_column_name, instance_accessor: false
   end

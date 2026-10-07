@@ -223,13 +223,13 @@ module Auth
 
             ComTicketRecord.connected_to(role: :writing) do
               VisitorToken.transaction do
-                VisitorToken.find_from_signed_refs(refs).each do |token|
-                  next unless token && allowed_to?(:destroy?, token, context: { user: visitor })
-                  next if token.public_id == current_session_public_id
+                VisitorToken.find_from_signed_refs(refs).each do |selected_token|
+                  next unless selected_token && allowed_to?(:destroy?, selected_token, context: { user: visitor })
+                  next if selected_token.public_id == current_session_public_id
 
                   AuthenticationSelectedSessionRevoker.call(
                     owner: visitor,
-                    token: token,
+                    token: selected_token,
                     current_token: current_session,
                     current_session_public_id: current_session_public_id,
                     reason: "session_limit_selected_revoke",

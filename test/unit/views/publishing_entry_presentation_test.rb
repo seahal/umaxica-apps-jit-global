@@ -2,6 +2,7 @@
 
 require "test_helper"
 
+# rubocop:disable I18n/RailsI18n/DecorateString -- Literal fixture copy is asserted as exact rendered output.
 class PublishingEntryPresentationTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
@@ -144,3 +145,4 @@ class PublishingEntryPresentationTest < ActiveSupport::TestCase
     assert_nil body["maxlength"]
   end
 end
+# rubocop:enable I18n/RailsI18n/DecorateString

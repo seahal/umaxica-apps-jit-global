@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# Concrete Base controllers supply transaction loading and protect the exact Auth origin.
-# The Base browser's stored transaction reference is required independently of the bearer result.
+# Concrete Base controllers supply transaction loading and receiver-local CSRF protection.
+# The original Base browser nonce and transaction marker are independent of the result reference.
 module BaseStepUpCompletion
   include StepUpCeremonyLogging
   include BaseStepUpTransactionMarker
@@ -11,13 +11,16 @@ module BaseStepUpCompletion
   def show
     apply_base_browser_continuation_headers!
     result_reference_param
-    transaction_reference_param
+    transaction = completion_step_up_transaction(transaction_reference_param)
+    validate_completion_browser!(
+      transaction:, surface: self.class.base_admission_surface_name, actor: Actor.subject, token: current_session_token,
+    )
     render "base/shared/result_continuation", layout: false,
                                               locals: { action_url: request.path,
                                                         result_ref: params[:result_ref],
                                                         transaction_ref: params[:transaction_ref],
                                                         ri: params[:ri], }
-  rescue ActionController::BadRequest, ArgumentError
+  rescue ActionController::BadRequest, ArgumentError, BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   end
 
@@ -27,20 +30,8 @@ module BaseStepUpCompletion
     transaction = nil
     reference = transaction_reference_param
     result_reference = result_reference_param
-    unless reference.is_a?(String) && reference.present? &&
-        base_step_up_transaction_marker(
-          reference:, surface:, actor:, token:,
-        )
-      raise BaseAuthAdmissionCoordinator::Denied.new("Base browser binding missing", code: "return_binding_mismatch")
-    end
-
     transaction = completion_step_up_transaction(reference)
-    unless base_step_up_transaction_marker(
-      reference:, surface:, actor:, token:,
-      allow_root_replacement: transaction.purpose == "reauthentication" && transaction.consumed?,
-    )
-      raise BaseAuthAdmissionCoordinator::Denied.new("Base browser binding missing", code: "return_binding_mismatch")
-    end
+    validate_completion_browser!(transaction:, surface:, actor:, token:)
     # The destination is checked before the result is consumed: an invalid target must not leave
     # the transaction terminal.
     unless transaction.surface == surface && completion_return_target_valid?(transaction)
@@ -64,6 +55,7 @@ module BaseStepUpCompletion
     log_step_up_return_target(
       finalized.return_to, reason: "transaction_return_to", protected_flow: true, transaction: finalized,
     )
+    session[:inertia_clear_history] = true
     redirect_to(completion_redirect_target(finalized), status: :see_other, allow_other_host: false)
   rescue ActionController::BadRequest, BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
          IdentityStepUpCeremonyContract::Error,
@@ -77,6 +69,16 @@ module BaseStepUpCompletion
     render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
   rescue BaseSelfRpCredentialReissuer::CredentialUnavailable
     render_browser_rp_unauthenticated! unless performed?
+  end
+
+  def validate_completion_browser!(transaction:, surface:, actor:, token:)
+    validate_base_result_browser_binding!(transaction)
+    return if transaction.surface == surface.to_s && base_step_up_transaction_marker(
+      reference: transaction.transaction_id, surface:, actor:, token:,
+      allow_root_replacement: transaction.purpose == "reauthentication" && transaction.consumed?,
+    )
+
+    raise BaseAuthAdmissionCoordinator::Denied.new("Base browser binding missing", code: "return_binding_mismatch")
   end
 
   def result_reference_param

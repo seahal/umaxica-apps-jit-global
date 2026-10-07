@@ -15,6 +15,7 @@ module StepUpCeremonyTransactionable
   PURPOSES = %w(step_up reauthentication bootstrap credential_registration credential_change).freeze
   RETENTION_PERIOD = 7.days
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     # rubocop:disable ThreadSafety/ClassAndModuleAttributes
     class_attribute :ceremony_surface_name, instance_accessor: false
@@ -159,9 +160,14 @@ module StepUpCeremonyTransactionable
         )
 
         write_status!(
-          STATUS_VERIFIED, method: method.to_s, aal: aal.to_s,
-                           phishing_resistant: phishing_resistant, user_verified: user_verified, verified_at: verified_at,
-                           result_jti: SecureRandom.uuid, verified_credential_ref: verified_credential_ref,
+          STATUS_VERIFIED,
+          method: method.to_s,
+          aal: aal.to_s,
+          phishing_resistant: phishing_resistant,
+          user_verified: user_verified,
+          verified_at: verified_at,
+          result_jti: SecureRandom.uuid,
+          verified_credential_ref: verified_credential_ref,
         )
         self
       end
@@ -217,7 +223,9 @@ module StepUpCeremonyTransactionable
   end
 
   def prepare_cancellation_handoff!(reference:, ciphertext:)
-    unless reference.is_a?(String) && reference.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i)
+    valid_reference = reference.is_a?(String) &&
+      reference.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i)
+    unless valid_reference
       raise ArgumentError, "invalid cancellation handoff reference"
     end
     raise ArgumentError,
@@ -251,7 +259,9 @@ module StepUpCeremonyTransactionable
           "cancellation handoff is already bound", code: "transaction_conflict",
         )
       end
-      update!(cancellation_handoff_digest:) if cancellation_handoff_digest.present? && self.cancellation_handoff_digest.blank?
+      if cancellation_handoff_digest.present? && self.cancellation_handoff_digest.blank?
+        update!(cancellation_handoff_digest:)
+      end
       return self
     end
 
@@ -372,6 +382,22 @@ module StepUpCeremonyTransactionable
       )
     end
     write_status!(STATUS_CONSUMED, **attributes)
+  end
+
+  def consume_email_registration!(registered_credential_ref:)
+    self.class.connection_owner.connected_to(role: :writing) do
+      with_lock do
+        now = self.class.database_now
+        unless status == STATUS_PENDING && expires_at > now && allowed_methods_array == ["email_otp"]
+          raise IdentityStepUpCeremonyContract::Error.new(
+            "email registration permission is unavailable", code: "transaction_unavailable",
+          )
+        end
+
+        commit_registration_consumption!(now:, method: "email_otp", registered_credential_ref:)
+      end
+    end
+    self
   end
 
   private

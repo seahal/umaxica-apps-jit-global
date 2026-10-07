@@ -167,70 +167,81 @@ class OidcRefreshTokenIssuer
         decision_time = usage.class.database_now
         lookup = delivery_lookup(usage, predecessor_digest, now: decision_time)
         return failure(:delivery_receipt_invalid, token: usage) if lookup.status == :invalid
+        return replay_delivery_receipt(usage, lookup.receipt, decision_time) if lookup.receipt
 
-        if lookup.receipt
-          return failure(:inactive_token, token: usage) unless usage.active?(decision_time)
-
-          response = lookup.receipt.token_response_for(now: decision_time)
-          return success(
-            token: usage,
-            refresh_token: response.fetch(:refresh_token),
-            previous_token: nil,
-            token_response: response,
-            access_expires_at: lookup.receipt.access_expires_at,
-            refresh_expires_at: lookup.receipt.refresh_expires_at,
-          )
-        end
         usage.clear_refresh_delivery_receipt! if lookup.status == :expired
-
-        if usage.previous_refresh_token_digest_matches?(verifier)
-          handle_refresh_token_reuse(usage)
-          return failure(:refresh_token_reuse_detected, token: usage)
-        end
-
-        return failure(:inactive_token, token: usage) unless usage.active?(decision_time)
-        return failure(:invalid_digest, token: usage) unless usage.refresh_token_digest_matches?(verifier)
-
-        previous_token = usage.dup
-        refresh_plain = usage.rotate_refresh_token!(now: decision_time)
-        token_response = response_builder.call(
-          usage: usage,
-          previous_token: previous_token,
-          refresh_token: refresh_plain,
-          predecessor_digest: predecessor_digest,
-          now: decision_time,
-        )
-        receipt_expires_at = decision_time + OidcRefreshDeliveryReceipt::TTL
-        access_expires_at = decision_time + response_seconds(token_response, :expires_in).seconds
-        ciphertext = OidcRefreshDeliveryReceipt.encrypt(
-          rp_session_public_id: usage.public_id,
-          client_id: client_id,
-          resource_type: resource_type,
-          predecessor_digest: predecessor_digest,
-          generation: usage.refresh_generation,
-          expires_at: receipt_expires_at,
-          access_expires_at: access_expires_at,
-          refresh_expires_at: usage.refresh_token_expires_at,
-          token_response: token_response,
-        )
-        usage.store_refresh_delivery_receipt!(
-          ciphertext: ciphertext,
-          predecessor_digest: predecessor_digest,
-          expires_at: receipt_expires_at,
-        )
-        touch_oidc_connection!(usage, now: decision_time)
-
-        result = success(
-          token: usage,
-          refresh_token: refresh_plain,
-          previous_token: previous_token,
-          token_response: token_response,
-          access_expires_at: access_expires_at,
-          refresh_expires_at: usage.refresh_token_expires_at,
-        )
+        result = rotate_and_store_delivery!(usage, verifier, predecessor_digest, decision_time)
       end
     end
     result
+  end
+
+  def replay_delivery_receipt(usage, receipt, decision_time)
+    return failure(:inactive_token, token: usage) unless usage.active?(decision_time)
+
+    response = receipt.token_response_for(now: decision_time)
+    success(
+      token: usage,
+      refresh_token: response.fetch(:refresh_token),
+      previous_token: nil,
+      token_response: response,
+      access_expires_at: receipt.access_expires_at,
+      refresh_expires_at: receipt.refresh_expires_at,
+    )
+  end
+
+  def rotate_and_store_delivery!(usage, verifier, predecessor_digest, decision_time)
+    if usage.previous_refresh_token_digest_matches?(verifier)
+      handle_refresh_token_reuse(usage)
+      return failure(:refresh_token_reuse_detected, token: usage)
+    end
+
+    return failure(:inactive_token, token: usage) unless usage.active?(decision_time)
+    return failure(:invalid_digest, token: usage) unless usage.refresh_token_digest_matches?(verifier)
+
+    previous_token = usage.dup
+    refresh_plain = usage.rotate_refresh_token!(now: decision_time)
+    token_response = response_builder.call(
+      usage: usage,
+      previous_token: previous_token,
+      refresh_token: refresh_plain,
+      predecessor_digest: predecessor_digest,
+      now: decision_time,
+    )
+    receipt_expires_at = decision_time + OidcRefreshDeliveryReceipt::TTL
+    access_expires_at = decision_time + response_seconds(token_response, :expires_in).seconds
+    store_delivery_receipt!(
+      usage, predecessor_digest, token_response, receipt_expires_at, access_expires_at,
+    )
+    touch_oidc_connection!(usage, now: decision_time)
+
+    success(
+      token: usage,
+      refresh_token: refresh_plain,
+      previous_token: previous_token,
+      token_response: token_response,
+      access_expires_at: access_expires_at,
+      refresh_expires_at: usage.refresh_token_expires_at,
+    )
+  end
+
+  def store_delivery_receipt!(usage, predecessor_digest, token_response, receipt_expires_at, access_expires_at)
+    ciphertext = OidcRefreshDeliveryReceipt.encrypt(
+      rp_session_public_id: usage.public_id,
+      client_id: client_id,
+      resource_type: resource_type,
+      predecessor_digest: predecessor_digest,
+      generation: usage.refresh_generation,
+      expires_at: receipt_expires_at,
+      access_expires_at: access_expires_at,
+      refresh_expires_at: usage.refresh_token_expires_at,
+      token_response: token_response,
+    )
+    usage.store_refresh_delivery_receipt!(
+      ciphertext: ciphertext,
+      predecessor_digest: predecessor_digest,
+      expires_at: receipt_expires_at,
+    )
   end
 
   def redeliver_receipt(usage, predecessor_digest)

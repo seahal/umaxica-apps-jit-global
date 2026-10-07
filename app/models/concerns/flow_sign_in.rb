@@ -6,10 +6,6 @@ module FlowSignIn
 
   include FlowBase
 
-  included do
-    cycle_status_column :state_id
-  end
-
   def sign_in_primary_pending?
     cycle_status?(state_id_for("PRIMARY_PENDING"))
   end

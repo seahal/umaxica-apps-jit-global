@@ -19,20 +19,25 @@ class SignAppUpTelephoneRegistrationFinalizer
   # exists. This is a guard, not an expected path.
   class PasskeyMissingError < StandardError; end
 
-  def self.call(telephone:)
-    new(telephone: telephone).call
+  def self.call(telephone:, actor_context:, operation_ref:)
+    new(telephone: telephone, actor_context: actor_context, operation_ref: operation_ref).call
   end
 
-  def initialize(telephone:)
+  def initialize(telephone:, actor_context:, operation_ref:)
     @telephone = telephone
+    @actor_context = actor_context
+    @operation_ref = operation_ref
   end
 
   def call
     user = nil
 
     ClientTelephone.transaction do
+      user = Client.lock.find(@telephone.user_id)
+      raise ActiveRecord::RecordNotSaved, "Contact owner is unavailable" unless user.active?
+
       telephone = ClientTelephone.lock.find(@telephone.id)
-      user = Client.lock.find(telephone.user_id)
+      raise ArgumentError, "telephone sign-up owner mismatch" unless telephone.user_id == user.id
 
       unless user.client_passkeys.active.exists?
         raise PasskeyMissingError, "telephone sign-up requires an active passkey"
@@ -48,43 +53,12 @@ class SignAppUpTelephoneRegistrationFinalizer
       if user.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
         user.update!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
       end
+      ContactBindingAuditRecorder.call!(
+        actor_context: @actor_context, actor: user, contact: telephone,
+        operation_ref: @operation_ref, event_name: "finalized",
+      )
     end
 
-    # Chronicle write must happen AFTER the transaction commits.
-    # If the transaction above rolls back, this line is never
-    # reached and we cannot leak an orphan SIGNED_UP_WITH_TELEPHONE
-    # row that points to a user that does not exist. See S-8.
-    write_signup_audit!(user)
     Result.new(user: user)
-  end
-
-  private
-
-  def write_signup_audit!(user)
-    event_id = ClientChronicleEvent::SIGNED_UP_WITH_TELEPHONE
-
-    ChronicleRecord.connected_to(role: :writing) do
-      ClientChronicleEvent.find_or_create_by!(id: event_id)
-      ClientChronicleLevel.find_or_create_by!(id: ClientChronicleLevel::NOTHING)
-    end
-
-    ClientChronicle.create!(
-      actor_type: "Client",
-      actor_id: user.id,
-      event_id: event_id,
-      subject_id: user.id.to_s,
-      subject_type: "Client",
-    )
-  rescue ActiveRecord::RecordInvalid => e
-    Rails.logger.error(
-      JitLogEvent.format(
-        "sign.signup.telephone.audit_save_failed",
-        user_id: user&.id,
-        event_id: event_id,
-        errors: e.record.errors.full_messages,
-        exception: e,
-      ),
-    )
-    raise
   end
 end

@@ -58,3 +58,11 @@ result satisfies the requested purpose and stores any resulting freshness on the
 - `docs/security/logout-session-management.md`
 - `docs/security/downstream-token-authority.md`
 - `docs/security/step-up-ceremony-delegation.md`
+
+## Delivered reconciliation (2026-10-06)
+
+Base owns the Browser Session and the seven first-party RP credential contracts. A valid parent
+security context may authorize an OIDC request under its explicit prompt/max-age rules but never
+acts as a missing RP credential. RP sessions are parented by stable DeviceSessions; refresh uses
+device-session-first rotation and bounded encrypted coalescing. Auth owns ceremony continuity only,
+and step-up freshness is accepted by Base after the operation and current-policy checks.

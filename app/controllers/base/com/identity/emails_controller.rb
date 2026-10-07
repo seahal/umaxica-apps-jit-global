@@ -72,8 +72,8 @@ module Base
 
           IdentityCredentialRemovalCommitter.call!(
             actor: current_visitor, credential: @user_email, current_session: current_session, request: request,
+            actor_context: current_actor,
           )
-          create_audit_event!(ClientChronicleEvent::EMAIL_REMOVED, subject: @user_email)
 
           redirect_to(
             base_com_identity_emails_path(ri: params[:ri]),

@@ -33,3 +33,11 @@ this implementation has not been deployed.
   credential ID and does not trust the browser-supplied handle as account authority.
 - Verification: `test/models/webauthn_duplicate_registration_test.rb` covers opacity, uniqueness,
   and inequality with the primary key.
+
+## Delivered reconciliation (2026-10-06)
+
+The shared assertion path now checks returned `userHandle` bytes against the immutable registered
+handle for discoverable and actor-known authentication, in addition to credential ownership,
+challenge, RP ID, Origin, UV, UP, purpose, browser and slot concurrency. A caller cannot use a
+legacy actor identifier or a handle from another Identity. The security invariant test and passkey
+registration/assertion suites are the current verification boundary.

@@ -266,13 +266,15 @@ class Auth::App::Sign::In::SessionsController < ::Auth::App::ApplicationControll
 
     AppTicketRecord.connected_to(role: :writing) do
       ClientToken.transaction do
-        ClientToken.find_from_signed_refs(refs).each do |token|
-          next unless token && allowed_to?(:destroy?, token, context: { user: user })
-          next if token.id == current_session&.id || token.public_id == current_session_public_id # Skip current session
+        ClientToken.find_from_signed_refs(refs).each do |selected_token|
+          next unless selected_token && allowed_to?(:destroy?, selected_token, context: { user: user })
+          # Skip the current session.
+          next if selected_token.id == current_session&.id ||
+            selected_token.public_id == current_session_public_id
 
           AuthenticationSelectedSessionRevoker.call(
             owner: user,
-            token: token,
+            token: selected_token,
             current_token: current_session,
             current_session_public_id: current_session_public_id,
             reason: "session_limit_selected_revoke",

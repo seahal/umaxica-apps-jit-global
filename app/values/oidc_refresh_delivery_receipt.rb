@@ -173,7 +173,9 @@ class OidcRefreshDeliveryReceipt < Data.define(
 
   # Re-delivery returns the exact issued response. Callers use the absolute
   # deadlines below when setting browser cookies.
-  def token_response_for(now:)
+  # The exact issued response is a snapshot; retain the existing time keyword for callers that
+  # already have the database decision time.
+  def token_response_for(now:) # rubocop:disable Lint/UnusedMethodArgument -- The snapshot does not change with elapsed time.
     token_response.dup
   end
 

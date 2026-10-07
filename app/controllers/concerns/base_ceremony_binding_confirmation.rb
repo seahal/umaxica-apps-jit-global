@@ -6,6 +6,7 @@
 # base_confirmed_at and returns the browser to Auth.
 module BaseCeremonyBindingConfirmation
   extend ActiveSupport::Concern
+  include AdmissionReferenceParameters
 
   public
 
@@ -23,11 +24,13 @@ module BaseCeremonyBindingConfirmation
   def create
     apply_base_browser_continuation_headers!
     binding = load_ceremony_binding!
-    token = validate_binding_base_context!(binding)
-    binding.confirm_base!(
-      base_token: token,
-      browser_digest: base_admission_browser_digest(binding.entry_ref),
-    )
+    BaseAuthAdmissionCoordinator.with_admission_binding_lock!(binding) do |locked_binding|
+      token = validate_binding_base_context!(locked_binding)
+      locked_binding.confirm_base!(
+        base_token: token,
+        browser_digest: base_admission_browser_digest(locked_binding.entry_ref),
+      )
+    end
     redirect_to(auth_binding_entry_url(binding), status: :see_other, allow_other_host: true)
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
          AuthAdmissionBinding::InvalidTransition
@@ -37,6 +40,10 @@ module BaseCeremonyBindingConfirmation
   private
 
   def load_ceremony_binding!
+    raise ArgumentError if duplicate_admission_reference?("binding_ref")
+
+    raise ArgumentError if BaseAuthAdmissionCoordinator.client_supplied_binding_proof?(params)
+
     reference = params[:binding_ref]
     raise ArgumentError unless reference.is_a?(String) &&
       reference.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN)
@@ -49,6 +56,14 @@ module BaseCeremonyBindingConfirmation
   def validate_binding_base_context!(binding)
     raise BaseAuthAdmissionCoordinator::Denied.new("binding is unavailable", code: "invalid_admission") unless
       binding.live? && base_admission_browser_nonce.present? && auth_binding_session_active?(binding)
+
+    unless ActiveSupport::SecurityUtils.secure_compare(
+      binding.base_browser_digest, base_admission_browser_digest(binding.entry_ref),
+    )
+      raise BaseAuthAdmissionCoordinator::Denied.new(
+        "Base browser does not match binding", code: "session_binding_mismatch",
+      )
+    end
 
     token = current_session_token
     if binding.base_token_id.present?
@@ -66,6 +81,7 @@ module BaseCeremonyBindingConfirmation
         raise BaseAuthAdmissionCoordinator::Denied.new("unexpected Base session", code: "session_binding_mismatch")
       end
 
+      validate_binding_parent_actor!(binding, nil)
       nil
     end
   end
@@ -86,11 +102,13 @@ module BaseCeremonyBindingConfirmation
       end
     when :authorization_transaction
       transaction = binding.authorization_transaction
+      now = transaction.class.database_now
       raise BaseAuthAdmissionCoordinator::Denied.new("authorization is unavailable", code: "invalid_admission") if
-        transaction.expired?(now: transaction.class.database_now)
+        transaction.expired?(now: now) || transaction.login_challenge_expired?(now: now) || transaction.consumed?
     when :sign_in_flow
+      flow = binding.sign_in_flow
       raise BaseAuthAdmissionCoordinator::Denied.new("local entry is unavailable", code: "invalid_admission") unless
-        binding.sign_in_flow.sign_in_primary_pending?
+        flow.sign_in_primary_pending? && !flow.expired?(flow.class.database_now) && flow.principal_id.nil?
     else
       raise BaseAuthAdmissionCoordinator::Denied.new("binding parent is unavailable", code: "invalid_admission")
     end
@@ -98,59 +116,85 @@ module BaseCeremonyBindingConfirmation
 
   def auth_binding_session_active?(binding)
     session = binding.auth_ceremony_session
-    session.present? && session.active?(now: binding.class.database_now) && !session.admitted?
+    session.present? && session.active?(now: binding.class.database_now)
   end
 
   def auth_binding_entry_url(binding)
     query = { entry_ref: binding.entry_ref, ri: params[:ri] }.compact
     case self.class.base_admission_surface_name
     when "app"
-      auth_host_url = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-      case binding.purpose
-      when "authentication_handoff", "local_sign_in", "local_sign_up"
-        intent = binding.authorization_transaction&.intent.to_s
-        path_helper = (intent == "sign_up" || binding.purpose == "local_sign_up") ? :auth_app_sign_up_url : :auth_app_sign_in_url
-      when "bootstrap_handoff"
-        path_helper = :new_auth_app_verification_setup_url
-      when "credential_registration_handoff"
-        unless binding.step_up_ceremony_transaction&.allowed_methods_array == ["passkey"]
-          raise ArgumentError, "unsupported credential registration method"
-        end
-
-        path_helper = :new_auth_app_verification_registration_passkey_url
-      else
-        path_helper = :auth_app_verification_url
-      end
-      public_send(path_helper, **query, host: auth_host_url, protocol: "https")
+      app_auth_binding_entry_url(binding, **query, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), protocol: "https")
     when "com"
-      auth_host_url = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-      path_helper =
-        %w(authentication_handoff local_sign_in local_sign_up).include?(binding.purpose) ?
-               ((binding.purpose == "local_sign_up") ? :auth_com_sign_up_url : :auth_com_sign_in_url) : :auth_com_verification_url
-      if binding.purpose == "credential_registration_handoff"
-        unless binding.step_up_ceremony_transaction&.allowed_methods_array == ["passkey"]
-          raise ArgumentError, "unsupported credential registration method"
-        end
-
-        path_helper = :new_auth_com_verification_registration_passkey_url
-      end
-      public_send(path_helper, **query, host: auth_host_url, protocol: "https")
+      com_auth_binding_entry_url(binding, **query, host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), protocol: "https")
     when "org"
-      auth_host_url = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-      path_helper =
-        %w(authentication_handoff local_sign_in local_sign_up).include?(binding.purpose) ?
-               ((binding.purpose == "local_sign_up") ? :auth_org_sign_up_url : :auth_org_sign_in_url) : :auth_org_verification_url
-      if binding.purpose == "credential_registration_handoff"
-        unless binding.step_up_ceremony_transaction&.allowed_methods_array == ["passkey"]
-          raise ArgumentError, "unsupported credential registration method"
-        end
-
-        path_helper = :new_auth_org_verification_registration_passkey_url
-      end
-      public_send(path_helper, **query, host: auth_host_url, protocol: "https")
+      org_auth_binding_entry_url(binding, **query, host: ENV.fetch("PUBLIC_AUTH_STAFF_URL"), protocol: "https")
     else
       raise ArgumentError, "unsupported Base surface"
     end
+  end
+
+  def app_auth_binding_entry_url(binding, **query)
+    case binding.purpose
+    when "authentication_handoff", "local_sign_in", "local_sign_up"
+      signup_binding?(binding) ? auth_app_sign_up_url(**query) : auth_app_sign_in_url(**query)
+    when "bootstrap_handoff"
+      new_auth_app_verification_setup_url(**query)
+    when "credential_registration_handoff"
+      if binding.step_up_ceremony_transaction&.allowed_methods_array == ["totp"]
+        return new_auth_app_settings_totp_url(**query)
+      end
+
+      require_passkey_registration_binding!(binding)
+      new_auth_app_verification_registration_passkey_url(**query)
+    when "step_up_handoff", "reauthentication_handoff", "credential_change_handoff"
+      auth_app_verification_url(**query)
+    else
+      raise ArgumentError, "unsupported app admission purpose"
+    end
+  end
+
+  def com_auth_binding_entry_url(binding, **query)
+    case binding.purpose
+    when "authentication_handoff", "local_sign_in", "local_sign_up"
+      signup_binding?(binding) ? auth_com_sign_up_url(**query) : auth_com_sign_in_url(**query)
+    when "bootstrap_handoff"
+      new_auth_com_verification_setup_url(**query)
+    when "credential_registration_handoff"
+      require_passkey_registration_binding!(binding)
+      new_auth_com_verification_registration_passkey_url(**query)
+    when "step_up_handoff", "reauthentication_handoff", "credential_change_handoff"
+      auth_com_verification_url(**query)
+    else
+      raise ArgumentError, "unsupported com admission purpose"
+    end
+  end
+
+  def org_auth_binding_entry_url(binding, **query)
+    case binding.purpose
+    when "authentication_handoff", "local_sign_in"
+      raise ArgumentError, "operator signup is unavailable" if signup_binding?(binding)
+
+      auth_org_sign_in_url(**query)
+    when "bootstrap_handoff"
+      new_auth_org_verification_setup_url(**query)
+    when "credential_registration_handoff"
+      require_passkey_registration_binding!(binding)
+      new_auth_org_verification_registration_passkey_url(**query)
+    when "step_up_handoff", "reauthentication_handoff", "credential_change_handoff"
+      auth_org_verification_url(**query)
+    else
+      raise ArgumentError, "unsupported org admission purpose"
+    end
+  end
+
+  def signup_binding?(binding)
+    binding.purpose == "local_sign_up" || binding.authorization_transaction&.intent == "sign_up"
+  end
+
+  def require_passkey_registration_binding!(binding)
+    return if binding.step_up_ceremony_transaction&.allowed_methods_array == ["passkey"]
+
+    raise ArgumentError, "unsupported credential registration method"
   end
 
   def render_invalid_binding!

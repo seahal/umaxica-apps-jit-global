@@ -18,6 +18,7 @@ module ProcessorErasureNotificationState
   ATTEMPT_OUTCOMES = %w(IN_FLIGHT ACCEPTED_PENDING SUCCEEDED RETRYABLE_FAILURE PERMANENT_FAILURE).freeze
   DISPATCH_LEASE = 5.minutes
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     include PublicId
     include Retainable

@@ -19,6 +19,7 @@ module Retainable
     end
   end
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     attribute :discard_at, :datetime, default: -> { SENTINEL }
     attribute :purge_eligible_at, :datetime, default: -> { SENTINEL }

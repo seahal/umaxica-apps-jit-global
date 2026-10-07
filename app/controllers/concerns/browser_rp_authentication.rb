@@ -46,16 +46,6 @@ module BrowserRpAuthentication
 
   class SkipNotAllowedError < StandardError; end
 
-  included do
-    include ::AuthenticationWithdrawalGate
-
-    after_action :verify_private_action_authorized! if respond_to?(:after_action)
-    after_action :apply_authenticated_page_cache_policy! if respond_to?(:after_action)
-    helper_method :current_resource, :browser_rp_authenticated?, :browser_rp_session_public_id,
-                  :current_browser_session_security_context, :current_session_public_id,
-                  :current_session, :logged_in?
-  end
-
   class_methods do
     def access_policy_rules
       ACCESS_POLICY_RULES.fetch_or_store(self) { [] }
@@ -226,6 +216,7 @@ module BrowserRpAuthentication
     case mode
     when :deny_all
       raise MissingPolicyError,
+            # rubocop:disable I18n/RailsI18n/DecorateString -- This is a diagnostic exception, not customer copy.
             "Denied by default authentication mode for #{self.class.name}##{action_name}. " \
             "Declare a concrete authentication mode before exposing this endpoint."
     when :bare, :open

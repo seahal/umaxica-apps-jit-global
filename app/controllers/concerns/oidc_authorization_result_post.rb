@@ -1,12 +1,11 @@
 # typed: false
 # frozen_string_literal: true
 
-# OIDC results are posted from the Auth host to the matching Base host. The
-# result is a short-lived, surface-bound transport capability whose durable
-# transaction binding and finalization state live in PostgreSQL; it may be
-# retried while valid. The request also requires an exact Auth origin (or the
-# existing same-site proxy null-origin case). This is intentionally not a
-# forgery-protection bypass.
+# Auth navigates to the matching Base host with a non-authorizing result lookup.
+# Base renders its own confirmation form; only a receiver-local POST with standard
+# Rails forgery protection accepts the stored evidence. Durable transaction binding
+# and finalization state live in PostgreSQL, permitting exact retries while valid.
+# Neither an Auth Origin nor a null Origin substitutes for Base's CSRF protection.
 module OidcAuthorizationResultPost
   extend ActiveSupport::Concern
 
@@ -16,10 +15,16 @@ module OidcAuthorizationResultPost
     apply_base_browser_continuation_headers!
     result_reference = params[:result_ref]
     transaction_reference = params[:transaction_ref]
-    unless result_reference.is_a?(String) && result_reference.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN) &&
+    unless result_reference.is_a?(String) &&
+        result_reference.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN) &&
         transaction_reference.is_a?(String) && transaction_reference.present?
       raise ArgumentError, "invalid authorization result reference"
     end
+
+    transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
+      surface: oidc_result_surface, transaction_id: transaction_reference,
+    )
+    validate_base_result_browser_binding!(transaction)
 
     render "base/shared/result_continuation", layout: false,
                                               locals: { action_url: request.path,
@@ -30,33 +35,11 @@ module OidcAuthorizationResultPost
 
   def create
     if params[:ceremony_action].present?
-      raise ArgumentError unless params[:ceremony_action].is_a?(String) && params[:ceremony_action] == "start" &&
-        params[:result_ref].blank? && params[:transaction_ref].blank? && params[:result].blank?
-
-      validate_authorization_request!
-      return issue_authorization_code!(current_resource_for_oidc_authorization) if authorization_session_sufficient?
-
-      start_authorization_ceremony!
-      return
+      return start_authorization_from_post!
     end
 
     if params[:result_ref].present? || params[:transaction_ref].present?
-      raise ArgumentError unless params[:result_ref].is_a?(String) &&
-        params.expect(:result_ref).match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN) &&
-        params[:transaction_ref].is_a?(String) && params[:transaction_ref].present? && params[:result].blank?
-
-      transaction =
-        OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
-          surface: oidc_result_surface, transaction_id: params[:transaction_ref].to_s,
-        )
-      validate_authorization_request!(transaction.authorize_params)
-      validate_authorization_transaction_ready!(transaction)
-      result_payload = BaseAuthAdmissionCoordinator.read_result_reference!(
-        reference: params[:result_ref], surface: oidc_result_surface,
-        transaction_ref: params[:transaction_ref], expected_intent: transaction.intent,
-      )
-      resume_authorization!(transaction, result_generation: result_payload.fetch("result_generation"))
-      return
+      return complete_authorization_from_post!
     end
 
     raise ArgumentError, "result reference is required" if params[:result].present?
@@ -86,9 +69,44 @@ module OidcAuthorizationResultPost
 
   private
 
+  def start_authorization_from_post!
+    raise ArgumentError unless params[:ceremony_action].is_a?(String) && params[:ceremony_action] == "start" &&
+      params[:result_ref].blank? && params[:transaction_ref].blank? && params[:result].blank?
+
+    validate_authorization_request!
+    return issue_authorization_code!(current_resource_for_oidc_authorization) if authorization_session_sufficient?
+
+    start_authorization_ceremony!
+  end
+
+  def complete_authorization_from_post!
+    raise ArgumentError unless params[:result_ref].is_a?(String) &&
+      params.expect(:result_ref).match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN) &&
+      params[:transaction_ref].is_a?(String) && params[:transaction_ref].present? && params[:result].blank?
+
+    transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
+      surface: oidc_result_surface, transaction_id: params[:transaction_ref],
+    )
+    validate_base_result_browser_binding!(transaction)
+    validate_authorization_request!(transaction.authorize_params)
+    validate_authorization_transaction_ready!(transaction)
+    payload = BaseAuthAdmissionCoordinator.read_result_reference!(
+      reference: params[:result_ref], surface: oidc_result_surface,
+      transaction_ref: params[:transaction_ref], expected_intent: transaction.intent,
+    )
+    browser_nonce = base_admission_browser_nonce
+    resume_authorization!(transaction, result_generation: payload.fetch("result_generation"))
+    # Root issuance rotates the Rails session against fixation. Retain only this already-proven
+    # nonce so the exact browser can retry a finalized result without creating a second root.
+    return if transaction.reload.base_finalized_at.blank?
+
+    session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] = browser_nonce
+  end
+
   def render_authorization_ceremony_start!
     render "base/shared/authorization_ceremony_start", layout: false,
-                                                       locals: { action_url: request.path, fields: authorize_params.to_h }
+                                                       locals: { action_url: request.path,
+                                                                 fields: authorize_params.to_h, }
   end
 
   def current_resource_for_oidc_authorization

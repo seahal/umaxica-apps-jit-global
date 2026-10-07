@@ -682,3 +682,12 @@ Only the initial management session and Step-Up are fixture state; fresh browser
 Step-Up and signup are not proven by this case. External Jump and Turnstile are
 test adapter substitutes behind a loopback HTTPS proxy. See
 `evidence/2026-10-05-app-secret-browser-admission-9D3F.md` for commands and limits.
+
+## Delivered reconciliation (2026-10-06)
+
+The current Secret contract is identity-first and browser/operation bound. A finalized email or
+telephone binding resolves the Client before Argon2id verification. Presentation, confirmation,
+claim, cancel, reattempt, rename and revoke are explicit POST operations with one-time payload and
+receipt rules. Plaintext is never returned as a durable page-history prop; browser cleanup is
+defense in depth, while stale requests are refused by the server. Source mutation and audit-outbox
+rows commit together, and cleanup waits for proof, audit, legal and enforcement conditions.

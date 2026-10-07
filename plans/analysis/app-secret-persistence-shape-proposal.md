@@ -430,3 +430,11 @@ is stored in the new fields. It does not change accepted TTL values, com/org,
 or authorize shared database application. Production-shape changes await explicit
 approval under the data-shape harness; the failing HTTP test remains evidence of
 the uncorrected behavior.
+
+## Reconciliation after `two.md` (2026-10-06)
+
+This proposal is historical input material. The delivered schema removes `lookup_digest`, adds the
+current authentication facts and outbox authority snapshots, and uses the rebuild migration owned
+by `adr/app-secret-phase1-rebuild.md`. The former “workflow integration remains incomplete” and
+“failing HTTP test” statements are superseded by the Phase 21–23 evidence. Shared production
+application and deployment remain outside this local verification.

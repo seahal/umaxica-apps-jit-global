@@ -49,9 +49,9 @@ class CsrfNotificationEmissionTest < ActionDispatch::IntegrationTest
       capture_csrf_events do
         with_forgery_protection do
           post(
-            auth_app_sign_in_email_url(ri: "jp"),
+            "/ceremony_bindings?ri=jp",
             params: { user_email: { address: "csrf-probe@example.com" } },
-            headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
+            headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
                        "Sec-Fetch-Site" => "cross-site", },
           )
         end
@@ -126,9 +126,9 @@ class CsrfNotificationEmissionTest < ActionDispatch::IntegrationTest
   def post_cross_site_sign_in
     with_forgery_protection do
       post(
-        auth_app_sign_in_email_url(ri: "jp"),
+        "/ceremony_bindings?ri=jp",
         params: { user_email: { address: "csrf-probe@example.com" } },
-        headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
+        headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
                    "Sec-Fetch-Site" => "cross-site", },
       )
     end

@@ -14,8 +14,8 @@
 // take `SHELL`, so the brand, the page title and the footer links sit on one vertical line at every
 // width. A page picks how narrow it wants to be inside that column through `Page`'s `width`; it
 // never restates the gutter.
-import { usePage } from "@inertiajs/react";
-import type { ReactNode } from "react";
+import { router, usePage } from "@inertiajs/react";
+import { useEffect, type ReactNode } from "react";
 
 import CookieBanner from "@/components/chrome/CookieBanner";
 import ThemeControls from "@/components/chrome/ThemeControls";
@@ -28,7 +28,14 @@ const NAV_LINK =
   "ui-text-link text-base text-fg-muted underline underline-offset-4 hover:text-fg hover:underline";
 
 export default function SurfaceLayout({ children }: { children: ReactNode }) {
-  const { chrome } = usePage<SharedProps>().props;
+  const { chrome, clear_history: clearHistory } = usePage<SharedProps>().props;
+
+  useEffect(() => {
+    if (clearHistory) {
+      router.clearHistory();
+    }
+  }, [clearHistory]);
+
   const footerLabel =
     typeof document === "undefined"
       ? undefined

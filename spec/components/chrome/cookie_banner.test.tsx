@@ -299,9 +299,11 @@ describe("CookieBanner mount", () => {
 });
 
 describe("CookieBanner actions", () => {
-  const patchPayload = (consented: boolean) => [
-    ENDPOINT,
-    {
+  test("accepting sends consent for every category and hides the banner", async () => {
+    await mount();
+    await click(button(controls.accept_all));
+
+    expect(fetchMock).toHaveBeenLastCalledWith(ENDPOINT, {
       method: "PATCH",
       headers: {
         Accept: "application/json",
@@ -309,21 +311,9 @@ describe("CookieBanner actions", () => {
         "X-CSRF-Token": "csrf-token",
       },
       body: JSON.stringify({
-        cookie: {
-          consented: true,
-          functional: consented,
-          performant: consented,
-          targetable: consented,
-        },
+        cookie: { consented: true, functional: true, performant: true, targetable: true },
       }),
-    },
-  ];
-
-  test("accepting sends consent for every category and hides the banner", async () => {
-    await mount();
-    await click(button(controls.accept_all));
-
-    expect(fetchMock).toHaveBeenLastCalledWith(...patchPayload(true));
+    });
     expect(banner()).toBeNull();
   });
 
@@ -331,7 +321,17 @@ describe("CookieBanner actions", () => {
     await mount();
     await click(button(controls.reject_all));
 
-    expect(fetchMock).toHaveBeenLastCalledWith(...patchPayload(false));
+    expect(fetchMock).toHaveBeenLastCalledWith(ENDPOINT, {
+      method: "PATCH",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-CSRF-Token": "csrf-token",
+      },
+      body: JSON.stringify({
+        cookie: { consented: true, functional: false, performant: false, targetable: false },
+      }),
+    });
     expect(banner()).toBeNull();
   });
 

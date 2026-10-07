@@ -99,6 +99,7 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
 
   private
 
+  # rubocop:disable Metrics/AbcSize, Metrics/MethodLength -- This browser journey binds email verification to the durable session-limit child.
   def complete_email_sign_in_for_session_limit!(email)
     base = open_session
     auth = open_session
@@ -182,4 +183,5 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
     base.follow_redirect! if base.response.redirect?
     base
   end
+  # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 end

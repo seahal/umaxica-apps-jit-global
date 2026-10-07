@@ -103,7 +103,8 @@ class OidcAuthorizationTransactionPurger
     resolutions = resolution_model.where(oidc_authorization_transaction_id: parent.id).lock.to_a
     return true if resolutions.empty?
 
-    flow_ids = resolutions.map(&:sign_in_flow_id).uniq
+    flow_ids = resolutions.map(&:sign_in_flow_id)
+    flow_ids.uniq!
     flows = flow_model.where(id: flow_ids).index_by(&:id)
     return false if resolutions.any? do |resolution|
       flow = flows[resolution.sign_in_flow_id]

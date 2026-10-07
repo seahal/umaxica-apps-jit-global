@@ -9,6 +9,20 @@ import { answerConfirmation } from "../../../support/confirmation";
 // on and stands in for it.
 vi.mock("@/lib/csrf", () => ({ csrfToken: () => "csrf-token" }));
 
+const deleteRequest = vi.fn();
+const patchRequest = vi.fn();
+vi.mock("@inertiajs/react", () => ({
+  router: { delete: deleteRequest, patch: patchRequest },
+  useForm: (initial: Record<string, string>) => ({
+    data: initial,
+    setData: vi.fn(),
+    transform: vi.fn(),
+    patch: patchRequest,
+    processing: false,
+    errors: {},
+  }),
+}));
+
 vi.mock("@/features/turnstile/TurnstileWidget", () => ({
   default: () => (
     <input
@@ -20,8 +34,8 @@ vi.mock("@/features/turnstile/TurnstileWidget", () => ({
 }));
 
 const { default: OrgPasskeySettingsIndex } =
-  await import("@/pages/auth/org/settings/passkeys/index");
-const { default: OrgPasskeySettingsShow } = await import("@/pages/auth/org/settings/passkeys/show");
+  await import("@/pages/base/org/identity/passkeys/index");
+const { default: OrgPasskeySettingsShow } = await import("@/pages/base/org/identity/passkeys/show");
 const { default: OrgSessionLimitPage } = await import("@/pages/auth/org/sign/in/sessions/show");
 
 let container: HTMLDivElement;
@@ -47,6 +61,15 @@ const submitForm = (index = 0) => {
   return event;
 };
 
+const clickButton = (label: string) => {
+  const button = [...container.querySelectorAll("button")].find(
+    (candidate) => candidate.textContent === label,
+  )!;
+  act(() => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+};
+
 beforeEach(() => {
   vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(submitted);
 });
@@ -57,33 +80,26 @@ afterEach(() => {
   });
   container.remove();
   submitted.mockClear();
+  deleteRequest.mockClear();
   vi.restoreAllMocks();
 });
-
-const turnstile = {
-  site_key: "site",
-  mode: "execute" as const,
-  action: null,
-  cdata: null,
-};
 
 describe("org passkey settings confirmation", () => {
   const indexProps = {
     title: "パスキー",
     description: "登録済みのパスキー。",
-    add_link: { label: "追加", href: "/settings/passkeys/new" },
+    new_link: { label: "追加", href: "/settings/passkeys/new" },
     back_link: { label: "もどる", href: "/settings" },
-    columns: { description: "名前", created_at: "作成", actions: "操作" },
-    empty: "登録がありません。",
-    edit_label: "編集",
-    destroy_label: "削除",
-    destroy_confirm: "このパスキーを削除しますか？",
-    turnstile,
+    remove_label: "削除",
+    remove_confirm: "このパスキーを削除しますか？",
+    empty_message: "登録がありません。",
     passkeys: [
       {
+        public_id: "pk_1",
         description: "ノートPC",
-        created_at: "2026-01-01",
-        edit_href: "/settings/passkeys/pk_1/edit",
+        created_at: null,
+        last_used_at: null,
+        show_href: "/settings/passkeys/pk_1",
         destroy_action: "/settings/passkeys/pk_1",
       },
     ],
@@ -103,7 +119,7 @@ describe("org passkey settings confirmation", () => {
   it("holds the deletion back until the operator accepts", () => {
     mount(<OrgPasskeySettingsIndex {...indexProps} />);
 
-    expect(submitForm().defaultPrevented).toBe(true);
+    clickButton("削除");
     expect(document.querySelector("[role='dialog']")?.textContent).toContain(
       "このパスキーを削除しますか？",
     );
@@ -111,33 +127,45 @@ describe("org passkey settings confirmation", () => {
     answerConfirmation(false);
     expect(submitted).not.toHaveBeenCalled();
 
-    submitForm();
+    clickButton("削除");
     answerConfirmation(true);
-    expect(submitted).toHaveBeenCalledTimes(1);
+    expect(deleteRequest).toHaveBeenCalledWith("/settings/passkeys/pk_1");
   });
 
   it("keeps the DELETE the show screen carries behind the same confirmation", () => {
     mount(
       <OrgPasskeySettingsShow
         title="ノートPC"
+        description="登録済みのパスキー。"
         back_link={{ label: "もどる", href: "/settings/passkeys" }}
-        details={[{ term: "作成", value: "2026-01-01" }]}
-        edit_link={{ label: "編集", href: "/settings/passkeys/pk_1/edit" }}
-        destroy_action="/settings/passkeys/pk_1"
-        destroy_label="削除"
-        destroy_confirm="このパスキーを削除しますか？"
-        turnstile={turnstile}
+        passkey={{
+          public_id: "pk_1",
+          description: "ノートPC",
+          created_at: "2026-01-01",
+          last_used_at: null,
+        }}
+        form={{
+          action: "/settings/passkeys/pk_1",
+          description: "ノートPC",
+          label: "名前",
+          submit_label: "保存",
+        }}
+        destroy={{
+          action: "/settings/passkeys/pk_1",
+          label: "削除",
+          confirm: "このパスキーを削除しますか？",
+        }}
+        error={null}
       />,
     );
 
-    submitForm();
+    clickButton("削除");
     answerConfirmation(false);
-    expect(submitted).not.toHaveBeenCalled();
+    expect(deleteRequest).not.toHaveBeenCalled();
 
-    submitForm();
+    clickButton("削除");
     answerConfirmation(true);
-    expect(submitted).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('input[name="_method"]')?.getAttribute("value")).toBe("delete");
+    expect(deleteRequest).toHaveBeenCalledWith("/settings/passkeys/pk_1");
   });
 });
 

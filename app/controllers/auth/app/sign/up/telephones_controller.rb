@@ -24,6 +24,7 @@ module Auth
 
           AUTHENTICATION_MODE = :guest
 
+          before_action :require_sign_up_ceremony_admission!
           before_action :reject_suspended_sign_up!
 
           declare_authentication_mode! :guest, status: :unauthorized,
@@ -115,12 +116,14 @@ module Auth
             begin
               result = SignAppUpTelephoneSignupCreator.call(
                 telephone: @user_telephone,
-                pending_public_id: session_public_id_from_registration,
               )
 
               @user_telephone = result.telephone
               session[:user_telephone_registration] = result.session_payload
               bind_sign_up_flow_to_telephone!(@user_telephone)
+              SignUpOtpDeliveryIssuer.call(
+                flow: current_sign_up_flow, record: @user_telephone, channel: :telephone,
+              )
               redirect_to(
                 auth_app_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params),
               )
@@ -243,7 +246,18 @@ module Auth
           end
 
           def valid_telephone_session?
-            return false unless @user_telephone.present? && !@user_telephone.otp_expired?
+            return false unless @user_telephone
+
+            context = @user_telephone.sign_up_otp_context
+            if context&.fetch("verified_at") && @sign_up_ticket
+              return context.fetch("surface") == "app" && context.fetch("purpose") == "sign_up" &&
+                  context.fetch("flow_ref") == @sign_up_ticket.public_id &&
+                  context.fetch("nonce_digest") == @sign_up_ticket.nonce_digest &&
+                  context.fetch("contact_ref") == @user_telephone.public_id &&
+                  !@user_telephone.binding_finalized_at && !@user_telephone.binding_released? &&
+                  Time.iso8601(context.fetch("result_expires_at")) > @user_telephone.class.database_now
+            end
+            return false if @user_telephone.otp_expired?
 
             @user_telephone.user_telephone_status_id == ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
           end
@@ -277,21 +291,6 @@ module Auth
             return false if last_sent_at.blank?
 
             last_sent_at.to_i > CommonOtpPolicy::SEND_COOLDOWN.ago.to_i
-          end
-
-          def cleanup_pending_telephone_signup!
-            pending_public_id =
-              session.dig(:user_telephone_registration, "public_id") ||
-              session.dig(:user_telephone_registration, :public_id)
-            sign_up_flow_locator.clear!
-            return if pending_public_id.blank?
-
-            pending_telephone = ClientTelephone.find_by(public_id: pending_public_id)
-            return unless pending_telephone
-
-            pending_user = pending_telephone.user
-            pending_telephone.destroy!
-            pending_user.destroy! if pending_user&.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
           end
 
           def log_signup_telephone_errors

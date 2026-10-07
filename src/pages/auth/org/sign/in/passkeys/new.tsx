@@ -28,7 +28,6 @@ export default function OrgPasskeySignInPage({
       width="narrow"
     >
       <PasskeyAuthenticationPanel {...panel} />
-
     </Page>
   );
 }

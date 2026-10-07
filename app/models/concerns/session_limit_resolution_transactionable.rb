@@ -32,15 +32,7 @@ module SessionLimitResolutionTransactionable
       raise FlowConfigurationError, "unsupported session-limit resolution actor: #{actor.class.name}"
     end
   end
-
-  included do
-    self.belongs_to_required_by_default = false
-
-    validates :state_id, :sign_in_flow_id, :actor_ref, :browser_binding_digest, :started_at, :expires_at,
-              presence: true
-    validates :challenge_digest, presence: true, uniqueness: true
-    validates :state_id, inclusion: { in: TRANSITIONS.keys }
-  end
+  public_class_method :model_for
 
   class_methods do
     def resolution_actor_class
@@ -212,6 +204,8 @@ module SessionLimitResolutionTransactionable
       [parent_expiry, now + TTL].compact.min
     end
   end
+
+  public
 
   def pending?
     state_id == PENDING

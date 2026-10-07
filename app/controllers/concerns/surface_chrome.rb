@@ -37,8 +37,10 @@ module SurfaceChrome
   # module, so route helpers cannot be composed from the module name alone.
   SURFACE_ROUTE_NAMES = { "dev" => "developer", "net" => "network" }.freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     inertia_share chrome: -> { surface_chrome }
+    inertia_share clear_history: -> { session[:inertia_clear_history] == true }
   end
 
   private

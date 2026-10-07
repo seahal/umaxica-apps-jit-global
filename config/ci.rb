@@ -81,6 +81,15 @@ CI.run do
     step "Tests: Rails", "bin/rails test"
   end
 
+  step "Security: Authentication invariant guards", <<~SH
+    bin/rails test \
+      test/security/invariants/lifecycle_direct_state_write_invariant_test.rb \
+      test/security/invariants/csrf_verification_strategy_invariant_test.rb \
+      test/unit/security/standard_csrf_invariant_test.rb \
+      test/unit/security/identity_authority_inversion_guard_test.rb \
+      test/unit/security/webauthn_invariants_test.rb
+  SH
+
   # Enable this after db/seeds.rb is intentionally valid as a CI contract.
   # step "Database: Seeds", "env RAILS_ENV=test bin/rails db:seed:replant"
 end

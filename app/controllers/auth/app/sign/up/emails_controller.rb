@@ -22,6 +22,7 @@ module Auth
 
           REGISTRATION_EMAIL_PERMITTED_KEYS = %i(raw_address address confirm_policy promotional notifiable).freeze
 
+          before_action :require_sign_up_ceremony_admission!
           before_action :reject_suspended_sign_up!
           before_action :enforce_email_flow!
 
@@ -107,7 +108,6 @@ module Auth
               return
             end
 
-            bind_sign_up_flow_to_email!(@user_email)
             progress_email_flow!(:create)
             redirect_params = {}
             sanitize_redirect_params!(redirect_params)
@@ -119,6 +119,14 @@ module Auth
           def sign_up_surface = :app
 
           def email_otp_purpose = :sign_up
+
+          def send_verification_email(_otp_number)
+            bind_sign_up_flow_to_email!(@user_email)
+            SignUpOtpDeliveryIssuer.call(
+              flow: current_sign_up_flow, record: @user_email, channel: :email,
+              verification_token: @user_email.generate_verification_token,
+            )
+          end
 
           # The registration form. `pt` travels in the generated action URL rather than as a prop,
           # so the signed target never becomes page data the browser holds separately.
@@ -292,7 +300,17 @@ module Auth
           end
 
           def valid_email_session?
-            return false if @user_email.blank?
+            return false unless @user_email
+
+            context = @user_email.sign_up_otp_context
+            if context&.fetch("verified_at") && @sign_up_ticket
+              return context.fetch("surface") == "app" && context.fetch("purpose") == "sign_up" &&
+                  context.fetch("flow_ref") == @sign_up_ticket.public_id &&
+                  context.fetch("nonce_digest") == @sign_up_ticket.nonce_digest &&
+                  context.fetch("contact_ref") == @user_email.public_id &&
+                  !@user_email.binding_finalized_at && !@user_email.binding_released? &&
+                  Time.iso8601(context.fetch("result_expires_at")) > @user_email.class.database_now
+            end
             return false if @user_email.otp_expired?
 
             @user_email.user_email_status_id == ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP

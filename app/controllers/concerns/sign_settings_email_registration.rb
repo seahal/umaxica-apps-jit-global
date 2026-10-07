@@ -18,7 +18,9 @@ module SignSettingsEmailRegistration
   def commit_settings_email_registration!(surface:, actor:, candidate:)
     config = settings_email_registration_config(surface)
     email =
-      config.fetch(:record_class).transaction do
+      actor.with_lock do
+        raise IdentityEmailCeremonyContract::Error, "Contact owner is unavailable" unless actor.active?
+
         locked = config.fetch(:record_class).lock.find(candidate.id)
         raise IdentityEmailCeremonyContract::Error,
               "email candidate owner changed" unless locked.public_send(config.fetch(:owner_key)) == actor.id
@@ -26,6 +28,7 @@ module SignSettingsEmailRegistration
               "email candidate is already verified" unless locked.public_send(config.fetch(:status_key)) ==
                 config.fetch(:unverified_status)
 
+        release_previous_settings_email!(config, actor, locked) if config[:binding]
         attributes = { config.fetch(:status_key) => config.fetch(:verified_status) }
         attributes[:binding_finalized_at] = config.fetch(:record_class).database_now if config[:binding]
         locked.update!(attributes)
@@ -42,6 +45,19 @@ module SignSettingsEmailRegistration
   # concrete surface rather than copying another surface's policy.
   def on_email_registration_verified!(*)
     nil
+  end
+
+  def release_previous_settings_email!(config, actor, candidate)
+    config.fetch(:record_class).effective_binding.where(config.fetch(:owner_key) => actor.id)
+      .where.not(id: candidate.id).lock.each do |previous|
+      previous.release_binding!
+      previous.clear_otp
+      previous.save!
+      ContactBindingAuditRecorder.call!(
+        actor_context: current_actor, actor: actor, contact: previous,
+        operation_ref: candidate.public_id, event_name: "released",
+      )
+    end
   end
 
   def settings_email_registration_config(surface)
@@ -74,6 +90,13 @@ module SignSettingsEmailRegistration
   end
 
   def record_settings_email_registration_audit!(config, actor, email)
+    if config[:binding]
+      return ContactBindingAuditRecorder.call!(
+        actor_context: current_actor, actor: actor, contact: email,
+        operation_ref: email.public_id, event_name: "finalized",
+      )
+    end
+
     return if config[:audit_event_id].blank?
 
     IdentityAudit.record!(

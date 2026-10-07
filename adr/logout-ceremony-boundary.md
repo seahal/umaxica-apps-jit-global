@@ -65,3 +65,11 @@ completion delivery remains outside the Jump graph.
 - `docs/security/logout-sequence.md`
 - `docs/security/oidc-discovery-profile.md`
 - `docs/security/logout-session-management.md`
+
+## Delivered reconciliation (2026-10-06)
+
+Logout is authority-first. The parent Browser Session is revoked at the irreversible commit point,
+then authority cleanup, origin cleanup, initiating RP cleanup and finalization run with durable
+operation facts. Access JWTs remain valid until `exp` plus leeway and sibling RP rows are not
+synchronously revoked. Completed, cancelled and expired browser ceremonies use replace-style
+navigation and the official Inertia history primitive; stale mutation is rejected server-side.

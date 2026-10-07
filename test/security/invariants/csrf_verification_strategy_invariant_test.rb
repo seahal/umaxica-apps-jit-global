@@ -24,19 +24,6 @@ module Security
 
       EXPECTED_STRATEGY = :header_or_legacy_token
 
-      # Endpoints that intentionally require Sec-Fetch-Site with no token fallback.
-      # These are cross-site POSTs from a trusted origin where no session-bound
-      # authenticity token can exist, so the header is the only real signal and a
-      # token fallback would weaken them.
-      HEADER_ONLY_EXCEPTIONS = {
-        "app/controllers/base/app/oidc/logouts_controller.rb" =>
-          "RP-initiated logout POST, guarded by an explicit trusted_origins allowlist",
-        "app/controllers/base/com/oidc/logouts_controller.rb" =>
-          "Corporate RP-initiated logout POST, guarded by its surface-local trusted_origins allowlist",
-        "app/controllers/base/org/oidc/logouts_controller.rb" =>
-          "Staff RP-initiated logout POST, guarded by its surface-local trusted_origins allowlist",
-      }.freeze
-
       test "every protect_from_forgery declaration states its verification strategy" do
         missing =
           protect_from_forgery_declarations.reject { |declaration| declaration.fetch(:source).include?("using:") }
@@ -47,18 +34,16 @@ module Security
                      "application's chosen strategy and rejects browsers without Sec-Fetch-Site."
       end
 
-      test "every surface uses the hybrid strategy except the reviewed header-only endpoints" do
+      test "every browser surface uses the standard hybrid strategy without endpoint exceptions" do
         unexpected =
           protect_from_forgery_declarations.filter_map do |declaration|
             next if declaration.fetch(:source).include?("using: :#{EXPECTED_STRATEGY}")
-            next if HEADER_ONLY_EXCEPTIONS.key?(declaration.fetch(:path))
 
             "#{declaration.fetch(:path)}:#{declaration.fetch(:line)} -> #{declaration.fetch(:source)}"
           end
 
         assert_empty unexpected,
-                     "Unreviewed CSRF verification strategy. Either use :#{EXPECTED_STRATEGY} or " \
-                     "record the endpoint in HEADER_ONLY_EXCEPTIONS with the reason."
+                     "Every browser endpoint must use :#{EXPECTED_STRATEGY}; protocol controllers have no browser CSRF."
       end
 
       test "the framework default is the strict strategy, so the explicit option is load-bearing" do
@@ -80,8 +65,6 @@ module Security
 
       def protect_from_forgery_declarations
         Rails.root.glob("app/controllers/**/*.rb").flat_map do |path|
-          # relative_path_from keeps this stable regardless of how Rails.root
-          # interpolates; HEADER_ONLY_EXCEPTIONS is keyed without a leading slash.
           relative = path.relative_path_from(Rails.root).to_s
           path.read.lines.each_with_index.filter_map do |line, index|
             next unless line.include?("protect_from_forgery")

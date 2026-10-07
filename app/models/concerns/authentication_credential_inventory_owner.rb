@@ -33,5 +33,4 @@ module AuthenticationCredentialInventoryOwner
   def has_usable_step_up_capability?(excluding: nil, reload: false)
     authentication_credential_inventory(excluding: excluding, reload: reload).has_usable_step_up_capability?
   end
-
 end

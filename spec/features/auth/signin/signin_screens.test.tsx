@@ -104,7 +104,7 @@ describe("sign-in method choice", () => {
       />Email<.*>Passkey<.*>Emergency<.*>Device<.*action="\/social\/google\/session\?ri=jp".*action="\/social\/apple\/session\?ri=jp".*<hr[^>]*>.*>Need an account<.*<p[^>]*>Cancel<\/p>/su,
     );
     expect(markup).toMatch(/<p[^>]*>Cancel<\/p>/u);
-    const interactiveElements = markup.match(/<(a|button|form)\b[^>]*>[^]*?<\/\1>/gu) ?? [];
+    const interactiveElements = markup.match(/<(a|button|form)\b[^>]*>[^]*?<\/\1>/gu)!;
     expect(interactiveElements.some((element) => element.includes("Cancel"))).toBe(false);
     expect(markup.match(/<form[^>]*method="post"/gu)).toHaveLength(2);
     expect(markup.match(/name="authenticity_token" value="csrf-value"/gu)).toHaveLength(2);
@@ -119,7 +119,7 @@ describe("sign-in method choice", () => {
       />,
     );
     expect(markup).toMatch(/<p[^>]*>Cancel<\/p><\/div>$/u);
-    const controls = markup.match(/<(a|button|form)\b[^>]*>[^]*?<\/\1>/gu) ?? [];
+    const controls = markup.match(/<(a|button|form)\b[^>]*>[^]*?<\/\1>/gu)!;
     expect(controls.some((control) => control.includes("Cancel"))).toBe(false);
     expect(markup).not.toContain("<hr");
     expect(markup).not.toContain("/sign/in/emergency");

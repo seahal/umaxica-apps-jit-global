@@ -76,56 +76,41 @@ class RetentionPurgeJob < ApplicationJob
       ClientSecretLifecycleJob.perform_now(batch_size: limit)
     end
 
-    RETAINABLE_MODELS.each do |klass|
-      now = klass.database_now
-
-      if klass == ClientSecretCredential
-        next
-      end
-
-      if [Client, Visitor].include?(klass)
-        anonymize_accounts(klass, now: now, batch_size: limit)
-        next
-      end
-
-      if klass == Operator
-        purge_operators(now: now, batch_size: limit)
-        next
-      end
-
-      next unless klass.column_names.include?("purge_eligible_at")
-
-      if [ClientSignInFlow, VisitorSignInFlow, OperatorSignInFlow].include?(klass)
-        purge_sign_in_flows(klass, now: now, batch_size: limit)
-        next
-      end
-
-      if klass == ClientSignUpFlow
-        purge_client_authentication_flows(klass, now: now, batch_size: limit)
-        next
-      end
-
-      if klass == ClientToken
-        purge_client_tokens(klass, now: now, batch_size: limit)
-        next
-      end
-
-      if klass == ClientPasskey
-        purge_client_passkeys(klass, now: now, batch_size: limit)
-        next
-      end
-
-      if [ClientSessionLimitResolutionTransaction, VisitorSessionLimitResolutionTransaction,
-          OperatorSessionLimitResolutionTransaction,].include?(klass)
-        purge_session_limit_resolutions(klass, now: now, batch_size: limit)
-        next
-      end
-
-      klass.where(purge_eligible_at: ..now).in_batches(of: limit).delete_all
-    end
+    RETAINABLE_MODELS.each { |klass| purge_retained_model(klass, batch_size: limit) }
   end
 
   private
+
+  def purge_retained_model(klass, batch_size:)
+    now = klass.database_now
+    return if klass == ClientSecretCredential
+    return if purge_special_retained_model(klass, now: now, batch_size: batch_size)
+    return unless klass.column_names.include?("purge_eligible_at")
+
+    klass.where(purge_eligible_at: ..now).in_batches(of: batch_size).delete_all
+  end
+
+  def purge_special_retained_model(klass, now:, batch_size:)
+    if [Client, Visitor].include?(klass)
+      anonymize_accounts(klass, now: now, batch_size: batch_size)
+    elsif klass == Operator
+      purge_operators(now: now, batch_size: batch_size)
+    elsif [ClientSignInFlow, VisitorSignInFlow, OperatorSignInFlow].include?(klass)
+      purge_sign_in_flows(klass, now: now, batch_size: batch_size)
+    elsif klass == ClientSignUpFlow
+      purge_client_authentication_flows(klass, now: now, batch_size: batch_size)
+    elsif klass == ClientToken
+      purge_client_tokens(klass, now: now, batch_size: batch_size)
+    elsif klass == ClientPasskey
+      purge_client_passkeys(klass, now: now, batch_size: batch_size)
+    elsif [ClientSessionLimitResolutionTransaction, VisitorSessionLimitResolutionTransaction,
+           OperatorSessionLimitResolutionTransaction,].include?(klass)
+      purge_session_limit_resolutions(klass, now: now, batch_size: batch_size)
+    else
+      return false
+    end
+    true
+  end
 
   def purge_client_authentication_flows(klass, now:, batch_size:)
     klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|

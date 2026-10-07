@@ -10,7 +10,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     host! @core_host
   end
 
-  test "authority-first logout revokes the parent before origin cleanup" do
+  test "authority-first logout revokes the parent before origin cleanup" do # rubocop:disable Minitest/MultipleAssertions -- Verifies the ordered authority and origin cleanup boundaries.
     user = clients(:one)
     root_token = ClientToken.create!(
       user: user,

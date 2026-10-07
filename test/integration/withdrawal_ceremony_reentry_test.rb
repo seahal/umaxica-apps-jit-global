@@ -22,6 +22,7 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
       confirm_policy: "1",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     fake_adapter = Object.new
     fake_adapter.define_singleton_method(:deliver) { |**_args| true }
 
@@ -70,6 +71,7 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
       confirm_policy: "1",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     fake_adapter = Object.new
     fake_adapter.define_singleton_method(:deliver) { |**_args| true }
 
@@ -102,7 +104,7 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
       address: "active-client@example.test",
       confirm_policy: "1",
       user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
+    ).finalize_binding!
 
     assert_no_difference -> { ClientWithdrawalCeremony.count } do
       post base_app_identity_withdrawal_session_url(ri: "jp", host: host),
@@ -129,6 +131,7 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
       confirm_policy: "1",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     deliveries = []
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**args| deliveries << args }
@@ -173,6 +176,7 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
       confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     fake_adapter = Object.new
     fake_adapter.define_singleton_method(:deliver) { |**_args| true }
 
@@ -218,6 +222,7 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
       confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     deliveries = []
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**args| deliveries << args }

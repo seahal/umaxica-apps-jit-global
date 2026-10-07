@@ -111,6 +111,7 @@ module Base
           issuance = OidcAuthorizationTransactionCoordinator.issue_with_handoff!(
             surface: "org", intent: authorization_intent, params: authorize_params,
             base_browser_nonce: base_admission_browser_nonce, base_token: current_session_token,
+            restart_of: params[:restart_of],
           )
           sign_url =
             if authorization_intent == "sign_up"

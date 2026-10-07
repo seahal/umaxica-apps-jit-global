@@ -11,6 +11,7 @@ module OidcAuthorizationTransactionable
   RETENTION_PERIOD = 15.minutes
   RESULT_TTL = 60.seconds
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     class_attribute :oidc_authorization_surface_name, instance_accessor: false # rubocop:disable ThreadSafety/ClassAndModuleAttributes
 

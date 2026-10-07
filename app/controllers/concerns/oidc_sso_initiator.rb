@@ -55,7 +55,7 @@ module OidcSsoInitiator
       pt: oidc_pt,
       max_age: max_age,
     )
-    log_oidc_pending_flow_created(state: state, pt: oidc_pt)
+    log_oidc_pending_flow_created
 
     oidc_authorization_url(
       code_challenge: challenge,
@@ -132,22 +132,15 @@ module OidcSsoInitiator
       .to_h
   end
 
-  def log_oidc_pending_flow_created(state:, pt:)
+  def log_oidc_pending_flow_created
     Rails.logger.info(
       JitLogEvent.format(
         "oidc.sso.pending_flow.created",
         client_id: oidc_client_id,
-        host: request.host,
-        csrf_digest12: oidc_sso_digest12(state),
-        pt_digest12: oidc_sso_digest12(pt),
-        pt_is_root: pt == "/",
-        pending_flow_count: session[OIDC_PENDING_FLOWS_SESSION_KEY].to_h.size,
+        request_id: request.request_id,
+        status: "created",
       ),
     )
-  end
-
-  def oidc_sso_digest12(value)
-    Digest::SHA256.hexdigest(value.to_s).first(12)
   end
 
   def oidc_callback_url

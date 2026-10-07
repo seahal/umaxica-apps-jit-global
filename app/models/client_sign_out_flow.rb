@@ -50,6 +50,17 @@ class ClientSignOutFlow < AppTicketRecord
   include SignOutFlow
   include FlowSignOut
 
+  cycle_status_column :status_id
+  before_validation :assign_default_status_id
+  before_validation :sync_legacy_state_from_status
+  validates :status_id, inclusion: { in: ->(record) { record.class::STATUS_IDS } }
+  validates :step, presence: true, inclusion: { in: ->(record) { record.class::STEPS } },
+                   if: ->(record) { record.class.const_defined?(:STEPS, false) }
+  validates :state, presence: true, if: ->(record) { record.has_attribute?(:state) }
+  validate :legacy_state_matches_status
+  validate :step_matches_status
+  validate :completed_status_has_completed_at
+
   STATUS_MODEL = ClientSignOutFlowStatus
   KIND_MODEL = ClientSignOutFlowKind
   STATUSES = {

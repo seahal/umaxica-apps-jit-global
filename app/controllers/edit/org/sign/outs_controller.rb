@@ -6,16 +6,24 @@ module Edit
     module Sign
       class OutsController < Edit::Org::BareController
         include ::BrowserRpAuthentication
+        include ::AuthenticationWithdrawalGate
+
         include ::AuthenticationLogoutable
         include ::SignOutNotice
         include ::OidcRpLogoutLauncher
         include ::SignOutClearSiteData
 
+        AUTHENTICATION_MODE = :open
+        after_action :verify_private_action_authorized!
+        after_action :apply_authenticated_page_cache_policy!
+        helper_method :current_resource, :browser_rp_authenticated?, :browser_rp_session_public_id,
+                      :current_browser_session_security_context, :current_session_public_id,
+                      :current_session, :logged_in?
+
         # OidcRpLogoutLauncher prepends its own callback and re-runs ensure_fqdn_gate_first!; restore
         # the inherited default no-store ahead of the gate (DefaultNoStore).
         prepend_before_action :apply_default_no_store
 
-        AUTHENTICATION_MODE = :open
         layout "edit/org/application"
 
         before_action :authenticate_oidc_rp_session!, only: :create,

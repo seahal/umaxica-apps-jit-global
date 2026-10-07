@@ -16,5 +16,5 @@ FqdnAvailabilityRegistry.flag_names.each { |flag| Flipper.enable(flag) }
 Rails.configuration.x.turnstile.verifier = 'TurnstileVerifierStub'
 
 server = Puma::Server.new(Rails.application)
-server.add_tcp_listener('127.0.0.1', 3188)
+server.add_tcp_listener('localhost', 3188)
 server.run.join

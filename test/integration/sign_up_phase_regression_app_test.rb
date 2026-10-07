@@ -235,8 +235,12 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
     flow = ClientSignUpFlow.order(:created_at).last
     version = flow.checkpoint_version
     patch birthdate_url, params: { requirement: "birthdate", checkpoint_version: version, birthdate: "1990-01-15" }
-    warn "DBG " + response.body.gsub(/<script.*?<\/script>/m, "").gsub(/<style.*?<\/style>/m, "").gsub(/<[^>]+>/, " ").squish[0,
-                                                                                                                              500,]
+    response_excerpt = response.body
+      .gsub(/<script.*?<\/script>/m, "")
+      .gsub(/<style.*?<\/style>/m, "")
+      .gsub(/<[^>]+>/, " ")
+      .squish[0, 500]
+    warn "DBG #{response_excerpt}"
 
     assert_equal ClientSignUpFlowStatus::COMPLETED, flow.reload.status_id
 

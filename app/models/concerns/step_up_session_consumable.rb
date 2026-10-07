@@ -11,6 +11,11 @@ module StepUpSessionConsumable
   VERIFICATION_PURPOSES = %w(step_up reauthentication).freeze
   REGISTRATION_PURPOSES = %w(bootstrap credential_registration).freeze
 
+  def revoke_authority!
+    self.class.revoke_authority_for!(id: id)
+    reload
+  end
+
   def issue_bound_passkey_challenge!(transaction:, challenge:, rp_id:, origin:)
     issue_passkey_challenge_for!(
       transaction: transaction, challenge: challenge, rp_id: rp_id, origin: origin, purposes: VERIFICATION_PURPOSES,
@@ -110,6 +115,24 @@ module StepUpSessionConsumable
   class_methods do
     public
 
+    def revoke_authority_for!(id:)
+      revoke_matching_authority!({ id: id })
+    end
+
+    def revoke_for_token!(token:)
+      key =
+        if self == ClientStepUpSession && token.is_a?(ClientToken)
+          :user_token_id
+        elsif self == VisitorStepUpSession && token.is_a?(VisitorToken)
+          :visitor_token_id
+        elsif self == OperatorStepUpSession && token.is_a?(OperatorToken)
+          :staff_token_id
+        else
+          raise ArgumentError, "step-up revocation realm mismatch"
+        end
+      revoke_matching_authority!({ key => token.id })
+    end
+
     # Runs the one-time completion work while holding the session row lock. A nil block result
     # leaves the row untouched; a successful result destroys the pending row before the transaction
     # commits. This keeps a concurrent worker from issuing a second step-up result.
@@ -128,6 +151,26 @@ module StepUpSessionConsumable
         end
       end
       result
+    end
+
+    private
+
+    def revoke_matching_authority!(conditions)
+      connection_class_for_self.connected_to(role: :writing) do
+        transaction do
+          record = where(conditions).lock.first
+          return unless record
+
+          now = database_now
+          attributes = { discard_at: record.accessible?(now) ? now : record.discard_at }
+          if record.passkey_challenge.present?
+            attributes[:passkey_challenge] = nil
+            attributes[:passkey_challenge_consumed_at] = record.passkey_challenge_consumed_at || now
+          end
+          record.update!(attributes)
+          record
+        end
+      end
     end
   end
 end

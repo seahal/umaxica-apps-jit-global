@@ -26,11 +26,16 @@ export type SignOutConfirmationProps = {
 
 export default function SignOutConfirmation(props: SignOutConfirmationProps) {
   const { title, description, form } = props;
-  if (props.back_link !== undefined && props.home_link !== undefined) {
+  // Server props still need runtime validation even though callers have an exclusive union.
+  const links: {
+    back_link?: { label: string; href: string };
+    home_link?: { label: string; href: string };
+  } = props;
+  if (links.back_link !== undefined && links.home_link !== undefined) {
     throw new Error("A sign-out page must provide one return link");
   }
 
-  const returnLink = props.back_link ?? props.home_link;
+  const returnLink = links.back_link ?? links.home_link;
 
   if (!returnLink) {
     throw new Error("A sign-out return link is required");

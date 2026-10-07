@@ -4,6 +4,7 @@
 module OauthAuthorizeRateLimit
   extend ActiveSupport::Concern
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_action :enforce_oauth_authorize_rate_limits!, only: :show
   end

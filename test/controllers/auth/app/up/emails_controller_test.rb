@@ -1,6 +1,9 @@
 # typed: false
 # frozen_string_literal: true
 
+# Snapshot diffs would expose OTP material and browser-bound token state on failure.
+# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
+
 require "test_helper"
 # require "helpers/global_test_support"
 
@@ -13,12 +16,40 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     reset_cookie_jar!
     cookies["csrf_token"] = csrf_token_value
     Rails.configuration.x.rate_limit.fetch(:store).clear
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
+    https!
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+
+    assert_response :success
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    admission_headers = { "Origin" => "https://#{request.host}", "Sec-Fetch-Site" => "same-origin" }
+    post(
+      "/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf },
+                            headers: admission_headers,
+    )
+
+    assert_response :see_other
+    # Public confirmation isolates this leaf's setup; separate HTTP tests exercise the Base receiver.
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+
+    assert_response :success
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf },
+                                       headers: admission_headers,
+    )
+
+    assert_response :see_other
   end
 
   teardown do
@@ -48,7 +79,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   test "direct email entry route no longer exists" do
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(
-        "http://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}/sign/up/email",
+        "http://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}/sign/up/email",
         method: :get,
       )
     end
@@ -84,7 +115,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "collection get redirects to add ri" do
-    get new_auth_app_sign_up_email_url(hotwire_spark: true, reload: "123"), headers: default_headers
+    get new_auth_app_sign_up_email_url(ri: nil, hotwire_spark: true, reload: "123"), headers: default_headers
 
     assert_response :redirect
   end
@@ -119,7 +150,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_not inertia_props.fetch("chrome").key?("primary_navigation")
   end
 
-  test "edit uses current registration email from session" do
+  test "edit requires a signed flow binding even when the browser has its current sequence" do
     # Establish flow state by starting a registration
     post auth_app_sign_up_email_url(ri: "jp"),
          params: {
@@ -131,11 +162,12 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
          },
          headers: default_headers
 
-    sequence_id = session[:auth_app_up_sequence_id]
-    session.delete(:app_sign_up_flow_locator)
-    session[:auth_app_up_sequence_id] = sequence_id
-
-    get auth_app_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+    target = response.location
+    cycle = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+    candidate = ClientEmail.find(cycle.pending_contact_id)
+    cycle_facts = cycle.reload.attributes
+    candidate_facts = candidate.reload.attributes
+    get target, headers: default_headers
 
     assert_response :success
     assert_equal "auth/app/sign/up/emails/edit", inertia_component
@@ -152,19 +184,40 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       I18n.t("sign.app.authentication.email.edit.delivery_help"),
       inertia_props.fetch("delivery_help"),
     )
+
+    get auth_app_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+
+    assert_response :conflict
+    assert(cycle_facts == cycle.reload.attributes, "a sequence id cannot replace browser authority")
+    assert(candidate_facts == candidate.reload.attributes, "missing browser authority preserves candidate evidence")
   end
 
   test "update accepts a valid otp submitted through client_email" do
     user_email = start_sign_up_flow!("client@example.com")
+    otp_query = Rack::Utils.parse_query(URI.parse(response.location).query)
+    bound_flow = SignFlowBindingCodec.decode(otp_query.fetch("fb"))
+
+    assert_equal "app", bound_flow.surface
+    assert_equal "sign_up", bound_flow.kind
+    assert_equal current_sign_up_flow(user_email).public_id, bound_flow.flow_public_id
     # Follow the OTP redirect produced by the create action.
     follow_redirect!
     pass_code = otp_code_for(user_email)
 
     patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
-          params: { client_email: { pass_code: pass_code } },
+          params: otp_query.merge("client_email" => { pass_code: pass_code }, "cf-turnstile-response" => "test"),
           headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp")
+    assert_response :redirect
+    checkpoint = URI.parse(response.location)
+
+    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), checkpoint.host
+    assert_equal "https", checkpoint.scheme
+    assert_equal URI.parse(auth_app_sign_up_check_email_birthdate_path(ri: "jp")).path, checkpoint.path
+    checkpoint_query = Rack::Utils.parse_query(checkpoint.query)
+
+    assert_equal "jp", checkpoint_query.fetch("ri")
+    assert_equal bound_flow, SignFlowBindingCodec.decode(checkpoint_query.fetch("fb"))
     assert_nil flash[:notice]
   end
 
@@ -278,18 +331,22 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_includes response.body, I18n.t("sign.app.registration.email.create.turnstile_validation_failed")
   end
 
-  test "create with existing verified email shows otp page without sending or creating records" do
+  test "create beside an effective email owns a new candidate without changing the original binding" do
     user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
     existing_email = ClientEmail.create!(
       user: user,
       address: "existing_signup@example.com",
       confirm_policy: "1",
       user_email_status_id: ClientEmailStatus::VERIFIED,
+      binding_finalized_at: ClientEmail.database_now,
     )
+    original_contact_facts = existing_email.reload.attributes
+    original_owner_facts = user.reload.attributes
+    original_root_count = ClientToken.count
 
-    assert_no_difference("Client.count") do
-      assert_no_difference("ClientEmail.count") do
-        assert_enqueued_emails 0 do
+    assert_difference("Client.count", 1) do
+      assert_difference("ClientEmail.count", 1) do
+        assert_enqueued_emails 1 do
           post auth_app_sign_up_email_url(ri: "jp"),
                params: {
                  user_email: {
@@ -304,8 +361,21 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_response :redirect
-    assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp")
-    assert_nil session[SignEmailRegistrable::EXISTING_EMAIL_SESSION_KEY]
+    target = URI.parse(response.location)
+    flow_binding = Rack::Utils.parse_query(target.query).fetch("fb")
+    flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+    candidate = ClientEmail.find(flow.pending_contact_id)
+
+    assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding)
+    assert_equal flow.public_id, SignFlowBindingCodec.decode(flow_binding).flow_public_id
+    assert_not_equal user.id, candidate.user_id
+    assert_nil candidate.binding_finalized_at
+    assert(
+      original_contact_facts == existing_email.reload.attributes,
+      "original binding and OTP facts remain unchanged",
+    )
+    assert(original_owner_facts == user.reload.attributes, "original owner facts remain unchanged")
+    assert_equal original_root_count, ClientToken.count
 
     follow_redirect!
 
@@ -315,18 +385,21 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_not_includes response.body, I18n.t("errors.messages.taken")
   end
 
-  test "create with existing verified-with-sign-up email shows otp page without sending" do
+  test "create beside a non-finalized verified signup candidate owns independent evidence" do
     existing_user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
-    ClientEmail.create!(
+    existing_email = ClientEmail.create!(
       user: existing_user,
       address: "completed-signup@example.com",
       confirm_policy: "1",
       user_email_status_id: ClientEmailStatus::VERIFIED_WITH_SIGN_UP,
     )
+    original_contact_facts = existing_email.reload.attributes
+    original_owner_facts = existing_user.reload.attributes
+    original_root_count = ClientToken.count
 
-    assert_no_difference("Client.count") do
-      assert_no_difference("ClientEmail.count") do
-        assert_enqueued_emails 0 do
+    assert_difference("Client.count", 1) do
+      assert_difference("ClientEmail.count", 1) do
+        assert_enqueued_emails 1 do
           post auth_app_sign_up_email_url(ri: "jp"),
                params: {
                  user_email: {
@@ -341,8 +414,18 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_response :redirect
-    assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp")
-    assert_nil session[SignEmailRegistrable::EXISTING_EMAIL_SESSION_KEY]
+    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+    candidate = ClientEmail.find(flow.pending_contact_id)
+
+    assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding)
+    assert_equal flow.public_id, SignFlowBindingCodec.decode(flow_binding).flow_public_id
+    assert_not_equal existing_email.id, candidate.id
+    assert_not_equal existing_user.id, candidate.user_id
+    assert_nil candidate.binding_finalized_at
+    assert(original_contact_facts == existing_email.reload.attributes, "other candidate facts remain unchanged")
+    assert(original_owner_facts == existing_user.reload.attributes, "other candidate owner facts remain unchanged")
+    assert_equal original_root_count, ClientToken.count
   end
 
   test "create enqueues exactly one email" do
@@ -385,19 +468,20 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_not user_email.notifiable
   end
 
-  test "create with existing verified email enqueues no emails and leaves otp state unchanged" do
+  test "create delivers only the independent candidate OTP and preserves an effective contact OTP" do
     user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
     existing_email = ClientEmail.create!(
       user: user,
       address: "no_otp_send@example.com",
       confirm_policy: "1",
       user_email_status_id: ClientEmailStatus::VERIFIED,
+      binding_finalized_at: ClientEmail.database_now,
     )
     before_otp_last_sent_at = existing_email.otp_last_sent_at
     before_otp_counter = existing_email.otp_counter
     before_otp_attempts_count = existing_email.otp_attempts_count
 
-    assert_enqueued_emails 0 do
+    assert_enqueued_emails 1 do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -416,58 +500,101 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "fresh sessions cannot distinguish pending and registered email sign-up" do
-    registered_email = ClientEmail.create!(
-      user: Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP),
-      address: "fresh-session-registered-signup@example.com",
-      confirm_policy: true,
+    user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+    existing = ClientEmail.create!(
+      user: user, raw_address: "app-fresh-session-registered-signup@example.com", confirm_policy: true,
       user_email_status_id: ClientEmailStatus::VERIFIED,
+      binding_finalized_at: ClientEmail.database_now,
     )
-    unregistered_address = "fresh-session-pending-signup@example.com"
+    existing_facts = existing.reload.attributes
+    existing_owner_facts = user.reload.attributes
+    responses = []
+    candidates = []
+    browsers = []
+    targets = []
 
-    registered_responses =
-      2.times.map do
-        response = nil
-        open_session do |session|
-          session.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
-          session.post(
+    [existing.address, "app-fresh-session-pending-signup@example.com"].each do |destination|
+      2.times do
+        browser = open_session
+        browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
+        browser.https!
+        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+        )
+        binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+        browser.get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+
+        assert_equal 200, browser.response.status
+        csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        headers = { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin" }
+        browser.post(
+          "/ceremony_bindings",
+          params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf }, headers: headers,
+        )
+
+        assert_equal 303, browser.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        browser.get(auth_app_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+        csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        browser.post(
+          auth_app_sign_up_path(ri: "jp"),
+          params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: headers,
+        )
+
+        assert_equal 303, browser.response.status
+        assert_difference("ClientEmail.count", 1) do
+          browser.post(
             auth_app_sign_up_email_url(ri: "jp"),
-            params: {
-              user_email: { raw_address: registered_email.address, confirm_policy: "1" },
-              "cf-turnstile-response": "test",
-            },
+            params: { user_email: { raw_address: destination, confirm_policy: "1" },
+                      "cf-turnstile-response": "test", }, headers: headers,
           )
-          response = {
-            status: session.response.status,
-            location: session.response.headers["Location"],
-            body: session.response.body,
-          }
         end
-        response
-      end
 
-    pending_responses =
-      2.times.map do
-        response = nil
-        open_session do |session|
-          session.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
-          session.post(
-            auth_app_sign_up_email_url(ri: "jp"),
-            params: {
-              user_email: { raw_address: unregistered_address, confirm_policy: "1" },
-              "cf-turnstile-response": "test",
-            },
-          )
-          response = {
-            status: session.response.status,
-            location: session.response.headers["Location"],
-            body: session.response.body,
-          }
-        end
-        response
-      end
+        assert_equal 302, browser.response.status
+        target = URI.parse(browser.response.location)
+        query = Rack::Utils.parse_query(target.query)
 
-    assert_equal 302, registered_responses.last.fetch(:status)
-    assert_equal registered_responses.last, pending_responses.last
+        assert_equal %w(fb ri), query.keys.sort
+        assert_equal "jp", query.fetch("ri")
+        responses << [browser.response.status, target.scheme, target.host, target.path, query.keys.sort]
+        candidate = ClientEmail.order(:created_at, :id).last
+        candidates << candidate
+        browsers << browser
+        targets << target
+
+        assert_equal destination, candidate.address
+        assert_nil candidate.binding_finalized_at
+      end
+    end
+
+    assert_equal 1, responses.uniq.length
+    assert_equal 4, candidates.map(&:id).uniq.length
+    assert_equal 4, candidates.map(&:user_id).uniq.length
+    assert(existing_facts == existing.reload.attributes, "protected record facts remain unchanged")
+    assert(existing_owner_facts == user.reload.attributes, "protected record facts remain unchanged")
+    own_candidate_facts = candidates.last.attributes
+    foreign_candidate_facts = candidates.first.attributes
+    browsers.last.get(targets.first.request_uri)
+
+    assert_equal 409, browsers.last.response.status
+    assert(own_candidate_facts == candidates.last.reload.attributes, "protected record facts remain unchanged")
+    assert(foreign_candidate_facts == candidates.first.reload.attributes, "protected record facts remain unchanged")
+    foreign_otp = candidates.first.get_otp
+    foreign_code = ROTP::HOTP.new(foreign_otp.fetch(:otp_private_key)).at(foreign_otp.fetch(:otp_counter)).to_s
+    assert_no_difference("ClientToken.count") do
+      browsers.last.patch(
+        targets.first.request_uri,
+        params: { user_email: { pass_code: foreign_code }, "cf-turnstile-response": "test" },
+        headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin" },
+      )
+    end
+
+    assert_equal 409, browsers.last.response.status
+    assert(own_candidate_facts == candidates.last.reload.attributes, "foreign proof cannot affect this candidate")
+    assert(foreign_candidate_facts == candidates.first.reload.attributes, "foreign proof cannot consume its candidate")
+    browsers.last.get(targets.last.request_uri)
+
+    assert_equal 200, browsers.last.response.status
   end
 
   test "create with validation failure enqueues no emails and returns 422" do
@@ -543,6 +670,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "rejects wrong OTP codes with error message" do
+    flow_binding = nil
     email = "test_wrong_otp@example.com"
 
     # Create registration record
@@ -556,6 +684,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
              "cf-turnstile-response": "test",
            },
            headers: default_headers
+      flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     end
 
     # Extract email ID from redirect location
@@ -564,10 +693,11 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     user_email = ClientEmail.find_by(public_id: email_id)
 
     # Attempt wrong code
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
-            id: user_email.id,
-            user_email: {
+            "cf-turnstile-response" => "test",
+            :id => user_email.id,
+            :user_email => {
               pass_code: "000000",
             },
           },
@@ -578,6 +708,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "update with blank code returns 422 and renders edit" do
+    flow_binding = nil
     email = "blank_code_test@example.com"
 
     # Create registration record
@@ -591,16 +722,18 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
              "cf-turnstile-response": "test",
            },
            headers: default_headers
+      flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     end
 
     email_id = ClientEmail.order(:created_at).last.public_id
     user_email = ClientEmail.find_by(public_id: email_id)
 
     # Attempt with blank code
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
-            id: user_email.id,
-            user_email: {
+            "cf-turnstile-response" => "test",
+            :id => user_email.id,
+            :user_email => {
               pass_code: "",
             },
           },
@@ -610,7 +743,8 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_includes @response.body, I18n.t("sign.app.registration.email.update.code_required")
   end
 
-  test "update with expired session redirects to new" do
+  test "update at the candidate OTP deadline refuses without clearing flow requirements" do
+    flow_binding = nil
     email = "expired_test@example.com"
 
     # Create registration record
@@ -624,28 +758,35 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
              "cf-turnstile-response": "test",
            },
            headers: default_headers
+      flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     end
 
     email_id = ClientEmail.order(:created_at).last.public_id
     user_email = ClientEmail.find_by(public_id: email_id)
 
-    # Travel to expire OTP
-    travel 16.minutes do
-      patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    cycle = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+    cycle_facts = cycle.reload.attributes
+    contact_facts = user_email.reload.attributes
+    ClientEmail.stub(:database_now, user_email.otp_expires_at) do
+      patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
             params: {
-              id: user_email.id,
-              user_email: {
+              "cf-turnstile-response" => "test",
+              :id => user_email.id,
+              :user_email => {
                 pass_code: "123456",
               },
             },
             headers: default_headers
 
-      assert_response :see_other
-      assert_redirected_to auth_app_sign_up_path(ri: "jp")
+      assert_response :found
+      assert_redirected_to new_auth_app_sign_up_email_url(ri: "jp")
+      assert(cycle_facts == cycle.reload.attributes, "OTP expiry does not manufacture checkpoint progress")
+      assert(contact_facts == user_email.reload.attributes, "expired OTP evidence is not consumed or replaced")
     end
   end
 
   test "max OTP attempts renders lockout error without clearing otp" do
+    flow_binding = nil
     email = "test_max_attempts@example.com"
 
     # Create registration record
@@ -659,6 +800,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
              "cf-turnstile-response": "test",
            },
            headers: default_headers
+      flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     end
 
     # Extract email ID from redirect location
@@ -669,10 +811,11 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     completed_requirements = cycle.completed_requirements.deep_dup
 
     Email::MAX_OTP_ATTEMPTS.times do
-      patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+      patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
             params: {
-              id: user_email.id,
-              user_email: {
+              "cf-turnstile-response" => "test",
+              :id => user_email.id,
+              :user_email => {
                 pass_code: "000000",
               },
             },
@@ -725,7 +868,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     # Try to access registration page while logged in (using test header to inject current user)
     get new_auth_app_sign_up_email_url(ri: "jp"),
-        headers: as_user_headers(user, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
+        headers: as_user_headers(user, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
 
     assert_response :unauthorized
     assert_equal I18n.t("errors.messages.already_authenticated"), response.body
@@ -745,7 +888,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            },
            headers: as_user_headers(
              user,
-             host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
+             host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
              headers: default_headers,
            )
     end
@@ -769,6 +912,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            pt: redirect_url,
          },
          headers: default_headers
+    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
     # Verify pt parameter is preserved in redirect
     assert_response :redirect
@@ -786,23 +930,25 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     correct_code = hotp.at(otp_data[:otp_counter]).to_s
 
     # Submit correct OTP with pt parameter
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
-            id: user_email.id,
-            user_email: {
+            "cf-turnstile-response" => "test",
+            :id => user_email.id,
+            :user_email => {
               pass_code: correct_code,
             },
-            pt: signed_rt,
+            :pt => signed_rt,
           },
           headers: default_headers
 
     # Should redirect directly to the decoded pt destination
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp")
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
   end
 
   # Transaction Tests for Client Creation
 
   test "successful OTP verification creates user and saves email in transaction" do
+    flow_binding = nil
     email = "transaction_success@example.com"
 
     # Create registration record
@@ -816,6 +962,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
              "cf-turnstile-response": "test",
            },
            headers: default_headers
+      flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     end
 
     # Extract email ID from redirect location
@@ -829,17 +976,18 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     initial_user_count = Client.count
 
     # Submit correct OTP
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
-            id: user_email.id,
-            user_email: {
+            "cf-turnstile-response" => "test",
+            :id => user_email.id,
+            :user_email => {
               pass_code: correct_code,
             },
           },
           headers: default_headers
 
     # Verify success response
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp")
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
 
     # Verify Client count unchanged (pending user was updated, not created)
     assert_equal initial_user_count, Client.count
@@ -858,6 +1006,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "successful OTP verification creates audit log in transaction" do
+    flow_binding = nil
     email = "audit_log_test@example.com"
 
     # Create registration record
@@ -871,6 +1020,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
              "cf-turnstile-response": "test",
            },
            headers: default_headers
+      flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     end
 
     # Extract email ID from redirect location
@@ -884,17 +1034,18 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     initial_audit_count = ClientChronicle.count
 
     # Submit correct OTP
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
-            id: user_email.id,
-            user_email: {
+            "cf-turnstile-response" => "test",
+            :id => user_email.id,
+            :user_email => {
               pass_code: correct_code,
             },
           },
           headers: default_headers
 
     # Verify success response
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp")
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
 
     # Sign-up completion and sign-in audit are delayed until checkpoint finalization.
     assert_equal initial_audit_count, ClientChronicle.count
@@ -914,6 +1065,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            "cf-turnstile-response": "test",
          },
          headers: default_headers
+    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
     assert_response :redirect, "Expected redirect but got #{response.status}: #{response.body[0..500]}"
     email_id = ClientEmail.order(:created_at).last.public_id
@@ -922,20 +1074,22 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     hotp = ROTP::HOTP.new(otp_data[:otp_private_key])
     correct_code = hotp.at(otp_data[:otp_counter]).to_s
 
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
-            id: user_email.id,
-            user_email: {
+            "cf-turnstile-response" => "test",
+            :id => user_email.id,
+            :user_email => {
               pass_code: correct_code,
             },
           },
           headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp")
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
     assert_equal initial_audit_count, ClientChronicle.count
   end
 
   test "sets user session after successful registration" do
+    flow_binding = nil
     email = "session_set@example.com"
 
     # Create registration record
@@ -949,6 +1103,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
              "cf-turnstile-response": "test",
            },
            headers: default_headers
+      flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     end
 
     # Extract email ID from redirect location
@@ -960,10 +1115,11 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     correct_code = hotp.at(otp_data[:otp_counter]).to_s
 
     # Submit correct OTP
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
-            id: user_email.id,
-            user_email: {
+            "cf-turnstile-response" => "test",
+            :id => user_email.id,
+            :user_email => {
               pass_code: correct_code,
             },
           },
@@ -991,16 +1147,18 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            "cf-turnstile-response": "test",
          },
          headers: default_headers
+    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
     email_id = ClientEmail.order(:created_at).last.public_id
     user_email = ClientEmail.find_by!(public_id: email_id)
     otp_data = user_email.get_otp
     pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
 
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
-            id: user_email.id,
-            user_email: {
+            "cf-turnstile-response" => "test",
+            :id => user_email.id,
+            :user_email => {
               pass_code: pass_code,
             },
           },
@@ -1011,7 +1169,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_no_match(/#{Regexp.escape(::AuthenticationClient::ACCESS_COOKIE_KEY.to_s)}=/, set_cookie)
   end
 
-  test "email sign up finalizes and establishes login from checkpoint" do
+  test "Auth email signup finalizes its binding and hands verified login evidence to Base without issuing a root" do
     email = "finalize_app_email_#{SecureRandom.hex(4)}@example.com"
 
     post auth_app_sign_up_email_url(ri: "jp"),
@@ -1023,19 +1181,20 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            "cf-turnstile-response": "test",
          },
          headers: default_headers
+    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
     assert_response :redirect
     user_email = ClientEmail.order(:created_at).last
     otp_data = user_email.get_otp
     pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
 
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: { user_email: { pass_code: pass_code } },
           headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp")
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding)
 
-    get auth_app_sign_up_check_email_birthdate_url(ri: "jp"), headers: default_headers
+    get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
 
     assert_response :ok
     assert_equal "auth/app/sign/up/checkpoints/show", inertia_component
@@ -1046,24 +1205,24 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       %w(year month day),
       birthdate.fetch("fields").fetch("parts").map { |part| part.fetch("part") },
     )
-    birthdate_path = auth_app_sign_up_check_email_birthdate_path(ri: "jp")
+    birthdate_path = auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
 
     assert_equal birthdate_path, birthdate.fetch("action")
-    cancellation_path = auth_app_sign_up_check_email_birthdate_path(ri: "jp")
+    cancellation_path = auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
 
     assert_equal cancellation_path, inertia_props.fetch("cancellation").fetch("action")
     # The auth surface carries no header navigation to sign-up/sign-in on any page, so a checkpoint
     # offers no escape hatch without needing a per-page suppression flag.
     assert_not inertia_props.fetch("chrome").key?("primary_navigation")
 
-    get auth_app_sign_up_check_email_birthdate_url(ri: "jp"), headers: default_headers
+    get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
 
     assert_response :ok
     assert_equal "iso", inertia_props.fetch("birthdate").fetch("fields").fetch("format")
 
     cycle = current_sign_up_flow(user_email)
 
-    patch auth_app_sign_up_check_email_birthdate_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding),
           params: {
             requirement: "birthdate",
             birthdate: "2000-01-01",
@@ -1074,17 +1233,47 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :redirect
     uri = URI.parse(response.location)
 
-    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), uri.host
+    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), uri.host
     assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
 
     user = user_email.reload.user
 
     assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
     assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, user.status_id
-    assert ClientToken.exists?(user_id: user.id)
+    assert_equal 0, ClientToken.where(user_id: user.id).count
+    assert_predicate user_email, :binding_effective?
+    follow_redirect!
+
+    assert_response :redirect
+    assert_equal auth_app_sign_handoff_path(ri: "jp"), URI.parse(response.location).request_uri
+    follow_redirect!
+
+    assert_response :success
+    form = response.parsed_body.at_css("form")
+    csrf = form.at_css('input[name="authenticity_token"]')["value"]
+    post form["action"],
+         params: { authenticity_token: csrf },
+         headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin" }
+
+    assert_response :see_other
+    continuation = URI.parse(response.location)
+
+    assert_equal "https", continuation.scheme
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), continuation.host
+    assert_equal URI.parse(base_app_sign_completion_url(ri: "jp")).path, continuation.path
+    query = Rack::Utils.parse_query(continuation.query)
+
+    assert_equal %w(result_ref ri transaction_ref), query.keys.sort
+    parent = ClientSignInFlow.find_by!(public_id: query.fetch("transaction_ref"))
+
+    assert_equal user.id, parent.principal_id
+    assert_equal "email", parent.authentication_method
+    assert_predicate parent, :sign_in_session_issuance_pending?
+    assert_equal 0, ClientToken.where(user_id: user.id).count
   end
 
   test "OTP data is cleared after successful verification" do
+    flow_binding = nil
     email = "otp_clear@example.com"
 
     # Create registration record
@@ -1098,6 +1287,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
              "cf-turnstile-response": "test",
            },
            headers: default_headers
+      flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     end
 
     # Extract email ID from redirect location
@@ -1112,10 +1302,11 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_not_nil user_email.get_otp
 
     # Submit correct OTP
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
-            id: user_email.id,
-            user_email: {
+            "cf-turnstile-response" => "test",
+            :id => user_email.id,
+            :user_email => {
               pass_code: correct_code,
             },
           },
@@ -1128,6 +1319,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "does not reset session ID before checkpoint finalization" do
+    flow_binding = nil
     email = "session_reset_test@example.com"
 
     # Create registration record
@@ -1141,6 +1333,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
              "cf-turnstile-response": "test",
            },
            headers: default_headers
+      flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     end
 
     email_id = ClientEmail.order(:created_at).last.public_id
@@ -1152,10 +1345,11 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     old_session_id = session.id.to_s
 
     # Submit correct OTP
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
-            id: user_email.id,
-            user_email: {
+            "cf-turnstile-response" => "test",
+            :id => user_email.id,
+            :user_email => {
               pass_code: correct_code,
             },
           },
@@ -1204,6 +1398,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            "cf-turnstile-response": "test",
          },
          headers: default_headers
+    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
     assert_response :redirect
 
@@ -1219,13 +1414,14 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     otp_data = user_email.get_otp
     pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
 
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
-            user_email: { pass_code: pass_code },
+            "cf-turnstile-response" => "test",
+            :user_email => { pass_code: pass_code },
           },
           headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp")
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
     assert_equal "checkpoint", cycle.reload.step
   end
 
@@ -1239,6 +1435,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            "cf-turnstile-response": "test",
          },
          headers: default_headers
+    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
     # Follow the redirect to the OTP page to consume the "OTP sent" flash notice
     # set by the create action; otherwise it leaks into the PATCH assertion below.
@@ -1249,21 +1446,22 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     otp_data = user_email.get_otp
     pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
 
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
-            user_email: { pass_code: pass_code },
+            "cf-turnstile-response" => "test",
+            :user_email => { pass_code: pass_code },
           },
           headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp")
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
     assert_nil flash[:notice]
 
-    get auth_app_sign_up_check_email_birthdate_url(ri: "jp"), headers: default_headers
+    get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
 
     assert_response :success
     assert_equal "iso", inertia_props.fetch("birthdate").fetch("fields").fetch("format")
 
-    patch auth_app_sign_up_check_email_birthdate_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding),
           params: {
             requirement: "birthdate",
             birthdate_year: "2000",
@@ -1289,18 +1487,20 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            "cf-turnstile-response": "test",
          },
          headers: default_headers
+    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
     user_email = ClientEmail.order(:created_at).last
     cycle = current_sign_up_flow(user_email)
     pass_code = otp_code_for(user_email)
 
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
-            user_email: { pass_code: pass_code },
+            "cf-turnstile-response" => "test",
+            :user_email => { pass_code: pass_code },
           },
           headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp")
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
 
     birthdate_params = {
       requirement: "birthdate",
@@ -1310,22 +1510,28 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       checkpoint_version: cycle.reload.checkpoint_version,
     }
 
-    patch auth_app_sign_up_check_email_birthdate_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding),
           params: birthdate_params,
           headers: default_headers
 
     assert_response :redirect
     uri = URI.parse(response.location)
 
-    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), uri.host
+    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), uri.host
     assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
     assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
+    committed_flow = cycle.attributes
+    committed_contact = user_email.reload.attributes
 
-    patch auth_app_sign_up_check_email_birthdate_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding),
           params: birthdate_params,
           headers: default_headers
 
-    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+    assert_response :conflict
+    assert_equal I18n.t("errors.messages.phase_violation_refused", locale: :ja), response.body
+    retained_facts = committed_flow == cycle.reload.attributes && committed_contact == user_email.reload.attributes
+
+    assert retained_facts, "terminal checkpoint replay must preserve committed facts"
     assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
   end
 
@@ -1339,33 +1545,36 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            "cf-turnstile-response": "test",
          },
          headers: default_headers
+    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
     user_email = ClientEmail.order(:created_at).last
     cycle = current_sign_up_flow(user_email)
     otp_data = user_email.get_otp
     pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
 
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: { user_email: { pass_code: pass_code } },
           headers: default_headers
 
     get auth_app_sign_up_guard_email_url(ri: "jp"), headers: default_headers
-    get auth_app_sign_up_check_email_birthdate_url(ri: "jp"), headers: default_headers
+    get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
 
     assert_response :success
 
-    delete auth_app_sign_up_check_email_birthdate_url(ri: "jp"), headers: default_headers
+    delete auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
 
     assert_redirected_to auth_app_sign_up_url(ri: "jp")
     assert_equal ClientSignUpFlowStatus::CANCELLED, cycle.reload.status_id
+    cancelled_flow = cycle.attributes
 
-    get auth_app_sign_up_check_email_birthdate_url(ri: "jp"), headers: default_headers
+    get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
 
-    assert_response :see_other
-    assert_redirected_to auth_app_sign_up_path(ri: "jp")
+    assert_response :conflict
+    assert_equal I18n.t("errors.messages.phase_violation_refused", locale: :ja), response.body
+    assert_equal cancelled_flow, cycle.reload.attributes
   end
 
-  test "email signup checkpoint birthdate is idempotent after requirement is cleared" do
+  test "completed ISO birthdate checkpoint refuses replay without changing its committed proof" do
     post auth_app_sign_up_email_url(ri: "jp"),
          params: {
            user_email: {
@@ -1375,75 +1584,72 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            "cf-turnstile-response": "test",
          },
          headers: default_headers
+    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
     user_email = ClientEmail.order(:created_at).last
     cycle = current_sign_up_flow(user_email)
     otp_data = user_email.get_otp
     pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
 
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: { user_email: { pass_code: pass_code } },
           headers: default_headers
 
     get auth_app_sign_up_guard_email_url(ri: "jp"), headers: default_headers
-    get auth_app_sign_up_check_email_birthdate_url(ri: "jp"), headers: default_headers
+    get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
 
-    user_email.user.update!(birthdate: "2000-02-03")
-    cycle.update!(
-      completed_requirements: {
-        "otp" => {
-          "cleared" => true,
-          "cleared_at" => Time.current.iso8601,
-        },
-        "birthdate" => {
-          "cleared" => true,
-          "cleared_at" => Time.current.iso8601,
-        },
-      },
-      checkpoint_version: cycle.reload.checkpoint_version,
-    )
-
-    patch auth_app_sign_up_check_email_birthdate_url(ri: "jp"),
-          params: {
-            requirement: "birthdate",
-            birthdate: "2000-02-03",
-            checkpoint_version: cycle.reload.checkpoint_version,
-          },
+    submission = {
+      requirement: "birthdate", birthdate: "2000-02-03", checkpoint_version: cycle.reload.checkpoint_version,
+    }
+    patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding),
+          params: submission,
           headers: default_headers
 
     assert_response :redirect
     assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
+    assert cycle.requirement_cleared?(:birthdate)
+    committed_flow = cycle.attributes
+    committed_contact = user_email.reload.attributes
+
+    patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding),
+          params: submission, headers: default_headers
+
+    assert_response :conflict
+    retained_facts = committed_flow == cycle.reload.attributes && committed_contact == user_email.reload.attributes
+
+    assert retained_facts, "replay must retain the original committed checkpoint and binding"
   end
 
-  test "email signup checkpoint blocks users before thirteenth birthday" do
-    travel_to Time.zone.local(2024, 2, 29, 12, 0, 0) do
-      post auth_app_sign_up_email_url(ri: "jp"),
-           params: {
-             user_email: {
-               raw_address: "email_under13_#{SecureRandom.hex(4)}@example.com",
-               confirm_policy: "1",
-             },
-             "cf-turnstile-response": "test",
+  test "leap-day under-thirteen signup halts without changing the Ticket clock" do
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: {
+           user_email: {
+             raw_address: "email_under13_#{SecureRandom.hex(4)}@example.com",
+             confirm_policy: "1",
            },
-           headers: default_headers
+           "cf-turnstile-response": "test",
+         },
+         headers: default_headers
+    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
-      assert_response :redirect
-      user_email = ClientEmail.order(:created_at).last
-      cycle = current_sign_up_flow(user_email)
-      otp_data = user_email.get_otp
-      pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    assert_response :redirect
+    user_email = ClientEmail.order(:created_at).last
+    cycle = current_sign_up_flow(user_email)
+    otp_data = user_email.get_otp
+    pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
 
-      patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
-            params: { user_email: { pass_code: pass_code } },
-            headers: default_headers
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
+          params: { :user_email => { pass_code: pass_code }, "cf-turnstile-response" => "test" },
+          headers: default_headers
 
-      assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp")
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding)
 
-      get auth_app_sign_up_check_email_birthdate_url(ri: "jp"), headers: default_headers
+    travel_to Time.zone.local(2024, 2, 29, 12, 0, 0) do
+      get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
 
       assert_response :success
 
-      patch auth_app_sign_up_check_email_birthdate_url(ri: "jp"),
+      patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding),
             params: {
               requirement: "birthdate",
               birthdate: "2011-03-01",
@@ -1453,9 +1659,9 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
       assert_response :success
       assert_includes response.body, "この登録方法ではアカウントを作成できません"
-      assert_equal ClientSignUpFlowStatus::FAILED, cycle.reload.status_id
+      assert_equal ClientSignUpFlowStatus::HALTED, cycle.reload.status_id
 
-      patch auth_app_sign_up_check_email_birthdate_url(ri: "jp"),
+      patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding),
             params: {
               requirement: "birthdate",
               birthdate: "2000-01-01",
@@ -1466,7 +1672,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       # The age-restricted session state keeps blocking the retry instead of restarting sign-up.
       assert_response :success
       assert_includes response.body, "この登録方法ではアカウントを作成できません"
-      assert_equal ClientSignUpFlowStatus::FAILED, cycle.reload.status_id
+      assert_equal ClientSignUpFlowStatus::HALTED, cycle.reload.status_id
       assert_not cycle.requirement_cleared?(:birthdate)
     end
   end
@@ -1500,7 +1706,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert Client.exists?(id: user_email.user_id), "Client record should exist for user_id"
   end
 
-  test "deletes pending user when unverified email is replaced" do
+  test "replacing an owned pending email retains the halted flow and schedules its artifacts for purge" do
     email = "replace_pending_test@example.com"
 
     # First registration attempt
@@ -1520,6 +1726,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     first_email_id = ClientEmail.order(:created_at).last.public_id
     first_email = ClientEmail.find_by(public_id: first_email_id)
     first_user_id = first_email.user_id
+    first_flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
 
     # Count users before second attempt
     user_count_before_second = Client.count
@@ -1541,11 +1748,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
       assert_response :redirect
 
-      # Verify first user was deleted
-      assert_nil Client.find_by(id: first_user_id), "First pending user should be deleted"
+      retained_owner = Client.find(first_user_id)
 
-      # Verify new user was created (count should remain the same: one deleted, one created)
-      assert_equal user_count_before_second, Client.count
+      assert_equal ClientSignUpFlowStatus::HALTED, first_flow.reload.status_id
+      assert_predicate first_flow, :cleanup_completed?
+      assert_operator retained_owner.discard_at, :<=, first_flow.cleanup_completed_at
+      assert_operator retained_owner.purge_eligible_at, :>, retained_owner.discard_at
+      assert_operator first_email.reload.discard_at, :<=, first_flow.cleanup_completed_at
+      assert_equal first_user_id, first_email.user_id
+      assert_equal user_count_before_second + 1, Client.count
 
       # Verify new email has a different user
       second_email_id = ClientEmail.order(:created_at).last.public_id
@@ -1608,9 +1819,12 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP, second_record.user_email_status_id
     assert_not_equal first_user_id, second_record.user_id
 
-    # Verify first pending user was cleaned up
-    assert_nil Client.find_by(id: first_user_id),
-               "First pending user should be cleaned up when registering with a different email"
+    retained_owner = Client.find(first_user_id)
+
+    assert_operator retained_owner.discard_at, :<=, Time.current
+    assert_operator retained_owner.purge_eligible_at, :>, retained_owner.discard_at
+    assert_operator first_record.reload.discard_at, :<=, Time.current
+    assert_equal first_user_id, first_record.user_id
   end
 
   # OTP Resend Cooldown Tests
@@ -1632,8 +1846,10 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :redirect
 
-    # Second attempt immediately (inside the 10s overwrite window)
-    assert_enqueued_emails 0 do
+    first_flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+    first_candidate = ClientEmail.find(first_flow.pending_contact_id)
+
+    assert_enqueued_emails 1 do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -1645,7 +1861,18 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            headers: default_headers
     end
 
-    assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp")
+    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    replacement_flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+    replacement = ClientEmail.find(replacement_flow.pending_contact_id)
+
+    assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding)
+    assert_equal replacement_flow.public_id, SignFlowBindingCodec.decode(flow_binding).flow_public_id
+    assert_not_equal first_candidate.id, replacement.id
+    assert_not_equal first_candidate.user_id, replacement.user_id
+    assert_equal ClientSignUpFlowStatus::HALTED, first_flow.reload.status_id
+    assert_predicate first_flow, :cleanup_completed?
+    assert_equal email, replacement.address
+    assert_nil replacement.binding_finalized_at
   end
 
   test "create allows re-registration after overwrite window expires for new signup" do
@@ -1690,15 +1917,17 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   test "existing registered emails show otp page instead of entering cooldown" do
     user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
-    ClientEmail.create!(
+    existing_email = ClientEmail.create!(
       user: user,
       address: "registered_cooldown@example.com",
       confirm_policy: "1",
       user_email_status_id: ClientEmailStatus::VERIFIED,
+      binding_finalized_at: ClientEmail.database_now,
     )
+    original_contact_facts = existing_email.reload.attributes
+    original_owner_facts = user.reload.attributes
 
-    # First attempt with existing email -- no OTP sent, same user-facing OTP page.
-    assert_enqueued_emails 0 do
+    assert_enqueued_emails 1 do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -1711,10 +1940,11 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_response :redirect
-    assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp")
+    first_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
-    # Second attempt immediately -- same generic response, not an overwrite-window cooldown.
-    assert_enqueued_emails 0 do
+    assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp", fb: first_binding)
+
+    assert_enqueued_emails 1 do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -1727,7 +1957,12 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_response :redirect
-    assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp")
+    second_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
+    assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp", fb: second_binding)
+    assert_not_equal first_binding, second_binding
+    assert(original_contact_facts == existing_email.reload.attributes, "effective contact facts remain unchanged")
+    assert(original_owner_facts == user.reload.attributes, "effective owner facts remain unchanged")
   end
 
   test "otp_resend_too_soon i18n key exists in both locales" do
@@ -1813,7 +2048,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   def host
-    ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
   end
   private
 end

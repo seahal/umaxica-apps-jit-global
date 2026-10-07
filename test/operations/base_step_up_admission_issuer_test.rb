@@ -3,6 +3,223 @@
 require "test_helper"
 
 class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
+  %w(app com org).each do |surface|
+    test "#{surface} an expired predecessor is closed rather than treated as a conflicting intent" do
+      actor_id = SecureRandom.random_number(1 << 60) + 1_000_000_000
+      actor, token =
+        case surface
+        when "app"
+          actor = Client.create!(id: actor_id, status_id: ClientStatus::ACTIVE)
+          [actor, ClientToken.create!(user: actor)]
+        when "com"
+          actor = Visitor.create!(id: actor_id, status_id: VisitorStatus::ACTIVE)
+          [actor, VisitorToken.create!(visitor: actor)]
+        when "org"
+          actor = Operator.create!(id: actor_id)
+          [actor, OperatorToken.create!(staff: actor)]
+        end
+      requirement = StepUpRequirement.new(
+        scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
+        phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
+        audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
+        require_session_binding: true, ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+      )
+      nonce = SecureRandom.hex(32)
+      first = BaseStepUpAdmissionIssuer.call!(
+        actor:, token:, requirement:, return_to: "/identity/passkeys", base_browser_nonce: nonce, base_token: token,
+      )
+      # Public persistence arranges an expired parent; production observes expiry under its Ticket lock.
+      first.transaction.update!(expires_at: first.transaction.class.database_now - Rational(1, 1_000_000))
+      replacement = BaseStepUpAdmissionIssuer.call!(
+        actor:, token:, requirement: StepUpRequirement.new(**requirement.to_h.merge(scope: "settings_email")),
+        return_to: "/identity/emails", base_browser_nonce: nonce, base_token: token,
+      )
+
+      assert_not_equal first.transaction.id, replacement.transaction.id
+      assert_equal ["expired", "pending", "settings_email", nil],
+                   [first.transaction.reload.status, replacement.transaction.reload.status,
+                    replacement.transaction.required_scope, token.reload.last_step_up_at,]
+    end
+  end
+
+  test "each realm reuses exact intent and refuses changed scope target or purpose without extending authority" do
+    %w(app com org).each do |surface|
+      actor, token, model =
+        case surface
+        when "app"
+          actor = Client.create!(status_id: ClientStatus::ACTIVE)
+          [actor, ClientToken.create!(user: actor), ClientStepUpCeremonyTransaction]
+        when "com"
+          actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+          [actor, VisitorToken.create!(visitor: actor), VisitorStepUpCeremonyTransaction]
+        when "org"
+          actor = Operator.create!
+          [actor, OperatorToken.create!(staff: actor), OperatorStepUpCeremonyTransaction]
+        end
+      attributes = {
+        scope: "settings_passkey",
+        purpose: "step_up",
+        step_up_required: true,
+        allowed_methods: [:passkey],
+        phishing_resistant_required: false,
+        user_verification_required: false,
+        full_reauthentication_required: false,
+        audience: "step_up:#{surface}",
+        session_binding: token.public_id,
+        token_binding: token.public_id,
+        require_session_binding: true,
+        ttl: 15.minutes,
+        actor_ref: actor.public_id,
+        resource_ref: nil,
+        tenant_ref: nil,
+      }
+      arguments = {
+        actor: actor,
+        token: token,
+        requirement: StepUpRequirement.new(**attributes),
+        return_to: "/identity/passkeys",
+        base_browser_nonce: SecureRandom.urlsafe_base64(32),
+        base_token: token,
+      }
+      first = BaseStepUpAdmissionIssuer.call!(**arguments)
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: surface, reference: first.reference)
+      deadlines = [first.transaction.expires_at, binding.expires_at]
+      repeated = BaseStepUpAdmissionIssuer.call!(**arguments)
+
+      assert_equal [first.transaction.id, first.reference], [repeated.transaction.id, repeated.reference]
+      assert_equal deadlines, [first.transaction.reload.expires_at, binding.reload.expires_at]
+
+      [
+        [{ scope: "settings_email" }, "/identity/emails"],
+        [{}, "/identity/passkeys?ri=jp"],
+        [{ purpose: "reauthentication", full_reauthentication_required: true }, "/identity/passkeys"],
+      ].each do |change, target|
+        error =
+          assert_raises(BaseAuthAdmissionCoordinator::Denied, "#{surface}: #{change.keys}") do
+            BaseStepUpAdmissionIssuer.call!(
+              **arguments.merge(
+                requirement: StepUpRequirement.new(**attributes.merge(change)),
+                return_to: target,
+              ),
+            )
+          end
+
+        assert_equal "transaction_conflict", error.code
+        assert_equal 1, model.where(session_ref: token.public_id).count
+        assert_equal ["pending", *deadlines, nil, nil],
+                     [first.transaction.reload.status, first.transaction.expires_at, binding.reload.expires_at,
+                      binding.retired_at, binding.redeemed_at,]
+        assert_nil token.reload.last_step_up_at
+      end
+    end
+  end
+
+  test "issuance rejects revoked devices and displaced refresh roots in every realm without creating a parent" do
+    %w(app com org).each do |surface|
+      %i(revoked displaced).each do |condition|
+        actor, token, model =
+          case surface
+          when "app"
+            actor = Client.create!(status_id: ClientStatus::ACTIVE)
+            [actor, ClientToken.create!(user: actor), ClientStepUpCeremonyTransaction]
+          when "com"
+            actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+            [actor, VisitorToken.create!(visitor: actor), VisitorStepUpCeremonyTransaction]
+          when "org"
+            actor = Operator.create!
+            [actor, OperatorToken.create!(staff: actor), OperatorStepUpCeremonyTransaction]
+          end
+        device = token.device_session
+        if condition == :revoked
+          device.revoke!(reason: "user_logout")
+        else
+          device.update!(current_refresh_token_id: nil)
+        end
+        requirement = StepUpRequirement.new(
+          scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
+          phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
+          audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
+          require_session_binding: true, ttl: 15.minutes, actor_ref: actor.public_id,
+          resource_ref: nil, tenant_ref: nil,
+        )
+
+        assert_no_difference -> { model.count } do
+          assert_raises(BaseAuthAdmissionCoordinator::Denied, "#{surface}: #{condition}") do
+            BaseStepUpAdmissionIssuer.call!(
+              actor:, token:, requirement:, return_to: "/identity/passkeys",
+              base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: token,
+            )
+          end
+        end
+      end
+    end
+  end
+
+  test "restart form lookup preserves each realm parent and rejects foreign proof or changed intent" do
+    %w(app com org).each do |surface|
+      actor, token, other_token =
+        case surface
+        when "app"
+          actor = Client.create!(status_id: ClientStatus::ACTIVE)
+          [actor, ClientToken.create!(user: actor), ClientToken.create!(user: actor)]
+        when "com"
+          actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+          [actor, VisitorToken.create!(visitor: actor), VisitorToken.create!(visitor: actor)]
+        when "org"
+          actor = Operator.create!
+          [actor, OperatorToken.create!(staff: actor), OperatorToken.create!(staff: actor)]
+        end
+      requirement = StepUpRequirement.new(
+        scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
+        phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
+        audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
+        require_session_binding: true, ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+      )
+      nonce = SecureRandom.urlsafe_base64(32)
+      issuance = BaseStepUpAdmissionIssuer.call!(
+        actor:, token:, requirement:, return_to: "/identity/passkeys",
+        base_browser_nonce: nonce, base_token: token,
+      )
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
+      arguments = {
+        actor:,
+        token:,
+        requirement:,
+        return_to: "/identity/passkeys",
+        base_browser_nonce: nonce,
+        base_token: token,
+        restart_of: binding.entry_ref,
+      }
+      parent_deadline = issuance.transaction.expires_at
+
+      assert_equal binding.id, BaseStepUpAdmissionIssuer.restart_binding_for_form!(**arguments).id
+      [
+        { base_browser_nonce: SecureRandom.urlsafe_base64(32) },
+        { token: other_token, base_token: other_token },
+        { return_to: "/identity/passkeys/changed" },
+        { restart_of: nil }, { restart_of: "" }, { restart_of: 0 }, { restart_of: [binding.entry_ref] },
+        { restart_of: {} }, { restart_of: "#{binding.entry_ref}x" },
+      ].each do |invalid|
+        assert_raises(BaseAuthAdmissionCoordinator::Denied, "#{surface}: #{invalid.keys}") do
+          BaseStepUpAdmissionIssuer.restart_binding_for_form!(**arguments.merge(invalid))
+        end
+        assert_equal [nil, nil, nil, parent_deadline],
+                     [binding.reload.auth_ceremony_session_id, binding.retired_at, binding.redeemed_at,
+                      issuance.transaction.reload.expires_at,]
+      end
+
+      # Public persistence deliberately builds an expired fixture; production never changes this immutable deadline.
+      binding.update_columns(expires_at: binding.class.database_now - Rational(1, 1_000_000))
+
+      assert_equal binding.id, BaseStepUpAdmissionIssuer.restart_binding_for_form!(**arguments).id
+      issuance.transaction.update!(expires_at: issuance.transaction.class.database_now - Rational(1, 1_000_000))
+      assert_raises(BaseAuthAdmissionCoordinator::Denied, surface) do
+        BaseStepUpAdmissionIssuer.restart_binding_for_form!(**arguments)
+      end
+      assert_equal [nil, nil], [binding.reload.retired_at, binding.redeemed_at]
+    end
+  end
+
   %i(app com org).each do |surface|
     test "#{surface} Base refuses adjacent operation paths and invalid target types without creating authority" do
       case surface
@@ -409,6 +626,77 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
     assert_equal "canceled", first.transaction.reload.status
     assert_equal "pending", second.transaction.status
     assert_not_equal first.reference, second.reference
+  end
+
+  test "explicit same-intent restart cancels a redeemed pending ceremony instead of reopening it" do
+    actor = clients(:one)
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, purpose: "step_up",
+      audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+      require_session_binding: true, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+    )
+    first = issue_base_step_up_admission!(
+      actor:, token:, requirement:, return_to: "/identity/birthdate",
+      base_browser_nonce: "test-browser-nonce", base_token: token,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: first.reference)
+    auth_session, raw_sid = prepare_binding_for_consumption!(binding, token)
+    admitted, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", previous_raw_sid: raw_sid,
+      step_up_ceremony_transaction_ref: first.transaction.transaction_id,
+    )
+    binding.redeem!(auth_session:, admitted_auth_session: admitted)
+
+    assert_no_difference "ClientAuthAdmissionBinding.count" do
+      assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+        issue_base_step_up_admission!(
+          actor:, token:, requirement:, return_to: "/identity/birthdate",
+          base_browser_nonce: "test-browser-nonce", base_token: token,
+        )
+      end
+    end
+
+    second = issue_base_step_up_admission!(
+      actor:, token:, requirement:, return_to: "/identity/birthdate", restart_of: first.reference,
+      base_browser_nonce: "test-browser-nonce", base_token: token,
+    )
+
+    assert_not_equal first.transaction.transaction_id, second.transaction.transaction_id
+    assert_equal "canceled", first.transaction.reload.status
+    assert_equal "pending", second.transaction.status
+    assert_not_equal first.reference, second.reference
+  end
+
+  test "explicit restart replaces an expired unredeemed binding without extending its parent" do
+    actor = clients(:one)
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, purpose: "step_up",
+      audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+      require_session_binding: true, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+    )
+    first = issue_base_step_up_admission!(
+      actor:, token:, requirement:, return_to: "/identity/birthdate",
+      base_browser_nonce: "test-browser-nonce", base_token: token,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: first.reference)
+    deadline = first.transaction.expires_at
+    binding.update_columns(expires_at: binding.class.database_now - 1.second)
+
+    second = issue_base_step_up_admission!(
+      actor:, token:, requirement:, return_to: "/identity/birthdate", restart_of: first.reference,
+      base_browser_nonce: "test-browser-nonce", base_token: token,
+    )
+
+    assert_equal first.transaction.id, second.transaction.id
+    assert_equal deadline, second.transaction.expires_at
+    assert_not_equal first.reference, second.reference
+    assert_predicate binding.reload.retired_at, :present?
   end
 
   test "COM rejects TOTP and Base actor mismatch before creating a transaction" do

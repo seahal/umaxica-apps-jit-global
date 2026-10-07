@@ -11,8 +11,10 @@ module Warp
       include ::PreferenceGlobal
       include ::PreferenceAdoption
       include ::BrowserRpAuthentication
+      include ::AuthenticationWithdrawalGate
       include ::BrowserRpSafeRequestRefresh
       include ::BrowserRpUnsafeRequestRefresh
+
       include ::SignErrorResponses
       include ::SessionLimitGate
       include ::AuthorizationAudit
@@ -25,6 +27,13 @@ module Warp
       include ::Finisher
 
       AUTHENTICATION_MODE = :deny_all
+      after_action :verify_private_action_authorized!
+      after_action :apply_authenticated_page_cache_policy!
+      helper_method :current_resource, :browser_rp_authenticated?, :browser_rp_session_public_id,
+                    :current_browser_session_security_context, :current_session_public_id,
+                    :current_session, :logged_in?
+      before_action :authenticate_browser_rp_safe_request!
+      prepend_before_action :authenticate_browser_rp_unsafe_request!
 
       layout "warp/app/application"
 

@@ -31,10 +31,10 @@ vi.mock("@inertiajs/react", () => ({
 }));
 
 const { default: SocialLinkManage } = await import("@/features/auth/settings/SocialLinkManage");
-const { default: PasskeysIndex } = await import("@/pages/auth/app/settings/passkeys/index");
-const { default: PasskeysEdit } = await import("@/pages/auth/app/settings/passkeys/edit");
+const { default: PasskeysIndex } = await import("@/pages/base/app/identity/passkeys/index");
+const { default: PasskeysEdit } = await import("@/pages/base/app/identity/passkeys/show");
 const { default: TotpsNew } = await import("@/pages/auth/app/settings/totps/new");
-const { default: TotpsEdit } = await import("@/pages/auth/app/settings/totps/edit");
+const { default: TotpsEdit } = await import("@/pages/base/app/identity/totps/show");
 
 let container: HTMLDivElement;
 let root: Root;
@@ -149,27 +149,20 @@ describe("SocialLinkManage interaction", () => {
 describe("passkey settings interaction", () => {
   const indexProps = {
     title: "Passkeys",
+    description: "Manage passkeys",
     back_link: { label: "もどる", href: "/settings" },
     new_link: { label: "追加", href: "/settings/passkeys/new?ri=jp" },
-    columns: {
-      description: "名前",
-      created_at: "作成日",
-      last_used_at: "最終利用",
-      actions: "操作",
-    },
+    remove_label: "削除",
+    remove_confirm: "削除しますか",
     empty_message: "登録がありません",
-    edit_label: "編集",
-    destroy_label: "削除",
-    destroy_confirm: "削除しますか",
-    turnstile,
     passkeys: [
       {
         public_id: "pk_1",
         description: "MacBook",
         created_at: "2026/01/01",
         last_used_at: "-",
-        edit_href: "/settings/passkeys/pk_1/edit?ri=jp",
-        destroy_href: "/settings/passkeys/pk_1?ri=jp",
+        show_href: "/settings/passkeys/pk_1?ri=jp",
+        destroy_action: "/settings/passkeys/pk_1?ri=jp",
       },
     ],
   };
@@ -180,9 +173,7 @@ describe("passkey settings interaction", () => {
     clickButton("削除");
     answerConfirmation(true);
 
-    expect(deleteRequest).toHaveBeenCalledWith("/settings/passkeys/pk_1?ri=jp", {
-      data: { "cf-turnstile-response": "" },
-    });
+    expect(deleteRequest).toHaveBeenCalledWith("/settings/passkeys/pk_1?ri=jp");
   });
 
   it("keeps the row when the confirmation is declined", () => {
@@ -198,22 +189,19 @@ describe("passkey settings interaction", () => {
     title: "Passkeyの編集",
     description: "名前を変更します",
     back_link: { label: "もどる", href: "/settings/passkeys?ri=jp" },
+    passkey: { public_id: "pk_1", description: "", created_at: null, last_used_at: null },
     form: {
       action: "/settings/passkeys/pk_1?ri=jp",
-      scope: "client_passkey",
-      description_label: "名前",
-      description: null,
+      description: "",
+      label: "名前",
       submit_label: "保存",
     },
-    cancel_link: { label: "キャンセル", href: "/settings/passkeys" },
     destroy: {
       action: "/settings/passkeys/pk_1?ri=jp",
-      submit_label: "削除",
-      confirm_message: "削除しますか",
+      label: "削除",
+      confirm: "削除しますか",
     },
-    turnstile,
-    error_header: null,
-    error_messages: [],
+    error: null,
   };
 
   it("renames with a PATCH under the scope the server named", () => {
@@ -230,8 +218,7 @@ describe("passkey settings interaction", () => {
     expect(transform).toHaveBeenCalled();
     const passkeyTransformer = present(transform.mock.calls[0]?.[0], "a transform callback");
     expect(passkeyTransformer({ description: "Renamed" })).toEqual({
-      client_passkey: { description: "Renamed" },
-      "cf-turnstile-response": "",
+      passkey: { description: "Renamed" },
     });
     expect(patch).toHaveBeenCalledWith("/settings/passkeys/pk_1?ri=jp");
   });
@@ -242,9 +229,7 @@ describe("passkey settings interaction", () => {
     clickButton("削除");
     answerConfirmation(true);
 
-    expect(deleteRequest).toHaveBeenCalledWith("/settings/passkeys/pk_1?ri=jp", {
-      data: { "cf-turnstile-response": "" },
-    });
+    expect(deleteRequest).toHaveBeenCalledWith("/settings/passkeys/pk_1?ri=jp");
   });
 
   it("keeps the passkey when the removal is declined", () => {
@@ -318,23 +303,19 @@ describe("totp settings interaction", () => {
     title: "認証アプリの編集",
     description: "名前を変更します",
     back_link: { label: "もどる", href: "/settings/totps?ri=jp" },
+    totp: { public_id: "totp_1", title: "iPhone", last_otp_at: "-", status: "有効" },
     form: {
       action: "/settings/totps/totp_1?ri=jp",
-      scope: "user_totp_credential",
-      title_label: "名前",
-      title_placeholder: "iPhone",
-      title_hint: "わかりやすい名前",
-      title: null,
+      title: "iPhone",
+      label: "名前",
       submit_label: "保存",
     },
-    cancel_link: { label: "キャンセル", href: "/settings/totps?ri=jp" },
     destroy: {
       action: "/settings/totps/totp_1?ri=jp",
-      submit_label: "削除",
-      confirm_message: "削除しますか",
+      label: "削除",
+      confirm: "削除しますか",
     },
-    error_header: "1件のエラー",
-    error_messages: ["名前を入力してください"],
+    error: null,
   };
 
   it("renames with a PATCH", () => {
@@ -351,7 +332,7 @@ describe("totp settings interaction", () => {
     expect(transform).toHaveBeenCalled();
     const totpEditTransformer = present(transform.mock.calls[0]?.[0], "a transform callback");
     expect(totpEditTransformer({ title: "iPad" })).toEqual({
-      user_totp_credential: { title: "iPad" },
+      client_totp_credential: { title: "iPad" },
     });
     expect(patch).toHaveBeenCalledWith("/settings/totps/totp_1?ri=jp");
   });

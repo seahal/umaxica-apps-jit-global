@@ -2,6 +2,9 @@
 
 Ruby on Rails application, not the Rails framework monorepo.
 
+This repository is built for production deployment, not as a proof of concept. Treat every change
+as code that will run in production and serve real users.
+
 `README.md` describes the repository and its current topology. This file contains only
 repository-wide agent rules that cannot be reliably derived from the code. Task-specific rules under
 `.agents/harnesses/rules/` are canonical within their scope; load only those selected by the Task
@@ -36,9 +39,11 @@ the remaining entries matching the task.
 
 - Controllers or endpoints: `generic/controllers.mdc`, `generic/routing.mdc`,
   `project/surfaces.mdc`, `project/controller-inheritance.mdc`,
+  `project/browser-rp-contract.mdc`, `generic/authentication-boundaries.mdc`,
   `docs/architecture/controller-lifecycle.md`
 - JSON API endpoints, error responses, or API versioning: `docs/reference/api-design-standards.md`
-- Minitest or behavior changes: `generic/testing.mdc`, `generic/no-test-only-code.mdc`
+- Minitest or behavior changes: `generic/testing.mdc`, `generic/no-test-only-code.mdc`,
+  `project/static-invariant-guards.mdc`
 - Any line that reads or assigns `ENV`, in application, configuration, Rake, or test code:
   `generic/no-silent-fallback.mdc`, `adr/env-fetch-without-default.md`
 - Environment, dependency, tooling, or mounted-engine setup: `project/no-environment-tests.mdc`,
@@ -61,15 +66,18 @@ the remaining entries matching the task.
   `docs/operations/development-host-port-exposure.md`
 - Routing or authentication workflows: `project/surfaces.mdc`, `generic/routing.mdc`,
   `generic/no-workflow-drift.mdc`, `generic/no-silent-fallback.mdc`,
+  `generic/authentication-boundaries.mdc`, `project/browser-rp-contract.mdc`,
   `docs/architecture/controller-lifecycle.md`
 - Sign-in, session issuance, session limits, the login cooldown, or sign-out:
-  `project/session-issuance.mdc`, `adr/root-login-establishment-boundary.md`
+  `project/session-issuance.mdc`, `generic/lifecycle-transition-writers.mdc`,
+  `adr/root-login-establishment-boundary.md`
 - State machines, flow or status columns, status reference tables, or any code that writes a state
   or status value: `docs/mermaid/README.md` — locate the affected axis in its inventory, compare the
   matching `docs/mermaid/idp-*.mmd` diagram and its section in
   `docs/mermaid/idp-state-machine-transition-inventory.md` with the code, and update them in the
-  same change so the diagrams keep describing the current implementation; add an inventory row and
-  a diagram when the change introduces a new axis
+  same change so the diagrams keep describing the current implementation; also load
+  `generic/lifecycle-transition-writers.mdc`; add an inventory row and a diagram when the change
+  introduces a new axis
 - User-facing notices, alerts, or feedback: `generic/no-flash-messages.mdc`
 - Translation keys, locale bundles under `config/locales/`, or `t`/`I18n.t` calls:
   `docs/architecture/i18n.md`, `adr/i18n-explicit-translation-keys.md`
@@ -99,7 +107,7 @@ We sustain this codebase by creating value for people.
 **Security preserves our ability to continue that work.** Security defines the boundary within which
 implementation proceeds and preserves both safety and the system's ability to deliver value.
 
-Four coequal virtues guide implementation within that boundary:
+Five coequal virtues guide implementation within that boundary:
 
 - **Performance:** measure material behavior rather than assuming it.
 - **Experience:** preserve responsiveness, usability, accessibility, and interaction quality.
@@ -107,6 +115,8 @@ Four coequal virtues guide implementation within that boundary:
   and AI agents can reason from.
 - **Longevity:** keep the system understandable, replaceable, maintainable, and safe to change over
   time.
+- **Observability:** make runtime behavior explainable from the metrics, logs, traces, and profiles
+  the system emits, keeping every emitted signal within the disclosure protections of rule (A).
 
 ## Implementation Rules
 
@@ -184,11 +194,17 @@ conflicts through the governing principles above.
 
   - **SHOULD:** preserve non-obvious reasoning in the appropriate ADR, plan, evidence record, note,
     documentation, or comment so another human or AI agent can recover the intent.
-  - **SHOULD:** keep comments focused on constraints and reasoning that cannot be recovered directly
-    from the implementation.
+  - **SHOULD:** put each kind of knowledge in the artifact that owns it, following Takuto Wada's
+    (t_wada) formulation: code states _how_, test code states _what_, the commit log states _why_,
+    and code comments state _why not_.
+  - **SHOULD:** limit code comments to _why not_ by default: the alternative that was rejected, the
+    constraint that rules out the obvious approach, or the reason a tempting simplification is
+    wrong. Leave _how_ to the code, _what_ to the tests, and _why_ to the commit message instead of
+    restating them in a comment.
   - **SHOULD:** update or remove documentation and comments when their assumptions cease to match
     the implementation.
-  - **SHOULD:** explain why a change exists in its commit message rather than only what changed.
+  - **SHOULD:** explain why a change exists in its commit message rather than only what changed,
+    because the commit log is the only place that _why_ is recorded.
 
 - **(G) Evolution and Compatibility**
 

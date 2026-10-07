@@ -69,3 +69,10 @@ explicitly retains it.
 
 Status disposition: **amended** for D-82 only; the Xper freeze and all unrelated Auth workflow
 constraints are **retained**.
+
+## Delivered reconciliation (2026-10-06)
+
+D-82 is implemented only as the Base browser nonce, Auth admission, confirmation, redemption,
+restart and cancellation exchange. It does not create an Auth login session, shared-domain cookie,
+generic workflow framework or Xper redesign. The old lifecycle and RP references in this document
+remain scope history and are superseded by the current Base/Auth controller and admission tests.

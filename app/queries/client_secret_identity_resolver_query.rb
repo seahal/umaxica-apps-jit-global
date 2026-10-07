@@ -6,6 +6,8 @@
 # Secret.
 class ClientSecretIdentityResolverQuery
   class << self
+    public
+
     def call(identifier:)
       return nil unless identifier.is_a?(String) && identifier.valid_encoding? && identifier.exclude?("\0")
 
@@ -20,7 +22,8 @@ class ClientSecretIdentityResolverQuery
         clients << ClientTelephone.effective_binding.find_by(number_digest: telephone_digest)&.user
       end
 
-      clients = clients.compact.uniq(&:id)
+      clients.compact!
+      clients.uniq!(&:id)
       clients.one? ? clients.first : nil
     rescue ArgumentError, EncodingError
       nil

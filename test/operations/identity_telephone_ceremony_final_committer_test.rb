@@ -8,7 +8,11 @@ class IdentityTelephoneCeremonyFinalCommitterTest < ActiveSupport::TestCase
   setup do
     @now = Time.zone.parse("2026-06-24 12:00:00 UTC")
     @actor = FakeActor.new(id: 7, public_id: "actor-1")
-    @transaction = FakeTransaction.new
+    @transaction = ClientTelephoneCeremonyTransaction.create_transaction!(
+      actor_ref: "actor-1", session_ref: "session-1", operation: "registration",
+      transaction_id: "txn-1", telephone_candidate_ref: "candidate-1",
+      normalized_number_digest: "number-digest", now: @now,
+    )
     @telephone = FakeTelephone.new(id: 100, number_digest: "number-digest")
   end
 
@@ -124,54 +128,52 @@ class IdentityTelephoneCeremonyFinalCommitterTest < ActiveSupport::TestCase
   test "call! class method creates an instance and delegates" do
     assert_telephone_error("actor is required") do
       IdentityTelephoneCeremonyFinalCommitter.call!(
-        result_token: "token", actor: nil, session_ref: "session-1",
+        result_token: "token", actor_context: ActorValuesContext.empty, actor: nil, session_ref: "session-1",
         surface: "app", now: @now,
       )
     end
   end
 
-  test "commits through the locked record and writes the app audit" do
-    committer = IdentityTelephoneCeremonyFinalCommitter.new(
-      result_token: "token", actor: @actor, session_ref: "session-1", surface: "app", now: @now,
+  test "commits through the locked record and writes the app Source audit" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    contact = ClientTelephone.create!(user_id: actor.id, number: "+819012345682", confirm_policy: "1")
+    now = ClientTelephoneCeremonyTransaction.database_now
+    parent = ClientTelephoneCeremonyTransaction.create_transaction!(
+      actor_ref: actor.public_id, session_ref: "locked-audit-browser", operation: "registration",
+      telephone_candidate_ref: contact.public_id, normalized_number_digest: contact.number_digest, now: now,
     )
-    result = {
-      "surface" => "app",
-      "actor_ref" => "actor-1",
-      "session_ref" => "session-1",
-      "transaction_id" => "txn-1",
-      "telephone_candidate_ref" => "candidate-1",
-      "normalized_number_digest" => "number-digest",
-    }
-    committer.instance_variable_set(:@result, result)
-    committer.instance_variable_set(:@transaction, @transaction)
-    committer.instance_variable_set(:@telephone, @telephone)
-    lock = Object.new
-    locked_telephone = @telephone
-    lock.define_singleton_method(:find) { |_id| locked_telephone }
-    audit = nil
-    consumer = FakeConsumer.new
+    result_token = IdentityTelephoneCeremonyResult.issue(
+      { surface: "app",
+        actor_ref: actor.public_id,
+        session_ref: parent.session_ref,
+        transaction_id: parent.transaction_id,
+        grant_jti: parent.grant_jti,
+        result_jti: SecureRandom.uuid,
+        operation: parent.operation,
+        verified_at: now.to_i,
+        challenge_id: SecureRandom.uuid,
+        expires_at: parent.expires_at.to_i,
+        telephone_candidate_ref: contact.public_id,
+        normalized_number_digest: contact.number_digest, },
+      issuer_id: IdentityTelephoneCeremonyContract.sign_issuer_id("app"), now: now,
+    )
+    commit = IdentityTelephoneCeremonyFinalCommitter.call!(
+      result_token: result_token,
+      actor_context: ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base),
+      actor: actor, session_ref: parent.session_ref, surface: "app", now: now,
+    )
 
-    IdentityTelephoneCeremonyResultConsumer.stub(:new, ->(**) { consumer }) do
-      ClientTelephone.stub(:transaction, ->(&block) { block.call }) do
-        ClientTelephone.stub(:lock, lock) do
-          ChronicleRecord.stub(:connected_to, ->(**, &block) { block.call }) do
-            ClientChronicleEvent.stub(:find_or_create_by!, true) do
-              ClientChronicleLevel.stub(:find_or_create_by!, true) do
-                ClientChronicle.stub(:create!, ->(**attrs) { audit = attrs }) do
-                  commit = committer.call!
+    assert_equal contact, commit.telephone
+    assert_equal ClientTelephoneStatus::VERIFIED, contact.reload.user_telephone_status_id
+    assert_predicate contact, :binding_effective?
+    audit = ClientContactAuditOutbox.find_by!(operation_ref: parent.transaction_id)
 
-                  assert_same @telephone, commit.telephone
-                end
-              end
-            end
-          end
-        end
-      end
-    end
-
-    assert_equal ClientTelephoneStatus::VERIFIED, @telephone.updated_status
-    assert_equal ClientChronicleEvent::TELEPHONE_REGISTERED, audit.fetch(:event_id)
-    assert_equal @actor.id.to_s, audit.fetch(:subject_id)
+    assert_equal "telephone", audit.contact_kind
+    assert_equal "finalized", audit.event_name
+    assert_equal actor.public_id, audit.owner_ref
+    assert_equal actor.public_id, audit.actor_ref
+    assert_equal contact.public_id, audit.contact_ref
+    assert_nil audit.acknowledged_at
   end
 
   private
@@ -180,6 +182,7 @@ class IdentityTelephoneCeremonyFinalCommitterTest < ActiveSupport::TestCase
     IdentityTelephoneCeremonyFinalCommitter.new(
       result_token: "token",
       actor: actor,
+      actor_context: ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base),
       session_ref: session_ref,
       surface: surface,
       now: @now,

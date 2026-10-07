@@ -169,9 +169,81 @@ module Base
           def current_registration_telephone = ClientTelephone.find_by(id: session[registration_session_key])
 
           def valid_registration_session?
-            @user_telephone.present? && @user_telephone.user_id == current_client.id &&
-              !@user_telephone.otp_expired? &&
-              @user_telephone.user_telephone_status_id == ClientTelephoneStatus::UNVERIFIED
+            return false unless @user_telephone && @user_telephone.user_id == current_client.id
+
+            proof = @user_telephone.credential_registration_otp_context
+            flow = registration_otp_transaction
+            nonce = base_admission_browser_nonce
+            return false unless proof && flow && nonce && flow.expires_at > flow.class.database_now &&
+              proof.fetch("session_ref") == current_session_token.public_id &&
+              proof.fetch("browser_digest") == AuthAdmissionBinding.browser_digest(
+                surface: "app", entry_ref: flow.transaction_id, nonce: nonce,
+              )
+
+            deadline = proof.fetch(proof.fetch("verified_at") ? "result_expires_at" : "expires_at")
+            Time.iso8601(deadline) > @user_telephone.class.database_now
+          end
+
+          def send_telephone_verification_sms(contact, code)
+            flow = ContactRegistrationOtpIssuer.call!(
+              actor: current_client, token: current_session_token, contact:, channel: :telephone,
+              browser_nonce: ensure_base_admission_browser_nonce!, code:,
+            )
+            OtpAdapter.for(surface: :app, channel: :telephone).deliver(
+              record: contact, otp_code: code, purpose: "credential_registration",
+              public_id: contact.public_id, message_style: :localized_verification,
+              contact_ceremony_transaction_ref: flow.transaction_id,
+              contact_otp_counter: contact.credential_registration_otp_context.fetch("counter"),
+            )
+          end
+
+          def complete_telephone_verification(id, submitted_code)
+            return :session_expired unless @user_telephone && @user_telephone.id == id && registration_otp_transaction
+
+            result = ContactRegistrationOtpVerificationCommitter.call!(
+              actor: current_client, token: current_session_token, contact: @user_telephone,
+              transaction: registration_otp_transaction, channel: :telephone,
+              browser_nonce: base_admission_browser_nonce, code: submitted_code,
+            )
+            return :success if result == :verified
+            return :session_expired if result == :unavailable
+
+            @user_telephone.errors.add(:pass_code, t("sign.app.registration.telephone.update.invalid_code"))
+            result
+          end
+
+          def finish_telephone_ceremony!(surface:, actor:, session_ref:, candidate:)
+            unless surface == "app" && actor == current_client && session_ref == current_session_token.public_id
+              raise IdentityTelephoneCeremony::Error, "registration controller binding mismatch"
+            end
+
+            status = ContactRegistrationOtpFinalizer.call!(
+              actor:, actor_context: current_actor.with(surface: :base),
+              token: current_session_token, contact: candidate,
+              transaction: registration_otp_transaction, channel: :telephone,
+              browser_nonce: base_admission_browser_nonce,
+              requirement: step_up_requirement(scope: verification_scope),
+            )
+            return candidate if status == :finalized
+
+            raise IdentityTelephoneCeremony::Error, "registration finalization is unavailable"
+          end
+
+          def registration_otp_transaction
+            reference = @user_telephone&.credential_registration_otp_context&.fetch("flow_ref")
+            return unless reference
+
+            ClientTelephoneCeremonyTransaction.find_by(transaction_id: reference)
+          end
+
+          def step_up_requirement(scope:)
+            unless scope == "settings_telephone"
+              raise StepUpRequirement::Invalid, "registration operation scope mismatch"
+            end
+
+            contact = @user_telephone || ClientTelephone.new(user: current_client)
+            ClientTelephonePolicy.new(contact, user: current_client)
+              .credential_registration_requirement(token: current_session_token)
           end
 
           def registration_session_key = :settings_telephone_registration_id

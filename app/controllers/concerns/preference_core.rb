@@ -7,6 +7,7 @@ module PreferenceCore
   include PreferenceBase
   include PreferenceResourceSync
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     helper_method :preference_base_i18n_key, :preference_acme_i18n_key
   end

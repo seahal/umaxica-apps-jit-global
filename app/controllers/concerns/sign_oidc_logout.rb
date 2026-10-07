@@ -6,6 +6,7 @@ module SignOidcLogout
 
   OIDC_LOGOUT_REQUEST_SESSION_KEY = :oidc_logout_request
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     after_action :sign_out_notice_cache_headers!, only: %i(show create)
   end

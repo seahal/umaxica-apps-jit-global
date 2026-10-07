@@ -103,3 +103,11 @@ reached, so it is safe from fixed attacks):
 - `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md`
 - `adr/authentication-assurance-level-boundaries.md`
 - `docs/security/session-reset-policy.md`
+
+## Delivered reconciliation (2026-10-06)
+
+Full reauthentication, ordinary step-up freshness and RP credential reissuance are separate
+contracts. Step-up continuation does not extend a freshness window, a credential-management
+operation cannot promote registration evidence, and a privilege transition re-evaluates the current
+actor and resource before issuing or replacing a session. Older sign/acme authority references are
+historical and are superseded by the Base authority and operation inventory.

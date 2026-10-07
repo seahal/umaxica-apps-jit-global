@@ -172,15 +172,23 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       csrf_token = response.body[/name="authenticity_token" value="([^"]+)"/, 1]
 
       assert_predicate csrf_token, :present?
-      post(
-        "/sign", params: {
-          pt: "/dashboard",
-          ri: "jp",
-          authenticity_token: csrf_token,
-        }, headers: host_headers(host),
-      )
+      logged = []
+      Rails.logger.stub(:info, ->(message = nil, &block) { logged << (message.nil? ? block&.call : message).to_s }) do
+        post(
+          "/sign", params: {
+            pt: "/dashboard",
+            ri: "jp",
+            authenticity_token: csrf_token,
+          }, headers: host_headers(host),
+        )
+      end
 
       assert_response :redirect
+      pending_event = logged.grep(/"event":"oidc\.sso\.pending_flow\.created"/).sole
+      log_data = JSON.parse(pending_event).fetch("data")
+
+      assert_empty log_data.keys.grep(/digest|nonce|verifier|\Apt(?:_|\z)/),
+                   "OIDC initiation must not log state or return-target fingerprints"
       authorize_location = jump_rt_url_from_location(response.location)
       authorize_uri = URI.parse(authorize_location)
       authorize_query = Rack::Utils.parse_nested_query(authorize_uri.query.to_s)

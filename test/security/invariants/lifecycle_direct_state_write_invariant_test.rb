@@ -9,11 +9,17 @@ class LifecycleDirectStateWriteInvariantTest < ActiveSupport::TestCase
     ClientSignUpFlow VisitorSignUpFlow OperatorSignUpFlow
     ClientSignOutFlow VisitorSignOutFlow OperatorSignOutFlow
   ).freeze
-  TRANSITION_CONCERNS = %r{app/models/concerns/(flow_base|flow_sign_in|flow_sign_up|flow_sign_out|sign_flow|sign_out_flow|sign_up_flow_ticket|session_limit_resolution_transactionable)\.rb\z}
+  TRANSITION_CONCERNS = %r{
+    app/models/concerns/(flow_base|flow_sign_in|flow_sign_up|flow_sign_out|sign_flow|sign_out_flow|
+      sign_up_flow_ticket|session_limit_resolution_transactionable)\.rb\z
+  }x
   NON_LIFECYCLE_WRITER_ALLOWLIST = %w(
     app/controllers/concerns/sign_up_sequence_controller_support.rb
   ).freeze
-  STATE_WRITERS = /\b(?:update!|update_columns|update_all|assign_attributes|write_attribute)\s*\([^)]*\b(?:status_id|state_id|state|step)\b/m
+  STATE_WRITERS = %r{
+    \b(?:update!|update_columns|update_all|assign_attributes|write_attribute)\s*
+    \([^)]*\b(?:status_id|state_id|state|step)\b
+  }mx
 
   test "lifecycle state writes stay inside the transition concerns" do
     offenders = []

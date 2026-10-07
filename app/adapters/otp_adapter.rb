@@ -15,16 +15,16 @@ class OtpAdapter
     when [:org, :email] then email_adapter(:org, Email::Org::OtpMailer, Notify::Org::OtpNotifier)
     when [:app, :telephone],
          [:com, :telephone],
-         [:org, :telephone] then OtpTelephoneAdapter.new
+         [:org, :telephone] then OtpTelephoneAdapter.new(surface: surface)
     else
       raise ArgumentError, "Unknown OTP delivery channel: #{surface}/#{channel}"
     end
   end
 
   def self.email_adapter(surface, mailer, notifier)
-    return OtpEmailNotifierAdapter.new(notifier) if OtpEmailNotifierRollout.enabled?(surface)
+    return OtpEmailNotifierAdapter.new(notifier, surface: surface) if OtpEmailNotifierRollout.enabled?(surface)
 
-    OtpEmailAdapter.new(mailer)
+    OtpEmailAdapter.new(mailer, surface: surface)
   end
   private_class_method :email_adapter
 

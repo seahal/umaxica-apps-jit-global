@@ -393,6 +393,14 @@ Current retention / deletion decisions:
   notification receipt, bounded retry, terminal failure, recovery, and parent-retention cascade
   contract.
 
+Proposed and deferred directions (not accepted, not implemented):
+
+- `adr/remembered-account-projection-and-store-boundary.md` — proposed direction for listing
+  previously used accounts on the sign-in screen: an allow-listed snapshot written at sign-in, an
+  opaque browser identifier, no authentication authority, and a logically independent store whose
+  placement in the `*_ticket` database is provisional. Open items are in
+  `plans/backlog/remembered-account-chooser.md`.
+
 Repository / application boundary decisions:
 
 - `adr/split-into-regional-and-global-repos.md` — the two-repository structure (Global vs Regional)

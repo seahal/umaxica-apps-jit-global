@@ -27,7 +27,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
                           :staff_id,]
           end
         actor = actors.create!
-        token = tokens.create!(token_key => actor.id)
+        token = tokens.create!(token_key => actor.id, :id => 9_920_000_000_010)
         flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
           surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
         ).transaction
@@ -74,7 +74,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         assert_equal 2, pids.uniq.length, surface.to_s
         assert_includes [:recorded, :refused], results.first
         assert_equal :revoked, results.last
-        assert_predicate flow.reload, :sign_in_failed?
+        assert_predicate flow.reload, :sign_in_halted?
         assert_not_nil ceremony.reload.revoked_at
         assert_nil flow.result_digest
         assert_nil flow.base_finalized_at
@@ -88,6 +88,13 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           threads.each { |thread| thread.kill unless thread.join(10) }
         end
         ceremonies.where(id: ceremony.id).delete_all if ceremony
+        if flow
+          case surface
+          when :app then ClientAuthAdmissionBinding.where(sign_in_flow_id: flow.id).delete_all
+          when :com then VisitorAuthAdmissionBinding.where(sign_in_flow_id: flow.id).delete_all
+          when :org then OperatorAuthAdmissionBinding.where(sign_in_flow_id: flow.id).delete_all
+          end
+        end
         flows.where(id: flow.id).delete_all if flow
         tokens.where(id: token.id).delete_all if token
         case actor
@@ -144,8 +151,8 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
             end
         end
         # COM provisioning requires contact, but unverified contact is not a compatible fallback.
-        contact&.update!(visitor_email_status_id: VisitorEmailStatus::UNVERIFIED)
-        token = token_model.create!(token_key => actor.id)
+        contact&.reload&.update!(visitor_email_status_id: VisitorEmailStatus::UNVERIFIED)
+        token = token_model.create!(token_key => actor.id, :id => 9_920_000_000_011)
         ActiveRecord::Base.connection_handler.clear_active_connections!
         threads =
           credentials.map do |credential|
@@ -292,8 +299,8 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
     credential = actor.client_emails.create!(
       address: "otp-race-#{SecureRandom.hex(8)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
-    token = ClientToken.create!(user: actor)
+    ).tap(&:finalize_binding!)
+    token = ClientToken.create!(id: 9_920_000_000_012, user: actor)
     parent = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, required_scope: "settings_email",
       required_aal: "none", allowed_methods: ["email_otp"], return_to: "/identity/emails",
@@ -372,8 +379,8 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
     credential = actor.visitor_emails.create!(
       address: "otp-race-#{SecureRandom.hex(8)}@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-    )
-    token = VisitorToken.create!(visitor: actor)
+    ).tap(&:finalize_binding!)
+    token = VisitorToken.create!(id: 9_920_000_000_012, visitor: actor)
     parent = VisitorStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, required_scope: "settings_email",
       required_aal: "none", allowed_methods: ["email_otp"], return_to: "/identity/emails",
@@ -460,7 +467,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       when :app
         actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::BOTH)
         credential = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = ClientToken.create!(user: actor)
+        token = ClientToken.create!(id: 9_920_000_000_001, user: actor)
         credential_ref = credential.public_id
       when :com
         actor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::BOTH)
@@ -469,16 +476,19 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
         )
         credential = actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = VisitorToken.create!(visitor: actor)
+        token = VisitorToken.create!(id: 9_920_000_000_001, visitor: actor)
         credential_ref = credential.public_id
       when :org
         actor = Operator.create!
         credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = OperatorToken.create!(staff: actor)
+        token = OperatorToken.create!(id: 9_920_000_000_001, staff: actor)
         credential_ref = credential.external_id
       end
       requirement = StepUpRequirement.new(
         scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
+        step_up_required: true, phishing_resistant_required: true, user_verification_required: false,
+        full_reauthentication_required: false,
+        ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
         audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       )
@@ -487,7 +497,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       ).transaction
       # Synthetic evidence isolates finalization and logout, not WebAuthn signature verification.
       parent.record_verification!(
-        method: "passkey", aal: "aal1", phishing_resistant: true,
+        method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: false,
         verified_at: transactions.database_now, verified_credential_ref: credential_ref,
       )
       continuity, = continuities.rotate_and_admit!(
@@ -559,6 +569,11 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         threads.each { |thread| thread.kill unless thread.join(10) }
       end
       if parent
+        case surface
+        when :app then ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
+        when :com then VisitorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
+        when :org then OperatorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
+        end
         continuities.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
         sessions.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
         transactions.where(id: parent.id).delete_all
@@ -581,7 +596,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       when :app
         actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::BOTH)
         credential = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = ClientToken.create!(user: actor)
+        token = ClientToken.create!(id: 9_920_000_000_002, user: actor)
         credential_ref = credential.public_id
       when :com
         actor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::BOTH)
@@ -590,16 +605,19 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
         )
         credential = actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = VisitorToken.create!(visitor: actor)
+        token = VisitorToken.create!(id: 9_920_000_000_002, visitor: actor)
         credential_ref = credential.public_id
       when :org
         actor = Operator.create!
         credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = OperatorToken.create!(staff: actor)
+        token = OperatorToken.create!(id: 9_920_000_000_002, staff: actor)
         credential_ref = credential.external_id
       end
       requirement = StepUpRequirement.new(
         scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
+        step_up_required: true, phishing_resistant_required: true, user_verification_required: false,
+        full_reauthentication_required: false,
+        ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
         audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       )
@@ -608,7 +626,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       ).transaction
       # Synthetic evidence isolates finalization and credential revocation, not WebAuthn signature verification.
       parent.record_verification!(
-        method: "passkey", aal: "aal1", phishing_resistant: true,
+        method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: false,
         verified_at: transactions.database_now, verified_credential_ref: credential_ref,
       )
       continuity, = continuities.rotate_and_admit!(
@@ -700,6 +718,11 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         threads.each { |thread| thread.kill unless thread.join(10) }
       end
       if parent
+        case surface
+        when :app then ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
+        when :com then VisitorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
+        when :org then OperatorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
+        end
         continuities.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
         sessions.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
         transactions.where(id: parent.id).delete_all
@@ -722,7 +745,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       when :app
         actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::BOTH)
         credential = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = ClientToken.create!(user: actor)
+        token = ClientToken.create!(id: 9_920_000_000_003, user: actor)
         credential_ref = credential.public_id
       when :com
         actor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::BOTH)
@@ -731,16 +754,19 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
         )
         credential = actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = VisitorToken.create!(visitor: actor)
+        token = VisitorToken.create!(id: 9_920_000_000_003, visitor: actor)
         credential_ref = credential.public_id
       when :org
         actor = Operator.create!
         credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = OperatorToken.create!(staff: actor)
+        token = OperatorToken.create!(id: 9_920_000_000_003, staff: actor)
         credential_ref = credential.external_id
       end
       requirement = StepUpRequirement.new(
         scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
+        step_up_required: true, phishing_resistant_required: true, user_verification_required: false,
+        full_reauthentication_required: false,
+        ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
         audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       )
@@ -749,7 +775,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       ).transaction
       # Synthetic evidence isolates finalization and cancellation, not WebAuthn signature verification.
       parent.record_verification!(
-        method: "passkey", aal: "aal1", phishing_resistant: true,
+        method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: false,
         verified_at: transactions.database_now, verified_credential_ref: credential_ref,
       )
       continuity, = continuities.rotate_and_admit!(
@@ -837,6 +863,11 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         threads.each { |thread| thread.kill unless thread.join(10) }
       end
       if parent
+        case surface
+        when :app then ClientAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
+        when :com then VisitorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
+        when :org then OperatorAuthAdmissionBinding.where(step_up_ceremony_transaction_id: parent.id).delete_all
+        end
         continuities.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
         sessions.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
         transactions.where(id: parent.id).delete_all

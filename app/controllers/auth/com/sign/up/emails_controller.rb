@@ -26,6 +26,7 @@ module Auth
           AUTHENTICATION_MODE = :guest
 
           SESSION_KEY = :auth_com_up_email_flow_state
+          before_action :require_sign_up_ceremony_admission!
           before_action :reject_suspended_sign_up!
 
           before_action :enforce_email_flow!
@@ -128,7 +129,6 @@ module Auth
               return
             end
 
-            bind_sign_up_flow_to_email!(@user_email)
             progress_email_flow!(:create)
             redirect_to(
               auth_com_sign_up_check_email_otp_path(
@@ -260,7 +260,12 @@ module Auth
 
             current = email_flow_state
             if %i(new create).include?(action_name.to_sym) && current != "init"
-              reset_email_flow!
+              if action_name == "create"
+                # Keep the old locator until create halts the flow and cleans its owned artifacts.
+                session[SESSION_KEY] = "init"
+              else
+                reset_email_flow!
+              end
               return
             end
             return if current == required
@@ -290,7 +295,17 @@ module Auth
           end
 
           def valid_email_session?
-            return false if @user_email.blank?
+            return false unless @user_email
+
+            context = @user_email.sign_up_otp_context
+            if context&.fetch("verified_at") && @sign_up_ticket
+              return context.fetch("surface") == "com" && context.fetch("purpose") == "sign_up" &&
+                  context.fetch("flow_ref") == @sign_up_ticket.public_id &&
+                  context.fetch("nonce_digest") == @sign_up_ticket.nonce_digest &&
+                  context.fetch("contact_ref") == @user_email.public_id &&
+                  !@user_email.binding_finalized_at && !@user_email.binding_released? &&
+                  Time.iso8601(context.fetch("result_expires_at")) > @user_email.class.database_now
+            end
             return false if @user_email.otp_expired?
 
             @user_email.visitor_email_status_id == VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP
@@ -314,15 +329,13 @@ module Auth
 
               pending_visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
               @user_email.visitor = pending_visitor
-              otp_number = generate_otp_attributes(@user_email)
+              generate_otp_attributes(@user_email)
               @user_email.otp_last_sent_at = Time.current
               @user_email.save!
-              token = @user_email.generate_verification_token
-              OtpAdapter.for(surface: :com, channel: :email).deliver(
-                record: @user_email,
-                otp_code: otp_number,
-                purpose: :sign_up,
-                verification_token: token, public_id: @user_email.public_id,
+              bind_sign_up_flow_to_email!(@user_email)
+              SignUpOtpDeliveryIssuer.call(
+                flow: current_sign_up_flow, record: @user_email, channel: :email,
+                verification_token: @user_email.generate_verification_token,
               )
 
               true

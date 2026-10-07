@@ -18,10 +18,38 @@ module Outbound
 
     def perform(encrypted_payload: nil, to: nil, title: nil, encrypted_body: nil, body: nil)
       payload = delivery_payload(encrypted_payload:, to:, title:, encrypted_body:, body:)
+      if payload.key?(:otp_binding)
+        if payload.fetch(:otp_binding)[1] == "credential_registration"
+          return deliver_current_registration_otp(payload)
+        end
+
+        binding = SignUpOtpDeliveryBindingValue.for_sms(otp_binding: payload.fetch(:otp_binding))
+        flow_class = (binding.surface == "app") ? ClientSignUpFlow : VisitorSignUpFlow
+        flow = flow_class.find_by(public_id: binding.flow_ref)
+        return unless flow
+
+        return SignUpOtpDeliveryGuard.call(
+          flow: flow, channel: :telephone, contact_ref: binding.contact_ref,
+          counter: binding.counter, destination: payload.fetch(:to),
+        ) { OutboundSms.deliver_now(**payload.slice(:to, :title, :body)) }
+      end
       OutboundSms.deliver_now(**payload.slice(:to, :title, :body))
     end
 
     private
+
+    def deliver_current_registration_otp(payload)
+      binding = ContactRegistrationOtpDeliveryBindingValue.for_sms(otp_binding: payload.fetch(:otp_binding))
+      transaction_class =
+        (binding.surface == "app") ? ClientTelephoneCeremonyTransaction : VisitorTelephoneCeremonyTransaction
+      transaction = transaction_class.find_by(transaction_id: binding.flow_ref)
+      return unless transaction
+
+      ContactRegistrationOtpDeliveryIssuer.call(
+        transaction: transaction, contact_ref: binding.contact_ref, counter: binding.counter,
+        destination: payload.fetch(:to), message_body: payload.fetch(:body),
+      ) { OutboundSms.deliver_now(**payload.slice(:to, :title, :body)) }
+    end
 
     # Existing encrypted-body jobs may remain in a deployed queue during rollout.
     # New producers only enqueue the versioned full-payload envelope.

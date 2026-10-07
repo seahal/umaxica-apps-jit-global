@@ -24,6 +24,7 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
     assert_empty AuthenticationCredentialInventory.call(@user).usable_sign_in_capabilities
 
     create_active_external_identity(client: @user, provider: "google")
+
     assert_equal [:google], AuthenticationCredentialInventory.call(@user).usable_sign_in_capabilities
 
     create_verified_email(@user)
@@ -196,6 +197,7 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
         when :passkey_with_zero_contacts
           passkey = create_active_passkey(@user)
           inventory = AuthenticationCredentialInventory.call(@user)
+
           assert_equal [:passkey], inventory.usable_sign_in_capabilities, partition
           assert_empty inventory.contact_identifiers, partition
           AuthMethodGuard.can_remove_passkey?(@user, passkey)
@@ -211,12 +213,14 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
             confirmed_at: now,
           )
           inventory = AuthenticationCredentialInventory.call(@user)
+
           assert_empty inventory.usable_sign_in_capabilities, partition
           assert_empty inventory.usable_step_up_capabilities, partition
           AuthMethodGuard.can_remove_secret_credential?(@user, secret)
         when :social_only
           identity = create_active_external_identity(client: @user, provider: "google")
           inventory = AuthenticationCredentialInventory.call(@user)
+
           assert_equal [:google], inventory.usable_sign_in_capabilities, partition
           assert_empty inventory.usable_step_up_capabilities, partition
           AuthMethodGuard.can_remove_external_identity?(@user, identity)
@@ -224,6 +228,7 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
           email = create_verified_email(@user)
           email.update!(step_up_otp_locked_until: 1.hour.from_now)
           inventory = AuthenticationCredentialInventory.call(@user)
+
           assert_equal [:email_otp], inventory.usable_sign_in_capabilities, partition
           assert_empty inventory.usable_step_up_capabilities, partition
           AuthMethodGuard.can_remove_email?(@user, email)
@@ -234,11 +239,12 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
             last_otp_at: Time.zone.at(0),
           )
           inventory = AuthenticationCredentialInventory.call(@user)
+
           assert_empty inventory.usable_sign_in_capabilities, partition
           assert_equal [:totp], inventory.usable_step_up_capabilities, partition
           AuthMethodGuard.can_remove_totp?(@user, totp)
         else
-          raise "unhandled T15 partition: #{partition}"
+          raise RuntimeError, "unhandled T15 partition: #{partition}"
         end
     end
 

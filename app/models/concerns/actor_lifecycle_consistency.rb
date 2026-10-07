@@ -4,6 +4,7 @@
 module ActorLifecycleConsistency
   extend ActiveSupport::Concern
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     validate :lifecycle_timestamps_are_consistent
     validate :mfa_level_requirement_columns_are_consistent

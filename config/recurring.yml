@@ -3,6 +3,13 @@
 # explicitly so a local worker does not silently exercise a different set.
 
 development:
+  contact_audit_delivery:
+    class: ContactAuditDeliveryJob
+    queue: retention
+    priority: 50
+    args:
+      - batch_size: 500
+    schedule: every 15 minutes
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
@@ -117,6 +124,13 @@ development:
 test: {}
 
 production:
+  contact_audit_delivery:
+    class: ContactAuditDeliveryJob
+    queue: retention
+    priority: 50
+    args:
+      - batch_size: 500
+    schedule: every 15 minutes
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12

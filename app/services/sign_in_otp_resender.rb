@@ -17,7 +17,7 @@ class SignInOtpResender
 
   Response = Struct.new(:status, :resendable, :retry_after, keyword_init: true)
 
-  def initialize(kind:, state:, surface:)
+  def initialize(kind:, state:, surface:, browser_binding:, ceremony:)
     @kind = kind.to_s
     raise ArgumentError, "unsupported sign-in OTP resend kind: #{@kind}" unless @kind == KIND
 
@@ -27,25 +27,35 @@ class SignInOtpResender
     end
 
     @state = state
+    @browser_binding = browser_binding
+    @ceremony = ceremony
+    expected = (@surface == :app) ? ClientAuthCeremonySession : VisitorAuthCeremonySession
+    return if @ceremony.is_a?(expected) && @ceremony.sid_digest == @browser_binding
+
+    raise ArgumentError, "sign-in resend ceremony does not match surface and browser"
+
   end
 
   def call
-    parsed = SignInOtpResendState.parse(@state)
+    parsed = SignInOtpResendState.parse(@state, browser_binding: @browser_binding)
     return invalid_response unless parsed && parsed[:kind] == @kind && parsed[:surface] == @surface.to_s
 
     normalized_target = IdentifierBlindIndex.normalize_email(parsed[:target])
     return invalid_response if normalized_target.blank?
 
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     occurrence = find_or_create_occurrence!(occurrence_hmac(normalized_target))
     blocked_response = reserve_resend!(occurrence)
     return blocked_response if blocked_response.present?
 
-    issue_and_send!(normalized_target)
+    return invalid_response unless issue_and_send!(normalized_target, parsed)
 
     Response.new(status: :ok, resendable: true, retry_after: 0)
   rescue StandardError => e
-    Rails.error.report(e, handled: true, context: { service: "otp_resend", kind: @kind })
-    invalid_response
+    Rails.error.report(e, handled: false, context: { service: "otp_resend", kind: @kind })
+    raise
+  ensure
+    ensure_min_elapsed(started, CommonOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS) if started
   end
 
   private
@@ -108,31 +118,36 @@ class SignInOtpResender
     end
   end
 
-  def issue_and_send!(normalized_target)
-    records = EMAIL_MODELS.fetch(@surface).with_address(normalized_target)
+  def issue_and_send!(normalized_target, parsed)
+    if parsed.fetch(:contact_mode) == "fake"
+      return false unless @ceremony.email_otp_challenge_current?(contact: nil)
 
-    return if records.any?(&:locked?)
-
-    records.find_each do |record|
-      record.clear_otp(reset_attempts: false)
-    rescue StandardError => e
-      Rails.error.report(
-        e, handled: true, context: {
-          service: "otp_resend", action: "clear_otp", record_id: record.id,
-        },
-      )
+      @ceremony.issue_email_otp!(contact: nil, destination: normalized_target)
+      return true
     end
+    return false unless parsed.fetch(:contact_mode) == "real"
 
-    target = records.order(created_at: :asc).first
-    unless target
-      perform_dummy_otp_generation
-      return
-    end
+    target = EMAIL_MODELS.fetch(@surface).find_by(public_id: parsed.fetch(:contact_ref))
+    return false unless target
 
-    otp_code = generate_otp_for(target)
+    return false unless @ceremony.email_otp_challenge_current?(contact: target)
+
+    owner_id = (@surface == :app) ? target.user_id : target.visitor_id
+    return false unless owner_id.to_s.rjust(20, "0") == parsed.fetch(:owner_ref) &&
+      target.binding_finalized_at.utc.iso8601(6) == parsed.fetch(:binding_fact) &&
+      target.address_digest == IdentifierBlindIndex.bidx_for_email(normalized_target)
+
+    otp_code = @ceremony.issue_email_otp!(contact: target, destination: normalized_target)
+    return true if otp_code.nil?
+
     OtpAdapter
       .for(surface: @surface, channel: :email)
-      .deliver(record: target, otp_code: otp_code, purpose: :sign_in)
+      .deliver(
+        record: target, otp_code: otp_code, purpose: :sign_in,
+        auth_ceremony_session_ref: @ceremony.id.to_s,
+        auth_email_otp_generation: @ceremony.email_otp_context.fetch("generation"),
+      )
+    true
   end
 
   def log_issued!(occurrence:, issued_timestamps:)

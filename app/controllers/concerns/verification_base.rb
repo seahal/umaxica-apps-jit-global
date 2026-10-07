@@ -231,45 +231,36 @@ module VerificationBase
     end
 
     if request.get? || request.head?
-      return true if configured_step_up_methods.present? && verification_entry_request?
+      return true if configured_step_up_entry_request?
 
-      destination =
-        if step_up_bootstrap_unconfigured?
-          verification_setup_redirect_path(pt: encoded_step_up_pt, scope: scope_override || verification_scope)
-        else
-          verification_redirect_path(pt: encoded_step_up_pt, scope_override: scope_override)
-        end
-      fallback =
-        if step_up_bootstrap_unconfigured?
-          verification_setup_redirect_fallback
-        else
-          verification_redirect_fallback
-        end
-
-      redirect_to_verification_destination(destination, fallback: fallback, status: :found)
+      redirect_to_step_up_prerequisite(scope_override, status: :found)
     elsif request.format.json?
       render json: { error: I18n.t("auth.step_up.register_methods_required") }, status: :unprocessable_content
     else
-      destination =
-        if step_up_bootstrap_unconfigured?
-          verification_setup_redirect_path(pt: encoded_step_up_pt, scope: scope_override || verification_scope)
-        else
-          verification_redirect_path(pt: encoded_step_up_pt, scope_override: scope_override)
-        end
-      fallback =
-        if step_up_bootstrap_unconfigured?
-          verification_setup_redirect_fallback
-        else
-          verification_redirect_fallback
-        end
-
-      redirect_to_verification_destination(
-        destination,
-        fallback: fallback,
-        status: :see_other,
-      )
+      redirect_to_step_up_prerequisite(scope_override, status: :see_other)
     end
     false
+  end
+
+  def configured_step_up_entry_request?
+    configured_step_up_methods.present? && verification_entry_request?
+  end
+
+  def redirect_to_step_up_prerequisite(scope_override, status:)
+    destination, fallback = step_up_prerequisite_destination(scope_override)
+    redirect_to_verification_destination(destination, fallback: fallback, status: status)
+  end
+
+  def step_up_prerequisite_destination(scope_override)
+    if step_up_bootstrap_unconfigured?
+      [
+        verification_setup_redirect_path(pt: encoded_step_up_pt, scope: scope_override || verification_scope),
+        verification_setup_redirect_fallback,
+      ]
+    else
+      [verification_redirect_path(pt: encoded_step_up_pt, scope_override: scope_override),
+       verification_redirect_fallback,]
+    end
   end
 
   def log_step_up_required!(requirement:)

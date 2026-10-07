@@ -7,6 +7,8 @@ module Auth
   module Com
     module In
       class EmailsControllerEnumerationTest < ActionDispatch::IntegrationTest
+        rate_limit_counters!
+
         REGISTERED_ADDRESS = "com_enumeration_registered@example.com"
         UNREGISTERED_ADDRESS = "com_enumeration_unregistered@example.com"
 
@@ -16,7 +18,10 @@ module Auth
           TurnstileVerifierStub.challenge_response = { "success" => true }
 
           visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-          VisitorEmail.create!(visitor: visitor, address: REGISTERED_ADDRESS, confirm_policy: true)
+          VisitorEmail.create!(
+            visitor: visitor, address: REGISTERED_ADDRESS, confirm_policy: true,
+            visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+          ).tap(&:finalize_binding!)
         end
 
         teardown do
@@ -41,6 +46,7 @@ module Auth
               response = nil
               open_session do |session|
                 session.host!(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"))
+                admit_auth_local_entry!(surface: "com", browser: session)
                 session.post(
                   auth_com_sign_in_email_url(ri: "jp"), params: {
                     :user_email => { address: address },

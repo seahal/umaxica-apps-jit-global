@@ -46,9 +46,21 @@ export default function Issuance({
     >
       {notice && <output className="block">{notice}</output>}
       {reattempt_action && reattempt_of && (
-        <form method="post" action={reattempt_action} className="flex flex-col items-start gap-4">
-          <input type="hidden" name="authenticity_token" value={csrf} />
-          <input type="hidden" name="reattempt_of" value={reattempt_of} />
+        <form
+          method="post"
+          action={reattempt_action}
+          className="flex flex-col items-start gap-4"
+        >
+          <input
+            type="hidden"
+            name="authenticity_token"
+            value={csrf}
+          />
+          <input
+            type="hidden"
+            name="reattempt_of"
+            value={reattempt_of}
+          />
           {checkpoint_version !== undefined && (
             <input
               type="hidden"

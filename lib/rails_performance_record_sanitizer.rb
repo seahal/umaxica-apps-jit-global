@@ -43,7 +43,7 @@ module RailsPerformanceRecordSanitizer
   def sanitize_path(path)
     return path if path.nil?
 
-    path.to_s.split(/[?#]/, 2).first.to_s
+    ObservabilityRedactor.scrub_path(path.to_s.split(/[?#]/, 2).first.to_s)
   end
 
   # @param referer [String, nil] a Referer header value

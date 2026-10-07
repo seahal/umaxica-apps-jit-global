@@ -18,7 +18,7 @@ module Base
         return render_session_boundary_not_found if logged_in?
 
         render inertia: true, props: root_landing_props,
-               clear_history: session.delete(:inertia_clear_history) == true
+               clear_history: session[:inertia_clear_history] == true
       end
 
       def show
@@ -26,7 +26,8 @@ module Base
         authorize!(current_visitor, to: :show?)
         return unless require_selected_actor_context_for_dashboard!
 
-        render inertia: "base/com/dashboards/show", props: dashboard_page_props
+        render inertia: "base/com/dashboards/show", props: dashboard_page_props,
+               clear_history: session[:inertia_clear_history] == true
       end
 
       protected

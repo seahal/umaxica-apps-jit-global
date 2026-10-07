@@ -20,7 +20,13 @@ module OutboundSensitivePayload
     decrypt(token, purpose: SMS_BODY_PURPOSE)
   end
 
-  def encrypt_sms_delivery(to:, title:, body:)
+  def encrypt_sms_delivery(to:, title:, body:, otp_binding: nil)
+    unless otp_binding.nil?
+      payload = { "version" => 2, "to" => to, "title" => title, "body" => body, "otp_binding" => otp_binding }
+      validate_bound_sms_envelope!(payload)
+      return encrypt(JSON.generate(payload), purpose: SMS_DELIVERY_PURPOSE)
+    end
+
     encrypt_envelope(
       { "version" => ENVELOPE_VERSION, "to" => to, "title" => title, "body" => body },
       purpose: SMS_DELIVERY_PURPOSE,
@@ -29,7 +35,36 @@ module OutboundSensitivePayload
   end
 
   def decrypt_sms_delivery(token)
-    decrypt_envelope(token, purpose: SMS_DELIVERY_PURPOSE, required_keys: %w(version to title body))
+    payload = JSON.parse(decrypt(token, purpose: SMS_DELIVERY_PURPOSE))
+    if payload.is_a?(Hash) && payload["version"] == 2
+      validate_bound_sms_envelope!(payload)
+    else
+      validate_envelope!(payload, required_keys: %w(version to title body))
+    end
+    payload.symbolize_keys
+  rescue JSON::ParserError, TypeError
+    raise ArgumentError, "Invalid encrypted sensitive payload"
+  end
+
+  def validate_bound_sms_envelope!(payload)
+    unless payload.is_a?(Hash) && payload.keys.sort == %w(version to title body
+                                                          otp_binding).sort && payload["version"] == 2
+      raise ArgumentError, "Invalid bound SMS payload schema"
+    end
+
+    %w(to title body).each do |key|
+      unless payload[key].is_a?(String) && payload[key].present?
+        raise ArgumentError, "Invalid bound SMS payload field #{key}"
+      end
+    end
+    binding = payload.fetch("otp_binding")
+    raise ArgumentError, "Invalid bound SMS tuple" unless binding.is_a?(Array) && binding.length == 5
+
+    case binding[1]
+    when "sign_up" then SignUpOtpDeliveryBindingValue.for_sms(otp_binding: binding)
+    when "credential_registration" then ContactRegistrationOtpDeliveryBindingValue.for_sms(otp_binding: binding)
+    else raise ArgumentError, "Unsupported bound SMS purpose"
+    end
   end
 
   def encrypt_oidc_backchannel_logout(uri:, client_id:, resource_type:, subject:, sid:)

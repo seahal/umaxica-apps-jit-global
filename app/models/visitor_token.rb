@@ -118,7 +118,7 @@ class VisitorToken < ComTicketRecord
            foreign_key: :token_id,
            inverse_of: :token,
            dependent: :restrict_with_exception
-  has_many :visitor_rp_sessions, inverse_of: :visitor_token
+  has_many :visitor_rp_sessions, inverse_of: :visitor_token, dependent: :restrict_with_exception
   has_one :step_up_session,
           class_name: "VisitorStepUpSession",
           inverse_of: :visitor_token,

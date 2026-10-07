@@ -2,10 +2,11 @@
 # compactor never deletes: a development volume that grows without bound is a
 # misconfiguration under adr/traces-and-metrics-routing-via-alloy.md.
 #
-# Retention is 24h, matching `compactor.compaction.block_retention` in
-# podman/tempo/tempo.yaml and `--storage.tsdb.retention.time` on the `prometheus`
-# service. The three backends expire together so a trace, its metrics and its log
-# lines do not outlive each other.
+# Retention is 14 days (336h). Tempo (`compactor.compaction.block_retention` in
+# podman/tempo/tempo.yaml) and Prometheus (`--storage.tsdb.retention.time`) stay
+# at 24h, so a log line older than a day outlives its trace and metrics. Logs are
+# kept longer because unsolicited scanner and crawler traffic is only visible as
+# a pattern across days, and the log files Alloy tails carry no usable history.
 #
 # Loki is reached only over the `observability` network: Alloy pushes to
 # `loki:3100`, Grafana queries it. No host port is published.
@@ -43,11 +44,12 @@ limits_config:
   # truth: audit and security records live in the database
   # (docs/security/observability-boundary.md), so expiring development logs
   # loses diagnostics only.
-  retention_period: 24h
+  retention_period: 336h
   # A single developer's Rails process, not a fleet. These bound what a runaway
   # log loop can push before the write path starts rejecting.
   ingestion_rate_mb: 8
   ingestion_burst_size_mb: 16
+  # Ingestion age limit, independent of retention_period above.
   reject_old_samples: true
   reject_old_samples_max_age: 24h
 

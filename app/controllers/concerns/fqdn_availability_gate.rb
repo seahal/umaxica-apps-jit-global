@@ -43,6 +43,7 @@ module FqdnAvailabilityGate
   # this from swallowing unrelated bugs the way `rescue StandardError` would.
   FLAG_STORE_ERRORS = [ActiveRecord::ActiveRecordError].freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     prepend_before_action(:enforce_fqdn_availability!)
   end

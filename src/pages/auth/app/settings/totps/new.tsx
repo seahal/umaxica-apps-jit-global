@@ -94,7 +94,9 @@ export default function TotpsNew({
           data-turbo="false"
           onSubmit={(event) => {
             const field = event.currentTarget.elements.namedItem("authenticity_token");
-            if (field instanceof HTMLInputElement) field.value = csrfToken();
+            if (field instanceof HTMLInputElement) {
+              field.value = csrfToken();
+            }
           }}
         >
           <input

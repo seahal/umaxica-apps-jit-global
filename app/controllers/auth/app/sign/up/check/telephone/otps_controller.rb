@@ -137,7 +137,11 @@ module Auth
               end
 
               def complete_update_and_redirect
-                redirect_to(auth_app_sign_up_guard_telephone_path(ri: params[:ri], pt: signed_pt_param))
+                redirect_to(
+                  auth_app_sign_up_guard_telephone_path(
+                    **sign_up_flow_binding_params, ri: params[:ri], pt: signed_pt_param,
+                  ),
+                )
               end
 
               def submitted_pass_code

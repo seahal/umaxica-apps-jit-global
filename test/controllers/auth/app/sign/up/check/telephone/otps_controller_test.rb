@@ -19,6 +19,25 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     Rails.configuration.x.rate_limit.fetch(:store).clear
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
+
+    # Exercise OTP endpoints only after the public admission transitions.
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+    )
+    get "/sign/up", params: { ri: "jp", entry_ref: admission.reference }, headers: { "Host" => @host }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/ceremony_bindings", params: { ri: "jp", entry_ref: admission.reference, authenticity_token: csrf },
+                               headers: { "Host" => @host }
+
+    assert_response :see_other
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/up", params: { ri: "jp", entry_ref: admission.reference }, headers: { "Host" => @host }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/sign/up", params: { ri: "jp", entry_ref: admission.reference, authenticity_token: csrf },
+                     headers: { "Host" => @host }
+
+    assert_response :see_other
   end
 
   teardown do
@@ -30,7 +49,7 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
   test "show renders the otp form" do
     start_telephone_signup!("+1234567890")
 
-    get auth_app_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+    get auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
 
     assert_response :success
     assert_equal "auth/app/sign/up/telephones/edit", inertia_component
@@ -47,7 +66,7 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     expiry = user_telephone.reload.otp_expires_at
     ClientTelephone.stub(:database_now, expiry + 1.second) do
       travel_to(expiry + 1.second) do
-        get auth_app_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+        get auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
       end
     end
 
@@ -59,12 +78,12 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     user_telephone = start_telephone_signup!("+1234567891")
     cycle = current_sign_up_cycle
 
-    patch auth_app_sign_up_check_telephone_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
           params: { client_telephone: { pass_code: otp_code_for(user_telephone) } },
           headers: default_headers
 
     assert_response :redirect
-    assert_redirected_to auth_app_sign_up_guard_telephone_url(ri: "jp")
+    assert_redirected_to auth_app_sign_up_guard_telephone_url(ri: "jp", fb: @flow_binding)
     assert_equal ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP, user_telephone.reload.user_telephone_status_id
     assert session.dig(:user_telephone_registration, "otp_verified")
     assert_equal ClientSignUpFlowStatus::CHECKPOINT_PENDING, cycle.reload.status_id
@@ -78,7 +97,7 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     expiry = user_telephone.reload.otp_expires_at
     ClientTelephone.stub(:database_now, expiry + 1.second) do
       travel_to(expiry + 1.second) do
-        patch auth_app_sign_up_check_telephone_otp_url(ri: "jp"),
+        patch auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
               params: { client_telephone: { pass_code: "000000" } },
               headers: default_headers
       end
@@ -91,7 +110,7 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
   test "patch with a blank otp returns a validation error" do
     start_telephone_signup!("+1234567892")
 
-    patch auth_app_sign_up_check_telephone_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
           params: { client_telephone: { pass_code: "" } },
           headers: default_headers
 
@@ -102,7 +121,7 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
   test "patch with an invalid otp returns a validation error" do
     start_telephone_signup!("+1234567893")
 
-    patch auth_app_sign_up_check_telephone_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
           params: { client_telephone: { pass_code: "000000" } },
           headers: default_headers
 
@@ -116,7 +135,7 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     completed_requirements = cycle.completed_requirements.deep_dup
 
     Telephone::MAX_OTP_ATTEMPTS.times do
-      patch auth_app_sign_up_check_telephone_otp_url(ri: "jp"),
+      patch auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
             params: { client_telephone: { pass_code: "000000" } },
             headers: default_headers
     end
@@ -133,7 +152,7 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
 
   def start_telephone_signup!(telephone)
     post(
-      auth_app_sign_up_telephone_url(ri: "jp"),
+      auth_app_sign_up_telephone_url(ri: "jp", fb: @flow_binding),
       params: {
         client_telephone: {
           raw_number: telephone,
@@ -146,11 +165,12 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     )
 
     assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     ClientTelephone.order(:created_at).last
   end
 
   def current_sign_up_cycle
-    ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+    ClientSignUpFlow.find_by!(public_id: session[:auth_app_up_sequence_id])
   end
 
   def otp_code_for(user_telephone)

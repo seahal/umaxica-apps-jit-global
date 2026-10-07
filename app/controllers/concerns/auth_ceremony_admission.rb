@@ -9,12 +9,15 @@ module AuthCeremonyAdmission
   include AuthCeremonySidCookie
   include AuthCeremonyContext
   include StepUpCeremonyLogging
+  include AdmissionReferenceParameters
 
   public
 
   def create
     apply_admission_transport_headers!
     redeem_admission_reference_and_redirect!(expected_intent: auth_ceremony_entry_intent)
+  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
+    render_invalid_admission_request!
   end
 
   private
@@ -25,7 +28,7 @@ module AuthCeremonyAdmission
     return render_invalid_admission_request! if params[:admission].present?
     return render_invalid_admission_request! if multiple_admission_references? || invalid_admission_reference_params?
     if request.get? && admission_reference_param.present?
-      return render_admission_continuation!
+      return render_admission_continuation!(expected_intent:)
     end
 
     if logged_in? && admission_reference_param.blank? && !admitted_ceremony_present?(expected_intent: expected_intent)
@@ -64,14 +67,31 @@ module AuthCeremonyAdmission
       surface: auth_ceremony_surface, reference: admission_reference_param,
     )
     raw_auth_sid = read_auth_ceremony_sid_cookie
-    if binding.redeemed? && raw_auth_sid.present?
-      model = BaseAuthAdmissionCoordinator.ceremony_session_class(auth_ceremony_surface)
-      current_session = model.find_active_by_raw_sid(raw_auth_sid)
-      if current_session&.admitted? && current_session.id == binding.admitted_auth_ceremony_session_id
-        return redirect_to(auth_ceremony_clean_url(expected_intent: expected_intent), status: :see_other)
+    replacement_sid =
+      BaseAuthAdmissionCoordinator.with_admission_binding_lock!(binding) do |locked_binding|
+        if redeemed_binding_matches_cookie?(
+          locked_binding,
+          raw_auth_sid,
+        ) && auth_ceremony_matches_intent?(expected_intent)
+          nil
+        else
+          _record, sid = admit_confirmed_binding!(locked_binding, raw_auth_sid:, expected_intent:)
+          sid
+        end
       end
+    write_auth_ceremony_sid_cookie!(replacement_sid) if replacement_sid
+    redirect_to(auth_ceremony_clean_url(expected_intent: expected_intent), status: :see_other)
+  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
+         AuthCeremonySession::InvalidTransition => e
+    if BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
+      log_step_up_refusal(e, stage: "auth_admission", admission_intent: expected_intent.to_s)
     end
+    render_invalid_admission_request!
+  rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError
+    render_admission_backend_unavailable!
+  end
 
+  def admit_confirmed_binding!(binding, raw_auth_sid:, expected_intent:)
     payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
       reference: admission_reference_param,
       surface: auth_ceremony_surface,
@@ -85,7 +105,7 @@ module AuthCeremonyAdmission
       transaction = BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
         payload: payload, surface: auth_ceremony_surface, expected_intent: expected_intent,
       )
-      rotate_auth_ceremony_session!(
+      replacement = rotate_auth_ceremony_session!(
         admission_purpose: payload.fetch("purpose"),
         step_up_ceremony_transaction_ref: transaction.transaction_id,
         admission_binding: binding,
@@ -94,16 +114,22 @@ module AuthCeremonyAdmission
         "ceremony_accepted", transaction: transaction, outcome: "accepted", stage: "auth_admission",
                              state_before: transaction.status,
       )
+      replacement
     else
       admit_oidc_payload!(payload, expected_intent: expected_intent, binding: binding)
     end
-    redirect_to(auth_ceremony_clean_url(expected_intent: expected_intent), status: :see_other)
-  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
-         AuthCeremonySession::InvalidTransition => e
-    if BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
-      log_step_up_refusal(e, stage: "auth_admission", admission_intent: expected_intent.to_s)
-    end
-    render_invalid_admission_request!
+  end
+
+  def render_admission_backend_unavailable!
+    render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
+  end
+
+  def redeemed_binding_matches_cookie?(binding, raw_auth_sid)
+    return false unless binding.redeemed? && raw_auth_sid.present?
+
+    model = BaseAuthAdmissionCoordinator.ceremony_session_class(auth_ceremony_surface)
+    current_session = model.find_active_by_raw_sid(raw_auth_sid)
+    current_session&.admitted? && current_session.id == binding.admitted_auth_ceremony_session_id
   end
 
   def admit_local_entry_payload!(payload, binding:)
@@ -176,8 +202,7 @@ module AuthCeremonyAdmission
         [admitted, admitted_sid]
       end
     end
-    write_auth_ceremony_sid_cookie!(sid)
-    record
+    [record, sid]
   end
 
   def ceremony_admission_present?
@@ -195,10 +220,17 @@ module AuthCeremonyAdmission
     response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
   end
 
-  def render_admission_continuation!
+  def render_admission_continuation!(expected_intent:)
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
       surface: auth_ceremony_surface, reference: admission_reference_param,
     )
+    BaseAuthAdmissionCoordinator.validate_admission_continuation!(
+      binding: binding, surface: auth_ceremony_surface, expected_intent: expected_intent,
+    )
+    if binding.attached? && current_auth_ceremony_session&.id != binding.auth_ceremony_session_id
+      return render_invalid_admission_request!
+    end
+
     action_url =
       if binding.attached? && binding.confirmed?
         auth_ceremony_admitted_action_url
@@ -243,7 +275,9 @@ module AuthCeremonyAdmission
   end
 
   def invalid_admission_reference_params?
-    params[:entry_ref].present? && !params[:entry_ref].is_a?(String)
+    duplicate_admission_reference?("entry_ref") ||
+      BaseAuthAdmissionCoordinator.client_supplied_binding_proof?(params) ||
+      (params[:entry_ref].present? && !params[:entry_ref].is_a?(String))
   end
 
   def admission_reference_param_name

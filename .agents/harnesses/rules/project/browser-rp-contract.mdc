@@ -1,0 +1,21 @@
+---
+name: browser-rp-contract
+description: Preserve the shared Browser RP credential, refresh, cookie, and authority/RP separation contract.
+---
+
+# Browser RP Contract
+
+- Authority controllers and self-RP controllers have separate bases. A parent Browser Session may
+  authorize an explicitly bound OIDC request, but it is never an RP credential fallback.
+- Warp, Edit and Core application surfaces use the shared Browser RP lifecycle. Do not reintroduce
+  generic root authentication into an RP controller or RP credential lifecycle into an Authority
+  controller. Do not add old Side or `core-next-rp` aliases.
+- Refresh evaluates refresh credentials independently of access credentials. GET/HEAD orchestration
+  and unsafe-request orchestration remain separate; unsafe requests complete CSRF, Origin and Fetch
+  Metadata checks before refresh and mutation.
+- Credential failure and dependency failure have distinct observable outcomes. A credential failure
+  clears invalid RP cookies; a dependency failure preserves them and returns an explicit failure.
+  No silent refresh, fallback cookie, retry or grace protocol is permitted.
+- Logout is authority-first; revoking the parent does not imply synchronous sibling RP revocation.
+  Browser history clearing uses official Inertia primitives only and never stores one-time secrets in
+  page history.

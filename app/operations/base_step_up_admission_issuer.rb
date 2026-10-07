@@ -8,6 +8,54 @@ class BaseStepUpAdmissionIssuer
   class << self
     public
 
+    def conflict_binding_for_form!(actor:, token:, transaction:, base_browser_nonce:, base_token:)
+      binding = binding_for(actor, token)
+      device = token.device_session.reload
+      unless base_token.equal?(token) && transaction.is_a?(binding.transaction_model) &&
+          transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
+          %w(pending verified).include?(transaction.status) &&
+          !transaction.expired?(now: transaction.class.database_now) && actor.login_allowed? &&
+          token.currently_usable?(token.class.database_now) && device.usable? &&
+          device.current_refresh_token_id == token.id
+        deny!("step-up conflict parent is unavailable", "invalid_admission")
+      end
+
+      admission = BaseAuthAdmissionCoordinator.admission_binding_model(binding.surface).find_sole_by(
+        step_up_ceremony_transaction_id: transaction.id, retired_at: nil,
+      )
+      validate_restart_binding!(
+        transaction:, binding:, purpose: transaction.purpose, restart_of: admission.entry_ref,
+        base_browser_nonce:, base_token:,
+      )
+    rescue ActiveRecord::RecordNotFound, ActiveRecord::SoleRecordExceeded
+      deny!("step-up conflict binding is unavailable", "invalid_admission")
+    end
+
+    def restart_binding_for_form!(actor:, token:, requirement:, return_to:, base_browser_nonce:, base_token:,
+                                  restart_of:)
+      deny!("Base token binding is invalid", "session_binding_mismatch") unless base_token.equal?(token)
+
+      binding = binding_for(actor, token)
+      validate_requirement!(requirement, actor:, token:, return_to:, binding:)
+      admission = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: binding.surface, reference: restart_of)
+      transaction = admission.step_up_ceremony_transaction
+      unless transaction && %w(pending verified).include?(transaction.status) &&
+          !transaction.expired?(now: transaction.class.database_now) &&
+          matching_pending_intent?(transaction, binding:, requirement:, token:, actor:, return_to:)
+        deny!("step-up restart parent is unavailable", "invalid_admission")
+      end
+
+      device = token.device_session
+      unless actor.login_allowed? && token.currently_usable?(token.class.database_now) && device.usable? &&
+          device.current_refresh_token_id == token.id
+        deny!("Base session is unavailable", "session_expired")
+      end
+
+      validate_restart_binding!(
+        transaction:, binding:, purpose: requirement.purpose, restart_of:, base_browser_nonce:, base_token:,
+      )
+    end
+
     def call!(actor:, token:, requirement:, return_to:, base_browser_nonce:, base_token:, restart_of: nil)
       unless base_token.equal?(token)
         deny!("Base token binding is invalid", "session_binding_mismatch")
@@ -22,41 +70,12 @@ class BaseStepUpAdmissionIssuer
           ensure_bootstrap_eligible!(actor) if requirement.purpose == "bootstrap"
 
           binding.transaction_model.connection_owner.connected_to(role: :writing) do
-            token.with_lock do
-              now = binding.transaction_model.database_now
-              unless token.currently_usable?(now)
-                deny!("Base session is unavailable", "session_expired")
+            token.device_session.with_lock do
+              token.with_lock do
+                issue_under_root_locks!(
+                  actor:, token:, binding:, requirement:, return_to:, base_browser_nonce:, base_token:, restart_of:,
+                )
               end
-              ensure_bootstrap_session!(token, now) if requirement.purpose == "bootstrap"
-              if token.is_a?(OperatorToken) && token.emergency_authentication_context?
-                deny!("Emergency session cannot initiate step-up", "authorization_denied")
-              end
-
-              if requirement.purpose == "credential_registration"
-                ensure_registration_authorized!(requirement, actor: actor, token: token, binding: binding, now: now)
-              end
-
-              methods = requirement.allowed_methods.map(&:to_s) & binding.methods
-              deny!("step-up method unavailable", "unsupported_method") if methods.empty?
-
-              pending = binding.session_model.lock.find_by(binding.token_foreign_key => token.id)
-              transaction = existing_transaction(
-                pending, binding: binding, requirement: requirement,
-                         token: token, actor: actor, return_to: return_to,
-                         base_browser_nonce:, base_token:, restart_of:,
-              )
-              return transaction if transaction.is_a?(BaseAuthAdmissionCoordinator::Issuance)
-
-              transaction ||= create_transaction!(
-                binding: binding, token: token, actor: actor,
-                requirement: requirement, methods: methods,
-                return_to: return_to, now: binding.transaction_model.database_now,
-              )
-              persist_session!(pending: pending, transaction: transaction, binding: binding, token: token)
-              BaseAuthAdmissionCoordinator.issue_handoff!(
-                transaction: transaction, base_browser_nonce: base_browser_nonce, base_token: base_token,
-                restart_of:,
-              )
             end
           end
         end
@@ -64,6 +83,40 @@ class BaseStepUpAdmissionIssuer
     end
 
     private
+
+    def issue_under_root_locks!(actor:, token:, binding:, requirement:, return_to:, base_browser_nonce:, base_token:,
+                                restart_of:)
+      now = binding.transaction_model.database_now
+      device = token.device_session
+      unless token.currently_usable?(now) && device.usable? && device.current_refresh_token_id == token.id
+        deny!("Base session is unavailable", "session_expired")
+      end
+      ensure_bootstrap_session!(token, now) if requirement.purpose == "bootstrap"
+      if token.is_a?(OperatorToken) && token.emergency_authentication_context?
+        deny!("Emergency session cannot initiate step-up", "authorization_denied")
+      end
+      if requirement.purpose == "credential_registration"
+        ensure_registration_authorized!(requirement, actor:, token:, binding:, now:)
+      end
+
+      methods = requirement.allowed_methods.map(&:to_s) & binding.methods
+      deny!("step-up method unavailable", "unsupported_method") if methods.empty?
+
+      pending = binding.session_model.lock.find_by(binding.token_foreign_key => token.id)
+      transaction = existing_transaction(
+        pending, binding:, requirement:, token:, actor:, return_to:, base_browser_nonce:, base_token:, restart_of:,
+      )
+      if transaction.is_a?(BaseAuthAdmissionCoordinator::Issuance) ||
+          transaction.is_a?(BaseAuthAdmissionCoordinator::TerminalOutcome)
+        return transaction
+      end
+
+      transaction ||= create_transaction!(
+        binding:, token:, actor:, requirement:, methods:, return_to:, now: binding.transaction_model.database_now,
+      )
+      persist_session!(pending:, transaction:, binding:, token:)
+      BaseAuthAdmissionCoordinator.issue_handoff!(transaction:, base_browser_nonce:, base_token:, restart_of:)
+    end
 
     def deny!(message, code, context: {})
       raise BaseAuthAdmissionCoordinator::Denied.new(message, code: code, context: context)
@@ -86,15 +139,7 @@ class BaseStepUpAdmissionIssuer
       return requirement.step_up_required? if %w(step_up reauthentication).include?(requirement.purpose)
 
       if requirement.purpose == "credential_registration"
-        method =
-          case requirement.scope
-          when "settings_passkey" then :passkey
-          when "settings_totp" then :totp if binding.surface == "app"
-          end
-        return method.present? && requirement.allowed_methods == [method] &&
-            !requirement.step_up_required? &&
-            !requirement.phishing_resistant_required? && !requirement.user_verification_required? &&
-            !requirement.full_reauthentication_required?
+        return supported_registration_requirement?(requirement, binding)
       end
       return false unless requirement.purpose == "bootstrap" && !requirement.step_up_required? &&
         !requirement.phishing_resistant_required? &&
@@ -107,6 +152,17 @@ class BaseStepUpAdmissionIssuer
       registration_methods = binding.methods & %w(passkey totp email_otp)
       requirement.allowed_methods.present? &&
         (requirement.allowed_methods.map(&:to_s) - registration_methods).empty?
+    end
+
+    def supported_registration_requirement?(requirement, binding)
+      method =
+        case requirement.scope
+        when "settings_passkey" then :passkey
+        when "settings_totp" then :totp if binding.surface == "app"
+        end
+      method.present? && requirement.allowed_methods == [method] && !requirement.step_up_required? &&
+        !requirement.phishing_resistant_required? && !requirement.user_verification_required? &&
+        !requirement.full_reauthentication_required?
     end
 
     def ensure_registration_authorized!(requirement, actor:, token:, binding:, now:)
@@ -200,7 +256,30 @@ class BaseStepUpAdmissionIssuer
         return
       end
 
-      matching = transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
+      matching = matching_pending_intent?(transaction, binding:, requirement:, token:, actor:, return_to:)
+      if restart_of.present?
+        admission_binding = validate_restart_binding!(
+          transaction:, binding:, purpose: requirement.purpose, restart_of:, base_browser_nonce:, base_token:,
+        )
+        if admission_binding.redeemed?
+          return BaseStepUpCancelAndStartCommitter.call!(
+            actor:, token:, previous_transaction: transaction, requirement:, return_to:,
+            base_browser_nonce:, base_token:,
+          )
+        end
+      end
+      unless matching
+        deny!(
+          "another step-up transaction is pending", "transaction_conflict",
+          context: { transaction_ref: transaction.transaction_id },
+        )
+      end
+
+      transaction
+    end
+
+    def matching_pending_intent?(transaction, binding:, requirement:, token:, actor:, return_to:)
+      transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
         transaction.required_scope == requirement.scope &&
         transaction.step_up_required == requirement.step_up_required? &&
         transaction.user_verification_required == requirement.user_verification_required? &&
@@ -211,28 +290,9 @@ class BaseStepUpAdmissionIssuer
         transaction.tenant_ref == requirement.tenant_ref && transaction.resource_ref == requirement.resource_ref &&
         transaction.return_to == return_to && transaction.purpose == requirement.purpose &&
         transaction.allowed_methods_array.sort == (requirement.allowed_methods.map(&:to_s) & binding.methods).sort
-      unless matching
-        if restart_of.present?
-          admission_binding = validate_restart_binding!(
-            transaction:, binding:, requirement:, restart_of:, base_browser_nonce:, base_token:,
-          )
-          if admission_binding.redeemed?
-            return BaseStepUpCancelAndStartCommitter.call!(
-              actor:, token:, previous_transaction: transaction, requirement:, return_to:,
-              base_browser_nonce:, base_token:,
-            )
-          end
-        end
-        deny!(
-          "another step-up transaction is pending", "transaction_conflict",
-          context: { transaction_ref: transaction.transaction_id },
-        )
-      end
-
-      transaction
     end
 
-    def validate_restart_binding!(transaction:, binding:, requirement:, restart_of:, base_browser_nonce:, base_token:)
+    def validate_restart_binding!(transaction:, binding:, purpose:, restart_of:, base_browser_nonce:, base_token:)
       unless restart_of.is_a?(String) && restart_of.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN)
         deny!("step-up restart reference is invalid", "invalid_admission")
       end
@@ -240,10 +300,9 @@ class BaseStepUpAdmissionIssuer
       admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
         surface: binding.surface, reference: restart_of,
       )
-      expected_purpose = BaseAuthAdmissionCoordinator::HANDOFF_PURPOSE.fetch(requirement.purpose)
+      expected_purpose = BaseAuthAdmissionCoordinator::HANDOFF_PURPOSE.fetch(purpose)
       unless admission_binding.step_up_ceremony_transaction_id == transaction.id &&
-          admission_binding.purpose == expected_purpose && admission_binding.retired_at.nil? &&
-          (admission_binding.redeemed? || admission_binding.expires_at > transaction.class.database_now)
+          admission_binding.purpose == expected_purpose && admission_binding.retired_at.nil?
         deny!("step-up restart binding is unavailable", "invalid_admission")
       end
 

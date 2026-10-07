@@ -1,0 +1,14 @@
+stateDiagram-v2
+    state "Source intent (ACK absent)" as Pending
+    state "Chronicle committed, ACK absent" as Recoverable
+    state "Source acknowledged" as Acknowledged
+    [*] --> Pending: Contact mutation and Source record commit together
+    Pending --> Recoverable: Persist matching event_uuid in Chronicle
+    Recoverable --> Recoverable: Source ACK rollback or failure
+    Recoverable --> Acknowledged: Identity-matched rescan and Source clock
+    Acknowledged --> Acknowledged: Duplicate scan does not deliver again
+    note right of Pending
+        Separate app and com Zenith owners.
+        Missing retention policy or conflicting Chronicle facts raises.
+        Undelivered events are retained; no purge owner is introduced.
+    end note

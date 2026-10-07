@@ -113,3 +113,10 @@ The implementation should not rename DNS apex-domain terminology, cookie domain 
 - `adr/split-into-regional-and-global-repos.md`
 - `adr/surface-database-connection-naming.md`
 - `docs/security/cookie-domain-scope.md`
+
+## Delivered reconciliation (2026-10-06)
+
+The current registry and runtime names are governed by the Base authority/self-RP ADR. The old
+Acme/Sign naming guidance above is historical; the implementation uses Base as authority and Warp
+as the destructive replacement for the old Side internal identifier. No old-client or old-route
+fallback was retained, and registered issuer, audience and callback values remain explicit.

@@ -65,6 +65,7 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
       confirmation_url: path, cancel_url: path, checkpoint_version: @sign_up_ticket.checkpoint_version,
     }
   rescue ClientSecretPresentationIssuer::AlreadyPresented
+    session[:inertia_clear_history] = true
     redirect_to(
       auth_app_sign_up_check_telephone_secret_path(
         **sign_up_flow_binding_params,
@@ -95,6 +96,7 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
     )
     return render_sign_up_result(result) unless result.success?
 
+    session[:inertia_clear_history] = true
     redirect_to(next_explicit_step_path, status: :see_other)
   end
 
@@ -107,6 +109,7 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
       flow: @sign_up_ticket, nonce: browser_nonce, predecessor: @issuance,
       expires_after: ClientSecretLifetimesValue.issuance_ttl,
     )
+    session[:inertia_clear_history] = true
     redirect_to(
       auth_app_sign_up_check_telephone_secret_path(
         **sign_up_flow_binding_params, ri: current_region_identifier,

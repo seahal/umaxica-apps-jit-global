@@ -16,6 +16,8 @@ module Auth
       # when the address belonged to a login-eligible account, which made resubmitting
       # the same address twice an account-existence oracle.
       class EmailsControllerEnumerationTest < ActionDispatch::IntegrationTest
+        rate_limit_counters!
+
         fixtures :clients, :client_statuses, :client_email_statuses
 
         REGISTERED_ADDRESS = "enumeration_registered@example.com"
@@ -27,7 +29,10 @@ module Auth
           TurnstileVerifierStub.challenge_response = { "success" => true }
 
           clients(:one).update!(status_id: ClientStatus::ACTIVE)
-          ClientEmail.create!(user: clients(:one), address: REGISTERED_ADDRESS, confirm_policy: true)
+          ClientEmail.create!(
+            user: clients(:one), address: REGISTERED_ADDRESS, confirm_policy: true,
+            user_email_status_id: ClientEmailStatus::VERIFIED,
+          ).tap(&:finalize_binding!)
         end
 
         teardown do
@@ -52,6 +57,7 @@ module Auth
           TurnstileVerifierStub.challenge_response = { "success" => false }
           open_session do |session|
             session.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
+            admit_auth_local_entry!(surface: "app", browser: session)
             session.post(
               auth_app_sign_in_email_url(ri: "jp"), params: {
                 :user_email => { address: REGISTERED_ADDRESS },
@@ -65,6 +71,7 @@ module Auth
           TurnstileVerifierStub.challenge_response = { "success" => true }
           open_session do |session|
             session.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
+            admit_auth_local_entry!(surface: "app", browser: session)
             session.post(
               auth_app_sign_in_email_url(ri: "jp"), params: {
                 :user_email => { address: REGISTERED_ADDRESS },
@@ -86,6 +93,7 @@ module Auth
               response = nil
               open_session do |session|
                 session.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
+                admit_auth_local_entry!(surface: "app", browser: session)
                 session.post(
                   auth_app_sign_in_email_url(ri: "jp"), params: {
                     :user_email => { address: address },

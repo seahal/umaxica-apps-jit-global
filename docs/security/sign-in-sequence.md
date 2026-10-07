@@ -221,3 +221,11 @@ access tokens, refresh tokens, JWKS authority, and downstream token issuance.
 - `docs/security/session-token-authority.md`
 - `docs/security/redirect-vs-ceremony-result.md`
 - `docs/security/idp-flow-lifecycle.md`
+
+## Delivered current sequence (2026-10-06)
+
+The active sequence is Base authorization or the Auth admitted ceremony, canonical sign-in flow and
+ordinary session-limit resolution, then committed session issuance and derived return routing.
+Completion is not a dashboard handoff state. Stale, cancelled, expired, conflicting and replayed
+requests are refused or redirected through their explicit terminal transition. The historical
+sign/id/acme vocabulary above is not an active authority contract.

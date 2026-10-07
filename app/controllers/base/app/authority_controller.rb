@@ -6,7 +6,7 @@ module Base
     # Base protocol endpoints and Auth-result receivers use the root-session authority. They are
     # deliberately separate from the self-RP application controller and never accept RP cookies as
     # authentication proof.
-    class AuthorityController < ApplicationController
+    class AuthorityController < ::ApplicationController
       include ::FqdnAvailabilityGate
       include ::RateLimit
       include ::DefaultNoStore
@@ -27,7 +27,11 @@ module Base
       include ::Finisher
 
       AUTHENTICATION_MODE = :deny_all
-      base_admission_surface "app"
+      class << self
+        public
+
+        def base_admission_surface_name = "app"
+      end
 
       prepend_before_action :apply_default_no_store
 

@@ -71,3 +71,11 @@ executed for this documentation-only decision; existing route rollout gates rema
 - `adr/invalid-browser-credential-recovery.md`
 - `adr/home-dashboard-authentication-boundary.md`
 - `memos/2026-10-04-codex-core-cloudfront-browser-boundary-considerations.md`
+
+## Delivered reconciliation (2026-10-06)
+
+The Rails half of this boundary is implemented: Core browser requests use the shared RP credential
+contract and validate unsafe-request CSRF, Origin and Fetch Metadata before refresh or mutation.
+The TanStack/edge deployment remains deferred until external route ownership, cookie stripping and
+health-blocking evidence exists. This ADR therefore remains a deployment prerequisite, not a claim
+that Cloudflare or a real browser edge has been verified locally.

@@ -27,8 +27,8 @@ class AuthMethodGuardCoverageTest < ActiveSupport::TestCase
       end
     end
 
-    Inventory =
-      Struct.new(:has_usable_sign_in_capability_value, :has_usable_step_up_capability_value) do
+  Inventory =
+    Struct.new(:has_usable_sign_in_capability_value, :has_usable_step_up_capability_value) do
       def has_usable_sign_in_capability? = has_usable_sign_in_capability_value
 
       def has_usable_step_up_capability? = has_usable_step_up_capability_value

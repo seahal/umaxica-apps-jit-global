@@ -130,3 +130,12 @@ This is documented only; runtime Palm logout is not implemented here.
 - `docs/security/session-token-authority.md`
 - `docs/security/redirect-vs-ceremony-result.md`
 - `docs/security/idp-flow-lifecycle.md`
+
+## Delivered reconciliation (2026-10-06)
+
+The canonical current graph is the Base authority-first logout sequence: authenticate the logout
+request, lock and revoke the parent Browser Session at the commit point, perform authority/origin
+cleanup, revoke the initiating RP session, and finalize the local ceremony. `COMPLETED`,
+`CANCELLED` and `EXPIRED` are absorbing facts in the delivered lifecycle. The earlier “not
+implemented yet” lifecycle paragraph and Acme ownership description above are historical and
+superseded by `adr/authentication-state-machine-normalization.md`.

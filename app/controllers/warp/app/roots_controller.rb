@@ -16,7 +16,7 @@ module Warp
         return render_session_boundary_not_found if logged_in?
 
         render inertia: true, props: root_landing_props,
-               clear_history: session.delete(:inertia_clear_history) == true
+               clear_history: session[:inertia_clear_history] == true
       end
 
       private

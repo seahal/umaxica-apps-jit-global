@@ -951,14 +951,12 @@ describe("totp challenge form interaction", () => {
 
     const select = container.querySelector<HTMLSelectElement>(
       'select[name="totp_challenge_form[credential_id]"]',
-    );
-    expect(select?.value).toBe("totp-1");
+    )!;
+    expect(select.value).toBe("totp-1");
 
     act(() => {
-      if (select) {
-        select.value = "totp-2";
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-      }
+      select.value = "totp-2";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
     expect(setData).toHaveBeenCalledWith("totp_challenge_form", {

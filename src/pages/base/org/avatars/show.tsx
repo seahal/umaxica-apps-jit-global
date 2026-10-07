@@ -30,11 +30,21 @@ export default function AvatarShow({
       up={upLink}
     >
       {avatar && actionLink ? (
-        <ButtonLink href={actionLink.href} variant="secondary" size="sm" inertia>
+        <ButtonLink
+          href={actionLink.href}
+          variant="secondary"
+          size="sm"
+          inertia
+        >
           {actionLink.label}
         </ButtonLink>
       ) : (
-        <ButtonLink href={switcherLink.href} variant="secondary" size="sm" inertia>
+        <ButtonLink
+          href={switcherLink.href}
+          variant="secondary"
+          size="sm"
+          inertia
+        >
           {switcherLink.label}
         </ButtonLink>
       )}

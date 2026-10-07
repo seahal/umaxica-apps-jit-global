@@ -5,6 +5,130 @@ require "test_helper"
 class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
+  test "Contact release and Source intent roll back together without resurrecting invalidated authority" do
+    [
+      [Client, ClientEmail, ClientToken, ClientContactAuditOutbox, :user_id, :app],
+      [Visitor, VisitorEmail, VisitorToken, VisitorContactAuditOutbox, :visitor_id, :com],
+    ].each do |owner_class, contact_class, token_class, outbox_class, owner_key, surface|
+      owner = owner_class.create!
+      attributes = { owner_key => owner.id, :address => "rollback-release@example.test", :confirm_policy => "1" }
+      if surface == :app
+        attributes[:user_email_status_id] = ClientEmailStatus::VERIFIED
+      else
+        attributes[:visitor_email_status_id] = VisitorEmailStatus::VERIFIED
+      end
+      contact = contact_class.create!(attributes)
+      contact.finalize_binding!
+      if surface == :app
+        owner.client_passkeys.create!(
+          webauthn_id: SecureRandom.uuid, public_key: "fallback",
+          uv_verified_at: Time.current,
+        )
+      else
+        owner.visitor_passkeys.create!(
+          webauthn_id: SecureRandom.uuid, public_key: "fallback",
+          uv_verified_at: Time.current,
+        )
+      end
+      token = token_class.create!(owner_key => owner.id)
+      token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_email")
+      context = ActorValuesContext.empty.with(
+        subject: owner, actor_type: (surface == :app) ? :client : :visitor, tld: surface, surface: :base,
+      )
+      contact_class.transaction(requires_new: true) do
+        assert IdentityCredentialRemovalCommitter.call!(
+          actor: owner, credential: contact, current_session: token, actor_context: context,
+        )
+        assert_predicate contact.reload, :binding_released?
+        assert outbox_class.exists?(contact_ref: contact.public_id)
+        raise ActiveRecord::Rollback
+      end
+
+      assert_predicate contact.reload, :binding_effective?
+      assert_not outbox_class.exists?(contact_ref: contact.public_id)
+      assert_nil token.reload.last_step_up_at
+      assert_predicate token, :currently_usable?
+    end
+  end
+
+  test "Contact removal refuses missing anonymous foreign role and realm contexts before clearing authority" do
+    owner = Client.create!
+    foreign = Client.create!
+    contact = ClientEmail.create!(user_id: owner.id, address: "release-context@example.test", confirm_policy: "1")
+    contact.finalize_binding!
+    token = ClientToken.create!(user: owner)
+    token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_email")
+    freshness = token.last_step_up_at
+    valid = ActorValuesContext.empty.with(subject: owner, actor_type: :client, tld: :app, surface: :base)
+    [nil, ActorValuesContext.empty.with(tld: :app), valid.with(subject: foreign),
+     valid.with(actor_type: :visitor), valid.with(tld: :com),].each do |context|
+      error =
+        assert_raises(ArgumentError) do
+          IdentityCredentialRemovalCommitter.call!(
+            actor: owner, credential: contact, current_session: token, actor_context: context,
+          )
+        end
+      assert_equal "Contact removal requires its authenticated Actor context", error.message
+      assert_predicate contact.reload, :binding_effective?
+      assert_not ClientContactAuditOutbox.exists?(contact_ref: contact.public_id)
+      assert_equal freshness, token.reload.last_step_up_at
+    end
+  end
+
+  test "Contact release records one Source intent and an exact terminal retry adds none in app and com" do
+    [
+      [Client, ClientEmail, ClientToken, ClientContactAuditOutbox, :user_id, "email", :app],
+      [Client, ClientTelephone, ClientToken, ClientContactAuditOutbox, :user_id, "telephone", :app],
+      [Visitor, VisitorEmail, VisitorToken, VisitorContactAuditOutbox, :visitor_id, "email", :com],
+      [Visitor, VisitorTelephone, VisitorToken, VisitorContactAuditOutbox, :visitor_id, "telephone", :com],
+    ].each do |owner_class, contact_class, token_class, outbox_class, owner_key, kind, surface|
+      owner = owner_class.create!
+      attributes = (kind == "email") ? { address: "release@example.test" } : { number: "+819012345686" }
+      contact = contact_class.create!(attributes.merge(owner_key => owner.id, :confirm_policy => "1"))
+      case contact
+      when ClientEmail then contact.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
+      when ClientTelephone then contact.update!(user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED)
+      when VisitorEmail then contact.update!(visitor_email_status_id: VisitorEmailStatus::VERIFIED)
+      when VisitorTelephone then contact.update!(visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED)
+      else raise ArgumentError, "unsupported test contact"
+      end
+      contact.finalize_binding!
+      if surface == :app
+        owner.client_passkeys.create!(
+          webauthn_id: SecureRandom.uuid, public_key: "fallback",
+          uv_verified_at: Time.current,
+        )
+      else
+        owner.visitor_passkeys.create!(
+          webauthn_id: SecureRandom.uuid, public_key: "fallback",
+          uv_verified_at: Time.current,
+        )
+      end
+      token = token_class.create!(owner_key => owner.id)
+      context = ActorValuesContext.empty.with(
+        subject: owner, actor_type: (surface == :app) ? :client : :visitor, tld: surface, surface: :base,
+      )
+      assert_difference -> { outbox_class.where(contact_ref: contact.public_id).count }, 1 do
+        assert IdentityCredentialRemovalCommitter.call!(
+          actor: owner, credential: contact, current_session: token, actor_context: context,
+        )
+      end
+      event = outbox_class.find_by!(contact_ref: contact.public_id)
+
+      assert_predicate contact.reload, :binding_released?
+      assert_equal [kind, "released", owner.public_id, owner.public_id],
+                   [event.contact_kind, event.event_name, event.owner_ref, event.actor_ref]
+      assert_nil event.acknowledged_at
+      assert_predicate token.reload, :currently_usable?
+      assert_no_difference -> { outbox_class.where(contact_ref: contact.public_id).count } do
+        assert_not IdentityCredentialRemovalCommitter.call!(
+          actor: owner, credential: contact, current_session: token, actor_context: context,
+        )
+      end
+      assert_equal event.event_uuid, outbox_class.find_by!(contact_ref: contact.public_id).event_uuid
+    end
+  end
+
   test "a temporarily locked Email refuses last Passkey removal without clearing authority" do
     %i(app com).each do |surface|
       actor, token, passkey, email =
@@ -162,8 +286,11 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       )
       removed_id = credential.id
 
-      assert IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token),
-             surface
+      removed = IdentityCredentialRemovalCommitter.call!(
+        actor: actor, credential: credential, current_session: token,
+      )
+
+      assert removed, "surface=#{surface}"
 
       credential.reload
       status = (surface == :totp) ? credential.user_identity_totp_credential_status_id : credential.status_id

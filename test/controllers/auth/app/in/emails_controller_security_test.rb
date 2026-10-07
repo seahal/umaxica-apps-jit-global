@@ -14,6 +14,7 @@ module Auth
 
         setup do
           host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+          admit_auth_local_entry!(surface: "app")
           TurnstileVerifierStub.challenge_enabled = true
           TurnstileVerifierStub.challenge_response = { "success" => true }
         end
@@ -138,7 +139,10 @@ module Auth
         test "handles OTP in database" do
           user = clients(:one)
           # Create existing email
-          email = ClientEmail.create!(user: user, address: "otp_test@example.com", confirm_policy: true)
+          email = ClientEmail.create!(
+            user: user, address: "otp_test@example.com", confirm_policy: true,
+            user_email_status_id: ClientEmailStatus::VERIFIED,
+          ).tap(&:finalize_binding!)
 
           # Request OTP
           post auth_app_sign_in_email_url(ri: "jp"), params: {
@@ -153,7 +157,10 @@ module Auth
         test "cleans up OTP secret_credentials after verification" do
           user = clients(:one)
           # Create existing email
-          email = ClientEmail.create!(user: user, address: "cleanup_test@example.com", confirm_policy: true)
+          email = ClientEmail.create!(
+            user: user, address: "cleanup_test@example.com", confirm_policy: true,
+            user_email_status_id: ClientEmailStatus::VERIFIED,
+          ).tap(&:finalize_binding!)
 
           # Request OTP to generate secret_credentials
           post auth_app_sign_in_email_url(ri: "jp"), params: {

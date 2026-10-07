@@ -158,13 +158,27 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
     assert_nil identity, "Identity should not be created when intent expired"
   end
 
-  test "Sign-owned Google link intent creates one social identity" do
+  test "Google link callback stages evidence before a receiver-local POST creates one identity" do
     new_uid = "grantless_google_#{SecureRandom.hex(4)}"
     setup_google_mock_auth(uid: new_uid)
     grant_session = seed_app_social_link_grant_session(provider: "google", user: @user_one, ri: "jp")
 
+    assert_no_difference("ClientGoogleIdentity.count") do
+      get auth_app_social_google_callback_url(ri: "jp"),
+          params: { state: grant_session.state },
+          headers: @callback_headers.merge(grant_session.user_headers)
+    end
+
+    assert_response :success
+    form = response.parsed_body.at_css("form#social-completion-form")
+
+    assert_not_nil form
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
     assert_difference("ClientGoogleIdentity.count", 1) do
-      perform_grant_backed_link(provider: "google", grant_session: grant_session)
+      post form["action"], params: fields,
+                           headers: grant_session.user_headers.merge(
+                             "Host" => @host, "Origin" => "https://#{@host}",
+                           )
     end
 
     assert_redirected_to auth_app_settings_path(ri: "jp")

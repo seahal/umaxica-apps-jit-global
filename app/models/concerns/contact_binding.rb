@@ -7,13 +7,7 @@
 module ContactBinding
   extend ActiveSupport::Concern
 
-  included do
-    scope :effective_binding, -> {
-      where.not(binding_finalized_at: nil).where(binding_released_at: nil)
-    }
-
-    validate :effective_binding_has_digest
-  end
+  public
 
   def binding_effective?
     binding_finalized_at.present? && binding_released_at.blank?
@@ -21,6 +15,32 @@ module ContactBinding
 
   def binding_released?
     binding_released_at.present?
+  end
+
+  def finalize_registration_binding!
+    with_lock do
+      now = self.class.database_now
+      proof = credential_registration_otp_context
+      unless proof&.fetch("verified_at") && Time.iso8601(proof.fetch("result_expires_at")) > now &&
+          !binding_finalized_at && !binding_released? && accessible?(now)
+        raise ArgumentError, "verified registration candidate is unavailable"
+      end
+
+      key, pending, verified =
+        case self
+        when ClientEmail then [:user_email_status_id, ClientEmailStatus::UNVERIFIED, ClientEmailStatus::VERIFIED]
+        when ClientTelephone
+          [:user_telephone_status_id, ClientTelephoneStatus::UNVERIFIED, ClientTelephoneStatus::VERIFIED]
+        when VisitorEmail then [:visitor_email_status_id, VisitorEmailStatus::UNVERIFIED, VisitorEmailStatus::VERIFIED]
+        when VisitorTelephone
+          [:visitor_telephone_status_id, VisitorTelephoneStatus::UNVERIFIED, VisitorTelephoneStatus::VERIFIED]
+        else raise ArgumentError, "unsupported registration Contact"
+        end
+      raise ArgumentError, "registration candidate is not pending" unless self[key] == pending
+
+      update!(key => verified, :binding_finalized_at => now)
+      self
+    end
   end
 
   def finalize_binding!(at: self.class.database_now)

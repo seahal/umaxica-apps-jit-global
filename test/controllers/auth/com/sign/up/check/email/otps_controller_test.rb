@@ -18,6 +18,25 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     Rails.configuration.x.rate_limit.fetch(:store).clear
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
+
+    # Exercise OTP endpoints only after the public admission transitions.
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+    )
+    get "/sign/up", params: { ri: "jp", entry_ref: admission.reference }, headers: { "Host" => @host }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/ceremony_bindings", params: { ri: "jp", entry_ref: admission.reference, authenticity_token: csrf },
+                               headers: { "Host" => @host }
+
+    assert_response :see_other
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: admission.reference)
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/up", params: { ri: "jp", entry_ref: admission.reference }, headers: { "Host" => @host }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/sign/up", params: { ri: "jp", entry_ref: admission.reference, authenticity_token: csrf },
+                     headers: { "Host" => @host }
+
+    assert_response :see_other
   end
 
   teardown do
@@ -29,7 +48,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
   test "get show renders the otp form with a visible Turnstile challenge" do
     start_email_signup!("com-email-show@example.com")
 
-    get auth_com_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+    get auth_com_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
 
     assert_response :success
     assert_equal "auth/com/sign/up/emails/edit", inertia_component
@@ -51,7 +70,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
       params = { visitor_email: { pass_code: otp_code_for(visitor_email) } }
       params["cf-turnstile-response"] = turnstile_token if turnstile_token
 
-      patch auth_com_sign_up_check_email_otp_url(ri: "jp"), params: params, headers: default_headers
+      patch auth_com_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), params: params, headers: default_headers
 
       assert_response :unprocessable_content
       assert_equal "render", inertia_props.fetch("turnstile").fetch("mode")
@@ -69,7 +88,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
 
     TurnstileVerifierStub.challenge_response = { "success" => false }
     patch(
-      auth_com_sign_up_check_email_otp_url(ri: "jp"),
+      auth_com_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
       params: {
         "visitor_email" => { "pass_code" => otp_code_for(visitor_email) },
         "cf-turnstile-response" => "invalid-turnstile-token",
@@ -82,7 +101,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
 
     TurnstileVerifierStub.challenge_response = { "success" => false, "unavailable" => true }
     patch(
-      auth_com_sign_up_check_email_otp_url(ri: "jp"),
+      auth_com_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
       params: {
         "visitor_email" => { "pass_code" => otp_code_for(visitor_email) },
         "cf-turnstile-response" => "provider-outage-token",
@@ -102,7 +121,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_equal VisitorSignUpFlowStatus::CONTACT_PENDING, cycle.status_id
     assert_equal 0, cycle.checkpoint_version
 
-    patch auth_com_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_com_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
           params: {
             "visitor_email" => { "pass_code" => otp_code_for(visitor_email) },
             "cf-turnstile-response" => "valid-turnstile-token",
@@ -110,7 +129,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
           headers: default_headers
 
     assert_response :redirect
-    assert_redirected_to auth_com_sign_up_check_email_birthdate_url(ri: "jp")
+    assert_redirected_to auth_com_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
     assert_equal VisitorEmailStatus::VERIFIED_WITH_SIGN_UP, visitor_email.reload.visitor_email_status_id
     assert_equal VisitorSignUpFlowStatus::CHECKPOINT_PENDING, cycle.reload.status_id
     assert_equal "checkpoint", cycle.step
@@ -122,7 +141,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     visitor_email = start_email_signup!("com-email-version@example.com")
     cycle = current_sign_up_cycle
 
-    patch auth_com_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_com_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
           params: { visitor_email: { pass_code: otp_code_for(visitor_email) } },
           headers: default_headers
 
@@ -135,7 +154,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
   test "patch with a blank otp returns a validation error" do
     start_email_signup!("com-email-blank@example.com")
 
-    patch auth_com_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_com_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
           params: { visitor_email: { pass_code: "" } },
           headers: default_headers
 
@@ -147,7 +166,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     start_email_signup!("com-email-wrong@example.com")
     cycle = current_sign_up_cycle
 
-    patch auth_com_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_com_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
           params: { visitor_email: { pass_code: "000000" } },
           headers: default_headers
 
@@ -163,7 +182,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     cycle = current_sign_up_cycle
 
     Email::MAX_OTP_ATTEMPTS.times do
-      patch auth_com_sign_up_check_email_otp_url(ri: "jp"),
+      patch auth_com_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
             params: { visitor_email: { pass_code: "000000" } },
             headers: default_headers
     end
@@ -174,29 +193,39 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_nil cycle.reload.completed_requirements["otp"]
   end
 
-  test "patch for an already registered address does not advance any ticket" do
+  test "wrong OTP for an independently held destination does not advance its candidate or change the owner" do
     existing = create_verified_visitor_email!("com-email-existing@example.com")
+    existing.finalize_binding!
 
     start_email_signup!("com-email-existing@example.com")
 
-    assert_nil current_sign_up_cycle
+    cycle = current_sign_up_cycle
 
-    patch auth_com_sign_up_check_email_otp_url(ri: "jp"),
+    assert_equal VisitorSignUpFlowStatus::CONTACT_PENDING, cycle.status_id
+    candidate = VisitorEmail.find(cycle.pending_contact_id)
+
+    assert_not_equal existing.visitor_id, candidate.visitor_id
+    assert_nil candidate.binding_finalized_at
+
+    patch auth_com_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
           params: { visitor_email: { pass_code: "000000" } },
           headers: default_headers
 
-    # The decoy path must be indistinguishable from an ordinary wrong code.
+    # A competing candidate owns its own real proof and cannot mutate the effective owner.
     assert_response :unprocessable_content
     assert_includes response.body, I18n.t("sign.app.registration.email.update.invalid_code")
     assert_equal VisitorEmailStatus::VERIFIED, existing.reload.visitor_email_status_id
-    assert_empty VisitorSignUpFlow.where.not(status_id: VisitorSignUpFlowStatus::STARTED)
+    assert_equal VisitorSignUpFlowStatus::CONTACT_PENDING, cycle.reload.status_id
+    assert_nil cycle.completed_requirements["otp"]
+    assert_predicate existing.reload, :binding_effective?
+    assert_nil candidate.reload.binding_finalized_at
   end
 
   private
 
   def start_email_signup!(address)
     post(
-      auth_com_sign_up_email_url(ri: "jp"),
+      auth_com_sign_up_email_url(ri: "jp", fb: @flow_binding),
       params: {
         visitor_email: { raw_address: address, confirm_policy: "1" },
         "cf-turnstile-response": "test",
@@ -205,6 +234,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     )
 
     assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     VisitorEmail.where(address_digest: IdentifierBlindIndex.bidx_for_email(address))
       .order(:created_at).last
   end
@@ -227,7 +257,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
   end
 
   def current_sign_up_cycle
-    public_id = session.dig(:com_sign_up_flow_locator, "public_id")
+    public_id = session[:auth_com_up_sequence_id]
     return if public_id.blank?
 
     VisitorSignUpFlow.find_by(public_id: public_id)

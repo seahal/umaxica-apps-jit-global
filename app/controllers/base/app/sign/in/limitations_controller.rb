@@ -101,6 +101,7 @@ module Base
               ) if credential
             end
             clear_current_sign_in_flow_locator!
+            session[:inertia_clear_history] = true
             true
           rescue FlowInvalidTransition, ActiveRecord::RecordNotFound
             false
@@ -148,17 +149,33 @@ module Base
           end
 
           def load_resolution
-            gate = session[GATE_SESSION_KEY]
-            gate_challenge = gate.is_a?(Hash) ? gate["resolution_challenge"].to_s : ""
-            requested_challenge = params[:resolution_challenge].to_s
-            @resolution_challenge = gate_challenge.presence
+            @resolution_challenge = resolution_challenge_from_session
             return load_social_resolution if @resolution_challenge.blank?
-            return if requested_challenge.present? && requested_challenge != @resolution_challenge
+            return if requested_resolution_challenge_mismatch?
 
+            load_resolution_transaction
+          end
+
+          def resolution_challenge_from_session
+            gate = session[GATE_SESSION_KEY]
+            challenge = gate.is_a?(Hash) ? gate["resolution_challenge"].to_s : ""
+            challenge.presence
+          end
+
+          def requested_resolution_challenge_mismatch?
+            requested_challenge = params[:resolution_challenge].to_s
+            requested_challenge.present? && requested_challenge != @resolution_challenge
+          end
+
+          def load_resolution_transaction
             @resolution_binding = session_limit_resolution_binding
             @resolution = ClientSessionLimitResolutionTransaction.find_by(challenge: @resolution_challenge)
             return unless @resolution && @resolution_binding.present?
 
+            validate_loaded_resolution
+          end
+
+          def validate_loaded_resolution
             @actor = Client.find_by(public_id: @resolution.actor_ref)
             @oidc_transaction =
               AppTicketRecord.connected_to(role: :writing) do
@@ -170,18 +187,23 @@ module Base
               @resolution.browser_binding_digest,
               @resolution.class.digest_challenge(@resolution_binding),
             )
-            valid_parent = flow.principal_id == @actor&.id && !flow.expired?(now) &&
-              !flow.sign_in_completed? && !flow.sign_in_cancelled? && !flow.sign_in_halted?
-            valid_oidc =
-              if @oidc_transaction
-                @oidc_transaction.actor_ref == @actor.public_id && @oidc_transaction.authenticated? &&
-                  @oidc_transaction.base_finalized_at.nil? && !@oidc_transaction.expired?(now: now) &&
-                  !@oidc_transaction.login_challenge_expired?(now: now)
-              else
-                true
-              end
+            valid_parent = valid_resolution_parent?(flow, now)
+            valid_oidc = valid_resolution_oidc?(now)
             @resolution = nil unless @actor && valid_binding && valid_parent && valid_oidc &&
               (@resolution.open? || @resolution.resolved?)
+          end
+
+          def valid_resolution_parent?(flow, now)
+            flow.principal_id == @actor&.id && !flow.expired?(now) &&
+              !flow.sign_in_completed? && !flow.sign_in_cancelled? && !flow.sign_in_halted?
+          end
+
+          def valid_resolution_oidc?(now)
+            return true unless @oidc_transaction
+
+            @oidc_transaction.actor_ref == @actor.public_id && @oidc_transaction.authenticated? &&
+              @oidc_transaction.base_finalized_at.nil? && !@oidc_transaction.expired?(now: now) &&
+              !@oidc_transaction.login_challenge_expired?(now: now)
           end
 
           def render_invalid_resolution
@@ -232,6 +254,7 @@ module Base
           def complete_social_resolution
             return render_invalid_resolution unless promote_current_session_limit_cycle!(@actor)
 
+            session[:inertia_clear_history] = true
             redirect_to(base_app_dashboard_path(ri: params[:ri]), status: :see_other)
           rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
                  ActiveRecord::SoleRecordExceeded, AuthCeremonySession::InvalidTransition => e
@@ -270,6 +293,7 @@ module Base
             return render_invalid_resolution unless finalization[:status] == :success
 
             finalize_oidc_secret_claim! if @oidc_transaction.secret_sign_in_flow_id
+            session[:inertia_clear_history] = true
             issue_authorization_code!
           rescue ArgumentError => e
             Rails.logger.warn(

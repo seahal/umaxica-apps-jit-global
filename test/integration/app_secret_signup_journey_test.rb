@@ -31,7 +31,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
 
   ((0..20).map { |count| [count, :completed] } +
     [[0, :canceled], [0, :expired], [0, :payload_unavailable]]).each do |active_count, outcome|
-    test "telephone signup with A=#{active_count} saves its fixed Secret set and handles #{outcome}" do
+    test "telephone signup with A=#{active_count} saves its fixed Secret set and handles #{outcome}" do # rubocop:disable Minitest/MultipleAssertions -- Verifies each observable boundary in one signup journey.
       host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
       host!(base_host)
@@ -125,7 +125,9 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       )
       patch auth_app_sign_up_check_telephone_passkey_path(ri: "jp", fb: flow_binding),
             headers: headers.merge("X-CSRF-Token" => csrf), params: {
-              challenge_id: options.fetch("challenge_id"), credential: credential, checkpoint_version: flow.checkpoint_version,
+              challenge_id: options.fetch("challenge_id"),
+              credential: credential,
+              checkpoint_version: flow.checkpoint_version,
             }, as: :json
 
       assert_response :created
@@ -139,7 +141,9 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       assert_no_difference(["ClientSecretIssuance.count", "ClientPasskey.count", "ClientSecretCredential.count"]) do
         patch auth_app_sign_up_check_telephone_passkey_path(ri: "jp", fb: flow_binding),
               headers: headers.merge("X-CSRF-Token" => csrf), params: {
-                challenge_id: options.fetch("challenge_id"), credential: credential, checkpoint_version: flow.checkpoint_version,
+                challenge_id: options.fetch("challenge_id"),
+                credential: credential,
+                checkpoint_version: flow.checkpoint_version,
               }, as: :json
       end
       assert_response :created
@@ -285,6 +289,14 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       end
       assert_response :redirect
       assert_predicate flow.reload, :sign_up_completed?
+      contact_intent = ClientContactAuditOutbox.find_by!(operation_ref: flow.public_id)
+
+      assert_equal "finalized", contact_intent.event_name
+      assert_equal "telephone", contact_intent.contact_kind
+      assert_equal telephone.public_id, contact_intent.contact_ref
+      assert_equal actor.public_id, contact_intent.owner_ref
+      assert_nil contact_intent.actor_ref
+      assert_nil contact_intent.acknowledged_at
       assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, telephone.user.reload.status_id
       assert_equal active_count + expected_count, ClientSecretCapacityQuery.call(
         client: actor, at: Client.database_now,

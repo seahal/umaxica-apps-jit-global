@@ -25,30 +25,7 @@ module DeviceSessionRootAndRpBinding
         connection.execute("SET LOCAL lock_timeout = '5s'")
         connection.execute("SET LOCAL statement_timeout = '30min'")
 
-        verify_existing_token_bindings!(
-          connection,
-          token_table:,
-          device_table:,
-          actor_column:,
-        )
-        backfill_missing_token_bindings!(
-          connection,
-          token_table:,
-          device_table:,
-          actor_column:,
-        )
-        verify_current_token_pointers!(
-          connection,
-          token_table:,
-          device_table:,
-          actor_column:,
-        )
-        fill_unambiguous_current_token_pointers!(
-          connection,
-          token_table:,
-          device_table:,
-        )
-        verify_current_token_pointers!(
+        prepare_token_bindings!(
           connection,
           token_table:,
           device_table:,
@@ -76,11 +53,21 @@ module DeviceSessionRootAndRpBinding
           "device-session root and RP bindings are data-preserving and irreversible"
   end
 
+  def prepare_token_bindings!(connection, token_table:, device_table:, actor_column:)
+    verify_existing_token_bindings!(connection, token_table:, device_table:, actor_column:)
+    backfill_missing_token_bindings!(connection, token_table:, device_table:, actor_column:)
+    verify_current_token_pointers!(connection, token_table:, device_table:, actor_column:)
+    fill_unambiguous_current_token_pointers!(connection, token_table:, device_table:)
+    verify_current_token_pointers!(connection, token_table:, device_table:, actor_column:)
+  end
+  private_class_method :prepare_token_bindings!
+
   def verify_existing_token_bindings!(connection, token_table:, device_table:, actor_column:)
     token = quote_table(connection, token_table)
     device = quote_table(connection, device_table)
     actor = quote_column(connection, actor_column)
 
+    # rubocop:disable I18n/RailsI18n/DecorateString -- SQL syntax is not user-facing copy.
     rows = connection.select_values(<<~SQL.squish)
       SELECT t.id
         FROM #{token} AS t
@@ -89,6 +76,7 @@ module DeviceSessionRootAndRpBinding
          AND (d.id IS NULL OR d.#{actor} IS DISTINCT FROM t.#{actor})
        ORDER BY t.id
     SQL
+    # rubocop:enable I18n/RailsI18n/DecorateString
     raise_unresolved!("token/device-session bindings", rows)
   end
 
@@ -135,6 +123,11 @@ module DeviceSessionRootAndRpBinding
         FROM #{map} AS m
         JOIN #{token} AS t ON t.id = m.token_id
     SQL
+    update_token_device_session_bindings!(connection, token, map)
+  end
+  private_class_method :backfill_missing_token_bindings!
+
+  def update_token_device_session_bindings!(connection, token, map)
     connection.execute(<<~SQL.squish)
       UPDATE #{token} AS t
          SET device_session_id = m.device_session_id
@@ -142,12 +135,14 @@ module DeviceSessionRootAndRpBinding
        WHERE t.id = m.token_id
     SQL
   end
+  private_class_method :update_token_device_session_bindings!
 
   def verify_current_token_pointers!(connection, token_table:, device_table:, actor_column:)
     token = quote_table(connection, token_table)
     device = quote_table(connection, device_table)
     actor = quote_column(connection, actor_column)
 
+    # rubocop:disable I18n/RailsI18n/DecorateString -- SQL syntax is not user-facing copy.
     rows = connection.select_values(<<~SQL.squish)
       SELECT d.id
         FROM #{device} AS d
@@ -160,6 +155,7 @@ module DeviceSessionRootAndRpBinding
          )
        ORDER BY d.id
     SQL
+    # rubocop:enable I18n/RailsI18n/DecorateString
     raise_unresolved!("current root-token pointers", rows)
   end
 
@@ -205,11 +201,24 @@ module DeviceSessionRootAndRpBinding
     rp = quote_table(connection, rp_table)
     token_parent = quote_column(connection, token_parent_column)
 
-    migration.add_column(rp_table, :device_session_id, :bigint) unless migration.column_exists?(
-      rp_table,
-      :device_session_id,
+    ensure_rp_device_session_column!(migration, rp_table)
+    backfill_rp_device_session_ids!(connection, token, rp, token_parent)
+    verify_rp_device_session_bindings!(connection, rp)
+    add_rp_device_session_constraints!(
+      migration, rp_table, device_table, rp_device_foreign_key, old_active_index, new_active_index,
+      token_parent_column,
     )
+  end
 
+  def ensure_rp_device_session_column!(migration, rp_table)
+    return if migration.column_exists?(rp_table, :device_session_id)
+
+    migration.add_column(rp_table, :device_session_id, :bigint)
+  end
+  private_class_method :ensure_rp_device_session_column!
+
+  def backfill_rp_device_session_ids!(connection, token, rp, token_parent)
+    # rubocop:disable I18n/RailsI18n/DecorateString -- SQL syntax is not user-facing copy.
     connection.execute(<<~SQL.squish)
       UPDATE #{rp} AS r
          SET device_session_id = t.device_session_id
@@ -217,7 +226,11 @@ module DeviceSessionRootAndRpBinding
        WHERE r.#{token_parent} = t.id
          AND r.device_session_id IS NULL
     SQL
+    # rubocop:enable I18n/RailsI18n/DecorateString
+  end
+  private_class_method :backfill_rp_device_session_ids!
 
+  def verify_rp_device_session_bindings!(connection, rp)
     missing_rows = connection.select_values(<<~SQL.squish)
       SELECT r.id
         FROM #{rp} AS r
@@ -235,29 +248,34 @@ module DeviceSessionRootAndRpBinding
        ORDER BY device_session_id, oidc_client_id
     SQL
     raise_unresolved!("duplicate active RP Sessions", duplicate_rows)
+  end
+  private_class_method :verify_rp_device_session_bindings!
 
+  def add_rp_device_session_constraints!(migration, rp_table, device_table, foreign_key, old_index, new_index,
+                                         token_parent_column)
     migration.add_foreign_key(
       rp_table,
       device_table,
       column: :device_session_id,
-      name: rp_device_foreign_key,
+      name: foreign_key,
       on_delete: :restrict,
       validate: false,
     )
-    migration.validate_foreign_key(rp_table, name: rp_device_foreign_key)
+    migration.validate_foreign_key(rp_table, name: foreign_key)
     migration.change_column_null(rp_table, :device_session_id, false)
 
-    migration.remove_index(rp_table, name: old_active_index)
+    migration.remove_index(rp_table, name: old_index)
     migration.add_index(
       rp_table,
       %i(device_session_id oidc_client_id),
       unique: true,
       where: "revoked_at IS NULL",
-      name: new_active_index,
+      name: new_index,
     )
 
     migration.remove_foreign_key(rp_table, column: token_parent_column)
   end
+  private_class_method :add_rp_device_session_constraints!
 
   def raise_unresolved!(description, ids)
     return if ids.empty?

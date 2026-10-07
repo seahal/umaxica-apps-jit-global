@@ -1,8 +1,36 @@
 # Current IdP and authentication state axes
 
-This inventory describes the current local checkout, including pre-existing uncommitted changes, inspected on 2026-10-05 at commit `f313b126931cfe3c9ecf64bbb72fb1cd3a0aada5` (branch `feature`). The user explicitly authorized this checkout despite the requested repository URL differing from its origin (`seahal/umaxica-app-jit`). This is static implementation evidence, not deployed or live-database evidence.
+This inventory describes the current local checkout, including pre-existing uncommitted changes, reconciled on 2026-10-06 against the implementation-plan checkout (branch `feature`). This is static implementation evidence, not deployed or live-database evidence.
 
-`CONFIRMED` means the documented edge is present in current code; it does not mean every model-permitted edge has an HTTP caller. `PARTIAL` identifies incomplete wiring, conflicting layers, or unconfirmed runtime reachability. `UNCONFIRMED` identifies a candidate whose transition implementation is unavailable. `UNKNOWN` denotes missing evidence, never an invented transition. Derived timestamp conditions are explicitly labeled; results, protocol nonce `state`, and lifecycle states are distinct.
+`CONFIRMED` means the documented edge is present in current code; it does not mean every model-permitted edge has an HTTP caller. The canonical index below supersedes older investigation rows later in this file where a changed axis is marked `PARTIAL` or describes a pre-migration writer. `UNCONFIRMED` and `UNKNOWN` remain honest dispositions for axes outside this implementation. Derived timestamp conditions are explicitly labeled; results, protocol nonce `state`, and lifecycle states are distinct.
+
+## Canonical delivered axes (2026-10-06)
+
+The following diagrams are the canonical state graphs for the `two.md` cycle. Each realm-specific
+diagram uses the same named transition contract unless the table explicitly identifies an actor
+boundary. The detailed historical inventory below is retained for traceability and is not a second
+runtime authority.
+
+| Axis | Canonical diagrams | Delivered invariant |
+| --- | --- | --- |
+| Sign-in | `idp-{client,visitor,operator}-sign-in.mmd` | One state reference; issuance completes the flow; session-limit resolution is a durable child and never a parent state |
+| Flow-bound email OTP | `idp-auth-email-otp-challenge.mmd` | App/com sign-in per-ceremony generation and retained proof; delivery worker hardening remains incomplete |
+| Signup Contact OTP | `idp-sign-up-otp-challenge.mmd` | APP/COM Source-owned issued challenge and immutable bounded result; independent Ticket progression and original-generation transport |
+| Authenticated Contact OTP | `idp-credential-registration-otp-challenge.mmd` | APP/COM original Contact ceremony snapshots, immutable bounded proof, bound delivery, Source-first settings finalization and original-generation APP email resend; bootstrap/cancellation remain incomplete |
+| Sign-up | `idp-{client,visitor,operator}-sign-up.mmd` | Contact/checkpoint completion enters ordinary sign-in admission; terminal facts are retained |
+| Sign-out | `idp-{client,visitor,operator}-sign-out.mmd` | Authority-first commit and absorbing completion/cancellation/expiry facts |
+| Session-limit resolution | `idp-{client,visitor,operator}-session-limit-resolution.mmd` | Actor, parent, browser, realm and optional OIDC binding are rechecked under the owner lock |
+| Admission binding ×3 | `idp-{client,visitor,operator}-auth-admission-binding.mmd` | D-82 is the narrow Base/Auth browser-bound exception; stale or cross-browser redemption is refused |
+| Step-up | `idp-{client,visitor,operator}-step-up-ceremony.mmd` | Requirement and current policy travel through method choice, admission, result and mutation |
+| RP session/token | `idp-{client,visitor,operator}-{rp-session,token}.mmd` | Device-session parent, independent refresh evaluation and explicit retirement predicates |
+| App Secret | `idp-client-secret-{credential,issuance,sign-in-receipt,audit-outbox}.mmd` | Identity-first claim, source/outbox local atomicity, receipt reconciliation and hold-aware collection |
+| Contact binding | `idp-client-{email,telephone}-credential.mmd` | Effective binding facts and both-direction uniqueness; pending candidates do not occupy the binding |
+| Contact audit delivery | `idp-contact-audit-outbox.mmd` | Independent app/com Source intents; Chronicle UUID identity match precedes Source acknowledgment |
+| External identity | `idp-client-external-identity.mmd`, `idp-client-social-ceremony.mmd` | Issuer/subject-only resolution, release history and no stale callback reattachment |
+
+The `sign-*` diagrams are archived investigation artifacts and are not canonical for the current
+Base/Auth/Warp contract. They remain in place so historical links resolve; see
+`docs/mermaid/archive/README.md`.
 
 ## Inventory
 
@@ -91,6 +119,7 @@ This inventory describes the current local checkout, including pre-existing unco
 | administrative-access | WORKFLOW_STATE | client | administrative access | clients | None (state axis has no reference FK) | AdministrativeAccessLock | access_state | [idp-client-administrative-access](./idp-client-administrative-access.mmd) | CONFIRMED | Administrative state axis; audited cross-DB side effects |
 | email-verification-challenge | WORKFLOW_STATE | client | email verification challenge | client_email_ceremony_transactions | None (state axis has no reference FK) | EmailVerificationChallengeable | evp_outcome / expires_at | [idp-client-email-verification-challenge](./idp-client-email-verification-challenge.mmd) | PARTIAL | Separate EVP outcome; production wiring unconfirmed |
 | preference-dbsc | WORKFLOW_STATE | client | preference browser DBSC binding | app_preferences | app_preference_dbsc_statuses | DbscBindable / DbscRegistrationService | dbsc_status_id | [idp-client-preference-dbsc](./idp-client-preference-dbsc.mmd) | PARTIAL | Independent binding axis; no FAILED/REVOKE setters |
+| shared-otp-verification-budget | DERIVED_STATE | app/com/org | destination verification failures | auth-state Valkey | None | OtpVerificationBudgetAdapter / SignOtpCeremony / CommonOtp | integer failure count / native TTL | [idp-shared-otp-verification-budget](./idp-shared-otp-verification-budget.mmd) | PARTIAL | Signup, email sign-in and destination confirmation connected; full D-87 verification pending |
 | email-otp | DERIVED_STATE | client | email challenge/lock | client_emails | None (state axis has no reference FK) | OtpLockable / Email | otp_expires_at / otp_attempts_count / locked_at | [idp-client-email-otp](./idp-client-email-otp.mmd) | PARTIAL | Derived overlapping expiry/lock predicates |
 | telephone-otp | DERIVED_STATE | client | telephone challenge/lock | client_telephones | None (state axis has no reference FK) | OtpLockable / Telephone | otp_expires_at / otp_attempts_count / locked_at | [idp-client-telephone-otp](./idp-client-telephone-otp.mmd) | PARTIAL | Derived overlapping expiry/lock predicates |
 | secret-credential | WORKFLOW_STATE | visitor | secret credential | visitor_secret_credentials | visitor_secret_credential_statuses | SecretCredential / SignSecretVerify | visitor_secret_credential_status_id | [idp-visitor-secret-credential](./idp-visitor-secret-credential.mmd) | PARTIAL | Legacy usage/status vocabulary; operator aliases differ |

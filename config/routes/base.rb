@@ -232,8 +232,8 @@ scope(module: :base, as: :base) do
 
       namespace :identity do
         resource :standing, only: :show
-        resources :passkeys, only: %i(index show new update destroy)
-        resources :totps, only: %i(index show update destroy)
+        resources :passkeys, only: %i(index show new create update destroy)
+        resources :totps, only: %i(index show new create update destroy)
         resource :recovery, only: :show do
           resource :completion, only: :create, module: :recovery
         end
@@ -447,7 +447,7 @@ scope(module: :base, as: :base) do
       namespace :identity do
         resource :standing, only: :show
         resource :recovery_secret, only: :show, path: "recovery-secret"
-        resources :passkeys, only: %i(index show new update destroy)
+        resources :passkeys, only: %i(index show new create update destroy)
         namespace :mfa do
           resource :reset, only: :show
         end
@@ -711,7 +711,7 @@ scope(module: :base, as: :base) do
       resources :sessions, controller: "identity/sessions", only: %i(index show destroy)
       namespace :identity do
         resource :standing, only: :show
-        resources :passkeys, only: %i(index show new update destroy)
+        resources :passkeys, only: %i(index show new create update destroy)
         namespace :mfa do
           resource :reset, only: :show
         end

@@ -257,6 +257,35 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     assert_nil session[:email_registration_public_id]
   end
 
+  test "email replacement keeps the old binding until OTP and commits release and finalization intents together" do
+    previous = @user.client_emails.create!(
+      address: "previous-app-binding@example.test", user_email_status_id: ClientEmailStatus::VERIFIED,
+      confirm_policy: "1",
+    )
+    previous.finalize_binding!
+    post base_app_identity_emails_registration_url(ri: "jp", host: @host),
+         params: { user_email: { raw_address: "replacement-app-binding@example.test" } }, headers: @headers
+    pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
+    otp = pending.get_otp
+    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+
+    assert_predicate previous.reload, :binding_effective?
+    assert_not pending.reload.binding_effective?
+    operation_ref = pending.credential_registration_otp_context.fetch("flow_ref")
+
+    assert_not ClientContactAuditOutbox.exists?(operation_ref: operation_ref)
+    patch base_app_identity_emails_registration_url(ri: "jp", host: @host),
+          params: { user_email: { pass_code: code } }, headers: @headers
+
+    assert_response :redirect
+    assert_predicate previous.reload, :binding_released?
+    assert_predicate pending.reload, :binding_effective?
+    assert_equal [pending.id], @user.client_emails.effective_binding.pluck(:id)
+    assert_equal [[previous.public_id, "released"], [pending.public_id, "finalized"]],
+                 ClientContactAuditOutbox.where(operation_ref: operation_ref).order(:id)
+                   .pluck(:contact_ref, :event_name)
+  end
+
   test "update verifies the address and returns to the identity page on the correct code" do
     post base_app_identity_emails_registration_url(ri: "jp", host: @host),
          params: { user_email: { raw_address: "app_email_reg_verified@example.com" } }, headers: @headers
@@ -269,6 +298,12 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
 
     assert_response :redirect
     assert_equal ClientEmailStatus::VERIFIED, pending.reload.user_email_status_id
+    intent = ClientContactAuditOutbox.find_by!(contact_ref: pending.public_id, event_name: "finalized")
+
+    assert_equal @user.public_id, intent.owner_ref
+    assert_equal @user.public_id, intent.actor_ref
+    assert_equal pending.credential_registration_otp_context.fetch("flow_ref"), intent.operation_ref
+    assert_nil intent.acknowledged_at
     assert_nil session[:email_registration_public_id]
   end
 

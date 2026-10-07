@@ -58,6 +58,7 @@ module Base
 
           IdentityCredentialRemovalCommitter.call!(
             actor: current_client, credential: telephone, current_session: current_session, request: request,
+            actor_context: current_actor,
           )
           redirect_to(base_app_identity_telephones_path(ri: params[:ri]), status: :see_other)
         end

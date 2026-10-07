@@ -153,3 +153,10 @@ layer after `Authentication::LogoutAllSessions`, for example in
 - `adr/session-reset-on-privilege-transition.md`
 - `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md`
 - GH issue #833
+
+## Delivered reconciliation (2026-10-06)
+
+The current primitive/composition boundary is implemented by the coordinated authority-first
+logout transaction and the surface-local ceremony controllers. The initiating RP is revoked after
+the parent authority commit; sibling RP sessions are not treated as synchronously revoked. The
+historical `acme/www` and `sign/id` ownership text is superseded by the Base/Warp boundary ADR.

@@ -6,11 +6,7 @@ stateDiagram-v2
     state "canceled" as canceled
     state "expired" as expired
     state "revoked" as revoked
-    pending --> canceled: cancel! public model API
-    verified --> consumed: consume_result! public model API
-    verified --> canceled: cancel! public model API
-    expired --> consumed: consume_result! public model API
-    expired --> canceled: cancel! public model API
+    %% expired, canceled and revoked are absorbing terminal states.
     [*] --> pending
     pending --> verified: record_verification! / record_registration_verification!
     verified --> verified: prepare_result_delivery!
@@ -21,15 +17,17 @@ stateDiagram-v2
     verified --> expired: Base cancellation at TTL
     verified --> revoked: token revoke_step_up_authority!
     verified --> consumed: Base freshness / registration final committer
-    pending --> consumed: consume_result! public model API
+    pending --> consumed: Base registration consumption for email_otp only
     revoked --> [*]
     consumed --> [*]
     canceled --> [*]
     note right of pending
         Auth proof returns to owning Base operation.
-        revoked timestamp CHECK blocks public terminal rewrite.
-        expired public edges require future TTL; not clock-expiry recovery.
-        expired is stored by cancellation-at-TTL only.
-        Generic public methods have broader guards than Base.
+        The single named model writer rejects every terminal rewrite.
+        expired is stored only by the owner expiry operation.
+        Cancellation, expiry and revocation cannot rewrite a terminal.
+        Generic result delivery is not an authorization shortcut.
         consumed registration proof does not grant freshness.
+        Base cancellation/freshness require a usable DeviceSession and its current root.
+        Base locks owner, device, token, then ceremony parent.
     end note

@@ -19,6 +19,25 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     Rails.configuration.x.rate_limit.fetch(:store).clear
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
+
+    # Exercise OTP endpoints only after the public admission transitions.
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+    )
+    get "/sign/up", params: { ri: "jp", entry_ref: admission.reference }, headers: { "Host" => @host }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/ceremony_bindings", params: { ri: "jp", entry_ref: admission.reference, authenticity_token: csrf },
+                               headers: { "Host" => @host }
+
+    assert_response :see_other
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/up", params: { ri: "jp", entry_ref: admission.reference }, headers: { "Host" => @host }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/sign/up", params: { ri: "jp", entry_ref: admission.reference, authenticity_token: csrf },
+                     headers: { "Host" => @host }
+
+    assert_response :see_other
   end
 
   teardown do
@@ -30,7 +49,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
   test "show renders the otp form" do
     start_email_signup!("email-show@example.com")
 
-    get auth_app_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+    get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
 
     assert_response :success
     assert_equal "auth/app/sign/up/emails/edit", inertia_component
@@ -57,7 +76,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
       params = { client_email: { pass_code: otp_code_for(user_email) } }
       params["cf-turnstile-response"] = turnstile_token if turnstile_token
 
-      patch auth_app_sign_up_check_email_otp_url(ri: "jp"), params: params, headers: default_headers
+      patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), params: params, headers: default_headers
 
       assert_response :unprocessable_content
       assert_equal "render", inertia_props.fetch("turnstile").fetch("mode")
@@ -76,7 +95,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
 
     TurnstileVerifierStub.challenge_response = { "success" => false }
     patch(
-      auth_app_sign_up_check_email_otp_url(ri: "jp"),
+      auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
       params: {
         "client_email" => { "pass_code" => otp_code_for(user_email) },
         "cf-turnstile-response" => "invalid-turnstile-token",
@@ -90,7 +109,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
 
     TurnstileVerifierStub.challenge_response = { "success" => false, "unavailable" => true }
     patch(
-      auth_app_sign_up_check_email_otp_url(ri: "jp"),
+      auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
       params: {
         "client_email" => { "pass_code" => otp_code_for(user_email) },
         "cf-turnstile-response" => "provider-outage-token",
@@ -99,7 +118,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     )
 
     assert_response :redirect
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp")
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
     assert_equal ClientSignUpFlowStatus::CHECKPOINT_PENDING, cycle.reload.status_id
   ensure
     Flipper.disable(:turnstile_degraded_mode)
@@ -109,7 +128,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     user_email = start_email_signup!("email-valid@example.com")
     cycle = current_sign_up_cycle
 
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
           params: {
             "client_email" => { "pass_code" => otp_code_for(user_email) },
             "cf-turnstile-response" => "valid-turnstile-token",
@@ -117,7 +136,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
           headers: default_headers
 
     assert_response :redirect
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp")
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
     assert_equal ClientEmailStatus::VERIFIED_WITH_SIGN_UP, user_email.reload.user_email_status_id
     assert_equal ClientSignUpFlowStatus::CHECKPOINT_PENDING, cycle.reload.status_id
     assert_equal "checkpoint", cycle.reload.step
@@ -131,7 +150,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     expiry = user_email.reload.otp_expires_at
     ClientEmail.stub(:database_now, expiry + 1.second) do
       travel_to(expiry + 1.second) do
-        get auth_app_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+        get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
       end
     end
 
@@ -145,7 +164,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     expiry = user_email.reload.otp_expires_at
     ClientEmail.stub(:database_now, expiry + 1.second) do
       travel_to(expiry + 1.second) do
-        patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+        patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
               params: { client_email: { pass_code: "000000" } },
               headers: default_headers
       end
@@ -158,7 +177,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
   test "patch with a blank otp returns a validation error" do
     start_email_signup!("email-blank@example.com")
 
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
           params: { client_email: { pass_code: "" } },
           headers: default_headers
 
@@ -169,7 +188,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
   test "patch with an invalid otp returns a validation error" do
     start_email_signup!("email-wrong@example.com")
 
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
           params: { client_email: { pass_code: "000000" } },
           headers: default_headers
 
@@ -183,7 +202,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     completed_requirements = cycle.completed_requirements.deep_dup
 
     Email::MAX_OTP_ATTEMPTS.times do
-      patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+      patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
             params: { client_email: { pass_code: "000000" } },
             headers: default_headers
     end
@@ -200,7 +219,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
 
   def start_email_signup!(email)
     post(
-      auth_app_sign_up_email_url(ri: "jp"),
+      auth_app_sign_up_email_url(ri: "jp", fb: @flow_binding),
       params: {
         user_email: {
           raw_address: email,
@@ -212,11 +231,12 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     )
 
     assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     ClientEmail.order(:created_at).last
   end
 
   def current_sign_up_cycle
-    ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+    ClientSignUpFlow.find_by!(public_id: session[:auth_app_up_sequence_id])
   end
 
   def otp_code_for(user_email)

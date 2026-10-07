@@ -485,10 +485,14 @@ ja:
         i18n_settings_description: 組織で利用する言語や地域の既定値を変更します。
         title: コンフィギュレーション
   actions:
+    actions: 操作
+    add: 追加
     back: もどる
     cancel: キャンセル
     connect: 連携する
     continue: 続行
+    restart: 確認を再開する
+    cancel_and_start: 取り消して新しい確認を始める
     delete: 削除
     save: 保存
     submit: 送信
@@ -530,6 +534,16 @@ ja:
       client_chronicle:
         user_chronicle_event: イベント
         user_chronicle_level: レベル
+      client_contact_audit_outbox:
+        acknowledged_at: 確認日時
+        actor_ref: 実行者参照
+        contact_kind: 連絡先種別
+        contact_ref: 連絡先参照
+        event_name: イベント
+        event_uuid: イベント UUID
+        occurred_at: 発生日時
+        operation_ref: 操作参照
+        owner_ref: 所有者参照
       client_email:
         address: メールアドレス
         address_digest: メールアドレスダイジェスト
@@ -611,6 +625,16 @@ ja:
         created_at: 作成日時
         last_otp_at: 最終使用日
         title: 名前
+      visitor_contact_audit_outbox:
+        acknowledged_at: 確認日時
+        actor_ref: 実行者参照
+        contact_kind: 連絡先種別
+        contact_ref: 連絡先参照
+        event_name: イベント
+        event_uuid: イベント UUID
+        occurred_at: 発生日時
+        operation_ref: 操作参照
+        owner_ref: 所有者参照
       visitor_email:
         address: メールアドレス
         address_digest: メールアドレスダイジェスト
@@ -1436,6 +1460,22 @@ ja:
           userinfo: UserInfo
       identity:
         up_link: もどる
+        passkeys:
+          description: 登録済みのパスキーを管理します。
+          title: パスキー
+        totps:
+          description: 登録済みの認証アプリを管理します。
+          remove_confirm: この認証アプリを削除しますか？
+          show_description: この認証アプリを確認し、名前を変更できます。
+          show_title: 認証アプリ
+          status_label: 状態
+          statuses:
+            active: 有効
+            deleted: 削除済み
+            inactive: 無効
+            nothing: 未設定
+            revoked: 失効
+          title: 認証アプリ
         activities:
           title: アクティビティ履歴
           description: アカウントに関する最近のセキュリティ関連アクティビティです。
@@ -3576,6 +3616,9 @@ ja:
           authenticate_with_passkey: パスキーで認証
           back: 戻る
           description: 本人確認のため、パスキーで認証してください。
+          title: 本人確認
+        new:
+          description: 続行する前に本人確認を行ってください。
           title: 本人確認
         setup:
           description: 続行する前に、パスキーまたはメールアドレスを登録してください。

@@ -12,6 +12,7 @@ module SingleUseToken
     motion density page_size adult_content_gate
   ).freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     scope :active, -> { where(arel_table[:discard_at].gt(Time.current)) }
     scope :unconsumed, -> { where(used_at: nil) }

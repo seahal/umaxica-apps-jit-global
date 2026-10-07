@@ -10,8 +10,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TurnstileApi } from "@/lib/turnstile";
 import OrgEntraSettingsEdit from "@/pages/auth/org/settings/entras/edit";
 import OrgEntraSettingsShow from "@/pages/auth/org/settings/entras/show";
-import OrgPasskeySettingsEdit from "@/pages/auth/org/settings/passkeys/edit";
-import OrgPasskeySettingsNew from "@/pages/auth/org/settings/passkeys/new";
 import OrgEmergencyPasskeySignInPage from "@/pages/auth/org/sign/in/emergency/passkeys/new";
 import OrgPasskeySignInPage from "@/pages/auth/org/sign/in/passkeys/new";
 import OrgSignInEntry from "@/pages/auth/org/sign/ins/show";
@@ -19,8 +17,10 @@ import OrgInvitationPage from "@/pages/auth/org/sign/up/invitations/new";
 import OrgSignUpEntry from "@/pages/auth/org/sign/ups/show";
 import OrgEntraSessionEntry from "@/pages/auth/org/social/sessions/new";
 import OrgVerificationPasskeyPage from "@/pages/auth/org/verification/passkeys/new";
+import OrgPasskeySettingsNew from "@/pages/auth/org/verification/registration/passkeys/new";
 import OrgVerificationSetup from "@/pages/auth/org/verification/setups/new";
 import OrgVerificationEntry from "@/pages/auth/org/verifications/show";
+import OrgPasskeySettingsEdit from "@/pages/base/org/identity/passkeys/show";
 
 import { mount } from "../../../support/react";
 
@@ -457,7 +457,7 @@ describe("Org passkey ceremony pages", () => {
       <OrgPasskeySettingsNew
         title="パスキー登録"
         description="新しいパスキー"
-        registration={{
+        panel={{
           options_url: "/org/settings/passkeys",
           verification_url: "/org/settings/passkeys",
           description_label: "名前",
@@ -466,7 +466,7 @@ describe("Org passkey ceremony pages", () => {
           turnstile_site_key: "site-key",
           turnstile_error_message: "検証に失敗しました",
         }}
-        cancel_link={BACK}
+        cancel={{ label: BACK.label, action: BACK.href, method: "post" }}
       />,
     );
 
@@ -477,20 +477,31 @@ describe("Org passkey ceremony pages", () => {
     const screen = mount(
       <OrgPasskeySettingsEdit
         title="パスキーの名前"
-        form_action="/org/settings/passkeys/pk_1"
-        description_label="名前"
-        description_value="MacBook"
-        submit_label="更新"
-        cancel_link={BACK}
-        errors_title="入力を確認してください"
-        errors={[]}
-        turnstile={turnstile}
+        description="名前を変更します"
+        back_link={BACK}
+        passkey={{
+          public_id: "pk_1",
+          description: "MacBook",
+          created_at: null,
+          last_used_at: null,
+        }}
+        form={{
+          action: "/org/settings/passkeys/pk_1",
+          description: "MacBook",
+          label: "名前",
+          submit_label: "更新",
+        }}
+        destroy={{
+          action: "/org/settings/passkeys/pk_1",
+          label: "削除",
+          confirm: "このパスキーを削除しますか？",
+        }}
+        error={null}
       />,
     );
 
-    expect(screen.container.querySelector("form")?.getAttribute("action")).toBe(
-      "/org/settings/passkeys/pk_1",
-    );
+    expect(screen.container.querySelector<HTMLInputElement>("input")?.value).toBe("MacBook");
+    expect(screen.container.textContent).toContain("更新");
   });
 
   it("renders the verification passkey challenge", () => {

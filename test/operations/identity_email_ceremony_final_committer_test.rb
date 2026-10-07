@@ -8,7 +8,11 @@ class IdentityEmailCeremonyFinalCommitterTest < ActiveSupport::TestCase
   setup do
     @now = Time.zone.parse("2026-06-24 12:00:00 UTC")
     @actor = FakeActor.new(id: 7, public_id: "actor-1", status_id: ClientStatus::ACTIVE)
-    @transaction = FakeTransaction.new
+    @transaction = ClientEmailCeremonyTransaction.create_transaction!(
+      actor_ref: "actor-1", session_ref: "session-1", operation: "registration",
+      transaction_id: "txn-1", email_candidate_ref: "candidate-1",
+      normalized_email_digest: "email-digest", now: @now,
+    )
     @email = FakeEmail.new(id: 100, address_digest: "email-digest")
   end
 
@@ -137,54 +141,52 @@ class IdentityEmailCeremonyFinalCommitterTest < ActiveSupport::TestCase
   test "call! class method creates an instance and delegates" do
     assert_email_error("actor is required") do
       IdentityEmailCeremonyFinalCommitter.call!(
-        result_token: "token", actor: nil, session_ref: "session-1",
+        result_token: "token", actor_context: ActorValuesContext.empty, actor: nil, session_ref: "session-1",
         surface: "app", now: @now,
       )
     end
   end
 
-  test "commits through the locked record and writes the app audit" do
-    committer = IdentityEmailCeremonyFinalCommitter.new(
-      result_token: "token", actor: @actor, session_ref: "session-1", surface: "app", now: @now,
+  test "commits through the locked record and writes the app Source audit" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    contact = ClientEmail.create!(user_id: actor.id, address: "locked-audit@example.test", confirm_policy: "1")
+    now = ClientEmailCeremonyTransaction.database_now
+    parent = ClientEmailCeremonyTransaction.create_transaction!(
+      actor_ref: actor.public_id, session_ref: "locked-audit-browser", operation: "registration",
+      email_candidate_ref: contact.public_id, normalized_email_digest: contact.address_digest, now: now,
     )
-    result = {
-      "surface" => "app",
-      "actor_ref" => "actor-1",
-      "session_ref" => "session-1",
-      "transaction_id" => "txn-1",
-      "email_candidate_ref" => "candidate-1",
-      "normalized_email_digest" => "email-digest",
-    }
-    committer.instance_variable_set(:@result, result)
-    committer.instance_variable_set(:@transaction, @transaction)
-    committer.instance_variable_set(:@email, @email)
-    lock = Object.new
-    locked_email = @email
-    lock.define_singleton_method(:find) { |_id| locked_email }
-    audit = nil
-    consumer = FakeConsumer.new
+    result_token = IdentityEmailCeremonyResult.issue(
+      { surface: "app",
+        actor_ref: actor.public_id,
+        session_ref: parent.session_ref,
+        transaction_id: parent.transaction_id,
+        grant_jti: parent.grant_jti,
+        result_jti: SecureRandom.uuid,
+        operation: parent.operation,
+        verified_at: now.to_i,
+        challenge_id: SecureRandom.uuid,
+        expires_at: parent.expires_at.to_i,
+        email_candidate_ref: contact.public_id,
+        normalized_email_digest: contact.address_digest, },
+      issuer_id: IdentityEmailCeremonyContract.sign_issuer_id("app"), now: now,
+    )
+    commit = IdentityEmailCeremonyFinalCommitter.call!(
+      result_token: result_token,
+      actor_context: ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base),
+      actor: actor, session_ref: parent.session_ref, surface: "app", now: now,
+    )
 
-    IdentityEmailCeremonyResultConsumer.stub(:new, ->(**) { consumer }) do
-      ClientEmail.stub(:transaction, ->(&block) { block.call }) do
-        ClientEmail.stub(:lock, lock) do
-          ChronicleRecord.stub(:connected_to, ->(**, &block) { block.call }) do
-            ClientChronicleEvent.stub(:find_or_create_by!, true) do
-              ClientChronicleLevel.stub(:find_or_create_by!, true) do
-                ClientChronicle.stub(:create!, ->(**attrs) { audit = attrs }) do
-                  commit = committer.call!
+    assert_equal contact, commit.email
+    assert_equal ClientEmailStatus::VERIFIED, contact.reload.user_email_status_id
+    assert_predicate contact, :binding_effective?
+    audit = ClientContactAuditOutbox.find_by!(operation_ref: parent.transaction_id)
 
-                  assert_same @email, commit.email
-                end
-              end
-            end
-          end
-        end
-      end
-    end
-
-    assert_equal ClientEmailStatus::VERIFIED, @email.updated_status
-    assert_equal ClientChronicleEvent::EMAIL_REGISTERED, audit.fetch(:event_id)
-    assert_equal @actor.id.to_s, audit.fetch(:subject_id)
+    assert_equal "email", audit.contact_kind
+    assert_equal "finalized", audit.event_name
+    assert_equal actor.public_id, audit.owner_ref
+    assert_equal actor.public_id, audit.actor_ref
+    assert_equal contact.public_id, audit.contact_ref
+    assert_nil audit.acknowledged_at
   end
 
   private
@@ -193,6 +195,7 @@ class IdentityEmailCeremonyFinalCommitterTest < ActiveSupport::TestCase
     IdentityEmailCeremonyFinalCommitter.new(
       result_token: "token",
       actor: actor,
+      actor_context: ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base),
       session_ref: session_ref,
       surface: surface,
       now: @now,

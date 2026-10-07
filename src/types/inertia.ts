@@ -76,4 +76,6 @@ export type SurfaceChrome = {
  */
 export type SharedProps = {
   chrome: SurfaceChrome;
+  /** Set by a terminal ceremony so the persistent layout clears encrypted browser history. */
+  clear_history?: boolean;
 };

@@ -85,3 +85,11 @@ commit. A concurrent request cannot issue a second result from the same ticket.
 
 - `docs/security/authentication-assurance-levels.md`
 - `docs/security/ceremony-grant-result.md`
+
+## Delivered reconciliation (2026-10-06)
+
+The former historical-path note is closed. `sign/id` and `acme/www` are not active authority
+names in this contract; Base is the authority and Auth is the admitted ceremony surface. Method
+choice, cancellation, conflict restart, result handoff and continuation all preserve the original
+actor, browser, surface, scope, resource and tenant binding. The result is accepted only through
+the Base receiver and current-policy recheck.

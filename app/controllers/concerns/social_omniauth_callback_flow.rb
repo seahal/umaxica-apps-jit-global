@@ -30,21 +30,6 @@ module SocialOmniauthCallbackFlow
 
   private
 
-  def handle_unverified_request
-    if action_name == "omniauth"
-      # Every failing guard branch records its reason; when none was recorded the request is
-      # still unverified, so it is rejected with the guard's own default rather than allowed.
-      rejection = request.env["social_callback_guard.rejection"] || {
-        reason: "csrf_unverified",
-        provider: params[:provider].to_s,
-        details: {},
-      }
-      reject_social_callback!(**rejection)
-    else
-      super
-    end
-  end
-
   def run_social_omniauth_callback(auth)
     if social_omniauth_callback_requires_writing_role?
       ActiveRecord::Base.connected_to(role: :writing) { handle_omniauth_callback(auth) }

@@ -11,6 +11,7 @@ module RefreshTokenable
 
   REFRESH_TTL = SecurityTokenLifetimes::CLIENT_REFRESH_TOKEN_TTL
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_validation :ensure_lapses_at, on: :create
     before_validation :ensure_refresh_token_family_id, on: :create

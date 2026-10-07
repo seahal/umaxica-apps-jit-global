@@ -42,7 +42,10 @@ class VisitorTelephone < ComPrincipalRecord
   include PublicId
   include ContactBinding
 
-  self.filter_attributes += %w(number)
+  scope :effective_binding, -> { where.not(binding_finalized_at: nil).where(binding_released_at: nil) }
+  validate :effective_binding_has_digest
+
+  self.filter_attributes += %w(number sign_up_otp_context credential_registration_otp_context)
 
   # Matches MAX_TELEPHONES_PER_USER and MAX_TELEPHONES_PER_STAFF: contact-method
   # caps are four across every principal.

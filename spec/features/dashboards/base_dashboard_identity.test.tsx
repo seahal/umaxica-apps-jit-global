@@ -36,10 +36,7 @@ describe("Base Dashboard identity navigation", () => {
   });
 
   it("renders the server-supplied Avatar image before the Persona name", () => {
-    const [menu] = props.sections;
-    if (menu === undefined) {
-      throw new Error("the fixture declares no dashboard section");
-    }
+    const menu = props.sections[0]!;
     const withImage: SurfaceDashboardProps = {
       ...props,
       sections: [

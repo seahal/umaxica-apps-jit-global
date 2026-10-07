@@ -25,6 +25,7 @@ module Auth
 
           AUTHENTICATION_MODE = :guest
 
+          before_action :require_sign_up_ceremony_admission!
           before_action :reject_suspended_sign_up!
 
           def new
@@ -85,12 +86,14 @@ module Auth
 
             result = SignComUpTelephoneSignupCreator.call(
               telephone: @visitor_telephone,
-              pending_public_id: session_public_id_from_registration,
             )
 
             @visitor_telephone = result.telephone
             session[:visitor_telephone_registration] = result.session_payload
             bind_sign_up_flow_to_telephone!(@visitor_telephone)
+            SignUpOtpDeliveryIssuer.call(
+              flow: current_sign_up_flow, record: @visitor_telephone, channel: :telephone,
+            )
             redirect_to(
               auth_com_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri]),
             )
@@ -198,7 +201,18 @@ module Auth
           end
 
           def valid_telephone_session?
-            return false unless @visitor_telephone.present? && !@visitor_telephone.otp_expired?
+            return false unless @visitor_telephone
+
+            context = @visitor_telephone.sign_up_otp_context
+            if context&.fetch("verified_at") && @sign_up_ticket
+              return context.fetch("surface") == "com" && context.fetch("purpose") == "sign_up" &&
+                  context.fetch("flow_ref") == @sign_up_ticket.public_id &&
+                  context.fetch("nonce_digest") == @sign_up_ticket.nonce_digest &&
+                  context.fetch("contact_ref") == @visitor_telephone.public_id &&
+                  !@visitor_telephone.binding_finalized_at && !@visitor_telephone.binding_released? &&
+                  Time.iso8601(context.fetch("result_expires_at")) > @visitor_telephone.class.database_now
+            end
+            return false if @visitor_telephone.otp_expired?
 
             @visitor_telephone.visitor_telephone_status_id == VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
           end

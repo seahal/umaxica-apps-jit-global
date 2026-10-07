@@ -1,0 +1,20 @@
+---
+name: static-invariant-guards
+description: Keep authentication boundary invariants mechanically enforced in local and CI test runs.
+---
+
+# Static Invariant Guards
+
+The following guards are part of the security contract and must remain runnable without a live
+provider or deployment edge:
+
+- `test/security/invariants/lifecycle_direct_state_write_invariant_test.rb`
+- `test/security/invariants/csrf_verification_strategy_invariant_test.rb`
+- `test/unit/security/standard_csrf_invariant_test.rb`
+- `test/unit/security/identity_authority_inversion_guard_test.rb`
+- `test/unit/security/webauthn_invariants_test.rb`
+- the authentication-method inventory/removal guard tests
+
+CI runs these guards as an explicit quality gate in addition to the complete Rails suite. A failing
+guard requires fixing the implementation or recording a reviewed contract change; do not weaken an
+assertion, add a broad allowlist, skip the test, or remove the guard to obtain green CI.

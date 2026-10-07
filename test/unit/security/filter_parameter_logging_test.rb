@@ -43,6 +43,17 @@ class FilterParameterLoggingTest < ActiveSupport::TestCase
     assert_includes ClientExternalIdentity.filter_attributes.map(&:to_s), "subject"
   end
 
+  test "browser admission proofs and references are filtered from diagnostic parameters" do
+    filter = ActiveSupport::ParameterFilter.new(Rails.application.config.filter_parameters)
+    fields = %w(
+      auth_sid sid base_browser_digest confirmation_ref binding_ref transaction_ref restart_of
+      auth_ceremony_session_ref auth_email_otp_generation
+    )
+    filtered = filter.filter(fields.index_with { |field| "fixture-#{field}" })
+
+    assert_equal fields.index_with("[FILTERED]"), filtered
+  end
+
   test "does not emit oauth credential values in active record sql logs" do
     log_io = StringIO.new
     logger = ActiveSupport::Logger.new(log_io)
@@ -58,21 +69,24 @@ class FilterParameterLoggingTest < ActiveSupport::TestCase
     apple_token = "apple-token-#{SecureRandom.hex(6)}"
     apple_refresh = "apple-refresh-#{SecureRandom.hex(6)}"
     apple_uid = "apple-uid-#{SecureRandom.hex(6)}"
-    ClientGoogleIdentity.create!(
-      user: clients(:one),
-      uid: google_uid,
-      token: google_token,
-      refresh_token: google_refresh,
-      expires_at: 1.week.from_now.to_i,
-      user_google_identity_status: client_google_identity_statuses(:active),
+
+    [google_token, apple_token].each do |provider_token|
+      assert_raises(ActiveModel::UnknownAttributeError) { ClientExternalIdentity.new(token: provider_token) }
+    end
+    [google_refresh, apple_refresh].each do |provider_refresh|
+      assert_raises(ActiveModel::UnknownAttributeError) { ClientExternalIdentity.new(refresh_token: provider_refresh) }
+    end
+    ClientExternalIdentity.create!(
+      client: Client.create!(status_id: ClientStatus::ACTIVE),
+      provider: "google", issuer: "https://accounts.google.com", subject: google_uid,
+      audience: "google-client-id", verification_authority: "omniauth-google-oauth2/1.2.1",
+      verified_at: ClientExternalIdentity.database_now,
     )
-    ClientAppleIdentity.create!(
-      user: clients(:one),
-      uid: apple_uid,
-      token: apple_token,
-      refresh_token: apple_refresh,
-      expires_at: 1.week.from_now.to_i,
-      user_apple_identity_status: client_apple_identity_statuses(:active),
+    ClientExternalIdentity.create!(
+      client: Client.create!(status_id: ClientStatus::ACTIVE),
+      provider: "apple", issuer: "https://appleid.apple.com", subject: apple_uid,
+      audience: "apple-client-id", verification_authority: "omniauth-apple/1.4.0",
+      verified_at: ClientExternalIdentity.database_now,
     )
     log_output = log_io.string
 

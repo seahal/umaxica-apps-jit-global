@@ -64,17 +64,36 @@ class ClientSecretClaimFinalizer
     def failure_reason!(credential, flow)
       return :unknown if flow.sign_in_completed?
 
-      reason = flow.sign_in_halted? ? "flow_halted" : "flow_failed"
-      if flow.expired?(ClientSignInFlow.database_now)
-        flow.expire_sign_in! unless flow.sign_in_failed? || flow.sign_in_expired? || flow.sign_in_cancelled? ||
-          flow.sign_in_halted?
-        reason = "flow_expired"
-      elsif !flow.sign_in_failed? && !flow.sign_in_expired? && !flow.sign_in_cancelled? && !flow.sign_in_halted?
-        return :pending
-      end
+      reason = terminal_flow_failure_reason!(flow)
+      return :pending if reason == :pending
+
       ceremony = ClientAuthCeremonySession.lock.find_by(id: credential.claim_ceremony_session_id)
       return :unknown unless terminal_ceremony_matches?(ceremony, flow, credential)
 
+      repair_terminal_flow_owner!(credential, flow)
+      canceled_oidc_handoff = oidc_handoff_canceled?(ceremony, flow)
+      (ceremony.cancelled_at || canceled_oidc_handoff) ? "flow_canceled" : reason
+    end
+
+    def terminal_flow_failure_reason!(flow)
+      return "flow_expired" if expire_failed_flow_if_due!(flow)
+      return :pending unless terminal_sign_in_flow?(flow)
+
+      flow.sign_in_halted? ? "flow_halted" : "flow_failed"
+    end
+
+    def expire_failed_flow_if_due!(flow)
+      return false unless flow.expired?(ClientSignInFlow.database_now)
+
+      flow.expire_sign_in! unless terminal_sign_in_flow?(flow)
+      true
+    end
+
+    def terminal_sign_in_flow?(flow)
+      flow.sign_in_failed? || flow.sign_in_expired? || flow.sign_in_cancelled? || flow.sign_in_halted?
+    end
+
+    def repair_terminal_flow_owner!(credential, flow)
       if flow.principal_id.nil?
         # The source claim can commit before an outer Ticket transaction rolls back.
         # Repair only terminal ownership; never admit authentication evidence.
@@ -82,13 +101,15 @@ class ClientSecretClaimFinalizer
       elsif flow.principal_id != credential.client_id
         raise ClientSecretSignInReceipt::InvalidCommit, "Secret terminal flow owner mismatch"
       end
-      oidc_canceled = ceremony.admission_purpose == "authentication_handoff" &&
+    end
+
+    def oidc_handoff_canceled?(ceremony, flow)
+      ceremony.admission_purpose == "authentication_handoff" &&
         ClientSessionLimitResolutionTransaction.exists?(
           oidc_authorization_transaction_id: ClientOidcAuthorizationTransaction.where(
             secret_sign_in_flow_id: flow.id,
           ).select(:id), state_id: ClientSessionLimitResolutionTransaction::CANCELLED,
         )
-      (ceremony.cancelled_at || oidc_canceled) ? "flow_canceled" : reason
     end
 
     def terminal_ceremony_matches?(ceremony, flow, credential)

@@ -247,6 +247,7 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
 
   private
 
+  # rubocop:disable Metrics/AbcSize -- This fixture walks the complete Base-to-Auth browser handoff.
   def app_oidc_auth_target!(base, base_host:)
     base.get("/sign", params: { ri: "jp" })
     csrf = Nokogiri::HTML(base.response.body).at_css('input[name="authenticity_token"]')["value"]
@@ -281,4 +282,5 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
     )
     URI.parse(result_payload.fetch("url"))
   end
+  # rubocop:enable Metrics/AbcSize
 end

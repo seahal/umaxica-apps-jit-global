@@ -46,7 +46,8 @@ Until the split happens, this repository still prepares the full fleet as one un
 ## Principles
 
 1. **Do not use incremental `bin/rails db:migrate` on a branch with in-progress table-rename
-   migrations.** Use `bin/rails db:migrate:reset` so every database is rebuilt from migrations.
+   migrations.** Prepare a newly created, owned isolated fleet with
+   `RAILS_ENV=test bin/rails db:test:prepare` so every database is rebuilt from migrations.
 2. **Do not write silent-skip helpers such as `rename_table_if_present`.** Use
    `rename_table_strict`, provided by `MigrationHelpers::SafeTableRename`.
 3. **Do not treat `db/*_structure.sql` files as proof of migration reconstruction.** Apply
@@ -65,14 +66,19 @@ tables across roughly 25 databases frequently violates that assumption:
 - Fixtures use current table names and cannot load into a partially renamed database, causing broad
   test failures.
 
-`bin/rails db:migrate:reset` performs drop, create, and migrate on every run, so intermediate state
-does not accumulate.
+The installed Rails `db:migrate` initializes an empty database from an available structure dump.
+That also imports migration version receipts without the business/reference rows produced by data
+migrations. Consequently, drop/create followed by ordinary migrate is not proof of reconstruction.
+The repository's `db:test:prepare` verifies the isolated database manifest and selected database
+names, then invokes `DatabaseTasks.migrate(skip_initialize: true)` for each selected writer. This
+executes migrations without importing dump receipts. Existing database contents are not reset.
 
 ## Commands
 
 ```bash
-bin/rails db:migrate:reset
-RAILS_ENV=test bin/rails db:migrate:reset
+# First create and register a new owned isolated fleet using the isolation tooling.
+# Supply POSTGRESQL_ISOLATED_TEST_MANIFEST and POSTGRESQL_TEST_PREPARE_DATABASES.
+RAILS_ENV=test bin/rails db:test:prepare
 
 bin/rails db:verify_no_schema_drift
 # Applies migrations to clean test databases and succeeds when the result matches

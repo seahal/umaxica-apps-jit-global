@@ -34,7 +34,7 @@ class OtpAdapterEmailCharacterizationTest < ActiveSupport::TestCase
   test "app email otp enqueues exactly one mail delivery job" do
     record = create_otp_email_record(:app, address: "characterization-app@example.com")
 
-    assert_enqueued_jobs 1, only: ActionMailer::MailDeliveryJob do
+    assert_enqueued_jobs 1, only: OtpMailDeliveryJob do
       OtpAdapter.for(surface: :app, channel: :email).deliver(record: record, otp_code: "123456")
     end
   end
@@ -74,22 +74,15 @@ class OtpAdapterEmailCharacterizationTest < ActiveSupport::TestCase
 
   test "records email enqueue failure without exposing recipient or otp content" do
     record = create_otp_email_record(:app, address: "characterization-failure@example.com")
-    delivery = Object.new
-    delivery.define_singleton_method(:deliver_later) do
-      raise Net::ReadTimeout, "provider timeout"
-    end
-    message = Object.new
-    message.define_singleton_method(:create) { delivery }
-    mailer = Object.new
-    mailer.define_singleton_method(:with) { |_| message }
 
-    assert_difference -> { Chronicle.where(action: "notification.delivery.email.enqueue_failed").count }, 1 do
-      assert_raises(Net::ReadTimeout) do
-        OtpEmailAdapter.new(mailer).deliver(
-          record: record,
-          otp_code: "987654",
-          purpose: :sign_in,
-        )
+    OtpMailDeliveryJob.queue_adapter.stub(:enqueue, ->(_job) { raise Net::ReadTimeout, "provider timeout" }) do
+      assert_difference -> { Chronicle.where(action: "notification.delivery.email.enqueue_failed").count }, 1 do
+        assert_raises(Net::ReadTimeout) do
+          OtpEmailAdapter.new(Email::App::OtpMailer).deliver(
+            record: record, otp_code: "987654", purpose: :sign_in,
+            auth_ceremony_session_ref: "1", auth_email_otp_generation: SecureRandom.uuid,
+          )
+        end
       end
     end
 

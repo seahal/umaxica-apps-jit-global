@@ -28,6 +28,7 @@ class Base::App::SecretPresentationsController < Base::App::ApplicationControlle
       checkpoint_version: nil,
     }
   rescue ClientSecretPresentationIssuer::AlreadyPresented
+    session[:inertia_clear_history] = true
     redirect_to(base_app_secret_issuance_path(@issuance.public_id), status: :see_other)
   rescue ClientSecretPresentationIssuer::PayloadUnavailable
     ClientSecretManualIssuanceInvalidator.call_for_payload_failure!(

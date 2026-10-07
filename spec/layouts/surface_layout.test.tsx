@@ -1,3 +1,4 @@
+import { router } from "@inertiajs/react";
 import { render as renderTree, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -12,6 +13,7 @@ import type { SurfaceChrome } from "@/types/inertia";
 // the styling it carries, which exact-markup assertions did not.
 vi.mock("@inertiajs/react", () => ({
   usePage: () => page,
+  router: { clearHistory: vi.fn() },
 }));
 
 vi.mock("@/components/chrome/CookieBanner", () => ({
@@ -61,7 +63,11 @@ const minimalChrome: SurfaceChrome = {
   copyright: "(c) Umaxica",
 };
 
-const page = { props: { chrome: minimalChrome, errors: {} } };
+const page: {
+  props: { chrome: SurfaceChrome; clear_history?: boolean; errors: Record<string, string> };
+} = {
+  props: { chrome: minimalChrome, errors: {} },
+};
 
 const render = (chrome: SurfaceChrome) => {
   page.props.chrome = chrome;
@@ -73,6 +79,7 @@ const render = (chrome: SurfaceChrome) => {
 };
 
 beforeEach(() => {
+  vi.mocked(router.clearHistory).mockClear();
   document.head.insertAdjacentHTML(
     "beforeend",
     '<meta name="ui-footer" content="Footer navigation"><meta name="ui-information" content="Information">',
@@ -80,6 +87,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   page.props.chrome = minimalChrome;
+  delete page.props.clear_history;
   document.documentElement.lang = "en";
   document
     .querySelectorAll('meta[name="ui-footer"], meta[name="ui-information"]')
@@ -104,6 +112,14 @@ describe("SurfaceLayout", () => {
     const main = screen.getByRole("main");
     expect(main.id).toBe("main");
     expect(within(main).getByText("page body")).toBeTruthy();
+  });
+
+  test("clears encrypted history when the server marks a terminal ceremony page", () => {
+    page.props.clear_history = true;
+
+    render(minimalChrome);
+
+    expect(router.clearHistory).toHaveBeenCalledTimes(1);
   });
 
   test("renders the brand, surface and copyright the server resolved", () => {

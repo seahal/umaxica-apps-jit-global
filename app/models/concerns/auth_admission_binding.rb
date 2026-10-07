@@ -27,68 +27,24 @@ module AuthAdmissionBinding
 
   class InvalidTransition < StandardError; end
 
-  def self.browser_digest(surface:, entry_ref:, nonce:)
-    raise ArgumentError, "browser nonce is invalid" unless nonce.is_a?(String)
-    raise ArgumentError, "browser nonce is required" if nonce.blank?
-    raise ArgumentError, "entry reference is invalid" unless entry_ref.is_a?(String)
-    raise ArgumentError, "entry reference is required" if entry_ref.blank?
+  class << self
+    public
 
-    Digest::SHA256.hexdigest("auth-admission:#{surface}:#{entry_ref}:#{nonce}")
-  end
+    def browser_digest(surface:, entry_ref:, nonce:)
+      raise ArgumentError, "browser nonce is invalid" unless nonce.is_a?(String)
+      raise ArgumentError, "browser nonce is required" if nonce.blank?
+      raise ArgumentError, "entry reference is invalid" unless entry_ref.is_a?(String)
+      raise ArgumentError, "entry reference is required" if entry_ref.blank?
 
-  included do
-    class_attribute :auth_admission_surface_name, instance_accessor: false
-    class_attribute :auth_admission_parent_classes, instance_accessor: false, default: {}.freeze
-    class_attribute :auth_admission_base_token_class, instance_accessor: false
-    class_attribute :auth_admission_session_class, instance_accessor: false
-
-    validates :entry_ref, presence: true, uniqueness: true
-    validates :purpose, presence: true
-    validates :base_browser_digest, presence: true, length: { is: 64 }
-    validates :expires_at, :created_at, :updated_at, presence: true
-    validate :validate_parent_shape
-    validate :validate_purpose_parent
-    validate :validate_base_token_requirement
-    validate :validate_auth_proof_pair
-    validate :validate_redemption_pair
-    validate :validate_terminal_exclusivity
-    before_update :reject_immutable_fact_changes
+      Digest::SHA256.hexdigest("auth-admission:#{surface}:#{entry_ref}:#{nonce}")
+    end
   end
 
   class_methods do
     public
 
-    def auth_admission_surface(surface = nil)
-      self.auth_admission_surface_name = surface.to_s if surface
-      auth_admission_surface_name
-    end
-
-    def configure_auth_admission_binding(surface:, sign_in_flow:, authorization_transaction:,
-                                         step_up_ceremony_transaction:, base_token:, auth_session:)
-      self.auth_admission_surface_name = surface.to_s
-      self.auth_admission_parent_classes = {
-        sign_in_flow: sign_in_flow,
-        authorization_transaction: authorization_transaction,
-        step_up_ceremony_transaction: step_up_ceremony_transaction,
-      }.freeze
-      self.auth_admission_base_token_class = base_token
-      self.auth_admission_session_class = auth_session
-    end
-
     def browser_digest(surface:, entry_ref:, nonce:)
       AuthAdmissionBinding.browser_digest(surface:, entry_ref:, nonce:)
-    end
-
-    def connection_owner
-      if self <= AppTicketRecord
-        AppTicketRecord
-      elsif self <= ComTicketRecord
-        ComTicketRecord
-      elsif self <= OrgTicketRecord
-        OrgTicketRecord
-      else
-        ActiveRecord::Base
-      end
     end
   end
 
@@ -132,33 +88,29 @@ module AuthAdmissionBinding
     retired_at.present?
   end
 
-  # Attaches one currently active, unadmitted Auth session and records a fresh
+  # Attaches one currently active Auth session without admitting this new purpose, and records a fresh
   # confirmation lookup reference. The binding row is locked before the Auth
   # session, matching the admission lock order.
-  def attach_auth_session!(auth_session:, confirmation_ref:, now: nil)
+  def attach_auth_session!(auth_session:, confirmation_ref:)
     require_uuid!(confirmation_ref, "confirmation reference")
     ensure_configured_session!(auth_session)
 
     writing_connection do
       with_lock do
-        decision_time = now || self.class.database_now
-        if attached?
-          return self if auth_ceremony_session_id == auth_session.id && self.confirmation_ref == confirmation_ref
-
-          raise InvalidTransition, "auth ceremony session is already attached"
-        end
-        raise InvalidTransition, "binding is not live" unless live?(now: decision_time)
-        raise InvalidTransition,
-              "binding proof is partial" if auth_ceremony_session_id.present? || self.confirmation_ref.present?
-
         auth_session.with_lock do
+          decision_time = self.class.database_now
+          raise InvalidTransition, "binding is not live" unless live?(now: decision_time)
+
+          if attached?
+            return self if auth_ceremony_session_id == auth_session.id && self.confirmation_ref == confirmation_ref
+
+            raise InvalidTransition, "auth ceremony session is already attached"
+          end
+          raise InvalidTransition,
+                "binding proof is partial" if auth_ceremony_session_id.present? || self.confirmation_ref.present?
+
           raise InvalidTransition,
                 "auth ceremony session is unavailable" unless auth_session.active?(now: decision_time)
-          raise InvalidTransition, "auth ceremony session is already admitted" if auth_session.admitted?
-
-          duplicate = self.class.where(auth_ceremony_session_id: auth_session.id).where.not(id: id).exists?
-          raise InvalidTransition, "auth ceremony session is already bound" if duplicate
-
           with_transition_write do
             update!(
               auth_ceremony_session_id: auth_session.id,
@@ -174,12 +126,12 @@ module AuthAdmissionBinding
   # Confirms the Base browser nonce after the Auth side has attached its
   # session. Confirmation is intentionally one-way and idempotent only for the
   # same durable binding state.
-  def confirm_base!(base_token:, browser_digest:, now: nil)
+  def confirm_base!(base_token:, browser_digest:)
     ensure_configured_token!(base_token) if base_token
 
     writing_connection do
       with_lock do
-        decision_time = now || self.class.database_now
+        decision_time = self.class.database_now
         if confirmed?
           return self if base_confirmed_at <= decision_time && base_token_id == base_token&.id &&
             base_browser_digest == browser_digest.to_s
@@ -199,13 +151,17 @@ module AuthAdmissionBinding
   # Marks the binding redeemed only after the Auth session has been rotated and
   # admitted. The original attached session may already be revoked by that
   # rotation; its identity remains part of the durable proof tuple.
-  def redeem!(auth_session:, admitted_auth_session:, now: nil)
+  def redeem!(auth_session:, admitted_auth_session:)
     ensure_configured_session!(auth_session)
     ensure_configured_session!(admitted_auth_session)
 
     writing_connection do
       with_lock do
-        decision_time = now || self.class.database_now
+        self.class.auth_admission_session_class.where(
+          id: [auth_session.id,
+               admitted_auth_session.id,],
+        ).order(:id).lock.load
+        decision_time = self.class.database_now
         if redeemed?
           return self if admitted_auth_ceremony_session_id == admitted_auth_session.id
 
@@ -234,10 +190,10 @@ module AuthAdmissionBinding
 
   # Expired or superseded unredeemed rows are retired explicitly before a new
   # binding is issued. Terminal facts are never cleared or rewritten.
-  def retire!(now: nil)
+  def retire!
     writing_connection do
       with_lock do
-        decision_time = now || self.class.database_now
+        decision_time = self.class.database_now
         return self if retired?
         raise InvalidTransition, "redeemed binding cannot be retired" if redeemed?
 
@@ -295,7 +251,11 @@ module AuthAdmissionBinding
 
   def validate_redemption_pair
     return if redeemed_at.blank? && admitted_auth_ceremony_session_id.blank?
-    return if redeemed_at.present? && admitted_auth_ceremony_session_id.present?
+
+    if redeemed_at.present? && admitted_auth_ceremony_session_id.present?
+      errors.add(:base, "Base confirmation is required for redemption") unless confirmed?
+      return
+    end
 
     errors.add(:base, "redemption timestamp and admitted session must be supplied together")
   end
@@ -317,12 +277,8 @@ module AuthAdmissionBinding
   end
 
   def require_uuid!(value, label)
-    UUIDTools::UUID.parse(value.to_s)
-  rescue NameError
-    unless value.to_s.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i)
-      raise InvalidTransition, "#{label} is invalid"
-    end
-  rescue StandardError
+    return if value.is_a?(String) && value.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN)
+
     raise InvalidTransition, "#{label} is invalid"
   end
 end

@@ -13,6 +13,7 @@ module Auth
         include ::SignAuthorityRedirect
         include ::SignSettingsTotpRegistration
         include ::AuthStepUpCeremonyContext
+        include ::AuthCeremonyAdmission
 
         include ::VerificationClient
 
@@ -23,6 +24,12 @@ module Auth
         before_action :require_totp_registration_context!, only: %i(new create)
 
         def new
+          if admission_reference_param.present?
+            return admit_or_render_sign_ceremony!(expected_intent: "credential_registration") do
+              render_invalid_admission_request!
+            end
+          end
+
           authorize!(ClientTotpCredential, to: :new?, context: { user: @step_up_ceremony_actor })
           if @step_up_ceremony_transaction.verified?
             return redirect_to(auth_app_settings_totps_handoff_path(ri: params[:ri]), status: :see_other)
@@ -45,6 +52,11 @@ module Auth
         end
 
         def create
+          if admission_reference_param.present?
+            apply_admission_transport_headers!
+            return redeem_admission_reference_and_redirect!(expected_intent: "credential_registration")
+          end
+
           authorize!(ClientTotpCredential, to: :create?, context: { user: @step_up_ceremony_actor })
           discard_legacy_totp_enrollment!
           @totp_enrollment = IdentityTotpEnrollmentQuery.call(
@@ -85,6 +97,12 @@ module Auth
 
         private
 
+        def auth_ceremony_entry_intent = "credential_registration"
+
+        def auth_step_up_ceremony_clean_url = new_auth_app_settings_totp_path(ri: params[:ri])
+
+        def auth_ceremony_admitted_action_url = auth_app_settings_totps_path(ri: params[:ri])
+
         def handle_failure
           @totp.errors.add(:first_token, t("sign.app.settings.totps.invalid_code"))
           render_totp_qrcode(@totp_enrollment.private_key)
@@ -96,6 +114,8 @@ module Auth
         end
 
         def require_totp_registration_context!
+          return if admission_reference_param.present?
+
           return unless load_registration_ceremony_context!
           return render_invalid_step_up_context! unless admitted_step_up_methods.include?(:totp)
           return if @step_up_ceremony_transaction.status == "pending" ||

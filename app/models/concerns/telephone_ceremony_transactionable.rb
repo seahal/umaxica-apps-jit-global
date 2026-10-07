@@ -9,6 +9,7 @@ module TelephoneCeremonyTransactionable
   STATUSES = [STATUS_PENDING, STATUS_CONSUMED].freeze
   RETENTION_PERIOD = 7.days
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     # rubocop:disable ThreadSafety/ClassAndModuleAttributes
     class_attribute :ceremony_surface_name, instance_accessor: false
@@ -97,6 +98,20 @@ module TelephoneCeremonyTransactionable
   end
 
   def consumed? = status == STATUS_CONSUMED
+
+  def consume_registration_result!
+    self.class.connection_owner.connected_to(role: :writing) do
+      with_lock do
+        now = self.class.database_now
+        unless operation == "registration" && status == STATUS_PENDING && !consumed_at && expires_at > now
+          raise IdentityTelephoneCeremony::Error, "registration receipt is unavailable"
+        end
+
+        update!(result_jti: SecureRandom.uuid, consumed_at: now, status: STATUS_CONSUMED)
+        self
+      end
+    end
+  end
 
   def consume_result!(result_jti:, consumed_at: Time.current)
     self.class.connection_owner.connected_to(role: :writing) do

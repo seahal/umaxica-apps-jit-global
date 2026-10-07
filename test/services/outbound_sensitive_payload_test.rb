@@ -42,4 +42,32 @@ class OutboundSensitivePayloadTest < ActiveSupport::TestCase
     assert_equal "verification-token", OutboundSensitivePayload.decrypt_email_verification_token(token)
     assert_not_equal "verification-token", token
   end
+
+  test "registration OTP SMS uses version two and preserves its original ceremony tuple" do
+    %w(app com).each do |surface|
+      binding = [surface, "credential_registration", SecureRandom.uuid, "contact", "1"]
+      token = OutboundSensitivePayload.encrypt_sms_delivery(
+        to: "+819012345678", title: "Verification", body: "Your code is 123456", otp_binding: binding,
+      )
+      payload = OutboundSensitivePayload.decrypt_sms_delivery(token)
+
+      assert_equal 2, payload.fetch(:version)
+      assert_equal binding, payload.fetch(:otp_binding)
+      assert_equal "+819012345678", payload.fetch(:to)
+      assert_equal "Your code is 123456", payload.fetch(:body)
+    end
+  end
+
+  test "registration OTP SMS rejects missing malformed and mixed original ceremony bindings" do
+    valid = ["app", "credential_registration", SecureRandom.uuid, "contact", "1"]
+
+    [valid.take(4), valid + ["extra"], valid.dup.tap { |tuple| tuple[2] = "other" },
+     valid.dup.tap { |tuple| tuple[1] = "unknown" }, valid.dup.tap { |tuple| tuple[4] = "01" },].each do |binding|
+      assert_raises(ArgumentError) do
+        OutboundSensitivePayload.encrypt_sms_delivery(
+          to: "+819012345678", title: "Verification", body: "Your code is 123456", otp_binding: binding,
+        )
+      end
+    end
+  end
 end

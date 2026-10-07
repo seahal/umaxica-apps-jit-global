@@ -49,6 +49,16 @@ module Base
 
           def verification_scope = "settings_email"
 
+          def step_up_requirement(scope:)
+            unless scope == "settings_email"
+              raise StepUpRequirement::Invalid, "registration operation scope mismatch"
+            end
+
+            contact = @user_email || ClientEmail.new(user: current_client)
+            ClientEmailPolicy.new(contact, user: current_client)
+              .credential_registration_requirement(token: current_session_token)
+          end
+
           def pending_email_status_id = ClientEmailStatus::UNVERIFIED
 
           def verified_email_status_id = ClientEmailStatus::VERIFIED

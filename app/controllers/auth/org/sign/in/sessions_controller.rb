@@ -204,13 +204,15 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
 
     OrgTicketRecord.connected_to(role: :writing) do
       OperatorToken.transaction do
-        OperatorToken.find_from_signed_refs(refs).each do |token|
-          next unless token && allowed_to?(:destroy?, token, context: { user: staff })
-          next if token.id == current_session&.id || token.public_id == current_session_public_id # Skip current session
+        OperatorToken.find_from_signed_refs(refs).each do |selected_token|
+          next unless selected_token && allowed_to?(:destroy?, selected_token, context: { user: staff })
+          # Skip the current session.
+          next if selected_token.id == current_session&.id ||
+            selected_token.public_id == current_session_public_id
 
           AuthenticationSelectedSessionRevoker.call(
             owner: staff,
-            token: token,
+            token: selected_token,
             current_token: current_session,
             current_session_public_id: current_session_public_id,
             reason: "session_limit_selected_revoke",

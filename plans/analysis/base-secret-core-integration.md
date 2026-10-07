@@ -218,3 +218,11 @@ contents. Record executed results with full SHA, dirty state, and timezone.
 Rollback is a reviewed local code change preserving newer security defenses.
 An app Secret rebuild cannot restore discarded old credential data. Infrastructure
 cache/routing checks and browser completion remain separate from local test success.
+
+## Reconciliation after `two.md` (2026-10-06)
+
+The analysis remains a historical dependency map, but its implementation gates were resolved for
+the Rails scope: Base/RP boundaries, identity-first Secret issuance/claim, audit reconciliation,
+retention, and disposable DDL checks are delivered. Core edge ownership, real-provider callbacks,
+external notification delivery and production deployment remain explicitly unverified. No new
+refresh or browser-edge protocol was introduced beyond the accepted current contract.

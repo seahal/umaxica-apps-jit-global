@@ -128,3 +128,11 @@ with its own policy before the staff realm carries production traffic. Open, not
 
 `CORE_BROWSER_JWT_COOKIE_ENABLED` must remain unset or false in production until the route table,
 request stripping, response stripping, and health blocking above are deployed and verified.
+
+## Delivered reconciliation (2026-10-06)
+
+The Rails application now enforces the corresponding RP and unsafe-request boundary, including
+explicit cookie names, refresh ordering, CSRF, Origin and Fetch Metadata checks. The zero-cookie
+edge itself is not present in this repository and remains NOT VERIFIED until the external proxy,
+Cloudflare/TanStack route ownership and production-like browser checks are recorded. Do not enable
+the feature flag as a fallback for missing edge enforcement.

@@ -4,6 +4,216 @@
 require "test_helper"
 
 class SignOtpCeremonyTest < ActiveSupport::TestCase
+  [
+    [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
+    [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
+    [Visitor, VisitorEmail, :visitor_id, VisitorSignUpFlow, :com, :email],
+    [Visitor, VisitorTelephone, :visitor_id, VisitorSignUpFlow, :com, :telephone],
+  ].each do |owner_class, contact_class, owner_key, flow_class, surface, channel|
+    test "#{surface} #{channel} signup failure budget survives another candidate flow and browser" do
+      destination =
+        (channel == :email) ? "budget-#{SecureRandom.hex(8)}@example.test" :
+               "+8190#{SecureRandom.random_number(100_000_000).to_s.rjust(8, "0")}"
+      flows =
+        2.times.map do |index|
+          owner = owner_class.create!(
+            status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
+          )
+          contact = contact_class.create!(
+            owner_key => owner.id, :confirm_policy => "1",
+            ((channel == :email) ? :address : :number) => destination,
+          )
+          private_key = ROTP::Base32.random_base32
+          contact.store_otp(private_key, 1, (contact_class.database_now + 10.minutes).to_i)
+          now = flow_class.database_now
+          flow = flow_class.create!(
+            principal_id: owner.id, status_id: flow_class::STATUS_MODEL::STARTED, step: "start",
+            nonce_digest: flow_class.digest_nonce("budget-browser-#{index}"), issued_at: now,
+            expires_at: now + 15.minutes, entry_method: channel.to_s,
+            pending_contact_type: channel.to_s, pending_contact_id: contact.id,
+          )
+          code = ROTP::HOTP.new(private_key).at(1).to_s
+          recorded = SignUpOtpChallengeRecorder.call(flow: flow, record: contact, channel: channel, code: code)
+
+          assert recorded
+          [flow, contact, code]
+        end
+      first_flow, first_contact, first_code = flows.first
+      wrong_code = first_code.end_with?("0") ? first_code.sub(/0\z/, "1") : first_code.sub(/.\z/, "0")
+      original_contact = first_contact.reload.attributes
+      original_flow = first_flow.reload.attributes
+      # This is the external connection boundary, not a mocked OTP comparison or ceremony outcome.
+      Umaxica::Valkey::Connection.stub(:new, ->(**) { raise Umaxica::Valkey::Unavailable, "dependency unavailable" }) do
+        [first_code, wrong_code].each do |submitted|
+          assert_raises(Umaxica::Valkey::Unavailable) do
+            SignOtpCeremony.verify!(
+              purpose: :sign_up, surface: surface, channel: channel, subject: first_flow,
+              destination: destination, code: submitted, session_nonce: first_flow.public_id,
+            )
+          end
+
+          assert_equal original_contact, first_contact.reload.attributes
+          assert_equal original_flow, first_flow.reload.attributes
+        end
+      end
+      5.times do
+        result = SignOtpCeremony.verify!(
+          purpose: :sign_up, surface: surface, channel: channel, subject: first_flow,
+          destination: destination, code: wrong_code, session_nonce: first_flow.public_id,
+        )
+
+        assert_not result.success?
+      end
+      assert_predicate first_contact.reload, :locked?
+      replacement_flow, replacement_contact, replacement_code = flows.last
+      retained_otp = replacement_contact.reload.get_otp
+      result = SignOtpCeremony.verify!(
+        purpose: :sign_up, surface: surface, channel: channel, subject: replacement_flow,
+        destination: destination, code: replacement_code, session_nonce: replacement_flow.public_id,
+      )
+
+      assert_not result.success?
+      assert_equal :locked, result.status
+      assert_equal retained_otp, replacement_contact.reload.get_otp
+      assert_not replacement_contact.binding_effective?
+    end
+  end
+
+  test "released signup Contact bindings cannot consume retained OTP in either channel or realm" do
+    [
+      [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
+      [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
+      [Visitor, VisitorEmail, :visitor_id, VisitorSignUpFlow, :com, :email],
+      [Visitor, VisitorTelephone, :visitor_id, VisitorSignUpFlow, :com, :telephone],
+    ].each do |owner_class, contact_class, owner_key, flow_class, surface, channel|
+      owner = owner_class.create!(
+        status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
+      )
+      contact = contact_class.create!(
+        owner_key => owner.id, :confirm_policy => "1",
+        ((channel == :email) ? :address : :number) =>
+          ((channel == :email) ? "released-signup@example.test" : "+819012345675"),
+      )
+      contact.finalize_binding!
+      contact.release_binding!
+      now = flow_class.database_now
+      flow = flow_class.create!(
+        principal_id: owner.id, status_id: flow_class::STATUS_MODEL::STARTED, step: "start",
+        nonce_digest: flow_class.digest_nonce("released-contact-signup"), issued_at: now,
+        expires_at: now + 15.minutes, entry_method: channel.to_s,
+        pending_contact_type: channel.to_s, pending_contact_id: contact.id,
+      )
+      private_key = ROTP::Base32.random_base32
+      contact.store_otp(private_key, 1, (contact_class.database_now + 10.minutes).to_i)
+      retained_otp = contact.reload.get_otp
+      code = ROTP::HOTP.new(private_key).at(1).to_s
+      result = SignOtpCeremony.verify!(
+        purpose: :sign_up, surface: surface, channel: channel, subject: flow,
+        code: code, session_nonce: flow.public_id,
+      )
+
+      assert_not result.success?
+      assert_equal :inactive_candidate, result.status
+      assert_equal retained_otp, contact.reload.get_otp
+      assert_predicate contact, :binding_released?
+      issued = SignOtpCeremony.issue!(
+        purpose: :sign_up, surface: surface, channel: channel, subject: flow, session_nonce: flow.public_id,
+      )
+
+      assert_not issued.success?
+      assert_equal :inactive_candidate, issued.status
+      assert_equal retained_otp, contact.reload.get_otp
+    end
+  end
+
+  test "signup OTP refuses another Identity's candidate in both channels and realms without consuming its proof" do
+    [
+      [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
+      [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
+      [Visitor, VisitorEmail, :visitor_id, VisitorSignUpFlow, :com, :email],
+      [Visitor, VisitorTelephone, :visitor_id, VisitorSignUpFlow, :com, :telephone],
+    ].each do |owner_class, contact_class, owner_key, flow_class, surface, channel|
+      owner = owner_class.create!(
+        status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
+      )
+      foreign = owner_class.create!
+      contact = contact_class.create!(
+        owner_key => owner.id, :confirm_policy => "1",
+        ((channel == :email) ? :address : :number) =>
+          ((channel == :email) ? "wrong-owner@example.test" : "+819012345676"),
+      )
+      now = flow_class.database_now
+      flow = flow_class.create!(
+        principal_id: foreign.id, status_id: flow_class::STATUS_MODEL::STARTED, step: "start",
+        nonce_digest: flow_class.digest_nonce("wrong-owner-signup"), issued_at: now,
+        expires_at: now + 15.minutes, entry_method: channel.to_s,
+        pending_contact_type: channel.to_s, pending_contact_id: contact.id,
+      )
+      private_key = ROTP::Base32.random_base32
+      contact.store_otp(private_key, 1, (contact_class.database_now + 10.minutes).to_i)
+      retained_otp = contact.reload.get_otp
+      code = ROTP::HOTP.new(private_key).at(1).to_s
+      assert_raises(ArgumentError) do
+        SignOtpCeremony.issue!(
+          purpose: :sign_up, surface: surface, channel: channel, subject: flow, session_nonce: flow.public_id,
+        )
+      end
+      assert_raises(ArgumentError) do
+        SignOtpCeremony.verify!(
+          purpose: :sign_up, surface: surface, channel: channel, subject: flow,
+          code: code, session_nonce: flow.public_id,
+        )
+      end
+      assert_equal retained_otp, contact.reload.get_otp
+      assert_equal 0, contact.otp_attempts_count
+      assert_not_predicate flow.reload, :sign_up_terminal?
+    end
+  end
+
+  test "terminal or expired signup cannot issue or consume an OTP in either email realm" do
+    [
+      [ClientEmail, ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP, :user, clients(:one), ClientSignUpFlow],
+      [VisitorEmail, VisitorEmailStatus::UNVERIFIED, :visitor, Visitor.create!, VisitorSignUpFlow],
+    ].each do |email_class, status, owner_key, actor, flow_class|
+      [:cancelled, :expired].each do |condition|
+        status_key = (email_class == ClientEmail) ? :user_email_status_id : :visitor_email_status_id
+        email = email_class.create!(
+          owner_key => actor, :address => "terminal-#{condition}-#{SecureRandom.hex(6)}@example.test",
+          :confirm_policy => "1", status_key => status,
+        )
+        decision_time = flow_class.database_now
+        flow = flow_class.create!(
+          principal_id: actor.id, status_id: flow_class::STATUS_MODEL::STARTED, step: "start",
+          nonce_digest: flow_class.digest_nonce("terminal-signup-nonce"),
+          issued_at: decision_time - 1.hour, expires_at: decision_time + 15.minutes,
+          entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+        )
+        private_key = ROTP::Base32.random_base32
+        email.store_otp(private_key, 1, (email_class.database_now + 10.minutes).to_i)
+        code = ROTP::HOTP.new(private_key).at(1).to_s
+        if condition == :cancelled
+          flow.cancel_sign_up!
+        else
+          flow.update!(expires_at: decision_time - Rational(1, 1_000_000))
+        end
+        retained_otp = email.reload.get_otp
+        surface = (email_class == ClientEmail) ? :app : :com
+        issued = SignOtpCeremony.issue!(
+          purpose: :sign_up, surface: surface, channel: :email, subject: flow,
+          destination: email.address, session_nonce: flow.public_id,
+        )
+        verified = SignOtpCeremony.verify!(
+          purpose: :sign_up, surface: surface, channel: :email, subject: flow,
+          destination: email.address, code: code, session_nonce: flow.public_id,
+        )
+
+        assert_equal [false, :inactive_flow, false, :inactive_flow],
+                     [issued.success?, issued.status, verified.success?, verified.status]
+        assert_equal retained_otp, email.reload.get_otp
+      end
+    end
+  end
+
   test "authentication and confirmation OTPs share one finite lifetime bound" do
     assert_equal 10.minutes, CommonOtpPolicy::MAX_OOB_TTL
     assert_equal CommonOtpPolicy::MAX_OOB_TTL, CommonOtpPolicy::AUTHENTICATION_TTL
@@ -11,7 +221,13 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "rejects an app email sign-up ticket with no bound contact record" do
-    flow = create_email_flow
+    flow = ClientSignUpFlow.create!(
+      principal_id: Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP).id,
+      status_id: ClientSignUpFlowStatus::STARTED, step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.hex(32)),
+      issued_at: ClientSignUpFlow.database_now, expires_at: ClientSignUpFlow.database_now + 15.minutes,
+      entry_method: "email", pending_contact_type: "email", pending_contact_id: nil,
+    )
     result = SignOtpCeremony.issue!(
       purpose: :sign_up,
       surface: :app,
@@ -26,8 +242,18 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "binds an issued OTP to the ticket email destination and consumes it once" do
-    email = create_verified_client_email("sign-otp@example.test")
-    flow = create_email_flow(pending_contact_id: email.id)
+    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    email = ClientEmail.create!(
+      user: owner, address: "sign-otp@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    )
+    flow = ClientSignUpFlow.create!(
+      principal_id: email.user_id,
+      status_id: ClientSignUpFlowStatus::STARTED, step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.hex(32)),
+      issued_at: ClientSignUpFlow.database_now, expires_at: ClientSignUpFlow.database_now + 15.minutes,
+      entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+    )
     delivery = nil
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**arguments| delivery = arguments }
@@ -76,8 +302,18 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "verify! refuses a code aimed at a destination the ticket is not bound to" do
-    email = create_verified_client_email("sign-otp-mismatch@example.test")
-    flow = create_email_flow(pending_contact_id: email.id)
+    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    email = ClientEmail.create!(
+      user: owner, address: "sign-otp-mismatch@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    )
+    flow = ClientSignUpFlow.create!(
+      principal_id: email.user_id,
+      status_id: ClientSignUpFlowStatus::STARTED, step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.hex(32)),
+      issued_at: ClientSignUpFlow.database_now, expires_at: ClientSignUpFlow.database_now + 15.minutes,
+      entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+    )
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**| nil }
 
@@ -104,8 +340,18 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "verify! treats malformed code lengths as invalid input" do
-    email = create_verified_client_email("sign-otp-malformed@example.test")
-    flow = create_email_flow(pending_contact_id: email.id)
+    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    email = ClientEmail.create!(
+      user: owner, address: "sign-otp-malformed@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    )
+    flow = ClientSignUpFlow.create!(
+      principal_id: email.user_id,
+      status_id: ClientSignUpFlowStatus::STARTED, step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.hex(32)),
+      issued_at: ClientSignUpFlow.database_now, expires_at: ClientSignUpFlow.database_now + 15.minutes,
+      entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+    )
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**| nil }
 
@@ -131,8 +377,18 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "issuing a new sign-up OTP does not reset failed attempts" do
-    email = create_verified_client_email("sign-otp-attempts@example.test")
-    flow = create_email_flow(pending_contact_id: email.id)
+    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    email = ClientEmail.create!(
+      user: owner, address: "sign-otp-attempts@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    )
+    flow = ClientSignUpFlow.create!(
+      principal_id: email.user_id,
+      status_id: ClientSignUpFlowStatus::STARTED, step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.hex(32)),
+      issued_at: ClientSignUpFlow.database_now, expires_at: ClientSignUpFlow.database_now + 15.minutes,
+      entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+    )
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**| nil }
 
@@ -175,8 +431,18 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "does not verify or consume a code under a different sign-up session nonce" do
-    email = create_verified_client_email("sign-otp-session-binding@example.test")
-    flow = create_email_flow(pending_contact_id: email.id)
+    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    email = ClientEmail.create!(
+      user: owner, address: "sign-otp-session-binding@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    )
+    flow = ClientSignUpFlow.create!(
+      principal_id: email.user_id,
+      status_id: ClientSignUpFlowStatus::STARTED, step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.hex(32)),
+      issued_at: ClientSignUpFlow.database_now, expires_at: ClientSignUpFlow.database_now + 15.minutes,
+      entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+    )
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**| nil }
 
@@ -199,7 +465,13 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "issue! refuses a channel the sign-up ticket is not waiting on" do
-    flow = create_email_flow
+    flow = ClientSignUpFlow.create!(
+      principal_id: Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP).id,
+      status_id: ClientSignUpFlowStatus::STARTED, step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.hex(32)),
+      issued_at: ClientSignUpFlow.database_now, expires_at: ClientSignUpFlow.database_now + 15.minutes,
+      entry_method: "email", pending_contact_type: "email", pending_contact_id: nil,
+    )
 
     error =
       assert_raises(ArgumentError) do
@@ -209,51 +481,49 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     assert_equal "OTP channel does not match sign-up ticket", error.message
   end
 
-  test "issue! rechecks the resend cooldown after acquiring the record lock" do
-    cooldown_checks = 0
+  test "issue! refuses persisted resend cooldown without replacing OTP or delivering" do
     delivery_attempted = false
-    record = Object.new
-    record.define_singleton_method(:locked?) { false }
-    record.define_singleton_method(:otp_cooldown_active?) do
-      cooldown_checks += 1
-      cooldown_checks > 1
-    end
-    record.define_singleton_method(:with_lock) { |&block| block.call }
-    record.define_singleton_method(:store_otp) do |*_arguments|
-      raise RuntimeError, "the locked cooldown must refuse issuance before storing an OTP"
-    end
-
+    record = ClientEmail.create!(
+      user: Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP),
+      address: "signup-cooldown@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    )
+    flow = ClientSignUpFlow.create!(
+      principal_id: record.user_id, status_id: ClientSignUpFlowStatus::STARTED, step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce("signup-cooldown-nonce"),
+      issued_at: ClientSignUpFlow.database_now, expires_at: 15.minutes.from_now,
+      entry_method: "email", pending_contact_type: "email", pending_contact_id: record.id,
+    )
+    record.store_otp(ROTP::Base32.random_base32, 1, (ClientEmail.database_now + 10.minutes).to_i)
+    retained_otp = record.reload.get_otp
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**| delivery_attempted = true }
-
-    fake_subject = Object.new
-    fake_subject.define_singleton_method(:public_id) { "fake-flow" }
-    ceremony = SignOtpCeremony.new(
-      purpose: :sign_up,
-      surface: :app,
-      channel: :email,
-      subject: fake_subject,
-      destination: "sign-otp@example.test",
-      session_nonce: "fake-flow",
-    )
-    ceremony.define_singleton_method(:validate_scope!) { nil }
-    ceremony.define_singleton_method(:bound_record) { record }
-    ceremony.define_singleton_method(:destination_matches?) { |_| true }
-
     OtpAdapter.stub(:for, adapter) do
-      result = ceremony.issue!
+      result = SignOtpCeremony.issue!(
+        purpose: :sign_up, surface: :app, channel: :email, subject: flow,
+        destination: record.address, session_nonce: flow.public_id,
+      )
 
       assert_not result.success?
       assert_equal :rate_limited, result.status
     end
-
-    assert_equal 2, cooldown_checks
+    assert_equal retained_otp, record.reload.get_otp
     assert_not delivery_attempted
   end
 
   test "sign-up OTP expiry stays within the ten-minute confirmation bound" do
-    email = create_verified_client_email("sign-otp-expiry@example.test")
-    flow = create_email_flow(pending_contact_id: email.id)
+    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    email = ClientEmail.create!(
+      user: owner, address: "sign-otp-expiry@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    )
+    flow = ClientSignUpFlow.create!(
+      principal_id: email.user_id,
+      status_id: ClientSignUpFlowStatus::STARTED, step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.hex(32)),
+      issued_at: ClientSignUpFlow.database_now, expires_at: ClientSignUpFlow.database_now + 15.minutes,
+      entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+    )
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**| nil }
 
@@ -272,8 +542,18 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
 
   test "sign-up OTP remains valid immediately before its ten-minute expiry" do
     issue_time = Time.zone.local(2026, 9, 22, 12, 0, 0)
-    email = create_verified_client_email("sign-otp-expiry-before@example.test")
-    flow = create_email_flow(pending_contact_id: email.id)
+    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    email = ClientEmail.create!(
+      user: owner, address: "sign-otp-expiry-before@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    )
+    flow = ClientSignUpFlow.create!(
+      principal_id: email.user_id,
+      status_id: ClientSignUpFlowStatus::STARTED, step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.hex(32)),
+      issued_at: ClientSignUpFlow.database_now, expires_at: ClientSignUpFlow.database_now + 15.minutes,
+      entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+    )
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**| nil }
 
@@ -304,8 +584,18 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
 
   test "sign-up OTP is rejected at its ten-minute expiry boundary" do
     issue_time = Time.zone.local(2026, 9, 22, 12, 0, 0)
-    email = create_verified_client_email("sign-otp-expiry-boundary@example.test")
-    flow = create_email_flow(pending_contact_id: email.id)
+    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    email = ClientEmail.create!(
+      user: owner, address: "sign-otp-expiry-boundary@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    )
+    flow = ClientSignUpFlow.create!(
+      principal_id: email.user_id,
+      status_id: ClientSignUpFlowStatus::STARTED, step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.hex(32)),
+      issued_at: ClientSignUpFlow.database_now, expires_at: ClientSignUpFlow.database_now + 15.minutes,
+      entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+    )
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**| nil }
 
@@ -335,8 +625,18 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "issue uses one writer database clock for OTP expiry and sent timestamp" do
-    email = create_verified_client_email("sign-otp-database-clock@example.test")
-    flow = create_email_flow(pending_contact_id: email.id)
+    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    email = ClientEmail.create!(
+      user: owner, address: "sign-otp-database-clock@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    )
+    flow = ClientSignUpFlow.create!(
+      principal_id: email.user_id,
+      status_id: ClientSignUpFlowStatus::STARTED, step: "start",
+      nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.hex(32)),
+      issued_at: ClientSignUpFlow.database_now, expires_at: ClientSignUpFlow.database_now + 15.minutes,
+      entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+    )
     database_now = 1.second.from_now
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**| nil }
@@ -356,31 +656,5 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
 
     assert_equal database_now.to_i, email.otp_last_sent_at.to_i
     assert_equal (database_now + SignOtpCeremony::OTP_EXPIRATION).to_i, email.otp_expires_at.to_i
-  end
-
-  private
-
-  def create_email_flow(pending_contact_id: nil)
-    ClientSignUpFlow.create!(
-      principal_id: 123,
-      status_id: ClientSignUpFlowStatus::STARTED,
-      step: "start",
-      nonce_digest: ClientSignUpFlow.digest_nonce("sign-otp-nonce-#{SecureRandom.hex(4)}"),
-      issued_at: Time.current,
-      expires_at: 15.minutes.from_now,
-      entry_method: "email",
-      pending_contact_type: "email",
-      pending_contact_id: pending_contact_id,
-    )
-  end
-
-  def create_verified_client_email(address)
-    ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
-    ClientEmail.create!(
-      user: clients(:one),
-      address: address,
-      confirm_policy: "1",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
   end
 end

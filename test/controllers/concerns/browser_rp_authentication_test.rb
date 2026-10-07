@@ -56,7 +56,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
 
   test "a valid RP access cookie authenticates without reading refresh authority" do
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
-    OidcTokenExchangeCoordinator.stub(:call, ->(**) { raise "refresh must not run" }) do
+    OidcTokenExchangeCoordinator.stub(:call, ->(**) { raise RuntimeError, "refresh must not run" }) do
       get :show, params: { required: "1" }
     end
 
@@ -141,7 +141,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = "expired"
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = @refresh_token
 
-    OidcTokenExchangeCoordinator.stub(:call, ->(**) { raise "refresh must not run" }) do
+    OidcTokenExchangeCoordinator.stub(:call, ->(**) { raise RuntimeError, "refresh must not run" }) do
       @request.set_header("HTTP_ORIGIN", "https://attacker.example")
       @request.set_header("HTTP_SEC_FETCH_SITE", "cross-site")
       patch :update

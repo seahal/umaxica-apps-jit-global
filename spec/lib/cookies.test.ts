@@ -2,7 +2,7 @@
 //
 // The application never writes these cookies, so what is covered here is the read: the value the
 // document carries, the shapes that mean "absent", and the failure the API's own absence is.
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { hasRecordedCookieConsent, readCookie, watchCookie } from "@/lib/cookies";
 
@@ -13,10 +13,6 @@ beforeEach(() => {
       document.cookie = `${key}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
     }
   }
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
 });
 
 describe("readCookie", () => {

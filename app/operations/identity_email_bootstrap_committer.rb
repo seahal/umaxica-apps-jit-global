@@ -44,22 +44,34 @@ class IdentityEmailBootstrapCommitter
     end
 
     def validate_binding!(actor, token, transaction, credential)
-      case actor
-      when Client
-        return if token.is_a?(ClientToken) && transaction.is_a?(ClientStepUpCeremonyTransaction) &&
-          credential.is_a?(ClientEmail) && token.user_id == actor.id && credential.user_id == actor.id &&
-          credential.user_email_status_id == ClientEmailStatus::VERIFIED
-      when Visitor
-        return if token.is_a?(VisitorToken) && transaction.is_a?(VisitorStepUpCeremonyTransaction) &&
-          credential.is_a?(VisitorEmail) && token.visitor_id == actor.id && credential.visitor_id == actor.id &&
-          credential.visitor_email_status_id == VisitorEmailStatus::VERIFIED
-      when Operator
-        return if token.is_a?(OperatorToken) && transaction.is_a?(OperatorStepUpCeremonyTransaction) &&
-          credential.is_a?(OperatorEmail) && token.staff_id == actor.id && credential.staff_id == actor.id &&
-          credential.staff_email_status_id == OperatorEmailStatus::VERIFIED
-      end
+      valid =
+        case actor
+        when Client then client_email_binding_valid?(actor, token, transaction, credential)
+        when Visitor then visitor_email_binding_valid?(actor, token, transaction, credential)
+        when Operator then operator_email_binding_valid?(actor, token, transaction, credential)
+        else false
+        end
+      return if valid
 
       refuse!("email bootstrap binding mismatch", "session_binding_mismatch")
+    end
+
+    def client_email_binding_valid?(actor, token, transaction, credential)
+      token.is_a?(ClientToken) && transaction.is_a?(ClientStepUpCeremonyTransaction) &&
+        credential.is_a?(ClientEmail) && token.user_id == actor.id && credential.user_id == actor.id &&
+        credential.user_email_status_id == ClientEmailStatus::VERIFIED
+    end
+
+    def visitor_email_binding_valid?(actor, token, transaction, credential)
+      token.is_a?(VisitorToken) && transaction.is_a?(VisitorStepUpCeremonyTransaction) &&
+        credential.is_a?(VisitorEmail) && token.visitor_id == actor.id && credential.visitor_id == actor.id &&
+        credential.visitor_email_status_id == VisitorEmailStatus::VERIFIED
+    end
+
+    def operator_email_binding_valid?(actor, token, transaction, credential)
+      token.is_a?(OperatorToken) && transaction.is_a?(OperatorStepUpCeremonyTransaction) &&
+        credential.is_a?(OperatorEmail) && token.staff_id == actor.id && credential.staff_id == actor.id &&
+        credential.staff_email_status_id == OperatorEmailStatus::VERIFIED
     end
 
     def validate_ticket!(actor, token, transaction, now)

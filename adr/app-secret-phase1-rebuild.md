@@ -118,3 +118,11 @@ when generated uniformly. It is a high-entropy saved credential, not a short OTP
 This calculation does not prove RNG approval, delivery safety or deployment
 conformance. Look-up secrets are not phishing-resistant, and possession does not
 guarantee permanent account recovery.
+
+## Delivered reconciliation (2026-10-06)
+
+The Phase 1 rebuild is delivered through the D-92–D-102 contract. App Secrets are Client-owned,
+server-generated Base58 values stored only as Argon2id hashes. Identity-first sign-in removes the
+global `lookup_digest`; claim, consumption, delivery reattempt, retention, purge and audit facts
+are bound to the issuance and operation. The old persistence shape is superseded; old-schema data
+was verified in a disposable reconstruction and no legacy credential was recreated.

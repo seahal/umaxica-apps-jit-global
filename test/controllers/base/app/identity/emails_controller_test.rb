@@ -28,6 +28,11 @@ class Base::App::Identity::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :see_other
     assert_equal ClientEmailStatus::DELETED, @email.reload.user_email_status_id
     assert_predicate @email, :binding_released?
+    audit = ClientContactAuditOutbox.find_by!(contact_ref: @email.public_id, event_name: "released")
+
+    assert_equal @client.public_id, audit.owner_ref
+    assert_equal @client.public_id, audit.actor_ref
+    assert_nil audit.acknowledged_at
   end
 
   test "destroy without fresh step-up is refused and keeps the email" do

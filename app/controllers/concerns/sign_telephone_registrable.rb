@@ -15,25 +15,11 @@ module SignTelephoneRegistrable
 
     check_telephone_verification_rate_limit!(number)
 
-    # Compute digest once and reuse for both lookup and stale-record cleanup.
-    digest = IdentifierBlindIndex.bidx_for_telephone(number)
-    existing_user_telephone = digest.present? ? user.client_telephones.find_by(number_digest: digest) : nil
-
-    @user_telephone = existing_user_telephone || user.client_telephones.build(raw_number: number)
-    @user_telephone.raw_number = number if existing_user_telephone
+    @user_telephone = user.client_telephones.build(raw_number: number)
     @user_telephone.user_telephone_status_id = ClientTelephoneStatus::UNVERIFIED
     if auto_accept_confirmations
       @user_telephone.confirm_policy = true
       @user_telephone.confirm_using_mfa = true
-    end
-
-    # Delete any stale unverified records for this number before creating a new one.
-    if digest.present? && existing_user_telephone.blank?
-      ClientTelephone.where(
-        number_digest: digest,
-        user_id: user.id,
-        user_telephone_status_id: ClientTelephoneStatus::UNVERIFIED,
-      ).destroy_all
     end
 
     otp_number = generate_otp_attributes(@user_telephone)
@@ -58,7 +44,12 @@ module SignTelephoneRegistrable
       return :session_expired
     end
 
-    result = verify_otp_code_and_consume(@user_telephone, submitted_code)
+    result = verify_otp_code_and_consume(
+      @user_telephone, submitted_code,
+      verification_scope: { surface: :app,
+                            purpose: :credential_registration,
+                            channel: :telephone, },
+    )
 
     unless result[:success]
       if @user_telephone.locked?

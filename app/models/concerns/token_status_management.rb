@@ -13,6 +13,7 @@ module TokenStatusManagement
 
   VALID_STATUSES = [STATUS_ACTIVE, STATUS_EXPIRED, STATUS_RESTRICTED, STATUS_REVOKED].freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     scope :session_inventory, ->(now = Time.current) { currently_usable_at(now) }
     scope :active_status,
@@ -74,7 +75,7 @@ module TokenStatusManagement
   # Concrete token models provide step_up_authority_binding. Only explicit lifecycle changes
   # touch these rows; normal requests do not acquire additional credential or ceremony locks.
   def revoke_step_up_authority!(now: nil, except_transaction_ref: nil)
-    session_model, transaction_model, ceremony_model, token_key = step_up_authority_binding
+    session_model, transaction_model, ceremony_model, _token_key = step_up_authority_binding
     self.class.connection_class_for_self.connected_to(role: :writing) do
       with_lock do
         decision_time = now || self.class.database_now
@@ -88,8 +89,7 @@ module TokenStatusManagement
           last_step_up_full_reauthentication: nil, last_step_up_resource_ref: nil,
           last_step_up_tenant_ref: nil,
         )
-        record = session_model.where(token_key => id).lock.first
-        record&.update!(discard_at: decision_time)
+        session_model.revoke_for_token!(token: self)
         transactions = transaction_model.where(session_ref: public_id, status: %w(pending verified))
         transactions = transactions.where.not(transaction_id: except_transaction_ref) if except_transaction_ref.present?
         transactions.order(:id).lock.each do |ceremony_transaction|

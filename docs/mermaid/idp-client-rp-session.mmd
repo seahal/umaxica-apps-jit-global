@@ -10,7 +10,9 @@ stateDiagram-v2
     revoked --> retired: retirement_pending? clock predicate
     retired --> [*]
     note right of active
+        RP session belongs to one stable ClientDeviceSession.
+        Rotation validates the refresh credential independently of access.
         Labels are predicates; root/refresh expiry can also deactivate.
         Unknown max JWT expiry prevents proven retirement.
-        last_logout_status is an outcome, not lifecycle.
+        Sibling RP rows are not synchronously revoked by logout.
     end note

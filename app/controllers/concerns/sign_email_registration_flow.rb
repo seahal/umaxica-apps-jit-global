@@ -95,13 +95,13 @@ module SignEmailRegistrationFlow
 
     return unless complete_registration_verification!(submitted_code)
 
-    session.delete(registration_email_session_key)
     finish_email_ceremony!(
       surface: "app",
       actor: email_registration_target_user,
       session_ref: current_session_public_id,
       candidate: @user_email,
     )
+    session.delete(registration_email_session_key)
     redirect_to_surface_url(
       after_email_registration_verified_path,
       notice: t("sign.app.registration.email.update.success"),
@@ -111,28 +111,38 @@ module SignEmailRegistrationFlow
   def resend
     @user_email = current_registration_email
 
-    unless resendable_registration_email?
+    unless valid_registration_email_session?
       reset_email_registration_flow!
       redirect_to(new_registration_path_with_notice)
       return
     end
 
-    if @user_email.otp_cooldown_active?
-      redirect_to(
-        email_registration_edit_path_with_flash(:alert, t("otp.resend.too_soon")),
-      )
-      return
-    end
-
-    otp_code = generate_otp_for(@user_email)
-    send_verification_email(otp_code)
-
-    redirect_to(
-      email_registration_edit_path_with_flash(:notice, t("otp.resend.sent")),
+    result = ContactRegistrationOtpResendIssuer.call!(
+      actor: email_registration_target_user, token: current_session_token,
+      contact: @user_email, transaction: registration_email_otp_transaction,
+      channel: :email, browser_nonce: base_admission_browser_nonce,
     )
+    case result
+    when ContactRegistrationOtpResendIssuer::Issuance
+      deliver_registration_email_otp!(code: result.code, transaction: result.transaction)
+    when :cooldown, :locked, :unavailable
+      # A retained proof must remain available to the original verification retry.
+    else
+      raise IdentityEmailCeremonyContract::Error, "unsupported registration resend result"
+    end
+    redirect_to(after_email_registration_started_path)
   end
 
   private
+
+  def deliver_registration_email_otp!(code:, transaction:)
+    OtpAdapter.for(surface: :app, channel: :email).deliver(
+      record: @user_email, otp_code: code, purpose: "credential_registration",
+      public_id: @user_email.public_id, verification_token: nil,
+      contact_ceremony_transaction_ref: transaction.transaction_id,
+      contact_otp_counter: @user_email.credential_registration_otp_context.fetch("counter"),
+    )
+  end
 
   # The registration screens, as the including surface renders them. A surface that has moved them
   # to Inertia overrides these two methods and every path above follows.
@@ -174,30 +184,31 @@ module SignEmailRegistrationFlow
   end
 
   def current_registration_email
-    user_email = ClientEmail.find_by(public_id: session[registration_email_session_key])
-    return user_email if user_email.present?
-
-    target_user = email_registration_target_user
-    return nil unless target_user
-
-    user_email =
-      target_user
-        .client_emails
-        .where(user_email_status_id: pending_email_status_ids)
-        .order(created_at: :desc)
-        .first
-
-    if user_email
-      session[registration_email_session_key] = user_email.public_id
-    end
-
-    user_email
+    email_registration_target_user.client_emails.find_by(public_id: session[registration_email_session_key])
   end
 
   def valid_registration_email_session?
-    @user_email.present? &&
-      !@user_email.otp_expired? &&
-      pending_email_status?(@user_email)
+    return false unless @user_email && @user_email.user_id == email_registration_target_user.id
+
+    proof = @user_email.credential_registration_otp_context
+    flow = registration_email_otp_transaction
+    nonce = base_admission_browser_nonce
+    return false unless proof && flow && nonce && flow.expires_at > flow.class.database_now &&
+      proof.fetch("session_ref") == current_session_token.public_id &&
+      proof.fetch("browser_digest") == AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref: flow.transaction_id, nonce: nonce,
+      )
+
+    deadline = proof.fetch(proof.fetch("verified_at") ? "result_expires_at" : "expires_at")
+    now = @user_email.class.database_now
+    Time.iso8601(deadline) > now && (proof.fetch("verified_at") || @user_email.otp_expires_at > now)
+  end
+
+  def registration_email_otp_transaction
+    reference = @user_email&.credential_registration_otp_context&.fetch("flow_ref")
+    return unless reference
+
+    ClientEmailCeremonyTransaction.find_by(transaction_id: reference)
   end
 
   def resendable_registration_email?
@@ -207,19 +218,19 @@ module SignEmailRegistrationFlow
   end
 
   def complete_registration_verification!(submitted_code)
-    result =
-      complete_email_verification!(
-        @user_email.public_id, submitted_code,
-        email_registration_verification_token,
-        commit_verified_status: false,
-      )
+    result = ContactRegistrationOtpVerificationCommitter.call!(
+      actor: email_registration_target_user, token: current_session_token, contact: @user_email,
+      transaction: registration_email_otp_transaction, channel: :email,
+      browser_nonce: base_admission_browser_nonce, code: submitted_code,
+    )
 
     if result == :locked
       reset_email_registration_flow!
       flash[:alert] = t("sign.app.registration.email.update.attempts_exceeded")
       redirect_to(new_email_registration_path)
       return false
-    elsif !result
+    elsif result != :verified
+      @user_email.errors.add(:pass_code, t("sign.app.registration.email.update.invalid_code"))
       render_email_registration_edit(status: :unprocessable_content)
       return false
     end

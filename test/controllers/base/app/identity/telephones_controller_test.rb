@@ -144,6 +144,11 @@ class Base::App::Identity::TelephonesControllerTest < ActionDispatch::Integratio
     assert_redirected_to base_app_identity_telephones_path(ri: "jp")
     assert_equal ClientTelephoneStatus::DELETED, telephone.reload.user_identity_telephone_status_id
     assert_predicate telephone, :binding_released?
+    audit = ClientContactAuditOutbox.find_by!(contact_ref: telephone.public_id, event_name: "released")
+
+    assert_equal @user.public_id, audit.owner_ref
+    assert_equal @user.public_id, audit.actor_ref
+    assert_nil audit.acknowledged_at
   end
 
   test "destroy may remove the last contact method when a passkey remains" do

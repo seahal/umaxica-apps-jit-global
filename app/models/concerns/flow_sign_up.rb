@@ -7,10 +7,6 @@ module FlowSignUp
   include FlowBase
   include SignFlowStatusBacked
 
-  included do
-    cycle_status_column :status_id
-  end
-
   class_methods do
     def sign_up_status_ids_for(*status_names)
       status_names.filter_map do |status_name|

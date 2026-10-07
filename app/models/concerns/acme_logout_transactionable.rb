@@ -35,6 +35,7 @@ module AcmeLogoutTransactionable
     STEP_FINALIZED,
   ].freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     include ::PublicId
 
@@ -199,8 +200,13 @@ module AcmeLogoutTransactionable
   def completed_steps_match_workflow
     return if workflow.blank?
 
-    allowed_steps = (browser_rp_workflow? ? self.class.browser_rp_step_sequence : self.class.step_sequence_for(origin_surface)) +
-      [STEP_FINALIZED]
+    step_sequence =
+      if browser_rp_workflow?
+        self.class.browser_rp_step_sequence
+      else
+        self.class.step_sequence_for(origin_surface)
+      end
+    allowed_steps = step_sequence + [STEP_FINALIZED]
     invalid = completed_steps - allowed_steps
     return if invalid.empty?
 

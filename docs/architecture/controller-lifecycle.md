@@ -40,6 +40,14 @@ surface authentication-aware controller lifecycle.
 Surface-local `ApplicationController` inherits directly from `ActionController::Base` and owns the
 authentication-aware request lifecycle.
 
+Base additionally separates its protocol Authority from its self-RP application lifecycle.
+`Base::{App,Com,Org}::AuthorityController` explicitly inherits `::ApplicationController`, not the
+same-namespace self-RP controller. It declares its own root-session lifecycle and standard CSRF
+protection. The leading `::` is security-relevant: an unqualified parent resolves to the local
+RP base and inherits RP authentication and refresh callbacks alongside root authentication.
+The self-RP `Base::{App,Com,Org}::ApplicationController` retains Browser RP concerns and no root
+authentication concern. See `adr/base-auth-ceremony-and-seven-rp-boundary.md`.
+
 Authentication modes that are more specific than this base split, including bare endpoints,
 guest-only flows, optional access, and step-up requirements, must be declared and audited explicitly
 by concrete controller/action metadata and policy. They must not be inferred from legacy

@@ -87,11 +87,16 @@ class IdentityAuthorityInversionGuardTest < ActiveSupport::TestCase
     assert_source_includes concern, "acme_social_login_completion_supported?"
   end
 
-  test "sign social completion form transports only signed result to acme" do
-    form = file_content("app/views/auth/shared/social_completion.html.erb")
+  test "social completion uses a receiver-local POST carrying only the opaque result reference" do
+    form = file_content("app/views/base/shared/result_continuation.html.erb")
+    receiver = file_content("app/controllers/base/app/social/authentication/completions_controller.rb")
 
-    assert_source_includes form, "form_with url: completion_url, method: :post"
-    assert_source_includes form, "hidden_field_tag :social_ceremony_result, result_token"
+    assert_source_includes form, "url: action_url, method: :post, local: true"
+    assert_source_includes form, "hidden_field_tag :result_ref, result_ref"
+    assert_source_includes receiver, 'render "base/shared/result_continuation"'
+    assert_source_includes receiver, "SocialCeremonyResultStore.new.read(reference: result_reference)"
+    assert_source_includes receiver, "IdentitySocialCeremonyFinalCommitter.call!"
+    assert_no_match(/\bsocial_ceremony_result\b/, form)
     assert_no_match(/\baccess_token\b/, form)
     assert_no_match(/\brefresh_token\b/, form)
     assert_no_match(/\breturn_to\b/, form)

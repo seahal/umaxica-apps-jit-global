@@ -14,4 +14,13 @@ stateDiagram-v2
         Labels are overlapping predicates, not an enum.
         store_otp preserves an active lock.
         clear_otp(false) can leave a locked expired OTP.
+        Signup issuance and verification require the candidate owner
+        to match the locked Ticket principal, rechecked under the contact lock.
+        Released binding facts refuse signup issuance and verification without OTP mutation.
+        Admissible signup verification also checks the shared destination failure budget.
+        Recreated candidates, flows and browsers cannot reset that separate budget.
+        Sign-in resend state binds Auth continuity and immutable Contact/owner facts.
+        Released Contacts refuse rotation; dummy state cannot adopt a later binding.
+        Accepted email receipt, valid-state resend and well-formed verification
+        use a shared 100ms response floor; OTP and budget deadlines are unchanged.
     end note

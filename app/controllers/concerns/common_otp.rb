@@ -126,17 +126,31 @@ module CommonOtp
   # first and clears the OTP later can accept the same correct code in two concurrent requests.
   # Failed attempts are incremented under that same boundary so a successful peer cannot be
   # followed by a stale invalid request that mutates the already-consumed record.
-  def verify_otp_code_and_consume(record, submitted_code)
+  def verify_otp_code_and_consume(record, submitted_code, verification_scope:)
     result = nil
     record.with_lock do
       result = verify_otp_code(record, submitted_code)
+      valid_comparison = result[:success]
+      if result[:success] || result[:error] == "Invalid OTP code"
+        # Reloaded contact data under this lock, not a pre-lock caller snapshot, owns the budget key.
+        digest =
+          case verification_scope.fetch(:channel)
+          when :email then record.address_digest
+          when :telephone then record.number_digest
+          else raise ArgumentError, "unsupported OTP channel"
+          end
+        budget_status = OtpVerificationFailureBudget.new.verify!(
+          **verification_scope, destination_digest: digest, valid: valid_comparison,
+        )
+        result = { success: false, error: :locked } if budget_status == :locked
+      end
       if result[:success]
         if !block_given? || yield(record)
           clear_otp(record)
         else
           result = { success: false, error: :consumption_rejected }
         end
-      else
+      elsif !valid_comparison
         increment_otp_attempts!(record)
       end
     end
@@ -179,6 +193,12 @@ module CommonOtp
     elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
     remaining = target_seconds - elapsed
     sleep(remaining) if remaining.positive?
+  end
+
+  def ensure_email_auth_verification_elapsed(start_time, code:)
+    return unless code.is_a?(String) && code.match?(/\A[0-9]{6}\z/)
+
+    ensure_min_elapsed(start_time, CommonOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
   end
 
   # ============================================================

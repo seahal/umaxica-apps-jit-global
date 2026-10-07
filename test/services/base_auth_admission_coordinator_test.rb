@@ -6,11 +6,80 @@ require "test_helper"
 class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
   fixtures :clients, :client_tokens
 
+  test "expired binding restart preserves its live parent and browser ownership in every realm" do
+    %w(app com org).each do |surface|
+      browser_nonce = SecureRandom.urlsafe_base64(32)
+      first = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: surface, intent: "sign_in", base_browser_nonce: browser_nonce, base_token: nil,
+      )
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: surface, reference: first.reference)
+      parent_deadline = first.transaction.expires_at
+      # Move only the admission deadline; the original parent retains its authorized lifetime.
+      binding.update_columns(expires_at: binding.class.database_now - 1.second)
+      successor = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: surface, intent: "sign_in", restart_of: first.reference,
+        base_browser_nonce: browser_nonce, base_token: nil,
+      )
+
+      assert_equal first.transaction.id, successor.transaction.id
+      assert_equal parent_deadline, successor.transaction.reload.expires_at
+      assert_not_equal first.reference, successor.reference
+      assert_predicate binding.reload, :retired?
+      replacement = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: surface, reference: successor.reference,
+      )
+
+      assert_predicate replacement, :live?
+      assert_operator replacement.expires_at, :<=, parent_deadline
+    end
+  end
+
+  test "handoff retry refuses another browser nonce without adopting its existing parent in every realm" do
+    [
+      %w(app core-app client),
+      %w(com core-com visitor),
+      %w(org core-org operator),
+    ].each do |surface, client_id, realm|
+      transaction = OidcAuthorizationTransactionCoordinator.issue!(
+        surface: surface, intent: "sign_in", params: {
+          response_type: "code",
+          client_id: client_id,
+          redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(realm).first,
+          code_challenge: "a" * 43,
+          code_challenge_method: "S256",
+          scope: "openid",
+          state: SecureRandom.urlsafe_base64(32),
+          nonce: SecureRandom.urlsafe_base64(32),
+        },
+      ).transaction
+      nonce = SecureRandom.urlsafe_base64(32)
+      first = BaseAuthAdmissionCoordinator.issue_handoff!(
+        transaction: transaction, base_browser_nonce: nonce, base_token: nil,
+      )
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: surface, reference: first.reference)
+      deadline = binding.expires_at
+      assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+        BaseAuthAdmissionCoordinator.issue_handoff!(
+          transaction: transaction, base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+        )
+      end
+
+      assert_nil binding.reload.retired_at
+      assert_nil binding.redeemed_at
+      same_browser = BaseAuthAdmissionCoordinator.issue_handoff!(
+        transaction: transaction, base_browser_nonce: nonce, base_token: nil,
+      )
+
+      assert_equal first.reference, same_browser.reference
+      assert_equal deadline, binding.reload.expires_at
+    end
+  end
+
   test "registration and bootstrap admissions retain their distinct authoritative purpose" do
     base_token = client_tokens(:one)
     %w(bootstrap credential_registration credential_change).each do |purpose|
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
-        actor_ref: "actor", session_ref: "session", required_scope: "settings_totp",
+        actor_ref: base_token.user.public_id, session_ref: base_token.public_id, required_scope: "settings_totp",
         required_aal: "none", allowed_methods: ["totp"], purpose: purpose,
       )
       issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
@@ -43,9 +112,43 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
-  test "step-up admission resolves only its purpose-bound pending transaction" do
+  test "step-up admission refuses substituted actor session and token binding before consuming its entry" do
+    token = client_tokens(:one)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
-      actor_ref: "actor", session_ref: "session", required_scope: "settings_birthdate",
+      actor_ref: token.user.public_id, session_ref: token.public_id,
+      required_scope: "settings_birthdate", required_aal: "none", allowed_methods: ["passkey"],
+    )
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction:, base_browser_nonce: "test-browser-nonce", base_token: token,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: token)
+    store = Valkey::AuthState::OpaqueAdmissionStore.new
+    original = store.read_reference!(reference: issuance.reference)
+    { actor_ref: clients(:two).public_id,
+      session_ref: "foreign-session",
+      token_binding: "foreign-token",
+      require_session_binding: false, }.each do |field, replacement|
+      authorized = transaction[field]
+      transaction.update_columns(field => replacement)
+
+      assert_raises(BaseAuthAdmissionCoordinator::Denied, field.to_s) do
+        BaseAuthAdmissionCoordinator.consume_entry_reference!(
+          reference: issuance.reference, surface: "app", expected_intent: "step_up",
+          binding:, raw_auth_sid: raw_sid,
+        )
+      end
+
+      assert_equal original, store.read_reference!(reference: issuance.reference)
+      assert_nil binding.reload.redeemed_at
+      transaction.update_columns(field => authorized)
+    end
+  end
+
+  test "step-up admission resolves only its purpose-bound pending transaction" do
+    token = client_tokens(:one)
+    transaction = ClientStepUpCeremonyTransaction.create_transaction!(
+      actor_ref: token.user.public_id, session_ref: token.public_id, required_scope: "settings_birthdate",
       required_aal: "none", allowed_methods: ["passkey"],
     )
     issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
@@ -78,6 +181,38 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
         payload: payload, surface: "app", expected_intent: "step_up",
       )
     end
+  end
+
+  test "redeemed step-up result retains its original browser binding after admission expiry" do
+    token = client_tokens(:one)
+    nonce = SecureRandom.urlsafe_base64(32)
+    transaction = ClientStepUpCeremonyTransaction.create_transaction!(
+      actor_ref: token.user.public_id, session_ref: token.public_id, required_scope: "settings_birthdate",
+      required_aal: "none", allowed_methods: ["passkey"],
+    )
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction:, base_browser_nonce: nonce, base_token: token,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    auth, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: token, base_browser_nonce: nonce)
+    admitted, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", previous_raw_sid: raw_sid,
+      step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    binding.redeem!(auth_session: auth, admitted_auth_session: admitted)
+    binding.update_columns(expires_at: binding.class.database_now - 1.second)
+
+    assert_equal binding, BaseAuthAdmissionCoordinator.validate_result_browser_binding!(
+      transaction:, surface: "app", base_browser_nonce: nonce, base_token: token,
+    )
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.validate_result_browser_binding!(
+        transaction:, surface: "app", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: token,
+      )
+    end
+
+    assert_predicate binding.reload, :redeemed?
+    assert_nil token.reload.last_step_up_at
   end
 
   test "step-up admission is not classified as a local sign-in entry" do
@@ -175,6 +310,29 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
         binding:, raw_auth_sid: raw_sid,
       )
     end
+  end
+
+  test "OIDC intent substitution does not consume the original sign-in admission" do
+    transaction = issue_transaction!
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction:, base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.consume_entry_reference!(
+        reference: issuance.reference, surface: "app", expected_intent: "sign_up",
+        binding:, raw_auth_sid: raw_sid,
+      )
+    end
+    payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: issuance.reference, surface: "app", expected_intent: "sign_in",
+      binding:, raw_auth_sid: raw_sid,
+    )
+
+    assert_equal transaction.transaction_id, payload.fetch("subject_ref")
+    assert_nil binding.reload.redeemed_at
   end
 
   test "local entry consume returns the payload once for the issuing surface" do

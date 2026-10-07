@@ -20,6 +20,7 @@ module SignOrgNormalPasskeyCeremony
   include ::SessionLimitGate
   include ::AuthenticationModeSwitchGuard
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     declare_authentication_mode! :guest
 

@@ -13,7 +13,10 @@ module EnforcementRecoveryCeremonyCookie
   end
 
   def recovery_ceremony_cookie_options
-    authentication_cookie_service.auth_cookie_options.merge(expires: EnforcementRecoveryCeremonyRecordable::TTL.from_now)
+    CoreCookieOptions.for(
+      surface: CoreSurface.current(request), request: request, same_site: :strict, path: "/", domain: false,
+      expires: EnforcementRecoveryCeremonyRecordable::TTL.from_now,
+    )
   end
 
   def write_recovery_ceremony_cookie!(ceremony)
@@ -28,6 +31,9 @@ module EnforcementRecoveryCeremonyCookie
   end
 
   def clear_recovery_ceremony_cookie!
-    cookies.delete(recovery_ceremony_cookie_name, authentication_cookie_service.auth_cookie_deletion_options)
+    options = CoreCookieOptions.for(
+      surface: CoreSurface.current(request), request: request, same_site: :strict, path: "/", domain: false,
+    ).except(:expires, :httponly)
+    cookies.delete(recovery_ceremony_cookie_name, options)
   end
 end

@@ -18,7 +18,7 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
   fixtures :operators, :operator_tokens, :clients
 
   setup do
-    @host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! @host
     @operator = operators(:one)
     @granter = operators(:two)
@@ -38,10 +38,18 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
     @passkey = @operator.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = AuthenticationToken.encode(
+    access = AuthenticationToken.encode(
       @operator, host: @host, session_public_id: @token.public_id, resource_type: "operator",
                  jwt_issuer_id: "surface:BASE_ORG",
     )
+    installed = cookies.merge(
+      "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(access)}",
+      URI.parse("https://#{@host}/"),
+    )
+
+    assert_equal ["#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(access)}"], installed
+
+    install_base_browser_rp_credentials!(surface: "org", host: @host, actor: @operator, token: @token)
     @session_headers = { "Host" => @host, "Client-Agent" => "Mozilla/5.0" }.freeze
     @mutations = {
       support: [
@@ -89,6 +97,10 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
         when "enforcement_case_apply" then "/support/app/enforcement_cases/new"
         end
       requirement = StepUpRequirement.new(
+        step_up_required: true, phishing_resistant_required: false,
+        user_verification_required: false, full_reauthentication_required: false,
+        ttl: VerificationBase::STEP_UP_TTL, actor_ref: @operator.public_id,
+        resource_ref: nil, tenant_ref: nil,
         scope: scope, allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:org",
         session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
       )
@@ -96,7 +108,7 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
         actor: @operator, token: @token, requirement: requirement, return_to: return_to,
       ).transaction
       transaction.record_verification!(
-        method: "passkey", aal: "aal1", phishing_resistant: true,
+        method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: false,
         verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
       )
       ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
@@ -161,6 +173,10 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
   test "a request without Fetch Metadata but with the page's CSRF token is accepted" do
     scope = "support_session_revoke"
     requirement = StepUpRequirement.new(
+      step_up_required: true, phishing_resistant_required: false,
+      user_verification_required: false, full_reauthentication_required: false,
+      ttl: VerificationBase::STEP_UP_TTL, actor_ref: @operator.public_id,
+      resource_ref: nil, tenant_ref: nil,
       scope: scope, allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:org",
       session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
     )
@@ -169,7 +185,7 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
       return_to: "/support/clients/#{@client.public_id}/revocations/new",
     ).transaction
     transaction.record_verification!(
-      method: "passkey", aal: "aal1", phishing_resistant: true,
+      method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: false,
       verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
     )
     ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(

@@ -2,11 +2,28 @@
 # frozen_string_literal: true
 
 class OtpTelephoneAdapter < OtpAdapter
-  def deliver(record:, otp_code:, message_style: :default, **)
+  def initialize(surface: nil)
+    super()
+    @surface = surface
+  end
+
+  def deliver(record:, otp_code:, message_style: :default, purpose: nil, public_id: nil,
+              sign_up_flow_ref: nil, sign_up_otp_counter: nil,
+              contact_ceremony_transaction_ref: nil, contact_otp_counter: nil, **)
+    binding = SignUpOtpDeliveryBindingValue.for_email(
+      purpose: purpose, surface: @surface, sign_up_flow_ref: sign_up_flow_ref,
+      public_id: public_id, sign_up_otp_counter: sign_up_otp_counter,
+    )
+    registration_binding = ContactRegistrationOtpDeliveryBindingValue.for_email(
+      purpose: purpose.to_s, surface: @surface.to_s,
+      contact_ceremony_transaction_ref: contact_ceremony_transaction_ref,
+      public_id: public_id, contact_otp_counter: contact_otp_counter,
+    )
+    delivery_params = { to: record.number, title: sms_title, body: sms_body(otp_code, message_style) }
+    delivery_params[:otp_binding] = binding.to_a if binding
+    delivery_params[:otp_binding] = registration_binding.to_a if registration_binding
     OutboundSms.deliver_later(
-      to: record.number,
-      title: sms_title,
-      body: sms_body(otp_code, message_style),
+      **delivery_params,
     )
   end
 

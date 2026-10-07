@@ -46,6 +46,15 @@ class OperatorSignInFlow < OrgTicketRecord
   include FlowSignIn
   include LocalAuthenticationResultDelivery
 
+  cycle_status_column :state_id
+  before_validation :assign_default_state_id
+  # SignFlow disables required belongs_to validation, so state presence stays explicit.
+  # rubocop:disable Rails/RedundantPresenceValidationOnBelongsTo
+  validates :state_id, presence: true,
+                       inclusion: { in: ->(record) { record.class::STATE_IDS } }
+  # rubocop:enable Rails/RedundantPresenceValidationOnBelongsTo
+  validate :completed_state_has_completed_at
+
   STATE_MODEL = OperatorSignInFlowState
   STATES = {
     "PRIMARY_PENDING" => STATE_MODEL::PRIMARY_PENDING,

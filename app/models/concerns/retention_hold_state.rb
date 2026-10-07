@@ -7,6 +7,7 @@ module RetentionHoldState
   HOLD_KINDS = %w(legal_hold).freeze
   REASON_CODES = %w(legal_hold security_investigation billing_dispute abuse_investigation court_order other).freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     include PublicId
     include Retainable

@@ -48,11 +48,10 @@ module BaseBrowserRpTestHelper
 
     access_token, refresh_token = @base_browser_rp_credentials.fetch(key)
     cookie_jar.merge(
-      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access_token)}",
-      URI.parse("https://#{host}/"),
-    )
-    cookie_jar.merge(
-      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(refresh_token)}",
+      [
+        "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access_token)}",
+        "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(refresh_token)}",
+      ],
       URI.parse("https://#{host}/"),
     )
   end

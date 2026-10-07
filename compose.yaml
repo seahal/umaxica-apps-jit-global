@@ -309,8 +309,8 @@ services:
     user: root
     # The image default (`local-config.yaml`) keeps every chunk forever, which
     # adr/traces-and-metrics-routing-via-alloy.md treats as a misconfiguration
-    # for a development volume. The repository config carries the 24h retention
-    # that matches Tempo and Prometheus, so it replaces the packaged one.
+    # for a development volume. The repository config carries a bounded 14-day
+    # retention (Tempo and Prometheus stay at 24h), so it replaces the packaged one.
     command: "-config.file=/etc/loki/loki.yaml"
     volumes:
       - "./podman/loki/loki.yaml:/etc/loki/loki.yaml:ro,z"

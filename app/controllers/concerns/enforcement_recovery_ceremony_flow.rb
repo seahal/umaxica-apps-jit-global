@@ -65,7 +65,12 @@ module EnforcementRecoveryCeremonyFlow
     return render_invalid_recovery_otp(started_at) \
       unless recovery_subject_eligible?(subject) && recovery_email_verified?(email)
 
-    result = verify_otp_code_and_consume(email, params[:pass_code])
+    result = verify_otp_code_and_consume(
+      email, params[:pass_code],
+      verification_scope: { surface: recovery_surface,
+                            purpose: :enforcement_recovery,
+                            channel: :email, },
+    )
     unless result[:success]
       return render_invalid_recovery_otp(started_at)
     end

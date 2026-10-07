@@ -4,6 +4,7 @@
 module IdentityCeremonyCandidateRecord
   extend ActiveSupport::Concern
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     scope :active_at, ->(time) { where(arel_table[:expires_at].gt(time), consumed_at: nil) }
 

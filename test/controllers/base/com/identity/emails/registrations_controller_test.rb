@@ -15,7 +15,8 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     https!
     @host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     host! @host
-    @visitor = visitors(:reserved_visitor)
+    # Nontransactional multi-database cases retain roots; avoid reusing their sequence-owned identities.
+    @visitor = Visitor.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000)
     @token = VisitorToken.create!(
       visitor: @visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
@@ -83,6 +84,30 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
 
     assert_response :success
     assert_nil session[:com_settings_email_registration_public_id]
+  end
+
+  test "shared settings budget refuses correct OTP without finalizing or consuming the pending binding" do
+    post base_com_identity_emails_registration_url(ri: "jp", host: @host),
+         params: { visitor_email: { raw_address: "shared-settings-#{SecureRandom.hex(8)}@example.test" } },
+         headers: @headers
+    pending = @visitor.visitor_emails.find_by!(public_id: session[:com_settings_email_registration_public_id])
+    otp = pending.get_otp
+    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+    5.times do
+      OtpVerificationFailureBudget.new.verify!(
+        surface: :com, purpose: :credential_registration, channel: :email,
+        destination_digest: pending.address_digest, valid: false,
+      )
+    end
+    patch base_com_identity_emails_registration_url(ri: "jp", host: @host),
+          params: { visitor_email: { pass_code: code } }, headers: @headers
+
+    assert_response :unprocessable_content
+    assert_equal otp, pending.reload.get_otp
+    assert_nil pending.binding_finalized_at
+    assert_nil pending.binding_released_at
+    assert_not pending.locked?
+    assert_equal 0, pending.otp_attempts_count
   end
 
   test "edit redirects back to new when no registration is in progress" do
@@ -162,7 +187,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     assert_equal freshness_before, @token.reload.last_step_up_at
   end
 
-  test "update discards the pending registration once the attempt limit locks it" do
+  test "update refuses locked registration while retaining its original candidate and flow" do
     post base_com_identity_emails_registration_url(ri: "jp", host: @host),
          params: { visitor_email: { raw_address: "com_reg_locked@example.com" } }, headers: @headers
     pending_public_id = session[:com_settings_email_registration_public_id]
@@ -175,11 +200,72 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
             params: { visitor_email: { pass_code: wrong_code } }, headers: @headers
     end
 
-    assert_redirected_to new_base_com_identity_emails_registration_path(ri: "jp")
-    assert_nil VisitorEmail.find_by(public_id: pending_public_id)
+    assert_response :unprocessable_content
+    assert_equal pending_public_id, session[:com_settings_email_registration_public_id]
+    assert_equal VisitorEmailStatus::UNVERIFIED, pending.reload.visitor_email_status_id
+    assert_equal OtpLockable::MAX_OTP_ATTEMPTS, pending.otp_attempts_count
+    assert_not pending.binding_effective?
+    assert_predicate pending, :locked?
+    flow = VisitorEmailCeremonyTransaction.find_by!(
+      transaction_id: pending.credential_registration_otp_context.fetch("flow_ref"),
+    )
+
+    assert_equal "pending", flow.status
+    assert_nil flow.consumed_at
+    assert_nil pending.credential_registration_otp_context.fetch("verified_at")
+    assert_not VisitorContactAuditOutbox.exists?(operation_ref: flow.transaction_id)
+  end
+
+  test "separate settings starts for the same email preserve the earlier candidate and OTP counter" do
+    post base_com_identity_emails_registration_url(ri: "jp", host: @host),
+         params: { visitor_email: { raw_address: "independent-com-candidates@example.test" } }, headers: @headers
+    first = VisitorEmail.find_by!(public_id: session[:com_settings_email_registration_public_id])
+    counter = first.otp_counter
+    post base_com_identity_emails_registration_url(ri: "jp", host: @host),
+         params: { visitor_email: { raw_address: "independent-com-candidates@example.test" } }, headers: @headers
+    second = VisitorEmail.find_by!(public_id: session[:com_settings_email_registration_public_id])
+
+    assert_response :found
+    assert_not_equal first.id, second.id
+    assert VisitorEmail.exists?(first.id)
+    assert_equal first.address_digest, second.address_digest
+    assert_equal counter, first.reload.otp_counter
+    assert_not first.binding_effective?
+    assert_not second.binding_effective?
+  end
+
+  test "email replacement keeps the old binding until OTP and commits release and finalization intents together" do
+    previous = @visitor.visitor_emails.create!(
+      address: "previous-com-binding@example.test", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+      confirm_policy: "1",
+    )
+    previous.finalize_binding!
+    post base_com_identity_emails_registration_url(ri: "jp", host: @host),
+         params: { visitor_email: { raw_address: "replacement-com-binding@example.test" } }, headers: @headers
+    pending = VisitorEmail.find_by!(public_id: session[:com_settings_email_registration_public_id])
+    otp = pending.get_otp
+    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+
+    assert_predicate previous.reload, :binding_effective?
+    assert_not pending.reload.binding_effective?
+    operation_ref = pending.credential_registration_otp_context.fetch("flow_ref")
+
+    assert_not VisitorContactAuditOutbox.exists?(operation_ref: operation_ref)
+    patch base_com_identity_emails_registration_url(ri: "jp", host: @host),
+          params: { visitor_email: { pass_code: code } }, headers: @headers
+
+    assert_response :redirect
+    assert_predicate previous.reload, :binding_released?
+    assert_predicate pending.reload, :binding_effective?
+    assert_equal [pending.id], @visitor.visitor_emails.effective_binding.pluck(:id)
+    assert_equal [[previous.public_id, "released"], [pending.public_id, "finalized"]],
+                 VisitorContactAuditOutbox.where(operation_ref: operation_ref).order(:id)
+                   .pluck(:contact_ref, :event_name)
   end
 
   test "update verifies the address and returns to the identity page on the correct code" do
+    assert_equal [@token.id], VisitorToken.not_revoked.where(visitor_id: @visitor.id, rotated_at: nil).pluck(:id),
+                 "the owning visitor must have only the setup root before allocating a competing browser"
     other_token = VisitorToken.create!(visitor: @visitor)
     other_requirement = StepUpRequirement.new(
       scope: "settings_email", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:com",
@@ -206,6 +292,12 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
 
     assert_response :redirect
     assert_equal VisitorEmailStatus::VERIFIED, pending.reload.visitor_email_status_id
+    intent = VisitorContactAuditOutbox.find_by!(contact_ref: pending.public_id, event_name: "finalized")
+
+    assert_equal @visitor.public_id, intent.owner_ref
+    assert_equal @visitor.public_id, intent.actor_ref
+    assert_equal pending.credential_registration_otp_context.fetch("flow_ref"), intent.operation_ref
+    assert_nil intent.acknowledged_at
     assert_nil session[:com_settings_email_registration_public_id]
     assert_nil @token.reload.last_step_up_at
     assert_equal "revoked", pending_transaction.reload.status
@@ -257,7 +349,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
 
   test "first confirmed contact is registered on Base without freshness and ends the initial exception" do
     visitor = Visitor.create!
-    token = VisitorToken.create!(visitor: visitor)
+    token = VisitorToken.create!(visitor: visitor, root_login_established_at: VisitorToken.database_now - 1.minute)
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
     install_base_browser_rp_credentials!(surface: "com", host: @host, actor: visitor, token: token)
@@ -269,6 +361,27 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
 
     assert_nil token.last_step_up_at
     assert_empty StepUpConfiguredMethodsQuery.call(visitor)
+    target = ActiveSupport::MessageVerifier.new(
+      Rails.application.key_generator.generate_key("path_target_token", 32),
+      digest: "SHA256", serializer: JSON, url_safe: true,
+    ).generate(
+      { "flow" => "step_up.bootstrap",
+        "surface" => "com",
+        "session_nonce" => token.public_id,
+        "pt" => "/identity/emails", },
+      purpose: :path_target, expires_in: 15.minutes,
+    )
+    post base_com_verification_setup_path(ri: "jp"),
+         params: { scope: "settings_email", pt: target, registration_method: "email_otp" }, headers: headers
+
+    assert_response :see_other
+    bootstrap = VisitorStepUpCeremonyTransaction.find_by!(
+      transaction_id: VisitorStepUpSession.find_by!(visitor_token_id: token.id).step_up_ceremony_transaction_ref,
+    )
+
+    assert_equal "bootstrap", bootstrap.purpose
+    assert_equal "pending", bootstrap.status
+    assert_nil token.reload.last_step_up_at
     assert_difference(-> { visitor.visitor_emails.count }, 1) do
       post base_com_identity_emails_registration_path(ri: "jp"),
            params: { visitor_email: { raw_address: "first-com-contact-#{SecureRandom.hex(4)}@example.com" } },
@@ -284,6 +397,8 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
 
     assert_response :redirect
     assert_equal VisitorEmailStatus::VERIFIED, pending.reload.visitor_email_status_id
+    assert_equal "consumed", bootstrap.reload.status
+    assert_equal pending.public_id, bootstrap.verified_credential_ref
     assert_nil token.reload.last_step_up_at
     assert_predicate token, :currently_usable?
     assert_includes StepUpConfiguredMethodsQuery.call(visitor), :email_otp

@@ -6,11 +6,14 @@ module Base
     module Identity
       class TotpsController < BaseController
         include ::SurfaceInertiaPage
+        include ::BaseStepUpTransactionMarker
 
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
 
         step_up only: :destroy, scope: "settings_totp"
+
+        public
 
         def index
           authorize!(ClientTotpCredential, to: :index?)
@@ -24,6 +27,47 @@ module Base
           find_totp
           authorize!(@totp)
           render inertia: true, props: show_page_props
+        end
+
+        def new
+          authorize!(ClientTotpCredential, to: :new?)
+          apply_base_browser_continuation_headers!
+          restart_binding = base_registration_restart_binding!(scope: "settings_totp", method: :totp)
+          render "base/shared/credential_registration", layout: false,
+                                                        locals: {
+                                                          action_url: base_app_identity_totps_path(ri: params[:ri]),
+                                                          restart_binding:,
+                                                        }
+        rescue BaseAuthAdmissionCoordinator::Denied, ArgumentError, ActiveRecord::RecordNotFound
+          render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+        end
+
+        def create
+          authorize!(ClientTotpCredential, to: :create?)
+          apply_base_browser_continuation_headers!
+          token = current_session_token
+          requirement = totp_registration_requirement(token)
+          issuance = BaseStepUpAdmissionIssuer.call!(
+            actor: current_client, token: token, requirement: requirement,
+            return_to: base_app_identity_totps_path,
+            base_browser_nonce: ensure_base_admission_browser_nonce!, base_token: token,
+            restart_of: params[:restart_of],
+          )
+          if issuance.is_a?(BaseAuthAdmissionCoordinator::TerminalOutcome)
+            return redirect_to(issuance.transaction.return_to, status: :see_other, allow_other_host: false)
+          end
+
+          remember_base_step_up_transaction!(transaction: issuance.transaction, actor: current_client, token: token)
+          redirect_to(
+            new_auth_app_settings_totp_url(
+              entry_ref: issuance.reference, ri: params[:ri],
+              host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), protocol: "https",
+            ), status: :see_other, allow_other_host: true,
+          )
+        rescue BaseAuthAdmissionCoordinator::Denied, ArgumentError, ActiveRecord::RecordNotFound
+          render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+        rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError
+          render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
         end
 
         def update
@@ -49,6 +93,17 @@ module Base
 
         private
 
+        def totp_registration_requirement(token)
+          StepUpRequirement.new(
+            scope: "settings_totp", purpose: "credential_registration", step_up_required: false,
+            allowed_methods: [:totp], phishing_resistant_required: false,
+            user_verification_required: false, full_reauthentication_required: false,
+            audience: "step_up:app", session_binding: token.public_id,
+            token_binding: token.public_id, require_session_binding: true, ttl: VerificationBase::STEP_UP_TTL,
+            actor_ref: current_client.public_id, resource_ref: nil, tenant_ref: nil,
+          )
+        end
+
         def find_totp
           @totp = current_client.client_totp_credentials.find_by!(public_id: params.expect(:id))
         end
@@ -59,18 +114,18 @@ module Base
 
         def index_page_props
           {
-            title: t("base.identity.totps.title", default: "Authenticator apps"),
-            description: t("base.identity.totps.description", default: "Manage your authenticator apps."),
+            title: t("base.shared.identity.totps.title"),
+            description: t("base.shared.identity.totps.description"),
             back_link: { label: t("base.shared.identity.up_link"), href: base_app_identity_path(ri: params[:ri]) },
             new_link: {
-              label: t("actions.add", default: "Add authenticator app"),
-              href: new_auth_app_settings_totp_path(ri: params[:ri]),
+              label: t("actions.add"),
+              href: new_base_app_identity_totp_path(ri: params[:ri]),
             },
             columns: {
               title: t("activerecord.attributes.user_totp_credential.title"),
               last_otp_at: t("activerecord.attributes.user_totp_credential.last_otp_at"),
-              status: t("messages.totp_status_label"),
-              actions: t("actions.actions", default: "Actions"),
+              status: t("base.shared.identity.totps.status_label"),
+              actions: t("actions.actions"),
             },
             empty_message: t("messages.no_totp_found"),
             edit_label: t("actions.edit"),
@@ -90,9 +145,9 @@ module Base
 
         def show_page_props(error: nil)
           {
-            title: t("base.identity.totps.show_title", default: "Authenticator app"),
-            description: t("base.identity.totps.show_description", default: "Review or rename this authenticator app."),
-            back_link: { label: t("actions.back", default: "Back"),
+            title: t("base.shared.identity.totps.show_title"),
+            description: t("base.shared.identity.totps.show_description"),
+            back_link: { label: t("actions.back"),
                          href: base_app_identity_totps_path(ri: params[:ri]), },
             totp: {
               public_id: @totp.public_id,
@@ -109,21 +164,21 @@ module Base
             destroy: {
               action: base_app_identity_totp_path(@totp.public_id, ri: params[:ri]),
               label: t("actions.delete"),
-              confirm: t("messages.confirm_delete_totp"),
+              confirm: t("base.shared.identity.totps.remove_confirm"),
             },
             error: error,
           }
         end
 
         def totp_status_label(totp)
-          keys = {
-            ClientTotpCredentialStatus::ACTIVE => "messages.totp_status.active",
-            ClientTotpCredentialStatus::INACTIVE => "messages.totp_status.inactive",
-            ClientTotpCredentialStatus::REVOKED => "messages.totp_status.revoked",
-            ClientTotpCredentialStatus::DELETED => "messages.totp_status.deleted",
-            ClientTotpCredentialStatus::NOTHING => "messages.totp_status.nothing",
-          }
-          t(keys.fetch(totp.user_identity_totp_credential_status_id), default: "Unknown")
+          case totp.user_identity_totp_credential_status_id
+          when ClientTotpCredentialStatus::ACTIVE then t("base.shared.identity.totps.statuses.active")
+          when ClientTotpCredentialStatus::INACTIVE then t("base.shared.identity.totps.statuses.inactive")
+          when ClientTotpCredentialStatus::REVOKED then t("base.shared.identity.totps.statuses.revoked")
+          when ClientTotpCredentialStatus::DELETED then t("base.shared.identity.totps.statuses.deleted")
+          when ClientTotpCredentialStatus::NOTHING then t("base.shared.identity.totps.statuses.nothing")
+          else raise ArgumentError, "unsupported TOTP credential status"
+          end
         end
 
         def formatted_last_otp_at(totp)

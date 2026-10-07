@@ -4,6 +4,38 @@
 # entry-reference consumer. The helper deliberately returns the raw ceremony
 # sid only to the test caller; production templates and URLs never carry it.
 module AuthAdmissionBindingTestHelper
+  # Uses the public attachment/redemption HTTP path; only Base proof confirmation is synthetic.
+  def admit_auth_local_entry!(surface:, browser: self, intent: "sign_in")
+    host =
+      case surface
+      when "app" then ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+      when "com" then ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+      when "org" then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      else raise ArgumentError, "unsupported Auth admission surface"
+      end
+    browser.host!(host)
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: surface, intent: intent, base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+    )
+    path = "/sign/#{(intent == "sign_up") ? "up" : "in"}"
+    browser.get(path, params: { entry_ref: admission.reference, ri: "jp" })
+    csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    browser.post(
+      "/ceremony_bindings",
+      params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" },
+    )
+
+    assert_equal 303, browser.response.status
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: surface, reference: admission.reference)
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    browser.get(path, params: { entry_ref: admission.reference, ri: "jp" })
+    csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    browser.post(path, params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" })
+
+    assert_equal 303, browser.response.status
+    admission
+  end
+
   def issue_base_step_up_admission!(**attributes)
     attributes[:base_browser_nonce] ||= "test-browser-nonce"
     attributes[:base_token] ||= attributes.fetch(:token)

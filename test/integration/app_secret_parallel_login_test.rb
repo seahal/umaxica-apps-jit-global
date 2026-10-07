@@ -25,7 +25,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
         ClientSessionLimitResolutionTransaction.where(sign_in_flow_id: flow.id).find_each(&:destroy!)
         ClientAuthAdmissionBinding.where(sign_in_flow_id: flow.id).find_each(&:destroy!)
         ClientAuthAdmissionBinding.where(
-          authorization_transaction_id: ClientOidcAuthorizationTransaction.where(secret_sign_in_flow_id: flow.id).select(:id),
+          authorization_transaction_id: ClientOidcAuthorizationTransaction.where(
+            secret_sign_in_flow_id: flow.id,
+          ).select(:id),
         ).find_each(&:destroy!)
         ClientOidcAuthorizationTransaction.where(secret_sign_in_flow_id: flow.id).find_each(&:destroy!)
         flow.reload.destroy!
@@ -338,6 +340,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     )
   end
 
+  # rubocop:disable Metrics/AbcSize -- This fixture walks the complete Base-to-Auth browser handoff.
   def app_oidc_auth_target!(base, base_host:)
     base.get("/sign", params: { ri: "jp" })
     csrf = Nokogiri::HTML(base.response.body).at_css('input[name="authenticity_token"]')["value"]
@@ -372,4 +375,5 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     )
     URI.parse(result_payload.fetch("url"))
   end
+  # rubocop:enable Metrics/AbcSize
 end

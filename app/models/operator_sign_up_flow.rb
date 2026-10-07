@@ -42,6 +42,21 @@ class OperatorSignUpFlow < OrgTicketRecord
   include SignFlow
   include FlowSignUp
 
+  cycle_status_column :status_id
+  before_validation :assign_default_status_id
+  before_validation :sync_legacy_state_from_status
+  # SignFlow disables required belongs_to validation, so status presence stays explicit.
+  # rubocop:disable Rails/RedundantPresenceValidationOnBelongsTo
+  validates :status_id, presence: true,
+                        inclusion: { in: ->(record) { record.class::STATUS_IDS } }
+  # rubocop:enable Rails/RedundantPresenceValidationOnBelongsTo
+  validates :step, presence: true, inclusion: { in: ->(record) { record.class::STEPS } },
+                   if: ->(record) { record.class.const_defined?(:STEPS, false) }
+  validates :state, presence: true, if: ->(record) { record.has_attribute?(:state) }
+  validate :legacy_state_matches_status
+  validate :step_matches_status
+  validate :completed_status_has_completed_at
+
   STATUS_MODEL = OperatorSignUpFlowStatus
   STATUSES = {
     "STARTED" => STATUS_MODEL::STARTED,

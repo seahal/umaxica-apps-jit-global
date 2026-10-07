@@ -117,7 +117,7 @@ class OperatorToken < OrgTicketRecord
   belongs_to :staff_token_dbsc_status, class_name: "OperatorTokenDbscStatus"
   belongs_to :oidc_connection, class_name: "OperatorOidcConnection"
   belongs_to :device_session, class_name: "OperatorDeviceSession", inverse_of: :staff_tokens
-  has_many :operator_rp_sessions, inverse_of: :operator_token
+  has_many :operator_rp_sessions, inverse_of: :operator_token, dependent: :restrict_with_exception
   has_many :staff_verifications, class_name: "OperatorVerification",
                                  foreign_key: :staff_token_id,
                                  dependent: :delete_all,

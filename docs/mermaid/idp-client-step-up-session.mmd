@@ -7,6 +7,8 @@ stateDiagram-v2
     [*] --> PENDING
     PENDING --> removed: consume_pending! completion block
     PENDING --> expired: clock reaches discard_at
+    PENDING --> expired: revoke_authority! on root revocation
+    VERIFIED --> expired: revoke_authority! on root revocation
     PENDING --> PENDING: Base admission reissue
     VERIFIED --> PENDING: Base admission replacement
     expired --> PENDING: Base admission replacement

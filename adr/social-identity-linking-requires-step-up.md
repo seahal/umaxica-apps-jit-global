@@ -71,3 +71,10 @@ This decision does not change:
 - the sign-up state machine;
 - the Sign/Auth ceremony boundary or Base authority boundary;
 - whether a fresh primary sign-in may satisfy Step-Up in a future design.
+
+## Delivered reconciliation (2026-10-06)
+
+Social link and unlink mutations use the explicit step-up operation and the current
+`AuthenticationCredentialInventory` removal guard. Verified issuer/subject is the only provider
+identity selector; email, display name and provider browser state never select an actor. Active
+partial uniqueness and `released_at` preserve history and prevent stale callback reattachment.

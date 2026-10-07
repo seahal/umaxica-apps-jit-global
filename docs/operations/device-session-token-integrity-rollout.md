@@ -92,3 +92,11 @@ keys, validation status, and representative create/rotate/revoke/delete behavior
 Only generate structure dumps from that isolated database. The three task-owned
 database targets passed migration and fresh structure-load checks; independent-
 connection race cases and an actual deployment remain unverified.
+
+## Delivered reconciliation (2026-10-06)
+
+The same rollout contract now covers all three realm token/session pairs and the RP session parent
+foreign keys. Fresh empty migration construction and representative old-schema reconstruction were
+run on task-owned disposable databases; shared databases were not touched. The generated structure
+dumps are checked by `bin/rails db:verify_no_schema_drift`. A production rollout still requires
+operator approval, independent provider verification and the documented stop/forward-repair path.

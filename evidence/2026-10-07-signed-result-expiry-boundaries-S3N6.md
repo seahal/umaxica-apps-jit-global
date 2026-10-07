@@ -1,0 +1,9 @@
+# Signed ceremony result expiry boundaries
+
+- Checkout: `6fa6867d44b5499632079775cb0fb22cbfddd339`, with inherited and task-related uncommitted changes affecting the checkout.
+- The new `ceremony_signed_result_deadline_test.rb` exercises public Email and Step-Up result issuance and decoding with real ES384 keys/signatures and framework-controlled time. No domain methods or crypto are replaced.
+- Each app/com/org result is issued two seconds before the decision point; its integer NumericDate expiry is one second before, exactly at or one second after that point. One second is the nearest representable neighbor for this wire type. Only the future case is accepted; expired cases reject even within the JWT layer's thirty-second leeway. Valid cases retain their declared surface, expiry and opaque actor/session references.
+- `bin/rails test test/values/ceremony_signed_result_deadline_test.rb test/values/identity_ceremony_contract_guard_test.rb test/unit/security/standard_csrf_invariant_test.rb test/security/invariants/csrf_verification_strategy_invariant_test.rb`: 25 runs / 136 assertions, zero failures/errors/skips, seed 56624, against the isolated `codex_integrity_20261006fresh1_*` fleet, PostgreSQL 17.7.
+- The new file passed scoped RuboCop; scoped `git diff --check` passed before this evidence addition. No production, migration, shared-data or persisted/wire-format change was made.
+- Email result decoding is used by the Contact final committer. Current Step-Up freshness commit reads opaque delivery rather than this retained signed wire-value class. These tests therefore do not establish the opaque Step-Up HTTP authorization/CSRF/commit matrix, all supported-purpose admission, Task 16.6 completion or Final Verification.
+- Previously recorded COM distribution and recreated-flow OTP regressions remain unresolved pending explicit shape approvals; these green targets do not override their red results.

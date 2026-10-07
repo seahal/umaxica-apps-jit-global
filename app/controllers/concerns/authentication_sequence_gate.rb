@@ -563,7 +563,8 @@ module AuthenticationSequenceGate
     return false unless cycle && resolution
     return false unless resolution.actor_ref == actor.public_id && resolution.resolved?
 
-    if (local_locator = local_sign_in_locator_for_pending_resume(cycle))
+    local_locator = local_sign_in_locator_for_pending_resume(cycle)
+    if local_locator
       result = LocalAuthenticationSessionCommitter.resume_pending!(
         controller: self, flow: cycle, actor: actor, nonce: local_locator.fetch(:nonce),
       )

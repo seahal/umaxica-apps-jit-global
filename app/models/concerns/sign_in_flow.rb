@@ -7,16 +7,9 @@ module SignInFlow
   include SignFlow
   include FlowBase
 
-  included do
-    cycle_status_column :state_id
-
-    before_validation :assign_default_state_id
-
-    validates :state_id, presence: true, inclusion: { in: ->(record) { record.class::STATE_IDS } }
-    validate :completed_state_has_completed_at
-  end
-
   class_methods do
+    public
+
     def state_id_for(state_name)
       self::STATE_NAMES.invert.fetch(state_name.to_s)
     end
@@ -36,6 +29,8 @@ module SignInFlow
 
   delegate :state_id_for, to: :class
   delegate :state_name_for, to: :class
+
+  public
 
   def state_ids_for(*state_names)
     self.class.state_ids_for(*state_names)

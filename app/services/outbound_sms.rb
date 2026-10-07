@@ -23,12 +23,12 @@ class OutboundSms < ApplicationService
     raise
   end
 
-  def self.deliver_later(to:, title:, body:)
+  def self.deliver_later(to:, title:, body:, otp_binding: nil)
     return suspended_result if suspended?
 
     provider
     Outbound::SmsDeliveryJob.perform_later(
-      encrypted_payload: OutboundSensitivePayload.encrypt_sms_delivery(to:, title:, body:),
+      encrypted_payload: OutboundSensitivePayload.encrypt_sms_delivery(to:, title:, body:, otp_binding:),
     )
     record_delivery_event_safely("enqueued")
     OutboundResult.accepted(channel: :sms)

@@ -4,19 +4,6 @@
 module SignFlowStatusBacked
   extend ActiveSupport::Concern
 
-  included do
-    before_validation :assign_default_status_id
-    before_validation :sync_legacy_state_from_status
-
-    validates :status_id, presence: true, inclusion: { in: ->(record) { record.class::STATUS_IDS } }
-    validates :step, presence: true, inclusion: { in: ->(record) { record.class::STEPS } },
-                     if: ->(record) { record.class.const_defined?(:STEPS, false) }
-    validates :state, presence: true, if: ->(record) { record.has_attribute?(:state) }
-    validate :legacy_state_matches_status
-    validate :step_matches_status
-    validate :completed_status_has_completed_at
-  end
-
   class_methods do
     def status_id_for(status_name)
       self::STATUS_NAMES.invert.fetch(status_name.to_s)
@@ -37,6 +24,8 @@ module SignFlowStatusBacked
 
   delegate :status_id_for, to: :class
   delegate :status_name_for, to: :class
+
+  public
 
   def status_ids_for(*status_names)
     self.class.status_ids_for(*status_names)

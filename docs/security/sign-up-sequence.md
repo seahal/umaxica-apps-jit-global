@@ -913,3 +913,11 @@ Target decision:
 - Org public sign-up should remain a candidate inquiry handoff, not an operator-creation route.
 - Org operator creation, mutation, and withdrawal should remain lifecycle requests from an existing
   authenticated operator with AAL2 step-up.
+
+## Delivered current sequence (2026-10-06)
+
+The current sign-up sequence uses the owning flow's state reference and named transitions. Contact
+OTP, checkpoint and social evidence are bound to the actor, candidate, flow and browser; finalization
+enters ordinary sign-in admission and completes at session issuance. Cancellation and expiry retain
+terminal facts and clean only artifacts owned by that flow. The old “future canonical vocabulary”
+notice above is superseded by `adr/authentication-state-machine-normalization.md`.

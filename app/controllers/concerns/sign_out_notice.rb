@@ -4,6 +4,7 @@
 module SignOutNotice
   extend ActiveSupport::Concern
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     helper_method :sign_out_active_context_present?,
                   :sign_out_confirmation_form_path,
@@ -170,9 +171,9 @@ module SignOutNotice
          AcmeLogoutTransaction::STEP_AUTHORITY_CLEANUP_ISSUED
       "base"
     when AcmeLogoutTransaction::STEP_ORIGIN_CLEANUP_ISSUED,
-         AcmeLogoutTransaction::STEP_ORIGIN_RP_SESSION_REVOKED
+         AcmeLogoutTransaction::STEP_ORIGIN_RP_SESSION_REVOKED,
+         AcmeLogoutTransaction::STEP_FINALIZED
       transaction.origin_surface
-    when AcmeLogoutTransaction::STEP_FINALIZED then transaction.origin_surface
     end
   end
 

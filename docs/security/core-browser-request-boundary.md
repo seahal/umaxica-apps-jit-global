@@ -52,3 +52,11 @@ The framework behavior is grounded in the repository's bundled Rails revision
 `2f75a03b05aff2610b3799ef9ebd87cfc9cf38eb`, in Action Controller's
 `request_forgery_protection.rb` origin and header-or-legacy-token verification.
 See [the execution record](../../evidence/2026-10-03-core-browser-origin-boundary-7P2A.md).
+
+## Delivered reconciliation (2026-10-06)
+
+The shared Browser RP layer preserves this ordering for Core and the other first-party RPs:
+authentication and refresh do not run before the unsafe-request CSRF, Origin and Fetch Metadata
+checks. Valid credentials, invalid credentials and dependency failures have distinct responses and
+cookie behavior. Browser-edge cookie stripping and real deployment routing remain external
+prerequisites.

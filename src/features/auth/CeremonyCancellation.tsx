@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 // Ends the ceremony the page belongs to.
 //
 // Cancellation is a state transition on the server, never a link or a history step, so it is a
@@ -6,7 +8,6 @@
 // always the one the current document carries.
 import Button from "@/components/ui/Button";
 import { csrfToken } from "@/lib/csrf";
-import { useState } from "react";
 
 export type CeremonyCancellationProps = {
   label: string;
@@ -16,16 +17,16 @@ export type CeremonyCancellationProps = {
 
 export default function CeremonyCancellation({ label, action, method }: CeremonyCancellationProps) {
   const [submitted, setSubmitted] = useState(false);
+  const [authenticityToken, setAuthenticityToken] = useState("");
 
   return (
     <form
       action={action}
       method="post"
       data-turbo="false"
-      onSubmit={(event) => {
+      onSubmit={() => {
+        setAuthenticityToken(csrfToken());
         setSubmitted(true);
-        const field = event.currentTarget.elements.namedItem("authenticity_token");
-        if (field instanceof HTMLInputElement) field.value = csrfToken();
       }}
     >
       {method === "post" ? null : (
@@ -39,7 +40,8 @@ export default function CeremonyCancellation({ label, action, method }: Ceremony
       <input
         type="hidden"
         name="authenticity_token"
-        defaultValue=""
+        value={authenticityToken}
+        readOnly
       />
       <Button
         type="submit"

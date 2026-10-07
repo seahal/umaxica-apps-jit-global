@@ -215,6 +215,7 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
 
   # Fills the one-session limit, then completes Entra and the passkey stage so this browser holds a
   # verified flow with an open resolution child. Returns the session that fills the limit.
+  # rubocop:disable Metrics/AbcSize, Metrics/MethodLength -- This helper preserves the Entra and passkey admission sequence.
   def enter_pending_session_limit!
     @staff.update!(status_id: OperatorStatus::ACTIVE)
     existing = Array.new(OperatorToken::MAX_SESSIONS_PER_STAFF) { create_active_session(@staff) }
@@ -270,6 +271,7 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
   end
+  # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
   def latest_flow
     OperatorSignInFlow.where(principal_id: @staff.id).recent_first.first

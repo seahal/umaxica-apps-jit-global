@@ -16,27 +16,36 @@ module Base
       include ::PreferenceAdoption
 
       include ::BrowserRpAuthentication
+      include ::AuthenticationWithdrawalGate
       include ::BrowserRpSafeRequestRefresh
       include ::BrowserRpUnsafeRequestRefresh
+
       include ::BaseAdmissionBrowserBinding
       include ::SignErrorResponses
       include ::SessionLimitGate
       include ::AuthorizationAudit
-
       include ::AuthorizationVisitor
-
       include ::VerificationVisitor
-
       include ActionPolicy::Controller
       include ::OidcSsoInitiator
       include ::RestrictedSessionGuard
-
       include ::ActorSupport
-
       include ::Finisher
 
       AUTHENTICATION_MODE = :deny_all
-      base_admission_surface "com"
+      after_action :verify_private_action_authorized!
+      after_action :apply_authenticated_page_cache_policy!
+      helper_method :current_resource, :browser_rp_authenticated?, :browser_rp_session_public_id,
+                    :current_browser_session_security_context, :current_session_public_id,
+                    :current_session, :logged_in?
+      before_action :authenticate_browser_rp_safe_request!
+      prepend_before_action :authenticate_browser_rp_unsafe_request!
+
+      class << self
+        public
+
+        def base_admission_surface_name = "com"
+      end
 
       prepend_before_action :apply_default_no_store
 

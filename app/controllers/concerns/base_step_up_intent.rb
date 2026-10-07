@@ -21,7 +21,10 @@ module BaseStepUpIntent
       return redirect_to(return_to, status: :see_other, allow_other_host: false)
     end
 
-    requested_step_up_requirement(actor: actor, token: token, scope: scope)
+    requirement = requested_step_up_requirement(actor: actor, token: token, scope: scope)
+    unless params[:restart_of].nil?
+      return render_step_up_restart!(actor:, token:, requirement:, return_to:, action:)
+    end
 
     render inertia: true, props: {
       title: title,
@@ -31,7 +34,26 @@ module BaseStepUpIntent
     }
   rescue BaseAuthAdmissionCoordinator::Denied => e
     log_step_up_refusal(e, session_public_id: token.public_id, stage: "base_intent_page")
+    unless params[:restart_of].nil?
+      return render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+    end
+
     render plain: I18n.t("views.sign.app.verifications.show.no_methods"), status: :unprocessable_content
+  rescue ActiveRecord::RecordNotFound, ArgumentError
+    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+  end
+
+  def render_step_up_restart!(actor:, token:, requirement:, return_to:, action:)
+    binding = BaseStepUpAdmissionIssuer.restart_binding_for_form!(
+      actor:, token:, requirement:, return_to:, base_browser_nonce: base_admission_browser_nonce,
+      base_token: token, restart_of: params[:restart_of],
+    )
+    apply_base_browser_continuation_headers!
+    render "base/shared/step_up_restart", layout: false,
+                                          locals: { action_url: action,
+                                                    scope: requirement.scope,
+                                                    pt: params[:pt],
+                                                    binding:, }
   end
 
   def redirect_to_step_up_ceremony!(actor:, token:, allowed_scopes:, sign_url_builder:, setup_url_builder:)
@@ -50,8 +72,12 @@ module BaseStepUpIntent
 
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token, requirement: requirement, return_to: return_to,
-      base_browser_nonce: base_admission_browser_nonce, base_token: token,
+      base_browser_nonce: base_admission_browser_nonce, base_token: token, restart_of: params[:restart_of],
     )
+    if issuance.is_a?(BaseAuthAdmissionCoordinator::TerminalOutcome)
+      return redirect_to(issuance.transaction.return_to, status: :see_other, allow_other_host: false)
+    end
+
     remember_base_step_up_transaction!(transaction: issuance.transaction, actor:, token:)
     log_step_up_ceremony(
       "admission_issued", transaction: issuance.transaction, outcome: "issued",
@@ -99,8 +125,12 @@ module BaseStepUpIntent
     ensure_base_admission_browser_nonce!
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token, requirement: requirement, return_to: return_to,
-      base_browser_nonce: base_admission_browser_nonce, base_token: token,
+      base_browser_nonce: base_admission_browser_nonce, base_token: token, restart_of: params[:restart_of],
     )
+    if issuance.is_a?(BaseAuthAdmissionCoordinator::TerminalOutcome)
+      redirect_to(issuance.transaction.return_to, status: :see_other, allow_other_host: false)
+      return nil
+    end
     remember_base_step_up_transaction!(transaction: issuance.transaction, actor:, token:)
     log_step_up_ceremony(
       "admission_issued", transaction: issuance.transaction, outcome: "issued", method: method,
@@ -137,8 +167,13 @@ module BaseStepUpIntent
       return
     end
 
+    transaction = step_up_intent_transaction_model(step_up_intent_surface).find_by!(transaction_id: reference)
+    binding = BaseStepUpAdmissionIssuer.conflict_binding_for_form!(
+      actor:, token:, transaction:, base_browser_nonce: base_admission_browser_nonce, base_token: token,
+    )
     session[:base_step_up_conflict] = {
       "transaction_ref" => reference,
+      "entry_ref" => binding.entry_ref,
       "actor_ref" => actor.public_id,
       "session_ref" => token.public_id,
       "surface" => step_up_intent_surface,
@@ -156,7 +191,16 @@ module BaseStepUpIntent
       "resource_ref" => requirement.resource_ref,
       "tenant_ref" => requirement.tenant_ref,
     }
-    render "base/shared/step_up_conflict", layout: false, status: :conflict
+    apply_base_browser_continuation_headers!
+    render "base/shared/step_up_conflict", layout: false, status: :conflict,
+                                           locals: {
+                                             scope: requirement.scope,
+                                             pt: params[:pt],
+                                             restart_of: (binding.expired?(now: binding.class.database_now) &&
+                                               !binding.redeemed?) ? binding.entry_ref : nil,
+                                           }
+  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound
+    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   end
 
   def resolve_step_up_conflict!(actor:, token:)
@@ -175,37 +219,21 @@ module BaseStepUpIntent
       return
     end
 
-    model = step_up_intent_transaction_model(state.fetch("surface"))
-    transaction =
-      model.connection_owner.connected_to(role: :writing) do
-        model.lock.find_by!(
-          transaction_id: state.fetch("transaction_ref"), actor_ref: actor.public_id,
-          session_ref: token.public_id,
-        )
-      end
-    now = model.database_now
-    unless %w(pending verified).include?(transaction.status) && !transaction.expired?(now: now)
-      render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
-      return
+    transaction = find_step_up_conflict_parent!(state:, actor:, token:)
+    binding = validate_conflict_admission!(actor:, token:, transaction:, state:)
+    if action == "continue" && binding.redeemed?
+      return continue_redeemed_step_up_conflict!(binding:, transaction:)
     end
 
-    ensure_base_admission_browser_nonce!
-    issuance =
-      if action == "continue"
-        BaseAuthAdmissionCoordinator.issue_handoff!(
-          transaction: transaction, base_browser_nonce: base_admission_browser_nonce, base_token: token,
-        )
-      else
-        BaseStepUpCancelAndStartCommitter.call!(
-          actor: actor, token: token, previous_transaction: transaction,
-          requirement: conflict_step_up_requirement(state, token), return_to: state.fetch("return_to"),
-          base_browser_nonce: base_admission_browser_nonce, base_token: token,
-        )
-      end
+    issuance = issue_step_up_conflict_admission!(action:, actor:, token:, transaction:, state:)
+    if issuance.is_a?(BaseAuthAdmissionCoordinator::TerminalOutcome)
+      session.delete(:base_step_up_conflict)
+      return redirect_to(issuance.transaction.return_to, status: :see_other, allow_other_host: false)
+    end
 
     remember_base_step_up_transaction!(transaction: issuance.transaction, actor:, token:)
     session.delete(:base_step_up_conflict)
-    redirect_to_step_up_conflict_admission!(issuance: issuance, transaction: issuance.transaction)
+    redirect_to_step_up_conflict_admission!(entry_ref: issuance.reference, transaction: issuance.transaction)
   rescue BaseAuthAdmissionCoordinator::Denied, IdentityStepUpCeremonyContract::Error,
          ActiveRecord::RecordNotFound, KeyError, ArgumentError => e
     log_step_up_refusal(e, session_public_id: token.public_id, stage: "base_conflict_resolution")
@@ -214,7 +242,53 @@ module BaseStepUpIntent
     render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
   end
 
-  def redirect_to_step_up_conflict_admission!(issuance:, transaction:)
+  def find_step_up_conflict_parent!(state:, actor:, token:)
+    model = step_up_intent_transaction_model(state.fetch("surface"))
+    model.connection_owner.connected_to(role: :writing) do
+      model.lock.find_by!(
+        transaction_id: state.fetch("transaction_ref"), actor_ref: actor.public_id, session_ref: token.public_id,
+      )
+    end
+  end
+
+  def continue_redeemed_step_up_conflict!(binding:, transaction:)
+    admitted = binding.admitted_auth_ceremony_session
+    unless params[:restart_of].nil? && admitted&.active?(now: admitted.class.database_now)
+      raise BaseAuthAdmissionCoordinator::Denied.new("Auth continuation is unavailable", code: "invalid_admission")
+    end
+
+    session.delete(:base_step_up_conflict)
+    redirect_to_step_up_conflict_admission!(entry_ref: nil, transaction:)
+  end
+
+  def validate_conflict_admission!(actor:, token:, transaction:, state:)
+    binding = BaseStepUpAdmissionIssuer.conflict_binding_for_form!(
+      actor:, token:, transaction:, base_browser_nonce: base_admission_browser_nonce, base_token: token,
+    )
+    unless binding.entry_ref == state.fetch("entry_ref") &&
+        (params[:restart_of].nil? || params[:restart_of] == binding.entry_ref)
+      raise BaseAuthAdmissionCoordinator::Denied.new("step-up conflict binding mismatch", code: "invalid_admission")
+    end
+
+    binding
+  end
+
+  def issue_step_up_conflict_admission!(action:, actor:, token:, transaction:, state:)
+    if action == "continue"
+      return BaseAuthAdmissionCoordinator.issue_handoff!(
+        transaction:, base_browser_nonce: base_admission_browser_nonce, base_token: token,
+        restart_of: params[:restart_of],
+      )
+    end
+
+    BaseStepUpCancelAndStartCommitter.call!(
+      actor:, token:, previous_transaction: transaction,
+      requirement: conflict_step_up_requirement(state, token), return_to: state.fetch("return_to"),
+      base_browser_nonce: base_admission_browser_nonce, base_token: token,
+    )
+  end
+
+  def redirect_to_step_up_conflict_admission!(entry_ref:, transaction:)
     surface = transaction.surface
     host_env = {
       "app" => "PUBLIC_AUTH_SERVICE_URL", "com" => "PUBLIC_AUTH_CORPORATE_URL", "org" => "PUBLIC_AUTH_STAFF_URL",
@@ -231,7 +305,7 @@ module BaseStepUpIntent
       (transaction.purpose == "bootstrap") ? "new_auth_#{surface}_verification_setup_url" :
            "auth_#{surface}_verification_url"
     redirect_to_surface_url(
-      public_send(route, entry_ref: issuance.reference, ri: params[:ri], host: ENV.fetch(host_env), protocol: "https"),
+      public_send(route, entry_ref: entry_ref, ri: params[:ri], host: ENV.fetch(host_env), protocol: "https"),
       status: :see_other,
     )
   end

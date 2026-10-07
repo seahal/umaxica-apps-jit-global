@@ -68,3 +68,12 @@ Consumption from two to one to zero is ordinary use. With a usable Passkey,
 that balance alone causes no warning, automatic addition, forced navigation,
 registration refusal or login restriction. Lack of another permitted Step-Up
 method still prevents sensitive changes; low balance never exempts Step-Up.
+
+## Delivered reconciliation (2026-10-06)
+
+The issuance policy is a reservation policy, not a best-effort count. It uses a short Client writer
+lock and the authoritative active/reserved totals, with the manual and passkey distribution above.
+Every failed boundary is an explicit refusal and leaves unrelated credentials and candidates
+unchanged. The Argon2id load evidence records unknown-identity, zero-candidate, one-candidate and
+twenty-candidate measurements using operational parameters; the memory and concurrency result is
+an observed local measurement, not a capacity guarantee.

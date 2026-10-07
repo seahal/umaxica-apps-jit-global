@@ -28,9 +28,21 @@ class SignComUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
     )
     telephone.store_otp("secret_credential", 789, 5.minutes.from_now.to_i)
 
-    result = SignComUpTelephoneRegistrationFinalizer.call(telephone: telephone)
+    operation_ref = SecureRandom.uuid
+    result = SignComUpTelephoneRegistrationFinalizer.call(
+      telephone: telephone,
+      actor_context: ActorValuesContext.empty.with(tld: :com, surface: :sign), operation_ref: operation_ref,
+    )
 
     assert_equal visitor, result.visitor
+    activity = VisitorContactAuditOutbox.find_by!(operation_ref: operation_ref)
+
+    assert_equal "finalized", activity.event_name
+    assert_equal "telephone", activity.contact_kind
+    assert_equal visitor.public_id, activity.owner_ref
+    assert_equal telephone.public_id, activity.contact_ref
+    assert_nil activity.actor_ref
+    assert_nil activity.acknowledged_at
     assert_equal VisitorTelephoneStatus::VERIFIED_WITH_SIGN_UP, telephone.reload.visitor_telephone_status_id
     assert_equal "0", telephone.otp_counter
     assert_equal 0, telephone.otp_attempts_count

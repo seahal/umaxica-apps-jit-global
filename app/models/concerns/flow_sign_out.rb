@@ -7,10 +7,6 @@ module FlowSignOut
   include FlowBase
   include SignFlowStatusBacked
 
-  included do
-    cycle_status_column :status_id
-  end
-
   def sign_out_nothing?
     cycle_status?(status_id_for("NOTHING"))
   end

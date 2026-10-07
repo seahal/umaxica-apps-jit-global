@@ -17,6 +17,7 @@
 module AuthenticationModeSwitchGuard
   extend ActiveSupport::Concern
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_action :prevent_sign_in_response_storage!
   end

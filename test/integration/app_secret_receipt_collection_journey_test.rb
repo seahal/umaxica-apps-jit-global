@@ -63,7 +63,11 @@ class AppSecretReceiptCollectionJourneyTest < ActionDispatch::IntegrationTest
       redeem_auth_ceremony_session!(
         self, auth_app_sign_in_path, reference: reference,
                                      params: { ri: "jp" },
-                                     headers: { "Host" => @host, "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" },
+                                     headers: {
+                                       "Host" => @host,
+                                       "Origin" => "https://#{@host}",
+                                       "Sec-Fetch-Site" => "same-origin",
+                                     },
       )
 
       assert_response :see_other

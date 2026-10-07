@@ -148,14 +148,15 @@ describe("SignOutConfirmation", () => {
   });
 
   it("refuses a page that carries both return links", () => {
-    const props = {
+    // @ts-expect-error Exercise invalid server props at the runtime boundary.
+    const props: Parameters<typeof SignOutConfirmation>[0] = {
       title: "Sign out",
       active: true,
       description: "You will need to sign in again.",
       form: null,
       back_link: { label: "Back", href: "/identity" },
       home_link: { label: "Home", href: "/" },
-    } as unknown as Parameters<typeof SignOutConfirmation>[0];
+    };
 
     expect(() => renderToStaticMarkup(<SignOutConfirmation {...props} />)).toThrow(
       "A sign-out page must provide one return link",
@@ -163,12 +164,13 @@ describe("SignOutConfirmation", () => {
   });
 
   it("refuses a page that carries no return link", () => {
-    const props = {
+    // @ts-expect-error Exercise missing server props at the runtime boundary.
+    const props: Parameters<typeof SignOutConfirmation>[0] = {
       title: "Sign out",
       active: true,
       description: "You will need to sign in again.",
       form: null,
-    } as unknown as Parameters<typeof SignOutConfirmation>[0];
+    };
 
     expect(() => renderToStaticMarkup(<SignOutConfirmation {...props} />)).toThrow(
       "A sign-out return link is required",

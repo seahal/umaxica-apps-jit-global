@@ -1,6 +1,9 @@
 # typed: false
 # frozen_string_literal: true
 
+# Snapshot diffs would expose OTP material and token state on assertion failure.
+# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
+
 require "test_helper"
 # require "helpers/global_test_support"
 
@@ -13,10 +16,38 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     cookies["csrf_token"] = csrf_token_value
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
+    https!
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    binding = VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+
+    assert_response :success
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    admission_headers = { "Origin" => "https://#{request.host}", "Sec-Fetch-Site" => "same-origin" }
+    post(
+      "/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf },
+                            headers: admission_headers,
+    )
+
+    assert_response :see_other
+    # Public confirmation isolates this leaf's setup; separate HTTP tests exercise the Base receiver.
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+
+    assert_response :success
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf },
+                                       headers: admission_headers,
+    )
+
+    assert_response :see_other
     Prosopite.pause do
       [1, 2, 3].each { |id| VisitorStatus.find_or_create_by!(id: id) }
       [0, 1, 2, 3].each { |id| VisitorVisibility.find_or_create_by!(id: id) }
@@ -59,58 +90,94 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            },
            "cf-turnstile-response": "test",
          },
-         headers: default_headers
+         headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
 
-    get auth_com_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+    assert_response :redirect
+    target = URI.parse(response.location)
+
+    assert_equal "/sign/up/check/email/otp", target.path
+    assert_predicate Rack::Utils.parse_query(target.query).fetch("fb"), :present?
+    get target.request_uri
 
     assert_response :success
-    assert_equal "auth/com/sign/up/emails/edit", inertia_component
-    assert_equal I18n.t("sign.app.authentication.email.edit.page_title"), inertia_props.fetch("title")
-    assert_equal I18n.t("sign.app.authentication.email.edit.code_label"), inertia_props.fetch("code_label")
+    page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
+    props = page.fetch("props")
+
+    assert_equal "auth/com/sign/up/emails/edit", page.fetch("component")
+    assert_equal I18n.t("sign.app.authentication.email.edit.page_title"), props.fetch("title")
+    assert_equal I18n.t("sign.app.authentication.email.edit.code_label"), props.fetch("code_label")
     assert_equal I18n.t("sign.app.authentication.email.edit.code_placeholder"),
-                 inertia_props.fetch("code_placeholder")
-    assert_equal "visitor_email", inertia_props.fetch("scope")
-    assert_equal I18n.t("sign.app.authentication.email.edit.submit"), inertia_props.fetch("submit_label")
+                 props.fetch("code_placeholder")
+    assert_equal "visitor_email", props.fetch("scope")
+    assert_equal I18n.t("sign.app.authentication.email.edit.submit"), props.fetch("submit_label")
     assert_includes response.body, "メールアドレス"
     assert_equal I18n.t("sign.app.authentication.email.edit.delivery_help"),
-                 inertia_props.fetch("delivery_help")
+                 props.fetch("delivery_help")
   end
 
-  test "new rejects when visitor is already logged in" do
-    visitor = create_verified_visitor_with_email(email_address: "logged-in-com-up-email@example.com")
-    visitor.visitor_telephones.create!(
-      number: "+15550002221",
-      visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
-    )
-
-    get new_auth_com_sign_up_email_url(ri: "jp"),
-        headers: as_visitor_headers(visitor, host: host)
-
-    gateway = URI.parse(response.location)
-
-    assert_equal "jump.umaxica.net", gateway.host
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-
-    assert_equal base_com_dashboard_url(ri: "jp", host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), protocol: "https"),
-                 payload.fetch("url")
-  end
-
-  test "create rejects when visitor is already logged in" do
+  test "new keeps an admitted ceremony independent of a presented root token" do
     visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    token = VisitorToken.create!(
+      visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
+      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
+      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
+    )
+    original_token_facts = token.attributes
+    credential = AuthenticationToken.encode(
+      visitor, host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+               session_public_id: token.public_id, resource_type: "visitor",
+    )
+    headers = { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+                "HTTPS" => "on",
+                "Authorization" => "Bearer #{credential}", }
 
-    assert_no_difference("VisitorEmail.count") do
-      post auth_com_sign_up_email_url(ri: "jp"),
-           params: {
-             visitor_email: {
-               raw_address: "logged-in-com@example.com",
-               confirm_policy: "1",
-             },
-             "cf-turnstile-response": "test",
-           },
-           headers: as_visitor_headers(visitor, host: host)
+    assert_no_difference(["VisitorToken.count", "VisitorEmail.count"]) do
+      get new_auth_com_sign_up_email_url(ri: "jp"), headers: headers
+    end
+
+    assert_response :success
+    assert(original_token_facts == token.reload.attributes, "protected record facts remain unchanged")
+  end
+
+  test "create keeps an admitted ceremony independent of a presented root token" do
+    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    token = VisitorToken.create!(
+      visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
+      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
+      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
+    )
+    original_token_facts = token.attributes
+    credential = AuthenticationToken.encode(
+      visitor, host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+               session_public_id: token.public_id, resource_type: "visitor",
+    )
+    headers = { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+                "HTTPS" => "on",
+                "Authorization" => "Bearer #{credential}", }
+
+    assert_difference("VisitorEmail.count", 1) do
+      assert_no_difference("VisitorToken.count") do
+        post auth_com_sign_up_email_url(ri: "jp"),
+             params: { visitor_email: { raw_address: "logged-in-com@example.com", confirm_policy: "1" },
+                       "cf-turnstile-response": "test", }, headers: headers
+      end
     end
 
     assert_response :redirect
+    target = URI.parse(response.location)
+
+    assert_equal ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), target.host
+    assert_equal URI.parse(auth_com_sign_up_check_email_otp_path(ri: "jp")).path, target.path
+    flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    candidate = VisitorEmail.find(flow.pending_contact_id)
+
+    assert_not_equal visitor.id, candidate.visitor_id
+    assert_nil candidate.binding_finalized_at
+    assert_equal flow.public_id,
+                 SignFlowBindingCodec.decode(Rack::Utils.parse_query(target.query).fetch("fb")).flow_public_id
+    assert(original_token_facts == token.reload.attributes, "protected record facts remain unchanged")
   end
 
   test "collection get is not routed" do
@@ -183,18 +250,21 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
                     I18n.t("sign.com.registration.email.create.turnstile_validation_failed")
   end
 
-  test "create with existing email still redirects and does not create a new record" do
+  test "create beside an effective email owns an independent candidate without altering the binding" do
     visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
     existing_email = VisitorEmail.create!(
       visitor: visitor,
       address: "com-existing-signup@example.com",
       confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+      binding_finalized_at: VisitorEmail.database_now,
     )
+    original_facts = existing_email.reload.attributes
+    original_owner_facts = visitor.reload.attributes
 
-    assert_no_difference("Visitor.count") do
-      assert_no_difference("VisitorEmail.count") do
-        assert_enqueued_emails 0 do
+    assert_difference("Visitor.count", 1) do
+      assert_difference("VisitorEmail.count", 1) do
+        assert_enqueued_emails 1 do
           post auth_com_sign_up_email_url(ri: "jp"),
                params: {
                  visitor_email: {
@@ -203,77 +273,132 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
                  },
                  "cf-turnstile-response": "test",
                },
-               headers: default_headers
+               headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
         end
       end
     end
 
     assert_response :redirect
     assert_includes response.location, "/sign/up/check/email/otp"
-    assert_nil session[:com_sign_up_flow_locator]
+    flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    candidate = VisitorEmail.find(flow.pending_contact_id)
+    target = URI.parse(response.location)
+
+    assert_equal flow.public_id,
+                 SignFlowBindingCodec.decode(Rack::Utils.parse_query(target.query).fetch("fb")).flow_public_id
+    assert_not_equal existing_email.id, candidate.id
+    assert_not_equal existing_email.visitor_id, candidate.visitor_id
+    assert_equal existing_email.address_digest, candidate.address_digest
+    assert_nil candidate.binding_finalized_at
+    assert(original_facts == existing_email.reload.attributes, "protected record facts remain unchanged")
+    assert(original_owner_facts == visitor.reload.attributes, "protected record facts remain unchanged")
   end
 
   test "fresh sessions cannot distinguish pending and registered email sign-up" do
     visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-    registered_email = VisitorEmail.create!(
-      visitor: visitor,
-      address: "com-fresh-session-registered-signup@example.com",
-      confirm_policy: true,
+    existing = VisitorEmail.create!(
+      visitor: visitor, raw_address: "com-fresh-session-registered-signup@example.com", confirm_policy: true,
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+      binding_finalized_at: VisitorEmail.database_now,
     )
-    unregistered_address = "com-fresh-session-pending-signup@example.com"
+    existing_facts = existing.reload.attributes
+    existing_owner_facts = visitor.reload.attributes
+    responses = []
+    candidates = []
+    browsers = []
+    targets = []
 
-    registered_responses =
-      2.times.map do
-        response = nil
-        open_session do |session|
-          session.host!(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"))
-          session.post(
+    [existing.address, "com-fresh-session-pending-signup@example.com"].each do |destination|
+      2.times do
+        browser = open_session
+        browser.host!(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"))
+        browser.https!
+        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+        )
+        binding = VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+        browser.get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+
+        assert_equal 200, browser.response.status
+        csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        headers = { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")}", "Sec-Fetch-Site" => "same-origin" }
+        browser.post(
+          "/ceremony_bindings",
+          params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf }, headers: headers,
+        )
+
+        assert_equal 303, browser.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        browser.get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+        csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        browser.post(
+          auth_com_sign_up_path(ri: "jp"),
+          params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: headers,
+        )
+
+        assert_equal 303, browser.response.status
+        assert_difference("VisitorEmail.count", 1) do
+          browser.post(
             auth_com_sign_up_email_url(ri: "jp"),
-            params: {
-              visitor_email: { raw_address: registered_email.address, confirm_policy: "1" },
-              "cf-turnstile-response": "test",
-            },
+            params: { visitor_email: { raw_address: destination, confirm_policy: "1" },
+                      "cf-turnstile-response": "test", }, headers: headers,
           )
-          response = {
-            status: session.response.status,
-            location: session.response.headers["Location"],
-            body: session.response.body,
-          }
         end
-        response
-      end
 
-    pending_responses =
-      2.times.map do
-        response = nil
-        open_session do |session|
-          session.host!(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"))
-          session.post(
-            auth_com_sign_up_email_url(ri: "jp"),
-            params: {
-              visitor_email: { raw_address: unregistered_address, confirm_policy: "1" },
-              "cf-turnstile-response": "test",
-            },
-          )
-          response = {
-            status: session.response.status,
-            location: session.response.headers["Location"],
-            body: session.response.body,
-          }
-        end
-        response
-      end
+        assert_equal 302, browser.response.status
+        target = URI.parse(browser.response.location)
+        query = Rack::Utils.parse_query(target.query)
 
-    assert_equal 302, registered_responses.last.fetch(:status)
-    assert_equal registered_responses.last, pending_responses.last
+        assert_equal %w(fb ri), query.keys.sort
+        assert_equal "jp", query.fetch("ri")
+        responses << [browser.response.status, target.scheme, target.host, target.path, query.keys.sort]
+        candidate = VisitorEmail.order(:created_at, :id).last
+        candidates << candidate
+        browsers << browser
+        targets << target
+
+        assert_equal destination, candidate.address
+        assert_nil candidate.binding_finalized_at
+      end
+    end
+
+    assert_equal 1, responses.uniq.length
+    assert_equal 4, candidates.map(&:id).uniq.length
+    assert_equal 4, candidates.map(&:visitor_id).uniq.length
+    assert(existing_facts == existing.reload.attributes, "protected record facts remain unchanged")
+    assert(existing_owner_facts == visitor.reload.attributes, "protected record facts remain unchanged")
+    own_candidate_facts = candidates.last.attributes
+    foreign_candidate_facts = candidates.first.attributes
+    browsers.last.get(targets.first.request_uri)
+
+    assert_equal 409, browsers.last.response.status
+    assert(own_candidate_facts == candidates.last.reload.attributes, "protected record facts remain unchanged")
+    assert(foreign_candidate_facts == candidates.first.reload.attributes, "protected record facts remain unchanged")
+    foreign_otp = candidates.first.get_otp
+    foreign_code = ROTP::HOTP.new(foreign_otp.fetch(:otp_private_key)).at(foreign_otp.fetch(:otp_counter)).to_s
+    assert_no_difference("VisitorToken.count") do
+      browsers.last.patch(
+        targets.first.request_uri,
+        params: { visitor_email: { pass_code: foreign_code }, "cf-turnstile-response": "test" },
+        headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")}", "Sec-Fetch-Site" => "same-origin" },
+      )
+    end
+
+    assert_equal 409, browsers.last.response.status
+    assert(own_candidate_facts == candidates.last.reload.attributes, "foreign proof cannot affect this candidate")
+    assert(foreign_candidate_facts == candidates.first.reload.attributes, "foreign proof cannot consume its candidate")
+    browsers.last.get(targets.last.request_uri)
+
+    assert_equal 200, browsers.last.response.status
   end
 
-  test "edit missing email resets flow and redirects to new" do
-    get auth_com_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+  test "an OTP page without a flow locator refuses without allocating a flow or contact" do
+    assert_no_difference(["VisitorSignUpFlow.count", "VisitorEmail.count", "VisitorToken.count"]) do
+      get auth_com_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+    end
 
-    assert_response :see_other
-    assert_redirected_to auth_com_sign_up_path(ri: "jp")
+    assert_response :conflict
+    assert_nil response.headers["Location"]
   end
 
   test "edit with expired session renders form error without clearing requirements" do
@@ -285,19 +410,22 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            },
            "cf-turnstile-response": "test",
          },
-         headers: default_headers
+         headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
 
-    public_id = VisitorEmail.order(:created_at).last.public_id
-    email = VisitorEmail.find_by(public_id: public_id)
-    email.update!(otp_expires_at: 1.minute.ago)
+    assert_response :redirect
+    target = URI.parse(response.location)
     cycle = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    email = VisitorEmail.find(cycle.pending_contact_id)
+    email.update!(otp_expires_at: VisitorEmail.database_now - 1.minute)
     completed_requirements = cycle.completed_requirements.deep_dup
     flow_count = VisitorSignUpFlow.count
 
-    get auth_com_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+    get target.request_uri
 
     assert_response :unprocessable_content
-    assert_includes inertia_props.fetch("errors").join(" "),
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+
+    assert_includes props.fetch("errors").join(" "),
                     I18n.t("sign.app.registration.email.edit.session_expired")
     assert_equal completed_requirements, cycle.reload.completed_requirements
     assert_equal flow_count, VisitorSignUpFlow.count
@@ -350,53 +478,107 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   test "create keeps re-registration inside overwrite window non-disclosing" do
     email_address = "cooldown-up@example.com"
+    headers = { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
 
-    # First request
     post auth_com_sign_up_email_url(ri: "jp"),
          params: { visitor_email: { raw_address: email_address, confirm_policy: "1" },
                    "cf-turnstile-response": "test", },
-         headers: default_headers
+         headers: headers
 
     assert_response :redirect
+    first_target = URI.parse(response.location)
+    first_flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
 
-    # Second request immediately should trigger the independent overwrite window
+    first_candidate = VisitorEmail.find(first_flow.pending_contact_id)
+    original_candidate_facts = first_candidate.reload.attributes.slice(
+      "visitor_id", "address_digest",
+      "binding_finalized_at", "binding_released_at",
+    )
+    original_owner = first_candidate.visitor.reload
+    # A new entry starts its own flow; the previous screen must never act on that replacement.
     post auth_com_sign_up_email_url(ri: "jp"),
          params: { visitor_email: { raw_address: email_address, confirm_policy: "1" },
                    "cf-turnstile-response": "test", },
-         headers: default_headers
+         headers: headers
 
-    assert_redirected_to auth_com_sign_up_check_email_otp_url(ri: "jp")
+    assert_response :redirect
+    second_target = URI.parse(response.location)
+    second_flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+
+    assert_equal [ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "/sign/up/check/email/otp"],
+                 [second_target.host, second_target.path]
+    assert_equal %w(fb ri), Rack::Utils.parse_query(second_target.query).keys.sort
+    assert_not_equal first_flow.public_id, second_flow.public_id
+    assert_predicate first_flow.reload, :sign_up_halted?
+    assert_not_predicate second_flow, :sign_up_terminal?
+    second_candidate = VisitorEmail.find(second_flow.pending_contact_id)
+
+    assert_not_equal first_candidate.id, second_candidate.id
+    assert_not_equal first_candidate.visitor_id, second_candidate.visitor_id
+    assert_equal first_candidate.address_digest, second_candidate.address_digest
+    assert(
+      original_candidate_facts == first_candidate.reload.attributes.slice(
+        "visitor_id", "address_digest",
+        "binding_finalized_at", "binding_released_at",
+      ), "owned supersession preserves binding facts",
+    )
+    assert_predicate first_flow, :cleanup_completed?
+    assert_operator first_candidate.discard_at, :<=, first_flow.cleanup_completed_at
+    assert_operator original_owner.reload.discard_at, :<=, first_flow.cleanup_completed_at
+    assert_operator original_owner.purge_eligible_at, :>, original_owner.discard_at
+    replacement_facts = second_flow.attributes
+    get first_target.request_uri
+
+    assert_response :conflict
+    assert(replacement_facts == second_flow.reload.attributes, "protected record facts remain unchanged")
   end
 
-  test "create after overwrite window replaces unverified email" do
-    email_address = "overwrite-window-com@example.com"
-
+  test "a new email registration after the old window preserves the original candidate and owner" do
+    destination = "overwrite-window-com@example.com"
     post auth_com_sign_up_email_url(ri: "jp"),
-         params: { visitor_email: { raw_address: email_address, confirm_policy: "1" },
+         params: { visitor_email: { raw_address: destination, confirm_policy: "1" },
                    "cf-turnstile-response": "test", },
-         headers: default_headers
+         headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
 
     assert_response :redirect
-    first_public_id = VisitorEmail.order(:created_at).last.public_id
-    first_email = VisitorEmail.find_by!(public_id: first_public_id)
-    first_visitor = first_email.visitor
+    first_flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    first_candidate = VisitorEmail.find(first_flow.pending_contact_id)
+    first_facts = first_candidate.reload.attributes.slice(
+      "visitor_id", "address_digest", "binding_finalized_at",
+      "binding_released_at",
+    )
+    first_owner = first_candidate.visitor.reload
 
-    decision_time = first_email.otp_last_sent_at + CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second
-    VisitorEmail.stub(:database_now, decision_time) do
-      travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
-        post auth_com_sign_up_email_url(ri: "jp"),
-             params: { visitor_email: { raw_address: email_address, confirm_policy: "1" },
-                       "cf-turnstile-response": "test", },
-             headers: default_headers
+    travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
+      assert_difference("VisitorEmail.count", 1) do
+        assert_difference("Visitor.count", 1) do
+          post auth_com_sign_up_email_url(ri: "jp"),
+               params: { visitor_email: { raw_address: destination, confirm_policy: "1" },
+                         "cf-turnstile-response": "test", },
+               headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
+        end
       end
     end
 
     assert_response :redirect
-    assert_not VisitorEmail.exists?(first_email.id)
-    assert_not Visitor.exists?(first_visitor.id)
-    new_public_id = VisitorEmail.order(:created_at).last.public_id
+    current = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    replacement = VisitorEmail.find(current.pending_contact_id)
 
-    assert VisitorEmail.exists?(public_id: new_public_id)
+    assert_not_equal first_candidate.id, replacement.id
+    assert_not_equal first_candidate.visitor_id, replacement.visitor_id
+    assert_equal first_candidate.address_digest, replacement.address_digest
+    assert(
+      first_facts == first_candidate.reload.attributes.slice(
+        "visitor_id", "address_digest", "binding_finalized_at",
+        "binding_released_at",
+      ), "owned supersession preserves binding facts",
+    )
+    assert_predicate first_flow.reload, :sign_up_halted?
+    assert_predicate first_flow, :cleanup_completed?
+    assert_operator first_candidate.discard_at, :<=, first_flow.cleanup_completed_at
+    assert_operator first_owner.reload.discard_at, :<=, first_flow.cleanup_completed_at
+    assert_operator first_owner.purge_eligible_at, :>, first_owner.discard_at
+    assert_nil replacement.binding_finalized_at
   end
 
   test "create rejects signup for an email blocked by an in-force registration_blocked Identifier Effect, " \
@@ -446,19 +628,29 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       address: "com-existing-otp-page@example.com",
       confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+      binding_finalized_at: VisitorEmail.database_now,
     )
+    original_binding = [existing_email.visitor_id,
+                        existing_email.binding_finalized_at, existing_email.binding_released_at,]
     post auth_com_sign_up_email_url(ri: "jp"),
          params: {
            visitor_email: { raw_address: existing_email.address, confirm_policy: "1" },
            "cf-turnstile-response": "test",
-         }, headers: default_headers
+         }, headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
 
     assert_response :redirect
 
-    get auth_com_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+    target = URI.parse(response.location)
+
+    assert_equal "/sign/up/check/email/otp", target.path
+    assert_predicate Rack::Utils.parse_query(target.query).fetch("fb"), :present?
+    get target.request_uri
 
     assert_response :success
     assert_not_includes response.body, I18n.t("errors.messages.taken")
+    assert_equal original_binding,
+                 [existing_email.reload.visitor_id,
+                  existing_email.binding_finalized_at, existing_email.binding_released_at,]
   end
 
   test "a code submitted against an existing verified email never verifies it" do
@@ -468,21 +660,34 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       address: "com-existing-otp-submit@example.com",
       confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+      binding_finalized_at: VisitorEmail.database_now,
     )
+    original_binding = [existing_email.visitor_id,
+                        existing_email.binding_finalized_at, existing_email.binding_released_at,]
     post auth_com_sign_up_email_url(ri: "jp"),
          params: {
            visitor_email: { raw_address: existing_email.address, confirm_policy: "1" },
            "cf-turnstile-response": "test",
-         }, headers: default_headers
-    get auth_com_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+         }, headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
+
+    assert_response :redirect
+    target = URI.parse(response.location)
+
+    assert_equal "/sign/up/check/email/otp", target.path
+    assert_predicate Rack::Utils.parse_query(target.query).fetch("fb"), :present?
+    get target.request_uri
+
+    assert_response :success
 
     assert_no_difference("Visitor.count") do
-      patch auth_com_sign_up_check_email_otp_url(ri: "jp"),
-            params: { visitor_email: { pass_code: "123456" } }, headers: default_headers
+      patch target.request_uri,
+            params: { visitor_email: { pass_code: "123456" }, "cf-turnstile-response": "test" }
     end
 
     assert_response :unprocessable_content
     assert_equal VisitorEmailStatus::VERIFIED, existing_email.reload.visitor_email_status_id
+    assert_equal original_binding,
+                 [existing_email.visitor_id, existing_email.binding_finalized_at, existing_email.binding_released_at]
   end
 
   private

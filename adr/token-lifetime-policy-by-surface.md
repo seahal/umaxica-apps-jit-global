@@ -89,3 +89,12 @@ these lifetimes.
 - `adr/step-up-authentication-redesign.md`
 - `adr/cookie-domain-scope-by-surface.md`
 - `plans/backlog/token-lifetime-policy-by-surface-implementation.md`
+
+## Delivered reconciliation (2026-10-06)
+
+The implementation cycle applied the surface-aware lifetimes to root sessions, step-up freshness,
+RP access and refresh credentials, and app Secret evidence. A step-up continuation extends no
+freshness window. RP refresh evaluates the refresh credential independently of access and uses the
+bounded encrypted delivery receipt described by `adr/base-authority-and-self-rp-separation.md`.
+The former “implementation is deferred” statement is superseded for these boundaries; unrelated
+future lifetime policy remains outside this cycle.

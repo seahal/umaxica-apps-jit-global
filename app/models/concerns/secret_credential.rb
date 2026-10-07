@@ -18,6 +18,7 @@ module SecretCredential
     limited_session
   ).freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     has_secure_password algorithm: :argon2, validations: false
     validates :name, presence: true

@@ -330,3 +330,12 @@ so the destination page owns the inline messaging — see
   `AuthMethodGuard.last_method?` (the unlink-side guard complementary to step-up).
 - `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md` — refresh-path AAL guarantees that this
   ADR's `step_up_satisfied?` depends on.
+
+## Delivered reconciliation (2026-10-06)
+
+The current step-up contract is recorded in `docs/security/step-up-operation-inventory.md`.
+Requirement, method choice, admission, Auth result, cancellation, conflict, continuation and final
+mutation are now one explicit operation boundary. Legacy AAL labels remain storage or wire history
+only and are not authorization inputs. The historical bootstrap and ownership language above is
+superseded where it conflicts with the delivered Base/Auth paths; first registration is a separate
+bootstrap transaction and cannot be reused as ordinary step-up freshness.

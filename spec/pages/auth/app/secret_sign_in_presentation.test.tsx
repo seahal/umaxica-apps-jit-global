@@ -26,6 +26,7 @@ describe("Secret sign-in presentation", () => {
     render(
       <SecretSignIn
         title="Sign in"
+        identifier_label="Identifier"
         label="Secret"
         submit="Continue"
         error={null}
@@ -46,6 +47,7 @@ describe("Secret sign-in presentation", () => {
     render(
       <SecretSignIn
         title="Sign in"
+        identifier_label="Identifier"
         label="Secret"
         submit="Continue"
         error="Try again."
@@ -68,6 +70,7 @@ describe("Secret sign-in presentation", () => {
     render(
       <SecretSignIn
         title="Sign in"
+        identifier_label="Identifier"
         label="Secret"
         submit="Continue"
         error={null}

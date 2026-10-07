@@ -12,7 +12,8 @@ module ObservabilityRedactor
       (?:.*)
       (?:
         email|uid|token|rt|jwt|authorization|cookie|set-cookie|session(?:_id)?|
-        code|state|nonce|verifier|challenge|dpop|otp|totp|hotp|password|secret|private_key|client_secret|
+        code|state|nonce|verifier|challenge|dpop|otp|totp|hotp|password|secret|
+        private_key|client_secret|sign_up_flow_ref|
         refresh_token|access_token|id_token|query_string|request_uri|original_url|
         url|redirect_uri|return_to|return_url
       )
@@ -87,10 +88,19 @@ module ObservabilityRedactor
     host = uri.host.to_s.downcase
     base = "#{uri.scheme.downcase}://#{host}"
     base += ":#{port}" if port && port != default_port
-    base += uri.path.to_s.presence || "/"
+    base += scrub_path(uri.path.to_s.presence || "/")
     base
   rescue URI::InvalidURIError
     REDACTED
+  end
+
+  def scrub_path(path)
+    return nil if path.nil?
+
+    path.to_s.sub(
+      %r{\A(/ceremony_bindings/)[^/?#]+(/confirmation)(?=\z|[/?#])},
+      '\\1[FILTERED]\\2',
+    )
   end
 
   def scrub_string(value)

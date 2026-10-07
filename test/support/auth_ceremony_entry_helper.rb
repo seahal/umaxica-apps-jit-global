@@ -119,6 +119,7 @@ module AuthCeremonyEntryHelper
 
   private
 
+  # rubocop:disable Metrics/AbcSize, Metrics/MethodLength -- This helper preserves the complete browser-facing Base/Auth ceremony exchange.
   def redeem_auth_ceremony_exchange!(browser, path, reference:, reference_param:, params:, headers:,
                                      confirm_via_http: false, base_browser: nil, base_token: nil)
     request_params = params.merge(reference_param => reference)
@@ -152,7 +153,8 @@ module AuthCeremonyEntryHelper
         "Sec-Fetch-Site" => "same-origin",
       )
       confirmation_browser.get(confirmation_path, headers: base_headers)
-      confirmation_action, confirmation_token, confirmation_hidden = continuation_form!(confirmation_browser.response.body)
+      confirmation_action, confirmation_token, confirmation_hidden =
+        continuation_form!(confirmation_browser.response.body)
       confirmation_browser.post(
         confirmation_action,
         params: confirmation_hidden.merge(authenticity_token: confirmation_token), headers: base_headers,
@@ -188,6 +190,7 @@ module AuthCeremonyEntryHelper
     final_action, final_token, final_hidden = continuation_form!(browser.response.body)
     browser.post(final_action, params: final_hidden.merge(authenticity_token: final_token), headers: auth_headers)
   end
+  # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
   def admission_surface_for_host(host)
     {

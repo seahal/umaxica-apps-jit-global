@@ -146,6 +146,55 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     assert_equal ClientTelephoneStatus::UNVERIFIED, pending.reload.user_telephone_status_id
   end
 
+  test "separate settings starts for the same telephone retain independent candidates and OTP counters" do
+    post base_app_identity_telephones_registration_url(ri: "jp", host: @host),
+         params: { user_telephone: { raw_number: "+15558675365" } }, headers: @headers
+    first = ClientTelephone.find(session[:settings_telephone_registration_id])
+    counter = first.otp_counter
+    post base_app_identity_telephones_registration_url(ri: "jp", host: @host),
+         params: { user_telephone: { raw_number: "+15558675365" } }, headers: @headers
+    second = ClientTelephone.find(session[:settings_telephone_registration_id])
+
+    assert_response :found
+    assert_not_equal first.id, second.id
+    assert_equal first.number_digest, second.number_digest
+    assert_equal counter, first.reload.otp_counter
+    assert_not first.binding_effective?
+    assert_not second.binding_effective?
+  end
+
+  test "telephone replacement preserves the old binding on wrong OTP and atomically audits the successful swap" do
+    previous = @user.client_telephones.create!(
+      number: "+15558675361", user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED, confirm_policy: "1",
+    )
+    previous.finalize_binding!
+    previous.store_otp("old-phone-evidence", 1, (ClientTelephone.database_now + 5.minutes).to_i)
+    post base_app_identity_telephones_registration_url(ri: "jp", host: @host),
+         params: { user_telephone: { raw_number: "+15558675362" } }, headers: @headers
+    pending = ClientTelephone.find(session[:settings_telephone_registration_id])
+    otp = pending.get_otp
+    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+    wrong = (code == "000000") ? "000001" : "000000"
+    patch base_app_identity_telephones_registration_url(ri: "jp", host: @host),
+          params: { user_telephone: { pass_code: wrong } }, headers: @headers
+
+    assert_response :unprocessable_content
+    assert_predicate previous.reload, :binding_effective?
+    assert_predicate previous, :otp_active?
+    assert_not ClientContactAuditOutbox.exists?(operation_ref: pending.public_id)
+    patch base_app_identity_telephones_registration_url(ri: "jp", host: @host),
+          params: { user_telephone: { pass_code: code } }, headers: @headers
+
+    assert_response :see_other
+    assert_predicate previous.reload, :binding_released?
+    assert_not previous.otp_active?
+    assert_predicate pending.reload, :binding_effective?
+    assert_equal [pending.id], @user.client_telephones.effective_binding.pluck(:id)
+    assert_equal [[previous.public_id, "released"], [pending.public_id, "finalized"]],
+                 ClientContactAuditOutbox.where(operation_ref: pending.public_id).order(:id)
+                   .pluck(:contact_ref, :event_name)
+  end
+
   test "update verifies the telephone number and returns to the identity page on the correct code" do
     post base_app_identity_telephones_registration_url(ri: "jp", host: @host),
          params: { user_telephone: { raw_number: "+15558675316" } }, headers: @headers
@@ -158,6 +207,12 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
 
     assert_response :see_other
     assert_equal ClientTelephoneStatus::VERIFIED, pending.reload.user_telephone_status_id
+    intent = ClientContactAuditOutbox.find_by!(contact_ref: pending.public_id, event_name: "finalized")
+
+    assert_equal @user.public_id, intent.owner_ref
+    assert_equal @user.public_id, intent.actor_ref
+    assert_equal pending.public_id, intent.operation_ref
+    assert_nil intent.acknowledged_at
     assert_nil session[:settings_telephone_registration_id]
   end
 

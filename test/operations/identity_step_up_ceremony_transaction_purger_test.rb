@@ -98,7 +98,10 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
     assert_predicate binding.reload, :retired?
     assert_nil binding.redeemed_at
 
-    later = now + StepUpCeremonyTransactionable::RETENTION_PERIOD
+    later = binding.retired_at + StepUpCeremonyTransactionable::RETENTION_PERIOD
+
+    assert_equal 0, IdentityStepUpCeremonyTransactionPurger.new(now: later - Rational(1, 1_000_000)).call.fetch(:app)
+    assert ClientAuthAdmissionBinding.exists?(binding.id)
 
     assert_operator IdentityStepUpCeremonyTransactionPurger.new(now: later).call.fetch(:app), :>=, 1
     assert_not ClientStepUpCeremonyTransaction.exists?(parent.id)

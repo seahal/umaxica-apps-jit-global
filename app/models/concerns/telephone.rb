@@ -38,6 +38,7 @@ module Telephone
   attr_accessor :confirm_policy, :confirm_using_mfa, :pass_code
   attr_writer :raw_number
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_validation :normalize_number_from_raw
     before_validation :set_number_digests

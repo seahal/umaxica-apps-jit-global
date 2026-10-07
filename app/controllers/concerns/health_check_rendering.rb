@@ -20,6 +20,7 @@
 module HealthCheckRendering
   extend ActiveSupport::Concern
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_action :disable_health_response_cache
   end

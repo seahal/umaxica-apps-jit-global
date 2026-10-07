@@ -55,7 +55,12 @@ module SignOperatorTelephoneRegistrable
       return :session_expired
     end
 
-    result = verify_otp_code_and_consume(@staff_telephone, submitted_code)
+    result = verify_otp_code_and_consume(
+      @staff_telephone, submitted_code,
+      verification_scope: { surface: :org,
+                            purpose: :credential_registration,
+                            channel: :telephone, },
+    )
     unless result[:success]
       if @staff_telephone.locked?
         @staff_telephone.destroy!

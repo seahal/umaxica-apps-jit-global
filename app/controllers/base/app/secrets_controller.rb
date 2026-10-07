@@ -88,6 +88,7 @@ class Base::App::SecretsController < Base::App::ApplicationController
       actor_context: secret_actor_context, token: current_session_token, credential: @secret,
       purge_after: ClientSecretLifetimesValue.purge_delay,
     )
+    session[:inertia_clear_history] = true
     redirect_to(base_app_secrets_path, status: :see_other)
   end
 
@@ -123,8 +124,11 @@ class Base::App::SecretsController < Base::App::ApplicationController
     operation_id = params[:operation_id]
     locator = session[:client_secret_operation]
     locator = locator.stringify_keys if locator.respond_to?(:stringify_keys)
-    unless operation_id.is_a?(String) && operation_id.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/) &&
-        locator.is_a?(Hash) && locator["id"] == operation_id && locator["session_ref"] == current_session_token&.public_id
+    valid_id = operation_id.is_a?(String) &&
+      operation_id.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/)
+    valid_locator = locator.is_a?(Hash) && locator["id"] == operation_id &&
+      locator["session_ref"] == current_session_token&.public_id
+    unless valid_id && valid_locator
       raise ClientSecretManualReservationIssuer::Denied, "Secret operation locator is unavailable"
     end
 

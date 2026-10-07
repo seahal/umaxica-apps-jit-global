@@ -186,18 +186,33 @@ class IdentityPasskeyRegistrationFinalCommitter
     end
 
     def validate_ticket!(config, actor, token, transaction, record, digest, payload, now)
-      valid = token.currently_usable?(now) && transaction.surface == config.fetch(:surface) &&
-        transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
-        %w(verified consumed).include?(transaction.status) && !transaction.expired?(now: now) &&
-        transaction.purpose.in?(%w(bootstrap credential_registration)) && transaction.method == "passkey" &&
+      valid = token.currently_usable?(now) && ticket_binding_matches?(config, actor, token, transaction, now) &&
+        ticket_policy_matches?(transaction) && registration_record_matches?(record, transaction, now) &&
+        ticket_result_matches?(transaction, digest, payload, now)
+      refuse!("passkey registration permission unavailable") unless valid
+    end
+
+    def ticket_binding_matches?(config, actor, token, transaction, now)
+      transaction.surface == config.fetch(:surface) && transaction.actor_ref == actor.public_id &&
+        transaction.session_ref == token.public_id && %w(verified consumed).include?(transaction.status) &&
+        !transaction.expired?(now: now)
+    end
+
+    def ticket_policy_matches?(transaction)
+      transaction.purpose.in?(%w(bootstrap credential_registration)) && transaction.method == "passkey" &&
         transaction.aal == "none" && transaction.step_up_required == false &&
         transaction.phishing_resistant_required == false && transaction.user_verification_required == false &&
-        transaction.full_reauthentication_required == false && transaction.allowed_methods_array.include?("passkey") &&
-        record.status == "PENDING" && record.scope == transaction.required_scope && record.discard_at > now &&
-        transaction.result_delivery_matches?(
-          result_digest: digest, result_generation: payload.fetch("result_generation"), now: now,
-        )
-      refuse!("passkey registration permission unavailable") unless valid
+        transaction.full_reauthentication_required == false && transaction.allowed_methods_array.include?("passkey")
+    end
+
+    def registration_record_matches?(record, transaction, now)
+      record.status == "PENDING" && record.scope == transaction.required_scope && record.discard_at > now
+    end
+
+    def ticket_result_matches?(transaction, digest, payload, now)
+      transaction.result_delivery_matches?(
+        result_digest: digest, result_generation: payload.fetch("result_generation"), now: now,
+      )
     end
 
     def validate_candidate!(config, actor, token, transaction, candidate, now)

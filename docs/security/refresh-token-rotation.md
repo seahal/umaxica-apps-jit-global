@@ -234,3 +234,13 @@ renamed. They must not assert sign-side authority.
 - `docs/security/session-token-authority.md`
 - `docs/security/downstream-token-authority.md`
 - `docs/security/cookie-domain-scope.md`
+
+## Delivered reconciliation (2026-10-06)
+
+The active contract is the device-session-first rotation in the Base RP layer. Access and refresh
+credentials are evaluated independently. GET/HEAD and unsafe requests use separate refresh
+orchestrators; unsafe requests complete CSRF, Origin and Fetch Metadata checks before refresh and
+mutation. Valkey single-flight coalescing is bounded by the fixed encrypted delivery receipt, while
+the database receipt remains the recovery authority. Credential failure clears RP cookies;
+dependency failure preserves them and is observable. Earlier sign/acme authority wording above is
+historical.

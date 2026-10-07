@@ -64,10 +64,10 @@ const { default: ComSetupsNew } = await import("@/pages/auth/com/verification/se
 const { default: ComEmailsNew } = await import("@/pages/auth/com/sign/in/emails/new");
 const { default: ComEmailsEdit } = await import("@/pages/auth/com/sign/in/emails/edit");
 const { default: ComPasskeysNew } = await import("@/pages/auth/com/sign/in/passkeys/new");
-const { default: ComSettingsIndex } = await import("@/pages/auth/com/settings/passkeys/index");
-const { default: ComSettingsShow } = await import("@/pages/auth/com/settings/passkeys/show");
-const { default: ComSettingsEdit } = await import("@/pages/auth/com/settings/passkeys/edit");
-const { default: ComSettingsNew } = await import("@/pages/auth/com/settings/passkeys/new");
+const { default: ComSettingsIndex } = await import("@/pages/base/com/identity/passkeys/index");
+const { default: ComSettingsShow } = await import("@/pages/base/com/identity/passkeys/show");
+const { default: BasePasskeysIndex } = await import("@/features/base_identity/PasskeysIndex");
+const { default: BasePasskeyShow } = await import("@/features/base_identity/PasskeyShow");
 
 const turnstile = {
   site_key: "site-key",
@@ -93,7 +93,7 @@ describe("AuthMethodChoice", () => {
       />,
     );
     expect(markup).toMatch(/<p[^>]*>Cancel<\/p><\/div>$/u);
-    const controls = markup.match(/<(a|button|form)\b[^>]*>[^]*?<\/\1>/gu) ?? [];
+    const controls = markup.match(/<(a|button|form)\b[^>]*>[^]*?<\/\1>/gu)!;
     expect(controls.some((control) => control.includes("Cancel"))).toBe(false);
   });
 
@@ -412,7 +412,7 @@ describe("passkey settings screens", () => {
   });
 });
 
-describe("auth/com page modules", () => {
+describe("auth/com and Base page modules", () => {
   it("re-export the shared screens rather than defining their own", () => {
     // Signing in and signing up offer different method sets, so they are different screens.
     expect(ComSignInsNew).toBe(SignInMethodChoice);
@@ -422,9 +422,7 @@ describe("auth/com page modules", () => {
     expect(ComEmailsNew).toBe(SignInEmailNew);
     expect(ComEmailsEdit).toBe(SignInEmailEdit);
     expect(ComPasskeysNew).toBe(SignInPasskeyNew);
-    expect(ComSettingsIndex).toBe(PasskeyIndex);
-    expect(ComSettingsShow).toBe(PasskeyShow);
-    expect(ComSettingsEdit).toBe(PasskeyEdit);
-    expect(ComSettingsNew).toBe(PasskeyNew);
+    expect(ComSettingsIndex).toBe(BasePasskeysIndex);
+    expect(ComSettingsShow).toBe(BasePasskeyShow);
   });
 });

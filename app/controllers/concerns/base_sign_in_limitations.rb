@@ -80,6 +80,7 @@ module BaseSignInLimitations
     flow.cancel_sign_in! unless flow.sign_in_completed? || flow.sign_in_expired? ||
       flow.sign_in_cancelled? || flow.sign_in_halted?
     clear_current_sign_in_flow_locator!
+    session[:inertia_clear_history] = true
     true
   rescue FlowInvalidTransition, ActiveRecord::RecordNotFound
     false
@@ -117,17 +118,33 @@ module BaseSignInLimitations
   end
 
   def load_resolution
-    gate = session[SessionLimitGate::GATE_SESSION_KEY]
-    gate_challenge = gate.is_a?(Hash) ? gate["resolution_challenge"].to_s : ""
-    requested_challenge = params[:resolution_challenge].to_s
-    @resolution_challenge = gate_challenge.presence
+    @resolution_challenge = resolution_challenge_from_session
     return if @resolution_challenge.blank?
-    return if requested_challenge.present? && requested_challenge != @resolution_challenge
+    return if requested_resolution_challenge_mismatch?
 
+    load_resolution_transaction
+  end
+
+  def resolution_challenge_from_session
+    gate = session[SessionLimitGate::GATE_SESSION_KEY]
+    challenge = gate.is_a?(Hash) ? gate["resolution_challenge"].to_s : ""
+    challenge.presence
+  end
+
+  def requested_resolution_challenge_mismatch?
+    requested_challenge = params[:resolution_challenge].to_s
+    requested_challenge.present? && requested_challenge != @resolution_challenge
+  end
+
+  def load_resolution_transaction
     @resolution_binding = session_limit_resolution_binding
     @resolution = resolution_transaction_class.find_by(challenge: @resolution_challenge)
     return unless @resolution && @resolution_binding.present?
 
+    validate_loaded_resolution
+  end
+
+  def validate_loaded_resolution
     @actor = actor_class.find_by(public_id: @resolution.actor_ref)
     @oidc_transaction =
       ticket_record.connected_to(role: :writing) { @resolution.oidc_authorization_transaction }
@@ -137,18 +154,23 @@ module BaseSignInLimitations
       @resolution.browser_binding_digest,
       @resolution.class.digest_challenge(@resolution_binding),
     )
-    valid_parent = flow.principal_id == @actor&.id && !flow.expired?(now) &&
-      !flow.sign_in_completed? && !flow.sign_in_cancelled? && !flow.sign_in_halted?
-    valid_oidc =
-      if @oidc_transaction
-        @oidc_transaction.actor_ref == @actor&.public_id && @oidc_transaction.authenticated? &&
-          @oidc_transaction.base_finalized_at.nil? && !@oidc_transaction.expired?(now: now) &&
-          !@oidc_transaction.login_challenge_expired?(now: now)
-      else
-        true
-      end
+    valid_parent = valid_resolution_parent?(flow, now)
+    valid_oidc = valid_resolution_oidc?(now)
     @resolution = nil unless @actor && valid_binding && valid_parent && valid_oidc &&
       (@resolution.open? || @resolution.resolved?)
+  end
+
+  def valid_resolution_parent?(flow, now)
+    flow.principal_id == @actor&.id && !flow.expired?(now) &&
+      !flow.sign_in_completed? && !flow.sign_in_cancelled? && !flow.sign_in_halted?
+  end
+
+  def valid_resolution_oidc?(now)
+    return true unless @oidc_transaction
+
+    @oidc_transaction.actor_ref == @actor&.public_id && @oidc_transaction.authenticated? &&
+      @oidc_transaction.base_finalized_at.nil? && !@oidc_transaction.expired?(now: now) &&
+      !@oidc_transaction.login_challenge_expired?(now: now)
   end
 
   def resolution_loaded?
@@ -189,6 +211,7 @@ module BaseSignInLimitations
   def complete_local_resolution
     return render_invalid_resolution unless promote_current_session_limit_cycle!(@actor)
 
+    session[:inertia_clear_history] = true
     redirect_to(local_login_success_path, status: :see_other)
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
          ActiveRecord::SoleRecordExceeded, AuthCeremonySession::InvalidTransition
@@ -219,6 +242,7 @@ module BaseSignInLimitations
     end
     return render_invalid_resolution unless finalization[:status] == :success
 
+    session[:inertia_clear_history] = true
     issue_authorization_code!
   rescue ArgumentError, ActiveRecord::RecordNotFound, FlowInvalidTransition
     render_invalid_resolution

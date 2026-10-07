@@ -6,7 +6,12 @@
 require "digest"
 
 class BaseAuthAdmissionCoordinator < ApplicationService
-  ADMISSION_REFERENCE_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i.freeze
+  ADMISSION_REFERENCE_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i.freeze
+  CLIENT_BINDING_PROOF_PARAMS = %w(
+    auth_sid sid auth_ceremony_session_id admitted_auth_ceremony_session_id base_token_id
+    base_browser_digest confirmation_ref sign_in_flow_id authorization_transaction_id
+    step_up_ceremony_transaction_id parent_kind purpose browser_nonce
+  ).freeze
 
   # `code` is the internal refusal taxonomy for logs; responses stay generic.
   class Denied < StandardError
@@ -90,17 +95,18 @@ class BaseAuthAdmissionCoordinator < ApplicationService
   }.freeze
 
   Issuance = Data.define(:transaction, :code, :reference)
+  TerminalOutcome = Data.define(:transaction)
   CancellationIssuance = Data.define(:transaction, :reference, :handoff)
 
   class << self
     public
 
-    def issue_handoff!(transaction:, base_browser_nonce:, base_token:, reference: nil, restart_of: nil,
+    def issue_handoff!(transaction:, base_browser_nonce:, base_token:, restart_of: nil,
                        store: default_store)
       purpose = handoff_purpose_for(transaction.intent)
       binding, code = issue_binding_and_transport!(
         transaction: transaction, purpose: purpose, base_browser_nonce: base_browser_nonce,
-        base_token: base_token, requested_reference: reference, restart_of:, store: store,
+        base_token: base_token, restart_of:, store: store,
       )
       Issuance.new(transaction: transaction, code: code, reference: binding.entry_ref)
     end
@@ -125,7 +131,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
             end
           binding = create_or_reuse_binding!(
             transaction: created, surface: surface.to_s, purpose: purpose, base_browser_nonce: base_browser_nonce,
-            base_token: base_token, requested_reference: nil, restart_of:, now: now,
+            base_token: base_token, restart_of:, now: now,
           )
           issued_code = issue_transport!(
             transaction: created, surface: surface.to_s, purpose: purpose, binding: binding,
@@ -137,15 +143,66 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       Issuance.new(transaction: transaction, code: code, reference: binding.entry_ref)
     end
 
+    def validate_result_browser_binding!(transaction:, surface:, base_browser_nonce:, base_token:)
+      unless transaction.surface == surface.to_s && base_browser_nonce.is_a?(String) && base_browser_nonce.present?
+        raise Denied.new("result browser binding is missing", code: "return_binding_mismatch")
+      end
+
+      binding = admission_binding_model(surface).where.not(redeemed_at: nil)
+        .find_by!(binding_parent_attributes(transaction))
+      expected = AuthAdmissionBinding.browser_digest(surface:, entry_ref: binding.entry_ref, nonce: base_browser_nonce)
+      unless binding.redeemed? && ActiveSupport::SecurityUtils.secure_compare(binding.base_browser_digest, expected) &&
+          result_root_context_matches?(binding, transaction, base_token)
+        raise Denied.new("result browser binding mismatch", code: "return_binding_mismatch")
+      end
+
+      binding
+    rescue ActiveRecord::RecordNotFound
+      raise Denied.new("result browser binding is unavailable", code: "return_binding_mismatch")
+    end
+
+    def validate_registration_restart_browser!(binding:, surface:, base_browser_nonce:, base_token:, scope:, method:)
+      unless binding.is_a?(admission_binding_model(surface)) && !binding.retired? &&
+          binding.parent_kind == :step_up_ceremony_transaction && binding.purpose == "credential_registration_handoff"
+        raise Denied.new("registration restart is unavailable", code: "invalid_admission")
+      end
+
+      transaction = binding.step_up_ceremony_transaction
+      unless transaction.purpose == "credential_registration" && transaction.required_scope == scope &&
+          transaction.allowed_methods_array == [method.to_s]
+        raise Denied.new("registration restart intent mismatch", code: "invalid_admission")
+      end
+
+      ensure_binding_browser_matches!(binding, surface:, nonce: base_browser_nonce)
+      ensure_binding_token_matches!(binding, base_token)
+      validate_admission_parent!(binding)
+      validate_admission_root!(binding)
+      binding
+    end
+
+    def validate_admission_continuation!(binding:, surface:, expected_intent:)
+      unless binding.is_a?(admission_binding_model(surface)) && binding.live? &&
+          admission_reference_purposes(expected_intent).include?(binding.purpose)
+        raise Denied.new("admission continuation is unavailable", code: "invalid_admission")
+      end
+
+      validate_admission_parent!(binding)
+      validate_admission_root!(binding)
+      validate_entry_parent_intent!(binding, expected_intent)
+      binding
+    end
+
     def consume_entry_reference!(reference:, surface:, expected_intent:, binding:, raw_auth_sid:, store: default_store)
+      allowed_purposes = admission_reference_purposes(expected_intent)
       validate_entry_binding!(
-        reference: reference, surface: surface, expected_intent: expected_intent,
+        reference: reference, surface: surface, allowed_purposes: allowed_purposes,
         binding: binding, raw_auth_sid: raw_auth_sid,
       )
+      validate_entry_parent_intent!(binding, expected_intent)
       result = store.consume_reference!(
         reference: reference,
-        purposes: admission_reference_purposes(expected_intent),
-        expected: binding_expectations(surface: surface),
+        purposes: allowed_purposes,
+        expected: binding_expectations(surface: surface, subject_ref: binding_parent_reference(binding)),
       )
       raise Denied.new("local admission missing", code: "invalid_admission") if result.missing?
       raise Denied.new("local admission replay", code: "admission_replay") if result.replay?
@@ -156,7 +213,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       validate_payload!(payload, surface: surface)
       validate_entry_payload_binding!(payload: payload, binding: binding, expected_intent: expected_intent)
       validate_entry_binding!(
-        reference: reference, surface: surface, expected_intent: expected_intent,
+        reference: reference, surface: surface, allowed_purposes: allowed_purposes,
         binding: binding, raw_auth_sid: raw_auth_sid,
       )
       payload
@@ -200,21 +257,10 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         transaction.class.connection_owner.transaction do
           transaction.with_lock do
             if transaction.cancellation_handoff_ref.present? || transaction.cancellation_handoff_ciphertext.present?
-              unless transaction.cancellation_handoff_ref.present? && transaction.cancellation_handoff_ciphertext.present?
-                raise Denied.new("cancellation handoff is incomplete", code: "transaction_conflict")
-              end
-
-              reference = transaction.cancellation_handoff_ref
-              handoff = transaction.cancellation_handoff_ciphertext
-              payload = decrypt_cancellation_handoff(handoff)
-              unless payload.fetch("reference") == reference && payload.fetch("transaction_ref") == transaction.transaction_id
-                raise Denied.new("cancellation handoff is inconsistent", code: "transaction_conflict")
-              end
-
-              ensure_cancellation_transport!(
-                store: store, reference: reference, transaction: transaction, raw_code: payload.fetch("raw_code"),
-                ceremony_session_ref: ceremony_session_ref, ttl: remaining, now: now,
-              ) unless transaction.status == "canceled"
+              reference, handoff = reuse_cancellation_handoff!(
+                transaction: transaction, store: store, ceremony_session_ref: ceremony_session_ref,
+                ttl: remaining, now: now,
+              )
             else
               raw_code = SecureRandom.urlsafe_base64(
                 Valkey::AuthState::OpaqueAdmissionStore::CODE_BYTES,
@@ -445,6 +491,26 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       CEREMONY_SESSION.fetch(surface.to_s)
     end
 
+    def client_supplied_binding_proof?(parameters)
+      CLIENT_BINDING_PROOF_PARAMS.any? { |key| parameters.key?(key) || parameters.key?(key.to_sym) }
+    end
+
+    def with_admission_binding_lock!(binding, &)
+      token = binding.base_token
+      if token
+        actor = admission_root_actor(token)
+        actor.class.connection_class_for_self.connected_to(role: :writing) do
+          actor.with_lock do
+            raise Denied.new("Base actor is unavailable", code: "authorization_denied") unless actor.login_allowed?
+
+            with_admission_ticket_locks!(binding, token, &)
+          end
+        end
+      else
+        with_admission_ticket_locks!(binding, nil, &)
+      end
+    end
+
     def admission_binding_model(surface)
       ADMISSION_BINDING.fetch(surface.to_s)
     rescue KeyError
@@ -494,8 +560,29 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     private :handoff_purpose_for, :result_purpose_for, :local_entry_purpose_for
 
+    def reuse_cancellation_handoff!(transaction:, store:, ceremony_session_ref:, ttl:, now:)
+      reference = transaction.cancellation_handoff_ref
+      handoff = transaction.cancellation_handoff_ciphertext
+      unless reference.present? && handoff.present?
+        raise Denied.new("cancellation handoff is incomplete", code: "transaction_conflict")
+      end
+
+      payload = decrypt_cancellation_handoff(handoff)
+      unless payload.fetch("reference") == reference && payload.fetch("transaction_ref") == transaction.transaction_id
+        raise Denied.new("cancellation handoff is inconsistent", code: "transaction_conflict")
+      end
+
+      unless transaction.status == "canceled"
+        ensure_cancellation_transport!(
+          store: store, reference: reference, transaction: transaction, raw_code: payload.fetch("raw_code"),
+          ceremony_session_ref: ceremony_session_ref, ttl: ttl, now: now,
+        )
+      end
+      [reference, handoff]
+    end
+
     def issue_binding_and_transport!(transaction:, purpose:, base_browser_nonce:, base_token:,
-                                     requested_reference:, restart_of:, store:)
+                                     restart_of:, store:)
       model = admission_binding_model(transaction.surface)
       model.connection_owner.connected_to(role: :writing) do
         model.transaction do
@@ -503,7 +590,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
           binding = create_or_reuse_binding!(
             transaction: locked_transaction, surface: locked_transaction.surface, purpose: purpose,
             base_browser_nonce: base_browser_nonce,
-            base_token: base_token, requested_reference: requested_reference, restart_of:, now: model.database_now,
+            base_token: base_token, restart_of:, now: model.database_now,
           )
           code = issue_transport!(
             transaction: locked_transaction, surface: locked_transaction.surface, purpose: purpose,
@@ -515,23 +602,26 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def create_or_reuse_binding!(transaction:, surface:, purpose:, base_browser_nonce:, base_token:,
-                                 requested_reference:, restart_of:, now:)
+                                 restart_of:, now:)
       model = admission_binding_model(surface)
       parent_attributes = binding_parent_attributes(transaction)
       validate_base_token!(transaction: transaction, surface: surface, base_token: base_token)
 
       retire_restart_binding!(
-        model:, transaction:, surface:, purpose:, base_browser_nonce:, base_token:, restart_of:, now:,
+        model:, transaction:, surface:, purpose:, base_browser_nonce:, base_token:, restart_of:,
       ) if restart_of.present?
 
       existing = model.lock.find_by(parent_attributes.merge(purpose: purpose, retired_at: nil, redeemed_at: nil))
       if existing
-        if existing.expired?(now: now)
-          existing.retire!(now: now)
-        else
-          ensure_binding_token_matches!(existing, base_token)
-          return existing
-        end
+        ensure_binding_token_matches!(existing, base_token)
+        ensure_binding_browser_matches!(existing, surface: surface, nonce: base_browser_nonce)
+        return existing unless existing.expired?(now: now)
+
+        raise Denied.new("admission expired; explicit restart is required", code: "expired_admission")
+      end
+
+      if model.where(parent_attributes.merge(purpose: purpose)).where.not(redeemed_at: nil).exists?
+        raise Denied.new("admission redeemed; explicit cancel-and-start is required", code: "invalid_admission")
       end
 
       entry_ref = SecureRandom.uuid
@@ -562,7 +652,8 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         binding.sign_in_flow_id.blank?
 
       flow = model.lock.find(binding.sign_in_flow_id)
-      unless binding.purpose == purpose && flow.sign_in_primary_pending? && !flow.expired?(now) && flow.principal_id.nil?
+      unless binding.purpose == purpose && flow.sign_in_primary_pending? &&
+          !flow.expired?(now) && flow.principal_id.nil?
         raise Denied.new("local restart is unavailable", code: "invalid_admission")
       end
 
@@ -572,11 +663,11 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def retire_restart_binding!(model:, transaction:, surface:, purpose:, base_browser_nonce:, base_token:,
-                                restart_of:, now:)
+                                restart_of:)
       validate_admission_reference!(restart_of, label: "restart reference")
       binding = model.lock.find_by!(entry_ref: restart_of)
       unless binding_parent_matches?(binding, transaction) &&
-          binding.purpose == purpose && !binding.redeemed? && !binding.retired? && binding.live?(now: now)
+          binding.purpose == purpose && !binding.redeemed? && !binding.retired?
         raise Denied.new("admission restart is unavailable", code: "invalid_admission")
       end
 
@@ -587,7 +678,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         raise Denied.new("admission restart browser binding mismatch", code: "session_binding_mismatch")
       end
 
-      binding.retire!(now: now)
+      binding.retire!
     rescue ActiveRecord::RecordNotFound
       raise Denied.new("admission restart binding missing", code: "invalid_admission")
     end
@@ -633,7 +724,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       }
       store.issue!(**arguments)
     rescue Umaxica::Valkey::OperationError => e
-      raise unless e.message == "admission code key collision" && store.respond_to?(:reissue_reference!)
+      raise unless e.message == "admission code key collision"
 
       store.reissue_reference!(**arguments.except(:reference).merge(reference: binding.entry_ref))
     end
@@ -667,11 +758,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def binding_parent_attributes(transaction)
       case transaction
-      when ClientSignInFlow
-        { sign_in_flow_id: transaction.id }
-      when VisitorSignInFlow
-        { sign_in_flow_id: transaction.id }
-      when OperatorSignInFlow
+      when ClientSignInFlow, VisitorSignInFlow, OperatorSignInFlow
         { sign_in_flow_id: transaction.id }
       when ClientOidcAuthorizationTransaction, VisitorOidcAuthorizationTransaction,
            OperatorOidcAuthorizationTransaction
@@ -738,7 +825,14 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       raise Denied.new("Base token binding is invalid", code: "session_binding_mismatch")
     end
 
-    def validate_entry_binding!(reference:, surface:, expected_intent:, binding:, raw_auth_sid:)
+    def ensure_binding_browser_matches!(binding, surface:, nonce:)
+      digest = AuthAdmissionBinding.browser_digest(surface: surface, entry_ref: binding.entry_ref, nonce: nonce)
+      return if ActiveSupport::SecurityUtils.secure_compare(binding.base_browser_digest, digest)
+
+      raise Denied.new("Base browser binding is invalid", code: "session_binding_mismatch")
+    end
+
+    def validate_entry_binding!(reference:, surface:, allowed_purposes:, binding:, raw_auth_sid:)
       model = admission_binding_model(surface)
       unless reference.is_a?(String) && reference.match?(ADMISSION_REFERENCE_PATTERN) &&
           binding.is_a?(model) && binding.entry_ref == reference && binding.live? &&
@@ -746,20 +840,140 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         raise Denied.new("admission binding is unavailable", code: "invalid_admission")
       end
 
+      unless allowed_purposes.include?(binding.purpose)
+        raise Denied.new("admission purpose mismatch", code: "invalid_admission")
+      end
+
+      validate_admission_parent!(binding)
+      validate_admission_root!(binding)
+
       unless raw_auth_sid.is_a?(String) && raw_auth_sid.present?
         raise Denied.new("Auth ceremony session is missing", code: "session_binding_mismatch")
       end
 
       auth_session = model.auth_admission_session_class.find_active_by_raw_sid(raw_auth_sid)
-      unless auth_session && auth_session.id == binding.auth_ceremony_session_id && !auth_session.admitted?
+      unless auth_session && auth_session.id == binding.auth_ceremony_session_id
         raise Denied.new("Auth ceremony session does not match binding", code: "session_binding_mismatch")
       end
-
-      return auth_session if expected_intent.to_s.blank?
 
       auth_session
     rescue ArgumentError, ActiveRecord::RecordNotFound
       raise Denied.new("Auth ceremony session is invalid", code: "session_binding_mismatch")
+    end
+
+    def validate_admission_parent!(binding)
+      available =
+        case binding.parent_kind
+        when :sign_in_flow
+          flow = binding.sign_in_flow.reload
+          flow.sign_in_primary_pending? && !flow.expired?(flow.class.database_now) && flow.principal_id.nil?
+        when :authorization_transaction
+          transaction = binding.authorization_transaction.reload
+          now = transaction.class.database_now
+          transaction.status == "pending" && !transaction.expired?(now:) && !transaction.login_challenge_expired?(now:)
+        when :step_up_ceremony_transaction
+          transaction = binding.step_up_ceremony_transaction.reload
+          %w(pending
+             verified).include?(transaction.status) && !transaction.expired?(now: transaction.class.database_now)
+        else
+          false
+        end
+      raise Denied.new("admission parent is unavailable", code: "invalid_admission") unless available
+    end
+
+    def validate_admission_root!(binding)
+      return if binding.base_token_id.nil?
+
+      token = binding.base_token.reload
+      device = token.device_session.reload
+      validate_step_up_root_context!(binding, token) if binding.parent_kind == :step_up_ceremony_transaction
+      return if token.currently_usable?(token.class.database_now) && device.usable? &&
+        device.current_refresh_token_id == token.id && admission_root_actor(token).login_allowed?
+
+      raise Denied.new("Base session is unavailable", code: "session_expired")
+    end
+
+    def result_root_context_matches?(binding, transaction, token)
+      return true if binding.base_token_id == token&.id
+      return false unless token && transaction.consumed?
+
+      case transaction
+      when ClientOidcAuthorizationTransaction, VisitorOidcAuthorizationTransaction, OperatorOidcAuthorizationTransaction
+        transaction.base_finalized_at.present? && transaction.browser_session_ref == token.public_id &&
+          transaction.actor_ref == admission_root_actor(token).public_id
+      when ClientStepUpCeremonyTransaction, VisitorStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction
+        transaction.purpose == "reauthentication" && binding.base_token.device_session_id == token.device_session_id &&
+          transaction.actor_ref == admission_root_actor(token).public_id
+      else
+        false
+      end
+    end
+
+    def validate_step_up_root_context!(binding, token)
+      transaction = binding.step_up_ceremony_transaction
+      return if transaction.actor_ref == admission_root_actor(token).public_id &&
+        transaction.session_ref == token.public_id && transaction.token_binding == token.public_id &&
+        transaction.require_session_binding
+
+      raise Denied.new("step-up Base context mismatch", code: "session_binding_mismatch")
+    end
+
+    def admission_root_actor(token)
+      case token
+      when ClientToken then token.user
+      when VisitorToken then token.visitor
+      when OperatorToken then token.staff
+      else raise Denied.new("Base token is invalid", code: "session_binding_mismatch")
+      end
+    end
+
+    def with_admission_ticket_locks!(binding, token, &)
+      binding.class.connection_owner.connected_to(role: :writing) do
+        binding.class.transaction do
+          if token
+            token.device_session.with_lock do
+              token.with_lock { with_admission_parent_lock!(binding, &) }
+            end
+          else
+            with_admission_parent_lock!(binding, &)
+          end
+        end
+      end
+    end
+
+    def with_admission_parent_lock!(binding)
+      parent =
+        case binding.parent_kind
+        when :sign_in_flow then binding.sign_in_flow
+        when :authorization_transaction then binding.authorization_transaction
+        when :step_up_ceremony_transaction then binding.step_up_ceremony_transaction
+        else raise Denied.new("admission parent is missing", code: "invalid_admission")
+        end
+      parent.with_lock do
+        binding.with_lock do
+          ids = [binding.auth_ceremony_session_id, binding.admitted_auth_ceremony_session_id].compact
+          ids.uniq!
+          binding.class.auth_admission_session_class.where(id: ids).order(:id).lock.load
+          validate_admission_parent!(binding) unless binding.redeemed?
+          validate_admission_root!(binding)
+          yield binding
+        end
+      end
+    end
+
+    def validate_entry_parent_intent!(binding, expected_intent)
+      # Local flows store no intent: their immutable binding purpose already distinguishes it.
+      return if binding.parent_kind == :sign_in_flow
+
+      actual =
+        case binding.parent_kind
+        when :authorization_transaction then binding.authorization_transaction.intent
+        when :step_up_ceremony_transaction then binding.step_up_ceremony_transaction.purpose
+        end
+      return if actual == expected_intent.to_s ||
+        (actual == "authentication" && %w(sign_in sign_up).include?(expected_intent.to_s))
+
+      raise Denied.new("admission parent intent mismatch", code: "invalid_admission")
     end
 
     def validate_entry_payload_binding!(payload:, binding:, expected_intent:)

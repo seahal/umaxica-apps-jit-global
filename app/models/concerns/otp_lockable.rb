@@ -43,6 +43,7 @@ module OtpLockable
   # column), while the Float casts to PostgreSQL's -infinity correctly.
   OTP_UNLOCKED_SENTINEL = -Float::INFINITY
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     after_initialize do
       self.otp_counter = "0" if otp_counter.blank?

@@ -71,12 +71,9 @@ function monikerValidationError(value: string, moniker: AvatarFormProps["moniker
   }
 
   const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-  let graphemeClusters = 0;
-  for (const _segment of segmenter.segment(normalized)) {
-    graphemeClusters += 1;
-    if (graphemeClusters > moniker.max_grapheme_clusters) {
-      return messages.max_graphemes;
-    }
+  const graphemeClusters = Array.from(segmenter.segment(normalized)).length;
+  if (graphemeClusters > moniker.max_grapheme_clusters) {
+    return messages.max_graphemes;
   }
 
   return null;

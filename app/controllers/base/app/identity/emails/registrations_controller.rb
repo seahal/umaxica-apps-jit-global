@@ -39,6 +39,75 @@ module Base
 
           private
 
+          def send_verification_email(code)
+            flow = ContactRegistrationOtpIssuer.call!(
+              actor: current_client, token: current_session_token, contact: @user_email, channel: :email,
+              browser_nonce: ensure_base_admission_browser_nonce!, code:,
+            )
+            deliver_registration_email_otp!(code:, transaction: flow)
+          end
+
+          def finish_email_ceremony!(surface:, actor:, session_ref:, candidate:)
+            unless surface == "app" && actor == current_client && session_ref == current_session_token.public_id
+              raise IdentityEmailCeremonyContract::Error, "registration controller binding mismatch"
+            end
+
+            bootstrap = open_email_bootstrap_transaction
+            status = ContactRegistrationOtpFinalizer.call!(
+              actor:, actor_context: current_actor.with(surface: :base),
+              token: current_session_token, contact: candidate,
+              transaction: registration_email_otp_transaction, channel: :email,
+              browser_nonce: base_admission_browser_nonce,
+              requirement: step_up_requirement(scope: verification_scope),
+              bootstrap_transaction: bootstrap,
+            )
+            unless status == :finalized
+              raise IdentityEmailCeremonyContract::Error, "registration finalization is unavailable"
+            end
+
+            @email_bootstrap_return_to = bootstrap.return_to if bootstrap
+            on_email_registration_verified!(user_email: candidate, target_user: actor)
+            candidate
+          end
+
+          def require_step_up_unless_bootstrap!(scope:, **policy)
+            return true if scope == "settings_email" && policy.empty? && bootstrap_receipt_recoverable?
+
+            super
+          end
+
+          def verification_satisfied?
+            return true if bootstrap_receipt_recoverable?
+
+            super
+          end
+
+          def bootstrap_receipt_recoverable?
+            return false unless action_name == "update"
+
+            @user_email = current_registration_email
+            bootstrap = open_email_bootstrap_transaction
+            flow = registration_email_otp_transaction
+            return false unless @user_email && bootstrap && flow
+
+            ContactRegistrationOtpFinalizer.bootstrap_receipt_pending?(
+              actor: current_client, actor_context: current_actor.with(surface: :base),
+              token: current_session_token, contact: @user_email, transaction: flow, channel: :email,
+              browser_nonce: base_admission_browser_nonce,
+              requirement: step_up_requirement(scope: "settings_email"), bootstrap_transaction: bootstrap,
+            )
+          end
+
+          def step_up_requirement(scope:)
+            unless scope == "settings_email"
+              raise StepUpRequirement::Invalid, "registration operation scope mismatch"
+            end
+
+            contact = @user_email || ClientEmail.new(user: current_client)
+            ClientEmailPolicy.new(contact, user: current_client)
+              .credential_registration_requirement(token: current_session_token)
+          end
+
           def render_email_registration_new(status: :ok)
             render inertia: "base/app/identity/emails/registrations/new",
                    props: email_registration_new_props,
@@ -154,27 +223,6 @@ module Base
             end
           end
 
-          # Consumes the bootstrap before the credential transition closes unfinished ceremonies.
-          # A refusal is logged and leaves the bootstrap to that transition; it grants nothing.
-          def complete_email_bootstrap!(user_email)
-            transaction = open_email_bootstrap_transaction
-            return unless transaction
-
-            IdentityEmailBootstrapCommitter.call!(
-              actor: current_client, token: current_session_token, transaction: transaction, credential: user_email,
-            )
-            log_step_up_ceremony(
-              "bootstrap_completed", transaction: transaction, outcome: "completed", method: "email_otp",
-                                     state_before: "pending", state_after: transaction.status,
-            )
-            log_step_up_return_target(
-              transaction.return_to, reason: "transaction_return_to", protected_flow: true, transaction: transaction,
-            )
-            @email_bootstrap_return_to = transaction.return_to
-          rescue IdentityStepUpCeremonyContract::Error => e
-            log_step_up_refusal(e, transaction: transaction, stage: "base_email_bootstrap")
-          end
-
           def after_email_registration_verified_path
             return @email_bootstrap_return_to if @email_bootstrap_return_to
 
@@ -193,8 +241,7 @@ module Base
 
           def verified_email_status_id = ClientEmailStatus::VERIFIED
 
-          def on_email_registration_verified!(user_email:, **)
-            complete_email_bootstrap!(user_email)
+          def on_email_registration_verified!(*)
             CredentialSecurityTransition.call(
               actor: current_client,
               current_session: current_session,

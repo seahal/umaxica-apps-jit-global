@@ -10,6 +10,7 @@ module PasskeyCeremonyTransactionable
   STATUSES = [STATUS_PENDING, STATUS_CONSUMED].freeze
   RETENTION_PERIOD = 7.days
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     # rubocop:disable ThreadSafety/ClassAndModuleAttributes
     class_attribute :ceremony_surface_name, instance_accessor: false

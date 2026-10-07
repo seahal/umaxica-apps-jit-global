@@ -3,6 +3,7 @@
 
 class ClientAuthCeremonySession < AppTicketRecord
   include AuthCeremonySession
+  include AuthEmailOtpChallenge
 
   before_validation :normalize_blank_previous_digest
 

@@ -27,7 +27,8 @@ namespace :db do
         next if db_config.replica?
         next unless selected_databases.include?(db_config.database)
 
-        ActiveRecord::Tasks::DatabaseTasks.migrate
+        # Empty databases must execute data migrations, not import dump version receipts.
+        ActiveRecord::Tasks::DatabaseTasks.migrate(skip_initialize: true)
       end
 
       # The test command prepares databases after Rails has booted. Clear pools created during

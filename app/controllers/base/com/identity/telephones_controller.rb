@@ -69,8 +69,8 @@ module Base
 
           IdentityCredentialRemovalCommitter.call!(
             actor: current_visitor, credential: telephone, current_session: current_session, request: request,
+            actor_context: current_actor,
           )
-          create_audit_event!(ClientChronicleEvent::TELEPHONE_REMOVED, subject: telephone)
 
           redirect_to(
             base_com_identity_telephones_path(ri: params[:ri]),
@@ -167,24 +167,11 @@ module Base
 
           check_telephone_verification_rate_limit!
 
-          digest = IdentifierBlindIndex.bidx_for_telephone(number)
-          existing_visitor_telephone =
-            digest.present? ? visitor.visitor_telephones.find_by(number_digest: digest) : nil
-
-          @user_telephone = existing_visitor_telephone || visitor.visitor_telephones.build(raw_number: number)
-          @user_telephone.raw_number = number if existing_visitor_telephone
+          @user_telephone = visitor.visitor_telephones.build(raw_number: number)
           @user_telephone.visitor_telephone_status_id = VisitorTelephoneStatus::UNVERIFIED
           if auto_accept_confirmations
             @user_telephone.confirm_policy = true
             @user_telephone.confirm_using_mfa = true
-          end
-
-          if digest.present? && existing_visitor_telephone.blank?
-            VisitorTelephone.where(
-              number_digest: digest,
-              visitor_id: visitor.id,
-              visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-            ).destroy_all
           end
 
           otp_number = generate_otp_attributes(@user_telephone)

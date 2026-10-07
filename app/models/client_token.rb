@@ -121,7 +121,7 @@ class ClientToken < AppTicketRecord
            foreign_key: :token_id,
            inverse_of: :token,
            dependent: :restrict_with_exception
-  has_many :client_rp_sessions, inverse_of: :client_token
+  has_many :client_rp_sessions, inverse_of: :client_token, dependent: :restrict_with_exception
   has_many :client_verifications, dependent: :delete_all, inverse_of: :user_token
   has_one :step_up_session,
           class_name: "ClientStepUpSession",

@@ -122,22 +122,21 @@ module Auth
           end
 
           def update
+            start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
             return unless verify_email_otp_turnstile
 
             @user_email.pass_code = update_pass_code_params[:pass_code]
+            return reject_dummy_email_otp if session[:user_email_authentication_id].blank?
+
             unless @user_email.valid?
               @user_email.errors.add(:pass_code, t("sign.app.authentication.email.update.invalid_code"))
               return render inertia: "auth/com/sign/in/emails/edit", props: sign_in_email_edit_props,
                             status: :unprocessable_content
             end
 
-            visitor = nil
-            result =
-              verify_otp_code_and_consume(@user_email, @user_email.pass_code) do |record|
-                visitor = record.visitor
-                visitor&.login_allowed?
-              end
-            unless result[:success]
+            verification = admitted_auth_ceremony_session.verify_email_otp!(code: @user_email.pass_code)
+            visitor = verification.contact&.visitor
+            unless verification.success?
               @user_email.errors.add(:pass_code, t("sign.app.authentication.email.update.invalid_code"))
               return render inertia: "auth/com/sign/in/emails/edit", props: sign_in_email_edit_props,
                             status: :unprocessable_content
@@ -166,6 +165,8 @@ module Auth
             else
               redirect_to_jump_url(destination, status: :see_other)
             end
+          ensure
+            ensure_email_auth_verification_elapsed(start_time, code: @user_email&.pass_code)
           end
 
           private
@@ -266,7 +267,9 @@ module Auth
                 :user_email_authentication_id,
                 VisitorEmail,
                 check_otp_expiry: false,
-                custom: ->(email) { email.present? && !email.otp_expired? },
+                custom: lambda { |email|
+                  email.present? && admitted_auth_ceremony_session.email_otp_challenge_current?(contact: email)
+                },
               )
 
               unless @user_email
@@ -275,17 +278,34 @@ module Auth
               end
               @otp_resend_state = SignInOtpResendState.issue(
                 kind: :email, target: @user_email.address, surface: :com,
+                contact: @user_email,
+                browser_binding: admitted_auth_ceremony_session.sid_digest,
               )
             elsif session[:user_email_authentication_address].present?
+              unless admitted_auth_ceremony_session.email_otp_challenge_current?(contact: nil)
+                redirect_to(new_auth_com_sign_in_email_path(pt: peek_pt, ri: current_region_identifier))
+                return
+              end
+
               @user_email = VisitorEmail.new(address: session[:user_email_authentication_address])
               @otp_resend_state = SignInOtpResendState.issue(
                 kind: :email,
                 target: session[:user_email_authentication_address],
+                contact: nil,
                 surface: :com,
+                browser_binding: admitted_auth_ceremony_session.sid_digest,
               )
             else
               redirect_to(new_auth_com_sign_in_email_path(pt: peek_pt, ri: current_region_identifier))
             end
+          end
+
+          def reject_dummy_email_otp
+            verify_dummy_otp(@user_email.pass_code)
+            admitted_auth_ceremony_session.verify_email_otp!(code: @user_email.pass_code)
+            @user_email.errors.add(:pass_code, t("sign.app.authentication.email.update.invalid_code"))
+            render inertia: "auth/com/sign/in/emails/edit", props: sign_in_email_edit_props,
+                   status: :unprocessable_content
           end
 
           # Slice before permitting, as the app surface does: `permit` on the whole
@@ -302,30 +322,36 @@ module Auth
           end
 
           def process_email_authentication(normalized_address)
+            started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
             existing_email = find_email_with_timing_protection(normalized_address)
 
             if existing_email&.visitor&.login_allowed?
               session[:user_email_authentication_id] = existing_email.id
               session[:user_email_authentication_address] = nil
 
-              return :ok if existing_email.locked?
+              otp_code = admitted_auth_ceremony_session.issue_email_otp!(
+                contact: existing_email, destination: normalized_address,
+              )
+              return :ok if otp_code.nil?
               return :cooldown if otp_request_rate_limited?(existing_email)
-
-              otp_code = generate_otp_for(existing_email)
 
               OtpAdapter.for(surface: :com, channel: :email).deliver(
                 record: existing_email,
                 otp_code: otp_code,
                 purpose: :sign_in,
+                auth_ceremony_session_ref: admitted_auth_ceremony_session.id.to_s,
+                auth_email_otp_generation: admitted_auth_ceremony_session.email_otp_context.fetch("generation"),
               )
             else
-              perform_dummy_otp_generation
+              admitted_auth_ceremony_session.issue_email_otp!(contact: nil, destination: normalized_address)
 
               session[:user_email_authentication_id] = nil
               session[:user_email_authentication_address] = normalized_address
             end
 
             :ok
+          ensure
+            ensure_min_elapsed(started, CommonOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
           end
 
           def otp_request_rate_limited?(user_email)

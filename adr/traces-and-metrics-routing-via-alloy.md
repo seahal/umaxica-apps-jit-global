@@ -242,7 +242,7 @@ tails development log files into Loki, which makes Alloy the single gateway for 
 rather than for two of them.
 
 Retention is bounded for all three backends: Tempo 24h (`block_retention`), Prometheus 24h
-(`--storage.tsdb.retention.time`), and now Loki 24h (`podman/loki/loki.yaml`, with
+(`--storage.tsdb.retention.time`), and Loki 14 days (`podman/loki/loki.yaml`, with
 `compactor.retention_enabled: true` — without that flag the retention period is advisory and chunks
 are kept forever, which is what the packaged `local-config.yaml` did).
 

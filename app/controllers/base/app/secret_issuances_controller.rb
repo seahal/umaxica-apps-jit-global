@@ -42,8 +42,16 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
     ClientSecretStorageConfirmationCommitter.call!(
       actor_context: secret_actor_context, token: current_session_token, issuance: @issuance,
     )
+    session[:inertia_clear_history] = true
+    destination =
+      if @issuance.origin == "manual"
+        base_app_secrets_path
+      else
+        base_app_secret_issuance_path(@issuance.public_id)
+      end
     redirect_to(
-      (@issuance.origin == "manual") ? base_app_secrets_path : base_app_secret_issuance_path(@issuance.public_id), status: :see_other,
+      destination,
+      status: :see_other,
     )
   end
 
@@ -53,6 +61,7 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
       actor_context: secret_actor_context, token: current_session_token, issuance: @issuance,
       purge_after: ClientSecretLifetimesValue.purge_delay,
     )
+    session[:inertia_clear_history] = true
     redirect_to(base_app_secrets_path, status: :see_other)
   end
 
@@ -65,6 +74,7 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
       actor_context: secret_actor_context, token: current_session_token, predecessor: @issuance,
       purge_after: ClientSecretLifetimesValue.purge_delay,
     )
+    session[:inertia_clear_history] = true
     redirect_to(base_app_secret_issuance_path(successor.public_id), status: :see_other)
   end
 
@@ -86,7 +96,13 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
     return t("base.app.secrets.distribution_omitted") if @issuance.planned_count.zero?
     return unless @issuance.planned_count == 1
 
-    t(@issuance.confirmed_at ? "base.app.secrets.distribution_one_confirmed" : "base.app.secrets.distribution_one_present")
+    key =
+      if @issuance.confirmed_at
+        "base.app.secrets.distribution_one_confirmed"
+      else
+        "base.app.secrets.distribution_one_present"
+      end
+    t(key)
   end
 
   def secret_actor_context

@@ -78,23 +78,20 @@ class StepUpResolver
     return true unless requirement.step_up_required?
     return false if emergency_authentication_context?
 
-    usable_token? &&
-      evidence_complete? &&
-      satisfied_at.present? &&
-      satisfied_at <= now &&
-      expires_at.present? &&
-      expires_at > now &&
-      scope_matches? &&
-      method_matches? &&
-      phishing_resistance_matches? &&
-      user_verification_matches? &&
-      full_reauthentication_matches? &&
-      session_bound? &&
-      token_bound? &&
-      purpose_bound? &&
-      audience_bound? &&
-      resource_bound? &&
-      tenant_bound?
+    usable_token? && current_step_up_evidence? && requirement_matches_evidence? && request_bindings_match?
+  end
+
+  def current_step_up_evidence?
+    evidence_complete? && satisfied_at.present? && satisfied_at <= now && expires_at.present? && expires_at > now
+  end
+
+  def requirement_matches_evidence?
+    scope_matches? && method_matches? && phishing_resistance_matches? &&
+      user_verification_matches? && full_reauthentication_matches?
+  end
+
+  def request_bindings_match?
+    session_bound? && token_bound? && purpose_bound? && audience_bound? && resource_bound? && tenant_bound?
   end
 
   def usable_token?

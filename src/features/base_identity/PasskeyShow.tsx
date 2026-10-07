@@ -1,16 +1,22 @@
 import { router, useForm } from "@inertiajs/react";
+
 import { useConfirm } from "@/components/ConfirmDialog";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Page from "@/components/ui/Page";
-import TextLink from "@/components/ui/TextLink";
 import TextField from "@/components/ui/TextField";
+import TextLink from "@/components/ui/TextLink";
 
 type Props = {
   title: string;
   description: string;
   back_link: { label: string; href: string };
-  passkey: { public_id: string; description: string; created_at: string | null; last_used_at: string | null };
+  passkey: {
+    public_id: string;
+    description: string;
+    created_at: string | null;
+    last_used_at: string | null;
+  };
   form: { action: string; description: string; label: string; submit_label: string };
   destroy: { action: string; label: string; confirm: string };
   error: string | null;
@@ -67,7 +73,9 @@ export default function PasskeyShow({
           type="button"
           variant="danger"
           onPress={() =>
-            confirm({ message: destroy.confirm, confirmLabel: destroy.label }, () => router.delete(destroy.action))
+            confirm({ message: destroy.confirm, confirmLabel: destroy.label }, () =>
+              router.delete(destroy.action),
+            )
           }
         >
           {destroy.label}

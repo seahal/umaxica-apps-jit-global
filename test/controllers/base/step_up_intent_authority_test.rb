@@ -12,6 +12,289 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     https!
   end
 
+  %w(app com org).each do |surface|
+    test "#{surface} ordinary verification conflicts with a pending bootstrap purpose without replacing it" do
+      actor_id = SecureRandom.random_number(1 << 60) + 1_000_000_000
+      actor, token, transaction_class, host, headers =
+        case surface
+        when "app"
+          actor = Client.create!(id: actor_id, status_id: ClientStatus::ACTIVE)
+          token = ClientToken.create!(user: actor, root_login_established_at: ClientToken.database_now)
+          host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+          [actor, token, ClientStepUpCeremonyTransaction, host, app_session_headers(host, token, actor)]
+        when "com"
+          actor = Visitor.create!(id: actor_id, status_id: VisitorStatus::ACTIVE)
+          token = VisitorToken.create!(visitor: actor, root_login_established_at: VisitorToken.database_now)
+          host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+          [actor, token, VisitorStepUpCeremonyTransaction, host, com_session_headers(host, token, actor)]
+        when "org"
+          actor = Operator.create!(id: actor_id)
+          token = OperatorToken.create!(staff: actor, root_login_established_at: OperatorToken.database_now)
+          host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+          [actor, token, OperatorStepUpCeremonyTransaction, host, org_session_headers(host, token, actor)]
+        end
+      target = public_send("base_#{surface}_identity_passkeys_path", ri: "jp")
+      pt = signed_step_up_pt_for(target, surface:, session_nonce: token.public_id)
+      post public_send("base_#{surface}_verification_setup_url", ri: "jp", host:),
+           params: { scope: "settings_passkey", pt:, registration_method: "passkey" }, headers: headers
+
+      assert_response :see_other
+      original = transaction_class.find_by!(actor_ref: actor.public_id, session_ref: token.public_id)
+
+      assert_equal ["pending", "bootstrap"], [original.status, original.purpose]
+      different_target = public_send("base_#{surface}_identity_emails_path", ri: "jp")
+      different_pt = signed_step_up_pt_for(different_target, surface:, session_nonce: token.public_id)
+      post public_send("base_#{surface}_verification_setup_url", ri: "jp", host:),
+           params: { scope: "settings_email", pt: different_pt, registration_method: "passkey" }, headers: headers
+
+      assert_response :conflict
+      assert_equal ["pending", "settings_passkey", target, 1],
+                   [original.reload.status, original.required_scope, original.return_to,
+                    transaction_class.where(actor_ref: actor.public_id).count,]
+      # Concurrent registration makes ordinary verification eligible without completing this bootstrap.
+      case surface
+      when "app"
+        actor.client_passkeys.create!(webauthn_id: SecureRandom.hex(32), public_key: "public-key")
+      when "com"
+        actor.visitor_emails.create!(
+          address: "purpose-#{SecureRandom.hex(8)}@example.com",
+          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+        ).finalize_binding!
+      when "org"
+        actor.operator_passkeys.create!(webauthn_id: SecureRandom.hex(32), public_key: "public-key")
+      end
+      post public_send("base_#{surface}_verification_url", ri: "jp", host:),
+           params: { scope: "settings_passkey", pt: }, headers: headers
+
+      assert_response :conflict
+      assert_equal ["pending", "bootstrap", target, nil, 1],
+                   [original.reload.status, original.purpose, original.return_to,
+                    token.reload.last_step_up_at, transaction_class.where(actor_ref: actor.public_id).count,]
+    end
+
+    test "#{surface} a changed return target conflicts and protected continue retains the original intent" do
+      actor_class, token_class, transaction_class, host_key, passkeys = {
+        "app" => [Client, ClientToken, ClientStepUpCeremonyTransaction, "PUBLIC_BASE_SERVICE_URL", :client_passkeys],
+        "com" => [Visitor, VisitorToken, VisitorStepUpCeremonyTransaction,
+                  "PUBLIC_BASE_CORPORATE_URL", :visitor_passkeys,],
+        "org" => [Operator, OperatorToken, OperatorStepUpCeremonyTransaction,
+                  "PUBLIC_BASE_STAFF_URL", :operator_passkeys,],
+      }.fetch(surface)
+      # Independent writer tests can leave credential rows outside fixture transactions.
+      actor = actor_class.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000)
+      if surface == "com"
+        VisitorEmail.create!(
+          visitor: actor, address: "conflict-#{SecureRandom.hex(8)}@example.com",
+          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+        ).finalize_binding!
+      end
+      actor.public_send(passkeys).create!(webauthn_id: SecureRandom.hex(32), public_key: "public-key")
+      owner_key = { "app" => :user, "com" => :visitor, "org" => :staff }.fetch(surface)
+      token = token_class.create!(owner_key => actor)
+      host = ENV.fetch(host_key)
+      headers =
+        case surface
+        when "app" then app_session_headers(host, token, actor)
+        when "com" then com_session_headers(host, token, actor)
+        when "org" then org_session_headers(host, token, actor)
+        end
+      endpoint = public_send("base_#{surface}_verification_url", ri: "jp", host:)
+      original_target = public_send("base_#{surface}_identity_passkeys_path", ri: "jp")
+      original_pt = signed_step_up_pt_for(original_target, surface:, session_nonce: token.public_id)
+      post endpoint, params: { scope: "settings_passkey", pt: original_pt }, headers: headers
+
+      assert_response :see_other
+      original = transaction_class.find_by!(actor_ref: actor.public_id, session_ref: token.public_id)
+      changed_pt = signed_step_up_pt_for("#{original_target}?intent=second", surface:, session_nonce: token.public_id)
+      post endpoint, params: { scope: "settings_passkey", pt: changed_pt }, headers: headers
+
+      assert_response :conflict
+      assert_equal ["pending", original_target, 1],
+                   [original.reload.status, original.return_to,
+                    transaction_class.where(actor_ref: actor.public_id).count,]
+      csrf = response.parsed_body.css("form").first.at_css('input[name="authenticity_token"]')["value"]
+      with_forgery_protection do
+        post endpoint,
+             params: { scope: "settings_passkey",
+                       pt: changed_pt,
+                       conflict_action: "continue",
+                       authenticity_token: csrf, },
+             headers: headers.merge("Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-site")
+      end
+
+      assert_response :see_other
+      assert_equal ["pending", original_target, nil, 1],
+                   [original.reload.status, original.return_to, token.reload.last_step_up_at,
+                    transaction_class.where(actor_ref: actor.public_id).count,]
+
+      email_target = public_send("base_#{surface}_identity_emails_path", ri: "jp")
+      email_pt = signed_step_up_pt_for(email_target, surface:, session_nonce: token.public_id)
+      post endpoint, params: { scope: "settings_email", pt: email_pt }, headers: headers
+
+      assert_response :conflict
+      assert_equal ["pending", "settings_passkey", original_target],
+                   [original.reload.status, original.required_scope, original.return_to]
+      csrf = response.parsed_body.css("form").last.at_css('input[name="authenticity_token"]')["value"]
+      with_forgery_protection do
+        post endpoint,
+             params: { scope: "settings_email",
+                       pt: email_pt,
+                       conflict_action: "cancel_and_start",
+                       authenticity_token: csrf, },
+             headers: headers.merge("Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-site")
+      end
+
+      assert_response :see_other
+      replacement = transaction_class.find_by!(actor_ref: actor.public_id, status: "pending")
+
+      assert_equal ["canceled", "settings_email", email_target, nil, 2],
+                   [original.reload.status, replacement.required_scope, replacement.return_to,
+                    token.reload.last_step_up_at, transaction_class.where(actor_ref: actor.public_id).count,]
+    end
+  end
+
+  test "app conflict forms preserve validated scope and return proof through protected choices" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor.client_passkeys.create!(webauthn_id: SecureRandom.hex(32), public_key: "public-key")
+    token = ClientToken.create!(user: actor)
+    headers = app_session_headers(host, token, actor)
+    original_pt = signed_step_up_pt_for(
+      base_app_identity_passkeys_path(ri: "jp"), surface: "app", session_nonce: token.public_id,
+    )
+    post base_app_verification_url(ri: "jp", host:),
+         params: { scope: "settings_passkey", pt: original_pt }, headers: headers
+    original = ClientStepUpCeremonyTransaction.find_by!(actor_ref: actor.public_id, session_ref: token.public_id)
+    pt = signed_step_up_pt_for(
+      base_app_identity_emails_path(ri: "jp"), surface: "app", session_nonce: token.public_id,
+    )
+    post base_app_verification_url(ri: "jp", host:), params: { scope: "settings_email", pt: }, headers: headers
+
+    assert_response :conflict
+    forms = response.parsed_body.css("form")
+
+    assert_equal [["settings_email", pt], ["settings_email", pt]], forms.map { |form|
+      [form.at_css('input[name="scope"]')&.[]("value"), form.at_css('input[name="pt"]')&.[]("value")]
+    }
+    csrf = forms.last.at_css('input[name="authenticity_token"]')["value"]
+    with_forgery_protection do
+      post base_app_verification_url(ri: "jp", host:),
+           params: { scope: "settings_email", pt:, conflict_action: "cancel_and_start" },
+           headers: headers.merge("Sec-Fetch-Site" => "cross-site")
+
+      assert_equal [422, "pending", 1],
+                   [response.status, original.reload.status,
+                    ClientStepUpCeremonyTransaction.where(actor_ref: actor.public_id).count,]
+      post base_app_verification_url(ri: "jp", host:),
+           params: { scope: "settings_email", pt:, conflict_action: "cancel_and_start", authenticity_token: csrf },
+           headers: headers.merge("Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-site")
+    end
+
+    assert_response :see_other
+    replacement = ClientStepUpCeremonyTransaction.find_by!(actor_ref: actor.public_id, status: "pending")
+
+    assert_equal ["canceled", "settings_email", base_app_identity_emails_path(ri: "jp"), nil],
+                 [original.reload.status, replacement.required_scope, replacement.return_to,
+                  token.reload.last_step_up_at,]
+  end
+
+  test "app conflict continue explicitly restarts an expired binding without extending its parent deadline" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor.client_passkeys.create!(webauthn_id: SecureRandom.hex(32), public_key: "public-key")
+    token = ClientToken.create!(user: actor)
+    headers = app_session_headers(host, token, actor)
+    original_pt = signed_step_up_pt_for(
+      base_app_identity_passkeys_path(ri: "jp"), surface: "app", session_nonce: token.public_id,
+    )
+    post base_app_verification_url(ri: "jp", host:),
+         params: { scope: "settings_passkey", pt: original_pt }, headers: headers
+    original = ClientStepUpCeremonyTransaction.find_by!(actor_ref: actor.public_id, session_ref: token.public_id)
+    binding = ClientAuthAdmissionBinding.find_by!(step_up_ceremony_transaction_id: original.id)
+    deadline = original.expires_at
+    binding.update_columns(expires_at: binding.class.database_now - Rational(1, 1_000_000))
+    pt = signed_step_up_pt_for(
+      base_app_identity_emails_path(ri: "jp"), surface: "app", session_nonce: token.public_id,
+    )
+    post base_app_verification_url(ri: "jp", host:), params: { scope: "settings_email", pt: }, headers: headers
+
+    assert_response :conflict
+    form = response.parsed_body.css("form").first
+
+    assert_equal binding.entry_ref, form.at_css('input[name="restart_of"]')&.[]("value")
+    csrf = form.at_css('input[name="authenticity_token"]')["value"]
+    with_forgery_protection do
+      post base_app_verification_url(ri: "jp", host:),
+           params: { scope: "settings_email",
+                     pt:,
+                     conflict_action: "continue",
+                     restart_of: binding.entry_ref,
+                     authenticity_token: csrf, },
+           headers: headers.merge("Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-site")
+    end
+
+    assert_response :see_other
+    replacement = ClientAuthAdmissionBinding.find_by!(entry_ref: redirect_query.fetch("entry_ref"))
+
+    assert_equal [original.id, deadline, "pending", "settings_passkey", true, nil],
+                 [replacement.step_up_ceremony_transaction_id, original.reload.expires_at, original.status,
+                  original.required_scope, binding.reload.retired?, token.reload.last_step_up_at,]
+  end
+
+  test "app conflict continue returns to admitted Auth without allocating another admission" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor.client_passkeys.create!(webauthn_id: SecureRandom.hex(32), public_key: "public-key")
+    token = ClientToken.create!(user: actor)
+    headers = app_session_headers(host, token, actor)
+    original_pt = signed_step_up_pt_for(
+      base_app_identity_passkeys_path(ri: "jp"), surface: "app", session_nonce: token.public_id,
+    )
+    post base_app_verification_url(ri: "jp", host:),
+         params: { scope: "settings_passkey", pt: original_pt }, headers: headers
+    original = ClientStepUpCeremonyTransaction.find_by!(actor_ref: actor.public_id, session_ref: token.public_id)
+    binding = ClientAuthAdmissionBinding.find_by!(step_up_ceremony_transaction_id: original.id)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: binding.entry_ref, surface: "app", expected_intent: "step_up", binding:, raw_auth_sid: raw_sid,
+    )
+    admitted, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", previous_raw_sid: raw_sid,
+      step_up_ceremony_transaction_ref: original.transaction_id,
+    )
+    binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
+    pt = signed_step_up_pt_for(
+      base_app_identity_emails_path(ri: "jp"), surface: "app", session_nonce: token.public_id,
+    )
+    post base_app_verification_url(ri: "jp", host:), params: { scope: "settings_email", pt: }, headers: headers
+
+    assert_response :conflict
+    csrf = response.parsed_body.css("form").first.at_css('input[name="authenticity_token"]')["value"]
+    assert_no_difference ["ClientAuthAdmissionBinding.count", "ClientAuthCeremonySession.count"] do
+      with_forgery_protection do
+        post base_app_verification_url(ri: "jp", host:),
+             params: { scope: "settings_email", pt:, conflict_action: "continue", authenticity_token: csrf },
+             headers: headers.merge("Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-site")
+      end
+    end
+
+    assert_response :see_other
+    jump_uri = URI.parse(response.location)
+    jump_token = Rack::Utils.parse_nested_query(jump_uri.query).fetch("rt")
+    destination, = JWT.decode(
+      jump_token, JumpRtKeyring.private_key(JumpRtSurface.namespace_for_controller("Base::App::VerificationController")),
+      true, algorithms: ["ES384"],
+    )
+
+    assert_equal auth_app_verification_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), protocol: "https"),
+                 destination.fetch("url")
+    assert_equal ["pending", true, nil],
+                 [original.reload.status, admitted.reload.active?(now: admitted.class.database_now),
+                  token.reload.last_step_up_at,]
+  end
+
   test "app Base verification GET displays a nonconsuming start and POST issues opaque admission" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
@@ -50,6 +333,27 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     assert_nil query["scope"]
     assert_nil query["pt"]
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: query.fetch("entry_ref"))
+    get base_app_verification_url(scope: "settings_email", pt:, ri: "jp", host:),
+        params: { restart_of: binding.entry_ref }, headers: app_session_headers(host, token, user)
+
+    assert_equal [200, binding.entry_ref, "settings_email", pt, nil],
+                 [response.status, response.parsed_body.at_css('input[name="restart_of"]')&.[]("value"),
+                  response.parsed_body.at_css('input[name="scope"]')&.[]("value"),
+                  response.parsed_body.at_css('input[name="pt"]')&.[]("value"), token.reload.last_step_up_at,]
+    foreign = open_session
+    foreign.host!(host)
+    foreign.https!
+    [OidcRpBrowserCredentialContract::ACCESS_COOKIE, OidcRpBrowserCredentialContract::REFRESH_COOKIE].each do |name|
+      foreign.cookies.merge("#{name}=#{Rack::Utils.escape(cookies[name])}", URI.parse("https://#{host}/"))
+    end
+    foreign.get(
+      base_app_verification_url(scope: "settings_email", pt:, ri: "jp", host:),
+      params: { restart_of: binding.entry_ref },
+    )
+
+    assert_equal [400, nil, I18n.t("errors.messages.invalid_request"), nil, nil],
+                 [foreign.response.status, foreign.response.location, foreign.response.body,
+                  binding.reload.retired_at, binding.redeemed_at,]
     _auth_session, raw_sid = prepare_admission_binding_for_consumption!(
       binding, base_token: token, base_browser_nonce: session.fetch("auth_admission_browser_nonce"),
     )
@@ -86,15 +390,47 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     # Synthetic evidence: the Auth verification itself is covered by the ceremony committer tests.
     transaction.record_verification!(
       method: "totp", aal: "aal1", phishing_resistant: false, user_verified: false,
-      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: client_totp_credential_ref(user),
+      verified_at: ClientStepUpCeremonyTransaction.database_now,
+      verified_credential_ref: client_totp_credential_ref(user),
+    )
+    # Synthetic Auth proof isolates Base finalization, but still follows every public admission transition.
+    binding = ClientAuthAdmissionBinding.find_by!(step_up_ceremony_transaction_id: transaction.id)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: binding.entry_ref, surface: "app", expected_intent: "step_up", binding:, raw_auth_sid: raw_sid,
     )
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      previous_raw_sid: raw_sid,
     )
+    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
     result = BaseAuthAdmissionCoordinator.issue_result!(
       transaction: transaction,
       ceremony_session_ref: ceremony.id.to_s,
     )
+
+    foreign = open_session
+    foreign.host!(host)
+    foreign.https!
+    [OidcRpBrowserCredentialContract::ACCESS_COOKIE, OidcRpBrowserCredentialContract::REFRESH_COOKIE].each do |name|
+      foreign.cookies.merge("#{name}=#{Rack::Utils.escape(cookies[name])}", URI.parse("https://#{host}/"))
+    end
+    foreign.get(
+      base_app_verification_completion_url(ri: "jp", host:),
+      params: { transaction_ref: transaction.transaction_id, result_ref: result.reference },
+    )
+
+    assert_equal [400, nil, "verified", nil],
+                 [foreign.response.status, foreign.response.location, transaction.reload.status,
+                  token.reload.last_step_up_at,]
+    get base_app_verification_completion_url(ri: "jp", host:),
+        params: { transaction_ref: transaction.transaction_id, result_ref: result.reference },
+        headers: app_session_headers(host, token, user)
+
+    assert_response :success
+    assert_equal ["verified", nil], [transaction.reload.status, token.reload.last_step_up_at]
 
     post base_app_verification_completion_url(ri: "jp", host: host),
          params: { transaction_ref: transaction.transaction_id, result_ref: result.reference },
@@ -130,22 +466,30 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
     token = create_client_token!(user)
-    issuance = issue_step_up_grant!(
-      surface: "app",
-      actor_ref: user.public_id,
-      session_ref: token.public_id,
-      scope: "settings_email",
-      methods: ["passkey"],
-      return_to: base_app_identity_emails_path(ri: "jp"),
+    user.client_passkeys.create!(webauthn_id: SecureRandom.hex(32), public_key: "public-key")
+    pt = signed_step_up_pt_for(base_app_identity_emails_path(ri: "jp"), surface: "app", session_nonce: token.public_id)
+    post base_app_verification_url(ri: "jp", host:), params: { scope: "settings_email", pt: },
+                                                     headers: app_session_headers(host, token, user)
+    transaction = ClientStepUpCeremonyTransaction.find_by!(
+      actor_ref: user.public_id, session_ref: token.public_id,
     )
-    transaction = issuance.transaction
     transaction.record_verification!(
       method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: true,
       verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: "test-passkey",
     )
+    # Synthetic Auth proof isolates Base finalization, but still follows every public admission transition.
+    binding = ClientAuthAdmissionBinding.find_by!(step_up_ceremony_transaction_id: transaction.id)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: binding.entry_ref, surface: "app", expected_intent: "step_up", binding:, raw_auth_sid: raw_sid,
+    )
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      previous_raw_sid: raw_sid,
     )
+    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
     result = BaseAuthAdmissionCoordinator.issue_result!(transaction:, ceremony_session_ref: ceremony.id.to_s)
 
     with_forgery_protection do
@@ -158,7 +502,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_response :unprocessable_content
     assert_nil token.reload.last_step_up_at
-    assert_not_predicate issuance.transaction.reload, :consumed?
+    assert_not_predicate transaction.reload, :consumed?
   end
 
   test "app base completion refuses an invalid stored return target before consuming the result" do
@@ -179,11 +523,22 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     # Synthetic evidence: the Auth verification itself is covered by the ceremony committer tests.
     transaction.record_verification!(
       method: "totp", aal: "aal1", phishing_resistant: false, user_verified: false,
-      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: client_totp_credential_ref(user),
+      verified_at: ClientStepUpCeremonyTransaction.database_now,
+      verified_credential_ref: client_totp_credential_ref(user),
+    )
+    # Synthetic Auth proof isolates Base finalization, but still follows every public admission transition.
+    binding = ClientAuthAdmissionBinding.find_by!(step_up_ceremony_transaction_id: transaction.id)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: binding.entry_ref, surface: "app", expected_intent: "step_up", binding:, raw_auth_sid: raw_sid,
     )
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      previous_raw_sid: raw_sid,
     )
+    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
     result = BaseAuthAdmissionCoordinator.issue_result!(
       transaction: transaction,
       ceremony_session_ref: ceremony.id.to_s,
@@ -258,11 +613,22 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     # Synthetic evidence: the Auth verification itself is covered by the ceremony committer tests.
     transaction.record_verification!(
       method: "totp", aal: "aal1", phishing_resistant: false, user_verified: false,
-      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: client_totp_credential_ref(user),
+      verified_at: ClientStepUpCeremonyTransaction.database_now,
+      verified_credential_ref: client_totp_credential_ref(user),
+    )
+    # Synthetic Auth proof isolates Base finalization, but still follows every public admission transition.
+    binding = ClientAuthAdmissionBinding.find_by!(step_up_ceremony_transaction_id: transaction.id)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: binding.entry_ref, surface: "app", expected_intent: "step_up", binding:, raw_auth_sid: raw_sid,
     )
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      previous_raw_sid: raw_sid,
     )
+    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
     result = BaseAuthAdmissionCoordinator.issue_result!(
       transaction: transaction,
       ceremony_session_ref: ceremony.id.to_s,
@@ -296,11 +662,22 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     # Synthetic evidence: the Auth verification itself is covered by the ceremony committer tests.
     transaction.record_verification!(
       method: "totp", aal: "aal1", phishing_resistant: false, user_verified: false,
-      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: client_totp_credential_ref(user),
+      verified_at: ClientStepUpCeremonyTransaction.database_now,
+      verified_credential_ref: client_totp_credential_ref(user),
+    )
+    # Synthetic Auth proof isolates Base finalization, but still follows every public admission transition.
+    binding = ClientAuthAdmissionBinding.find_by!(step_up_ceremony_transaction_id: transaction.id)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: binding.entry_ref, surface: "app", expected_intent: "step_up", binding:, raw_auth_sid: raw_sid,
     )
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      previous_raw_sid: raw_sid,
     )
+    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
     result = BaseAuthAdmissionCoordinator.issue_result!(
       transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
     )
@@ -343,11 +720,22 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     # Synthetic evidence: the Auth verification itself is covered by the ceremony committer tests.
     transaction.record_verification!(
       method: "totp", aal: "aal1", phishing_resistant: false, user_verified: false,
-      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: client_totp_credential_ref(user),
+      verified_at: ClientStepUpCeremonyTransaction.database_now,
+      verified_credential_ref: client_totp_credential_ref(user),
+    )
+    # Synthetic Auth proof isolates Base finalization, but still follows every public admission transition.
+    binding = ClientAuthAdmissionBinding.find_by!(step_up_ceremony_transaction_id: transaction.id)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: binding.entry_ref, surface: "app", expected_intent: "step_up", binding:, raw_auth_sid: raw_sid,
     )
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      previous_raw_sid: raw_sid,
     )
+    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
     result = BaseAuthAdmissionCoordinator.issue_result!(
       transaction: transaction,
       ceremony_session_ref: ceremony.id.to_s,
@@ -491,22 +879,32 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     token = create_client_token!(user)
     other_token = create_client_token!(user)
-    issuance = issue_step_up_grant!(
-      surface: "app",
-      actor_ref: user.public_id,
-      session_ref: other_token.public_id,
-      scope: "settings_email",
-      methods: ["passkey"],
-      return_to: base_app_identity_emails_path(ri: "jp"),
+    user.client_passkeys.create!(webauthn_id: SecureRandom.hex(32), public_key: "public-key")
+    pt = signed_step_up_pt_for(
+      base_app_identity_emails_path(ri: "jp"), surface: "app", session_nonce: other_token.public_id,
     )
-    transaction = issuance.transaction
+    post base_app_verification_url(ri: "jp", host:), params: { scope: "settings_email", pt: },
+                                                     headers: app_session_headers(host, other_token, user)
+    transaction = ClientStepUpCeremonyTransaction.find_by!(
+      actor_ref: user.public_id, session_ref: other_token.public_id,
+    )
     transaction.record_verification!(
       method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: true,
       verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: "test-passkey",
     )
+    # Synthetic Auth proof isolates Base finalization, but still follows every public admission transition.
+    binding = ClientAuthAdmissionBinding.find_by!(step_up_ceremony_transaction_id: transaction.id)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(base_token: other_token, browser_digest: binding.base_browser_digest)
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: binding.entry_ref, surface: "app", expected_intent: "step_up", binding:, raw_auth_sid: raw_sid,
+    )
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      previous_raw_sid: raw_sid,
     )
+    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
     result = BaseAuthAdmissionCoordinator.issue_result!(transaction:, ceremony_session_ref: ceremony.id.to_s)
 
     post base_app_verification_completion_url(ri: "jp", host: host),
@@ -515,7 +913,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_response :bad_request
     assert_nil token.reload.last_step_up_at
-    assert_not_predicate issuance.transaction.reload, :consumed?
+    assert_not_predicate transaction.reload, :consumed?
   end
 
   test "app base completion rejects a result whose payload is not a JSON object" do
@@ -715,13 +1113,38 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
       method: "email_otp", aal: "none", phishing_resistant: false, user_verified: false,
       verified_at: VisitorStepUpCeremonyTransaction.database_now, verified_credential_ref: email.public_id,
     )
+    # Synthetic Auth proof isolates Base finalization, but still follows every public admission transition.
+    binding = VisitorAuthAdmissionBinding.find_by!(step_up_ceremony_transaction_id: transaction.id)
+    attached, raw_sid = VisitorAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: binding.entry_ref, surface: "com", expected_intent: "step_up", binding:, raw_auth_sid: raw_sid,
+    )
     ceremony, = VisitorAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      previous_raw_sid: raw_sid,
     )
+    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
     result = BaseAuthAdmissionCoordinator.issue_result!(
       transaction: transaction,
       ceremony_session_ref: ceremony.id.to_s,
     )
+
+    foreign = open_session
+    foreign.host!(host)
+    foreign.https!
+    [OidcRpBrowserCredentialContract::ACCESS_COOKIE, OidcRpBrowserCredentialContract::REFRESH_COOKIE].each do |name|
+      foreign.cookies.merge("#{name}=#{Rack::Utils.escape(cookies[name])}", URI.parse("https://#{host}/"))
+    end
+    foreign.get(
+      base_com_verification_completion_url(ri: "jp", host:),
+      params: { transaction_ref: transaction.transaction_id, result_ref: result.reference },
+    )
+
+    assert_equal [400, nil, "verified", nil],
+                 [foreign.response.status, foreign.response.location, transaction.reload.status,
+                  token.reload.last_step_up_at,]
 
     post base_com_verification_completion_url(ri: "jp", host: host),
          params: { transaction_ref: transaction.transaction_id, result_ref: result.reference },
@@ -771,13 +1194,38 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
       method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: true,
       verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: passkey.external_id,
     )
+    # Synthetic Auth proof isolates Base finalization, but still follows every public admission transition.
+    binding = OperatorAuthAdmissionBinding.find_by!(step_up_ceremony_transaction_id: transaction.id)
+    attached, raw_sid = OperatorAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(base_token: token, browser_digest: binding.base_browser_digest)
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: binding.entry_ref, surface: "org", expected_intent: "step_up", binding:, raw_auth_sid: raw_sid,
+    )
     ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      previous_raw_sid: raw_sid,
     )
+    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
     result = BaseAuthAdmissionCoordinator.issue_result!(
       transaction: transaction,
       ceremony_session_ref: ceremony.id.to_s,
     )
+
+    foreign = open_session
+    foreign.host!(host)
+    foreign.https!
+    [OidcRpBrowserCredentialContract::ACCESS_COOKIE, OidcRpBrowserCredentialContract::REFRESH_COOKIE].each do |name|
+      foreign.cookies.merge("#{name}=#{Rack::Utils.escape(cookies[name])}", URI.parse("https://#{host}/"))
+    end
+    foreign.get(
+      base_org_verification_completion_url(ri: "jp", host:),
+      params: { transaction_ref: transaction.transaction_id, result_ref: result.reference },
+    )
+
+    assert_equal [400, nil, "verified", nil],
+                 [foreign.response.status, foreign.response.location, transaction.reload.status,
+                  token.reload.last_step_up_at,]
 
     post base_org_verification_completion_url(ri: "jp", host: host),
          params: { transaction_ref: transaction.transaction_id, result_ref: result.reference },
@@ -845,76 +1293,6 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     bearer_headers(
       jwt_access_token_for(operator, host: host, session_public_id: token.public_id, resource_type: "operator"),
       host: host,
-    )
-  end
-
-  def install_base_browser_rp_credentials!(surface:, host:, actor:, token:)
-    @base_browser_rp_credentials ||= {}
-    key = [surface, token.public_id]
-    client_id = { "app" => "base-app-ww", "com" => "base-com-ww", "org" => "base-org-ww" }.fetch(surface)
-    client = OidcClientRegistry.find!(client_id)
-    resource_type = { "app" => "client", "com" => "visitor", "org" => "operator" }.fetch(surface)
-    model = { "app" => ClientRpSession, "com" => VisitorRpSession, "org" => OperatorRpSession }.fetch(surface)
-    token_key = { "app" => :client_token, "com" => :visitor_token, "org" => :operator_token }.fetch(surface)
-    unless @base_browser_rp_credentials[key]
-      token.rotate_refresh_token! unless token.device_session.current_refresh_token_id
-      now = Time.current
-      rp_session = model.create!(
-        token_key => token,
-        :oidc_client_id => client.client_id,
-        :oidc_scope => "openid profile",
-        :oidc_jti => SecureRandom.uuid,
-        :oidc_nonce => SecureRandom.hex(16),
-        :oidc_auth_time => now,
-        :refresh_token_expires_at => now + 10.minutes,
-      )
-      access_token = AuthenticationTokenService.encode(
-        actor,
-        host: host,
-        resource_type: resource_type,
-        session_public_id: token.public_id,
-        base_session_public_id: token.public_id,
-        oidc_sid: rp_session.public_id,
-        oidc_jti: rp_session.oidc_jti,
-        expires_at: now + 10.minutes,
-        scopes: %w(openid profile),
-        issuer: OidcIssuer.for_client(client),
-        audiences: [client.aud],
-        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
-        subject: OidcSubject.for(actor, resource_type: resource_type),
-        client_id: client.client_id,
-      )
-      @base_browser_rp_credentials[key] = [access_token, rp_session.issue_refresh_token!]
-    end
-    access_token, refresh_token = @base_browser_rp_credentials.fetch(key)
-    transaction_model = {
-      "app" => ClientStepUpCeremonyTransaction,
-      "com" => VisitorStepUpCeremonyTransaction,
-      "org" => OperatorStepUpCeremonyTransaction,
-    }.fetch(surface)
-    verified_transaction = transaction_model.where(
-      session_ref: token.public_id,
-      status: "verified",
-    ).order(id: :desc).first
-    if verified_transaction
-      rp_session = model.where(token_key => token).order(id: :desc).first!
-      amr = { "passkey" => ["passkey"], "totp" => ["otp"], "email_otp" => ["email_otp"] }.fetch(
-        verified_transaction.method,
-      )
-      rp_session.update_columns(
-        oidc_auth_time: verified_transaction.verified_at,
-        oidc_acr: verified_transaction.aal,
-        oidc_amr: JSON.generate(amr),
-        updated_at: Time.current,
-      )
-    end
-    cookies.merge( # rubocop:disable Lint/Void
-      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access_token)}",
-      URI.parse("https://#{host}/"),
-    )
-    cookies.merge( # rubocop:disable Lint/Void
-      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(refresh_token)}",
-      URI.parse("https://#{host}/"),
     )
   end
 

@@ -29,7 +29,8 @@ module BaseStepUpCancellation
     unless transaction.cancellation_handoff_ref == lookup_reference
       raise BaseAuthAdmissionCoordinator::Denied.new("cancellation lookup mismatch", code: "return_binding_mismatch")
     end
-    unless transaction.actor_ref == cancellation_actor.public_id && transaction.session_ref == cancellation_token.public_id
+    unless transaction.actor_ref == cancellation_actor.public_id &&
+        transaction.session_ref == cancellation_token.public_id
       raise BaseAuthAdmissionCoordinator::Denied.new(
         "Base cancellation session mismatch",
         code: "session_binding_mismatch",
@@ -61,16 +62,9 @@ module BaseStepUpCancellation
     end
 
     transaction = cancellation_step_up_transaction(reference)
-    unless transaction.cancellation_handoff_ref == lookup_reference
-      raise IdentityStepUpCeremonyContract::Error.new(
-        "Base cancellation lookup mismatch", code: "return_binding_mismatch",
-      )
-    end
-    unless transaction.surface == surface && transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id
-      raise IdentityStepUpCeremonyContract::Error.new(
-        "Base cancellation binding mismatch", code: "session_binding_mismatch",
-      )
-    end
+    validate_cancellation_transaction_binding!(
+      transaction:, lookup_reference:, surface:, actor:, token:,
+    )
 
     BaseAuthAdmissionCoordinator.read_cancellation_handoff!(
       handoff:, surface:, transaction_ref: reference,
@@ -92,6 +86,7 @@ module BaseStepUpCancellation
     log_step_up_return_target(
       destination, reason: "cancellation_default", protected_flow: false, transaction: transaction,
     )
+    session[:inertia_clear_history] = true
     redirect_to(destination, status: :see_other, allow_other_host: false)
   rescue BaseAuthAdmissionCoordinator::Denied, IdentityStepUpCeremonyContract::Error,
          ActiveRecord::RecordNotFound, ArgumentError, KeyError => e
@@ -120,6 +115,20 @@ module BaseStepUpCancellation
     raise ActionController::BadRequest unless value.is_a?(String) && value.present?
 
     value
+  end
+
+  def validate_cancellation_transaction_binding!(transaction:, lookup_reference:, surface:, actor:, token:)
+    unless transaction.cancellation_handoff_ref == lookup_reference
+      raise IdentityStepUpCeremonyContract::Error.new(
+        "Base cancellation lookup mismatch", code: "return_binding_mismatch",
+      )
+    end
+    return if transaction.surface == surface && transaction.actor_ref == actor.public_id &&
+      transaction.session_ref == token.public_id
+
+    raise IdentityStepUpCeremonyContract::Error.new(
+      "Base cancellation binding mismatch", code: "session_binding_mismatch",
+    )
   end
 
   def cancellation_surface

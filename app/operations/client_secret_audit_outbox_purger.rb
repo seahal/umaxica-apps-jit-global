@@ -99,7 +99,8 @@ class ClientSecretAuditOutboxPurger
         authority.updated_at
       when ClientSignUpFlow
         terminal_statuses = %w(COMPLETED FAILED EXPIRED CANCELLED HALTED FINALIZED SIGN_IN_HANDOFF_PENDING)
-        return nil unless terminal_statuses.include?(ClientSignUpFlow::STATUS_NAMES.fetch(authority.status_id)) || authority.expired?(now)
+        terminal_status = ClientSignUpFlow::STATUS_NAMES.fetch(authority.status_id)
+        return nil unless terminal_statuses.include?(terminal_status) || authority.expired?(now)
 
         [authority.expires_at, authority.updated_at].compact.max
       else

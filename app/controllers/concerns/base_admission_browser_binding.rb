@@ -12,19 +12,6 @@ module BaseAdmissionBrowserBinding
   BROWSER_NONCE_SESSION_KEY = "auth_admission_browser_nonce"
   BROWSER_NONCE_BYTES = 32
 
-  included do
-    class_attribute :base_admission_surface_name, instance_accessor: false
-  end
-
-  class_methods do
-    public
-
-    def base_admission_surface(surface = nil)
-      self.base_admission_surface_name = surface.to_s if surface
-      base_admission_surface_name
-    end
-  end
-
   public
 
   # Call only from a CSRF-protected Base initiation POST. Retries in the same
@@ -65,10 +52,22 @@ module BaseAdmissionBrowserBinding
     response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
   end
 
-  # Used by an explicit restart to prevent the previous browser marker from
-  # confirming a newly issued entry.
-  def reset_base_admission_browser_nonce!
-    session.delete(BROWSER_NONCE_SESSION_KEY)
-    ensure_base_admission_browser_nonce!
+  def validate_base_result_browser_binding!(transaction)
+    BaseAuthAdmissionCoordinator.validate_result_browser_binding!(
+      transaction:, surface: self.class.base_admission_surface_name,
+      base_browser_nonce: base_admission_browser_nonce, base_token: current_session_token,
+    )
+  end
+
+  def base_registration_restart_binding!(scope:, method:)
+    return if params[:restart_of].nil?
+
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+      surface: self.class.base_admission_surface_name, reference: params[:restart_of],
+    )
+    BaseAuthAdmissionCoordinator.validate_registration_restart_browser!(
+      binding:, surface: self.class.base_admission_surface_name,
+      base_browser_nonce: base_admission_browser_nonce, base_token: current_session_token, scope:, method:,
+    )
   end
 end

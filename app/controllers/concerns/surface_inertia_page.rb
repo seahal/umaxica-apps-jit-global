@@ -15,6 +15,7 @@ module SurfaceInertiaPage
 
   include SurfaceChrome
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     family, surface = controller_path.to_s.split("/").first(2)
 

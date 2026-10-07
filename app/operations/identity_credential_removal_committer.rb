@@ -6,17 +6,21 @@ class IdentityCredentialRemovalCommitter
   class << self
     public
 
-    def call!(actor:, credential:, current_session:, request: nil)
-      new(actor: actor, credential: credential, current_session: current_session, request: request).call!
+    def call!(actor:, credential:, current_session:, actor_context: nil, request: nil)
+      new(
+        actor: actor, credential: credential, current_session: current_session,
+        actor_context: actor_context, request: request,
+      ).call!
     end
   end
 
   public
 
-  def initialize(actor:, credential:, current_session:, request: nil)
+  def initialize(actor:, credential:, current_session:, actor_context: nil, request: nil)
     @actor = actor
     @credential = credential
     @current_session = current_session
+    @actor_context = actor_context
     @request = request
   end
 
@@ -43,6 +47,7 @@ class IdentityCredentialRemovalCommitter
                 affected_surface: surface, revoke_other_sessions: false, request: request,
               )
               mark_terminal!
+              record_contact_release_intent!
               true
             end
           end
@@ -53,7 +58,7 @@ class IdentityCredentialRemovalCommitter
 
   private
 
-  attr_reader :actor, :credential, :current_session, :request
+  attr_reader :actor, :credential, :current_session, :actor_context, :request
 
   def validate_binding!
     owner_matches =
@@ -67,9 +72,36 @@ class IdentityCredentialRemovalCommitter
       else false
       end
     raise ArgumentError, "credential removal binding mismatch" unless owner_matches
-    return if actor.persisted? && credential.persisted? && current_session.persisted?
+    unless actor.persisted? && credential.persisted? && current_session.persisted?
+      raise ArgumentError, "credential removal requires persisted records"
+    end
 
-    raise ArgumentError, "credential removal requires persisted records"
+    validate_contact_context!
+  end
+
+  def contact?
+    credential.is_a?(ClientEmail) || credential.is_a?(ClientTelephone) ||
+      credential.is_a?(VisitorEmail) || credential.is_a?(VisitorTelephone)
+  end
+
+  def validate_contact_context!
+    return unless contact?
+
+    expected_role = actor.is_a?(Client) ? :client : :visitor
+    unless actor_context.is_a?(ActorValuesContext) && actor_context.subject == actor &&
+        actor_context.actor_type == expected_role && actor_context.tld.to_s == surface
+      raise ArgumentError, "Contact removal requires its authenticated Actor context"
+    end
+    raise ArgumentError, "Contact owner is unavailable" unless actor.active?
+  end
+
+  def record_contact_release_intent!
+    return unless contact?
+
+    ContactBindingAuditRecorder.call!(
+      actor_context: actor_context, actor: actor, contact: credential,
+      operation_ref: SecureRandom.uuid, event_name: "released",
+    )
   end
 
   def surface
@@ -96,9 +128,8 @@ class IdentityCredentialRemovalCommitter
     case credential
     when ClientPasskey, VisitorPasskey, OperatorPasskey then AuthMethodGuard.can_remove_passkey?(actor, credential)
     when ClientTotpCredential then AuthMethodGuard.can_remove_totp?(actor, credential)
-    when ClientEmail then AuthMethodGuard.can_remove_email?(actor, credential)
+    when ClientEmail, VisitorEmail then AuthMethodGuard.can_remove_email?(actor, credential)
     when ClientTelephone, VisitorTelephone then AuthMethodGuard.can_remove_telephone?(actor, credential)
-    when VisitorEmail then AuthMethodGuard.can_remove_email?(actor, credential)
     else raise ArgumentError, "unsupported removal credential"
     end
   end

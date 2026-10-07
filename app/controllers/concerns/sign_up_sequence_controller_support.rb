@@ -209,7 +209,6 @@ module SignUpSequenceControllerSupport
     # durable identity graph is provisioned, then the actor is handed off
     # to the sign-in boundary.
     finalized = nil
-    nil
     sign_in_result = nil
 
     # Serialize the entire finalize/handoff/complete sequence under the
@@ -223,6 +222,9 @@ module SignUpSequenceControllerSupport
     sign_up_ticket_record_class.connected_to(role: :writing) do
       @sign_up_ticket.with_cycle_lock do
         @sign_up_ticket.reload
+        context = sign_up_finalization_context
+        return render_sign_up_finalization_forbidden(json: json) unless context &&
+          allowed_to?(:finalize?, context, with: SignUp::FinalizationPolicy)
 
         unless @sign_up_ticket.sign_up_checkpoint_pending?
           finalized = SignUpResult.build(
@@ -254,7 +256,9 @@ module SignUpSequenceControllerSupport
 
     return render_sign_up_failure_result(finalized, json: json) unless finalized&.success?
 
-    ClientSecretPasskeyReservationIssuer.complete_sign_up!(flow: @sign_up_ticket) if @sign_up_ticket.is_a?(ClientSignUpFlow)
+    if @sign_up_ticket.is_a?(ClientSignUpFlow)
+      ClientSecretPasskeyReservationIssuer.complete_sign_up!(flow: @sign_up_ticket)
+    end
 
     sign_up_session_state.clear_all!
     redirect_after_sign_up_handoff!(sign_in_result, json: json)
@@ -475,17 +479,20 @@ module SignUpSequenceControllerSupport
       telephone = ClientTelephone.find_by(id: @sign_up_ticket.pending_contact_id)
       return :failed unless telephone
 
-      SignAppUpTelephoneRegistrationFinalizer.call(telephone: telephone)
+      SignAppUpTelephoneRegistrationFinalizer.call(
+        telephone: telephone, actor_context: current_actor, operation_ref: @sign_up_ticket.public_id,
+      )
     when "email", "social_identity"
       # Email and social sign-up only need the actor promoted into the
       # verified-with-sign-up state before the durable graph is provisioned.
-      Client.transaction do
+      actor.with_lock do
+        raise ActiveRecord::RecordNotSaved, "Contact owner is unavailable" unless actor.active?
+
         if @sign_up_ticket.pending_contact_type == "email"
           email = ClientEmail.lock.find(@sign_up_ticket.pending_contact_id)
           raise ActiveRecord::RecordNotFound unless email.user_id == actor.id
 
-          email.binding_finalized_at = ClientEmail.database_now
-          email.save!
+          finalize_sign_up_email_binding!(actor, email)
         end
         actor.update!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP) if
           actor.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
@@ -508,15 +515,18 @@ module SignUpSequenceControllerSupport
       telephone = VisitorTelephone.find_by(id: @sign_up_ticket.pending_contact_id)
       return :failed unless telephone
 
-      SignComUpTelephoneRegistrationFinalizer.call(telephone: telephone)
+      SignComUpTelephoneRegistrationFinalizer.call(
+        telephone: telephone, actor_context: current_actor, operation_ref: @sign_up_ticket.public_id,
+      )
     when "email"
       # Email sign-up has no additional com-side credential finalizer here.
-      VisitorEmail.transaction do
+      actor.with_lock do
+        raise ActiveRecord::RecordNotSaved, "Contact owner is unavailable" unless actor.active?
+
         email = VisitorEmail.lock.find(@sign_up_ticket.pending_contact_id)
         raise ActiveRecord::RecordNotFound unless email.visitor_id == actor.id
 
-        email.binding_finalized_at = VisitorEmail.database_now
-        email.save!
+        finalize_sign_up_email_binding!(actor, email)
       end
     else
       return :failed
@@ -531,6 +541,41 @@ module SignUpSequenceControllerSupport
     :accepted
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved
     :failed
+  end
+
+  def finalize_sign_up_email_binding!(actor, email)
+    if email.binding_finalized_at.present?
+      model, realm, role =
+        case email
+        when ClientEmail then [ClientContactAuditOutbox, :app, :client]
+        when VisitorEmail then [VisitorContactAuditOutbox, :com, :visitor]
+        else raise ArgumentError, "unsupported signup email owner"
+        end
+      context = current_actor
+      valid_context = context.is_a?(ActorValuesContext) && context.tld == realm &&
+        ((context.actor_type == role && context.subject == actor) ||
+         (context.unauthenticated? && context.subject.equal?(Unauthenticated.instance)))
+      raise ArgumentError, "signup email actor context mismatch" unless valid_context
+
+      receipts = model.where(
+        contact_kind: "email", event_name: "finalized", owner_ref: actor.public_id,
+        contact_ref: email.public_id, operation_ref: @sign_up_ticket.public_id,
+        actor_ref: context.authenticated? ? context.subject.public_id : nil,
+      )
+      unless email.binding_effective? && receipts.count == 1
+        raise ActiveRecord::RecordNotSaved, "Signup email finalization provenance mismatch"
+      end
+
+      # Source committed before the Ticket failure: reconcile only this original operation.
+      return
+    end
+
+    email.binding_finalized_at = email.class.database_now
+    email.save!
+    ContactBindingAuditRecorder.call!(
+      actor_context: current_actor, actor: actor, contact: email,
+      operation_ref: @sign_up_ticket.public_id, event_name: "finalized",
+    )
   end
 
   def handoff_to_sign_in_flow!(actor)
@@ -567,7 +612,7 @@ module SignUpSequenceControllerSupport
   end
 
   def sign_up_handoff_proceeds?(result)
-    (sign_up_surface == :app) ? result.proceed? : result.success?
+    result.proceed?
   end
 
   def redirect_after_sign_up_handoff!(sign_in_result, json: false)

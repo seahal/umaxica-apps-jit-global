@@ -105,3 +105,11 @@ issuance transaction, so the decision is based on the primary database state.
 
 The token models also validate total live-session count on create. This validation gives a
 model-level failure before excess live token rows are accepted.
+
+## Delivered reconciliation (2026-10-06)
+
+All three realms use the durable session-limit resolution contract. The parent sign-in flow remains
+in `SESSION_ISSUANCE_PENDING` while the child transaction is bound to actor, browser, realm and
+OIDC transaction where present. Resolve, cancel, expire and conflict transitions lock and reload
+the owner and use the database clock; there is no early `SESSION_LIMIT_PENDING` graph edge or
+placeholder session. The former Acme/sign authority wording is historical.

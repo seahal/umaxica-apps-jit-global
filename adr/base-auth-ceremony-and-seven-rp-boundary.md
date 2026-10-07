@@ -263,7 +263,10 @@ codes are never stored in PostgreSQL; Valkey stores only their short-lived opaqu
 The Unified Implementation Plan amends this ADR and its earlier naming amendments. Base has two
 explicit roles on the same FQDN: an Authority role for protocol endpoints and a self-RP role for
 control-plane UI, `/sign`, and `/oidc/callback`. Authority controllers do not use RP credentials as
-proof; self-RP controllers do not fall back to root cookies. A valid Base Browser Session is OP
+proof; self-RP controllers do not fall back to root cookies. Authority bases explicitly inherit
+`::ApplicationController`, avoiding Ruby's namespace-local resolution to the self-RP base and its
+authentication/refresh callbacks. Their root-session lifecycle remains independently declared.
+A valid Base Browser Session is OP
 login state and may satisfy OIDC SSO for `/oauth/authorize` without creating another Browser
 Session. `prompt=none`, `prompt=login`, and `max_age` are evaluated as explicit protocol
 conditions.
@@ -280,6 +283,42 @@ an Auth POST. Base confirmation records the binding before Auth can redeem the a
 confirmation, and redemption are separate non-authorizing steps; invalid proofs do not consume the
 admission or rotate the Auth sid, while a committed redemption may be restarted only through the
 original Base browser and parent authority.
+
+OIDC and Step-Up result acceptance also checks the original browser nonce and root context
+against the retained redeemed admission before result lookup or finalization. Admission expiry
+does not erase that correlation. Successful OIDC root issuance rotates the Rails session against
+fixation and retains only the already-proven nonce for exact finalized-result retries.
+
+Redeemed OIDC cancel-and-start remains unimplemented in this cycle by explicit user direction:
+the current OIDC parent has no cancellation transition. Its pending/authenticated/consumed
+lifecycle remains unchanged; no existing completed login is canceled or reopened.
+
+Step-Up and credential-registration restart forms are rendered only on their owning Base surface
+after checking the original browser nonce/root and the exact persisted intent. GET remains read-only
+and retains the original scope and signed return target without adding authority.
+A redeemed registration is labeled cancel-and-start; its receiver-local POST supplies restart_of to
+the existing locked cancellation/issuance operation. A different browser, changed root, expired
+parent or substituted registration route receives the generic invalid-request response.
+
+Step-Up issuance, cancellation and ordinary freshness finalization acquire source owner,
+DeviceSession and current root token before the ceremony parent. A revoked device or displaced
+root cannot initiate, cancel or grant freshness even if the token row itself remains unexpired.
+Ordinary issuance never creates another admission for a redeemed parent. Conflict forms retain
+scope and signed return target; an expired unredeemed admission is replaced only by an explicit
+restart_of submission, without extending its original parent deadline.
+After confirmed redemption, conflict continue returns to the clean Auth entry using the existing
+signed Jump navigation path only while the retained admitted continuity remains active. It issues
+no new admission and changes neither parent intent nor Base freshness.
+
+Full reauthentication retains its distinct reauthentication_handoff/reauthentication_result
+purpose throughout Auth entry, admission, Base result lookup and continuity acceptance. The
+verification route admits that purpose only from its exact server-loaded binding or admitted
+parent, never a request-supplied purpose. Base replaces the current root once; a terminal retry
+uses the exact predecessor/current-device pair and cannot authorize a revoked DeviceSession.
+
+The supported app/com email and telephone sign-up leaves explicitly require admitted sign-up
+continuity before rendering or mutating their workflow. Receiver-local CSRF or Turnstile alone
+cannot create a pending actor, contact, OTP or delivery before confirmed admission redemption.
 
 The existing seven-RP description is partially superseded by D-63's destructive Side-to-Warp
 rename, D-53's DeviceSession parent, and the explicit self-RP registrations above. Historical
@@ -405,3 +444,13 @@ exact expiry is unavailable. UV Passkey fallback and contactability use the same
 condition. ORG records without that lifetime column remain governed by their existing statuses.
 This changes the authoritative source and classification of existing inventory reads, rather than
 adding credential checks to every ordinary page or API access.
+
+## Delivered reconciliation (2026-10-06)
+
+The `two.md` implementation is now the current contract for this ADR. Base has separate Authority
+and self-RP controller bases on the same FQDN; the Browser Session is OP state and is never an RP
+credential fallback. Auth remains ceremony-only, with D-82 as the narrow browser-bound admission
+exception. The Base finalization path owns passkey/Secret registration handoff, cancellation
+handoff and continuation, and all three realm boundaries use the same explicit result contract.
+Earlier Side/Wide and unfinished-transition passages above are historical and superseded where they
+conflict with the current routes, Warp identifiers, or lifecycle diagrams.

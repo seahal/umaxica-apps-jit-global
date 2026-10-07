@@ -63,10 +63,6 @@ class SignUpPhaseViolationEnforcer
   end
 
   def audit_subject
-    case @flow
-    when ClientSignUpFlow then Client.find_by(id: @flow.principal_id)
-    when VisitorSignUpFlow then Visitor.find_by(id: @flow.principal_id)
-    else raise ArgumentError, "unsupported sign-up flow class: #{@flow.class.name}"
-    end
+    @flow.principal
   end
 end

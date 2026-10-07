@@ -38,7 +38,7 @@
 #
 
 class ClientTelephone < AppPrincipalRecord
-  self.filter_attributes += %w(number)
+  self.filter_attributes += %w(number sign_up_otp_context credential_registration_otp_context)
 
   MAX_TELEPHONES_PER_USER = 4
   alias_attribute :user_telephone_status_id, :user_identity_telephone_status_id
@@ -46,6 +46,9 @@ class ClientTelephone < AppPrincipalRecord
   include Telephone
   include PublicId
   include ContactBinding
+
+  scope :effective_binding, -> { where.not(binding_finalized_at: nil).where(binding_released_at: nil) }
+  validate :effective_binding_has_digest
 
   def to_param
     public_id

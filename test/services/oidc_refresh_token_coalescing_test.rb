@@ -182,9 +182,9 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
 
   private
 
-  def rotate_with(store, refresh_token, expires_in: 300)
+  def rotate_with(store, input_refresh_token, expires_in: 300)
     OidcRefreshTokenIssuer.call(
-      refresh_token: refresh_token,
+      refresh_token: input_refresh_token,
       client_id: "core-app",
       resource_type: "client",
       coordination_store: store,
@@ -247,7 +247,7 @@ class OidcRefreshTokenCoalescingConcurrencyTest < ActiveSupport::TestCase
       true
     end
 
-    def publish(resource_type:, rp_session_public_id:, ciphertext:)
+    def publish(**_attributes)
       true
     end
 

@@ -131,6 +131,7 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
 
   # Fills the one-session limit, then signs in through the real email ceremony so this browser holds
   # a verified flow with an open resolution child. Returns the session that fills the limit.
+  # rubocop:disable Metrics/AbcSize -- This helper preserves the end-to-end email admission sequence.
   def enter_pending_session_limit!
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
@@ -179,6 +180,7 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
   end
+  # rubocop:enable Metrics/AbcSize
 
   def latest_flow
     VisitorSignInFlow.where(principal_id: @visitor.id).recent_first.first

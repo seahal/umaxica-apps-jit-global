@@ -1,0 +1,24 @@
+stateDiagram-v2
+    %% CURRENT implementation; derived Source proof timestamps, not a flow status column.
+    [*] --> Absent
+    Absent --> Issued: SignUpOtpChallengeRecorder.call / original bound candidate
+    Issued --> Issued: same-flow resend / replace only unverified context
+    Issued --> Verified: SignOtpCeremony.verify! / Source OTP consumption and proof commit
+    Verified --> Verified: exact retry / same binding and fixed live result deadline
+    Issued --> Unavailable: OTP deadline or parent terminal / refusal predicate
+    Verified --> Unavailable: result deadline, release or lost live authority / refusal predicate
+    note right of Issued
+        APP/COM email and telephone store the original flow and nonce digest.
+        Owner, candidate, destination, counter and keyed code digest bind the challenge.
+        Owning Ticket, Source owner and Contact locks precede decisions.
+        Both candidate and shared destination failure limits remain authoritative.
+        Enqueue follows Ticket binding; transport checks the original counter under locks.
+    end note
+    note right of Verified
+        Source transaction consumes OTP and establishes immutable verified_at.
+        Subsequent four Ticket progression writes share one Ticket transaction.
+        Result expiry is min(verification plus 60 seconds, original Ticket deadline).
+        Retry compares the same input and respects shared/candidate failure limits.
+        No proof reissue, TTL extension, binding finalization or root issuance occurs here.
+        HTTP phase progression and its replay rules remain separate.
+    end note

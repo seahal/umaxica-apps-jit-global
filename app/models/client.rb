@@ -361,7 +361,9 @@ class Client < AppPrincipalRecord
       VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS.include?(t.user_identity_telephone_status_id)
     } if client_telephones.loaded?
 
-    client_telephones.effective_binding.exists?(user_identity_telephone_status_id: VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS)
+    client_telephones.effective_binding.exists?(
+      user_identity_telephone_status_id: VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS,
+    )
   end
 
   def passkey_login_available?

@@ -71,6 +71,8 @@ class ClientSecretAuditOutbox < AppZenithRecord
     end
   end
 
+  private
+
   def issuance_purge_authority_snapshot
     return unless event_name == "secret.issuance_purged"
 

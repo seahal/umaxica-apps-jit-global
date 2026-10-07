@@ -6,6 +6,12 @@ module Notify
     # Delivers an OTP to a staff member on the org surface.
     # See Notify::App::OtpNotifier for why each surface has its own notifier.
     class OtpNotifier < Notify::ApplicationNotifier
+      class << self
+        public
+
+        def otp_delivery_surface = "org"
+      end
+
       extend Notify::OtpIssuanceNotifier
 
       deliver_by :email do |config|

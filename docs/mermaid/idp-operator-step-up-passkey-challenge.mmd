@@ -11,3 +11,5 @@ stateDiagram-v2
     issued --> burned: consume_bound_passkey_challenge!
     issued --> expired: clock reaches challenge deadline
     expired --> burned: consume_bound_passkey_challenge!
+    issued --> burned: revoke_authority! clears challenge secret and retains original binding
+    burned --> burned: revoke_authority! preserves existing burn and binding facts

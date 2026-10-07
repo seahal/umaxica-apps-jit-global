@@ -104,7 +104,12 @@ module Base
             submitted_code = params.dig(:staff_email, :pass_code)
             return fail_code_required if submitted_code.blank?
 
-            result = verify_otp_code_and_consume(@staff_email, submitted_code)
+            result = verify_otp_code_and_consume(
+              @staff_email, submitted_code,
+              verification_scope: { surface: :org,
+                                    purpose: :credential_registration,
+                                    channel: :email, },
+            )
             return fail_otp_invalid unless result[:success]
 
             complete_registration!

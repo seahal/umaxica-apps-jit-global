@@ -25,8 +25,7 @@ class ClientSecretPasskeyReservationIssuer
                 when "CANCELLED" then "flow_canceled"
                 when "EXPIRED" then "flow_expired"
                 when "FAILED" then "flow_failed"
-                when "HALTED" then "flow_halted"
-                when "FINALIZED", "SIGN_IN_HANDOFF_PENDING" then "flow_halted"
+                when "HALTED", "FINALIZED", "SIGN_IN_HANDOFF_PENDING" then "flow_halted"
                 else raise Denied, "Secret signup retirement requires a confirmed terminal flow"
                 end
               retire_signup_batch!(current, reason, purge_after)

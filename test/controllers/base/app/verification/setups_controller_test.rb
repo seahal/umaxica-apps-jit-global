@@ -285,7 +285,6 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     confirmation = response.parsed_body.at_css("form")
     post(
       confirmation["action"], params: {
-        binding_ref: confirmation.at_css('input[name="binding_ref"]')["value"],
         authenticity_token: confirmation.at_css('input[name="authenticity_token"]')["value"],
         ri: confirmation.at_css('input[name="ri"]')["value"],
       }, headers: @headers,

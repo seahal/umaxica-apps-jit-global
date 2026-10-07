@@ -29,6 +29,7 @@ module AuthenticationBase
   # 8) MFA/session helper decisions ................................. L1873-L1966
   # ==========================================================================
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     after_action :verify_private_action_authorized! if respond_to?(:after_action)
     after_action :apply_authenticated_page_cache_policy! if respond_to?(:after_action)
@@ -326,14 +327,7 @@ module AuthenticationBase
              require_totp_check: true, audit_context: {}, established_authentication_method: nil,
              authentication_context: nil, authentication_event_at: nil, sign_in_flow: nil,
              oidc_authorization_transaction: nil)
-    raise SignInFlowIssuanceRejected, "Auth cannot establish a browser session" if auth_credential_ceremony?
-    if resource.is_a?(Client) && establishment == :root_login && established_authentication_method == "secret" &&
-        !sign_in_flow.is_a?(ClientSignInFlow)
-      raise SignInFlowIssuanceRejected, "Secret root login requires its claimed sign-in flow"
-    end
-    unless SESSION_ESTABLISHMENTS.include?(establishment)
-      raise ArgumentError, "unsupported session establishment: #{establishment.inspect}"
-    end
+    validate_login_establishment!(resource, establishment, established_authentication_method, sign_in_flow)
     return { status: :access_locked } if administratively_locked_resource?(resource)
     return { status: :login_forbidden } unless resource.login_allowed?
 
@@ -343,48 +337,30 @@ module AuthenticationBase
     dpop_result = validate_login_dpop_proof
     return { status: dpop_result[:status], error: dpop_result[:error] } unless dpop_result[:status] == :success
 
-    issuance =
-      with_actor_session_lock(resource) do
-        commit_login_session!(
-          resource,
-          establishment: establishment,
-          token_kind_id: token_kind_id,
-          dpop_jkt: dpop_result[:jkt],
-          established_authentication_method: established_authentication_method,
-          authentication_context: authentication_context,
-          authentication_event_at: authentication_event_at,
-          sign_in_flow: sign_in_flow,
-          oidc_authorization_transaction: oidc_authorization_transaction,
-        )
-      end
-    if issuance[:status] == :session_limit_pending && issuance[:resolution_challenge].present? &&
-        respond_to?(:issue_session_limit_gate!, true)
-      issue_session_limit_gate!(
-        pt: sign_in_flow&.return_to || session_limit_gate_pt,
-        flow: sign_in_flow&.public_id || issuance[:sign_in_flow_public_id],
-        resolution_challenge: issuance[:resolution_challenge],
-        resolution_binding: issuance[:resolution_binding],
-        actor_type: resource.class.name,
-      )
-    end
+    issuance = commit_login_session_under_actor_lock(
+      resource,
+      establishment: establishment,
+      token_kind_id: token_kind_id,
+      dpop_jkt: dpop_result[:jkt],
+      established_authentication_method: established_authentication_method,
+      authentication_context: authentication_context,
+      authentication_event_at: authentication_event_at,
+      sign_in_flow: sign_in_flow,
+      oidc_authorization_transaction: oidc_authorization_transaction,
+    )
+    issue_session_limit_gate_for_pending_login(issuance, resource, sign_in_flow)
     return issuance unless issuance[:status] == :committed
 
-    bind_committed_login!(
+    result = bind_committed_login!(
       resource, issuance,
       token_kind_id: token_kind_id, record_login_audit: record_login_audit, audit_context: audit_context,
     )
+    session[:inertia_clear_history] = true if establishment == :root_login && result[:status] == :success
+    result
   rescue ConcurrentSessionLimitExceededError
     session_limit_hard_reject_result(resource)
   rescue SignInFlowIssuanceRejected => e
-    Rails.logger.warn(
-      JitLogEvent.format(
-        "session.issuance.flow_rejected",
-        "#{resource_type}_id": resource.id,
-        sign_in_flow_public_id: sign_in_flow&.public_id,
-        reason: e.message,
-        request_id: request&.request_id,
-      ),
-    )
+    log_sign_in_flow_issuance_rejection(resource, sign_in_flow, e)
     { status: :invalid_request }
   end
 
@@ -540,70 +516,32 @@ module AuthenticationBase
     token_record_connection_owner.connected_to(role: :writing) do
       token_class.transaction(requires_new: true) do
         check_login_cooldown!(resource) if establishment == :root_login
-        locked_flow = lock_sign_in_flow_for_issuance!(sign_in_flow, resource) if sign_in_flow
-        locked_flow ||= create_oidc_issuance_flow!(
+        locked_flow = prepare_sign_in_flow_for_issuance(
           resource,
-          authentication_method: established_authentication_method,
+          establishment: establishment,
+          established_authentication_method: established_authentication_method,
           authentication_event_at: authentication_event_at,
-        ) if establishment == :root_login && authentication_event_at.present?
+          sign_in_flow: sign_in_flow,
+        )
 
         if session_limit_state_for(resource) == :at_limit
-          raise SignInFlowIssuanceRejected, "session-limit resolution requires a sign-in flow" unless locked_flow
-
-          raw_binding = SecureRandom.urlsafe_base64(32)
-          resolution_model = SessionLimitResolutionTransactionable.model_for(resource)
-          resolution = resolution_model.issue!(
-            sign_in_flow: locked_flow,
-            actor: resource,
-            browser_binding_digest: resolution_model.digest_challenge(raw_binding),
-            oidc_authorization_transaction: oidc_authorization_transaction,
-            audit_context: { auth_method: established_authentication_method }.compact,
-          )
-          {
-            status: :session_limit_pending,
-            resolution_challenge: resolution.challenge,
-            resolution_binding: raw_binding,
-            resolution_transaction: resolution.transaction,
-            sign_in_flow_public_id: locked_flow.public_id,
-          }
-        else
-          now = Time.current
-          token_record = create_login_token_record(
+          issue_pending_session_limit_resolution!(
             resource,
-            resolve_token_kind_id(token_kind_id),
-            token_status_id: token_class::STATUS_ACTIVE,
+            locked_flow: locked_flow,
+            established_authentication_method: established_authentication_method,
+            oidc_authorization_transaction: oidc_authorization_transaction,
+          )
+        else
+          create_committed_login_issuance!(
+            resource,
+            establishment: establishment,
+            token_kind_id: token_kind_id,
             dpop_jkt: dpop_jkt,
             established_authentication_method: established_authentication_method,
             authentication_context: authentication_context,
-            authentication_event_at: authentication_event_at || now,
-            root_login_established_at: (now if establishment == :root_login),
+            authentication_event_at: authentication_event_at,
+            sign_in_flow: locked_flow,
           )
-          device_session = ensure_device_session_for!(resource, token_record, dpop_jkt: dpop_jkt)
-          refresh_plain = token_record.rotate_refresh_token!(discard_at: nil)
-          update_device_session_refresh_state!(device_session, token_record)
-          complete_sign_in_flow_issuance!(locked_flow, token_record, now: now) if locked_flow
-          if resource.is_a?(Client) && establishment == :root_login && established_authentication_method == "secret"
-            write_secret_sign_in_receipt!(resource, locked_flow, token_record, now)
-          end
-
-          access_expires_at = access_token_expires_at_for(token_record, now: now)
-          access_token = encode_login_access_token(
-            resource,
-            token_record,
-            token_kind_id: token_kind_id,
-            dpop_jkt: dpop_jkt,
-            access_expires_at: access_expires_at,
-            authentication_event_at: authentication_event_at || now,
-          )
-
-          {
-            status: :committed,
-            token_record: token_record,
-            access_token: access_token,
-            refresh_plain: refresh_plain,
-            access_expires_at: access_expires_at,
-            issued_at: now,
-          }
         end
       end
     end
@@ -1042,6 +980,139 @@ module AuthenticationBase
   end
 
   private
+
+  def validate_login_establishment!(resource, establishment, authentication_method, sign_in_flow)
+    raise SignInFlowIssuanceRejected, "Auth cannot establish a browser session" if auth_credential_ceremony?
+    if resource.is_a?(Client) && establishment == :root_login && authentication_method == "secret" &&
+        !sign_in_flow.is_a?(ClientSignInFlow)
+      raise SignInFlowIssuanceRejected, "Secret root login requires its claimed sign-in flow"
+    end
+    return if SESSION_ESTABLISHMENTS.include?(establishment)
+
+    raise ArgumentError, "unsupported session establishment: #{establishment.inspect}"
+  end
+
+  def commit_login_session_under_actor_lock(resource, **issuance_attributes)
+    with_actor_session_lock(resource) do
+      commit_login_session!(resource, **issuance_attributes)
+    end
+  end
+
+  def issue_session_limit_gate_for_pending_login(issuance, resource, sign_in_flow)
+    return unless issuance[:status] == :session_limit_pending && issuance[:resolution_challenge].present?
+    return unless respond_to?(:issue_session_limit_gate!, true)
+
+    issue_session_limit_gate!(
+      pt: sign_in_flow&.return_to || session_limit_gate_pt,
+      flow: sign_in_flow&.public_id || issuance[:sign_in_flow_public_id],
+      resolution_challenge: issuance[:resolution_challenge],
+      resolution_binding: issuance[:resolution_binding],
+      actor_type: resource.class.name,
+    )
+  end
+
+  def log_sign_in_flow_issuance_rejection(resource, sign_in_flow, error)
+    Rails.logger.warn(
+      JitLogEvent.format(
+        "session.issuance.flow_rejected",
+        "#{resource_type}_id": resource.id,
+        sign_in_flow_public_id: sign_in_flow&.public_id,
+        reason: error.message,
+        request_id: request&.request_id,
+      ),
+    )
+  end
+
+  def prepare_sign_in_flow_for_issuance(resource, establishment:, established_authentication_method:,
+                                        authentication_event_at:, sign_in_flow:)
+    locked_flow = lock_sign_in_flow_for_issuance!(sign_in_flow, resource) if sign_in_flow
+    return locked_flow if locked_flow
+    return unless establishment == :root_login && authentication_event_at.present?
+
+    create_oidc_issuance_flow!(
+      resource,
+      authentication_method: established_authentication_method,
+      authentication_event_at: authentication_event_at,
+    )
+  end
+
+  def issue_pending_session_limit_resolution!(resource, locked_flow:, established_authentication_method:,
+                                              oidc_authorization_transaction:)
+    raise SignInFlowIssuanceRejected, "session-limit resolution requires a sign-in flow" unless locked_flow
+
+    raw_binding = SecureRandom.urlsafe_base64(32)
+    resolution_model = SessionLimitResolutionTransactionable.model_for(resource)
+    resolution = resolution_model.issue!(
+      sign_in_flow: locked_flow,
+      actor: resource,
+      browser_binding_digest: resolution_model.digest_challenge(raw_binding),
+      oidc_authorization_transaction: oidc_authorization_transaction,
+      audit_context: { auth_method: established_authentication_method }.compact,
+    )
+    {
+      status: :session_limit_pending,
+      resolution_challenge: resolution.challenge,
+      resolution_binding: raw_binding,
+      resolution_transaction: resolution.transaction,
+      sign_in_flow_public_id: locked_flow.public_id,
+    }
+  end
+
+  def create_committed_login_issuance!(resource, establishment:, token_kind_id:, dpop_jkt:,
+                                       established_authentication_method:, authentication_context:,
+                                       authentication_event_at:, sign_in_flow:)
+    now = Time.current
+    token_record = create_login_token_record(
+      resource,
+      resolve_token_kind_id(token_kind_id),
+      token_status_id: token_class::STATUS_ACTIVE,
+      dpop_jkt: dpop_jkt,
+      established_authentication_method: established_authentication_method,
+      authentication_context: authentication_context,
+      authentication_event_at: authentication_event_at || now,
+      root_login_established_at: (now if establishment == :root_login),
+    )
+    refresh_plain = commit_login_token_lifecycle!(
+      resource, token_record, sign_in_flow, establishment,
+      established_authentication_method, now, dpop_jkt,
+    )
+    build_committed_login_issuance(
+      resource, token_record, token_kind_id, dpop_jkt, authentication_event_at, now, refresh_plain,
+    )
+  end
+
+  def commit_login_token_lifecycle!(resource, token_record, sign_in_flow, establishment,
+                                    established_authentication_method, now, dpop_jkt)
+    device_session = ensure_device_session_for!(resource, token_record, dpop_jkt: dpop_jkt)
+    refresh_plain = token_record.rotate_refresh_token!(discard_at: nil)
+    update_device_session_refresh_state!(device_session, token_record)
+    complete_sign_in_flow_issuance!(sign_in_flow, token_record, now: now) if sign_in_flow
+    if resource.is_a?(Client) && establishment == :root_login && established_authentication_method == "secret"
+      write_secret_sign_in_receipt!(resource, sign_in_flow, token_record, now)
+    end
+    refresh_plain
+  end
+
+  def build_committed_login_issuance(resource, token_record, token_kind_id, dpop_jkt, authentication_event_at, now,
+                                     refresh_plain)
+    access_expires_at = access_token_expires_at_for(token_record, now: now)
+    access_token = encode_login_access_token(
+      resource,
+      token_record,
+      token_kind_id: token_kind_id,
+      dpop_jkt: dpop_jkt,
+      access_expires_at: access_expires_at,
+      authentication_event_at: authentication_event_at || now,
+    )
+    {
+      status: :committed,
+      token_record: token_record,
+      access_token: access_token,
+      refresh_plain: refresh_plain,
+      access_expires_at: access_expires_at,
+      issued_at: now,
+    }
+  end
 
   # ----------------------------------------------------------------------
   # 3-2) Bulletin private helpers

@@ -23,6 +23,7 @@ module MachineJsonNegotiation
   # among them, so it is accepted by the first entry and listing the range here would be dead.
   ACCEPTABLE = %w(application/json */*).freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     # A machine health or revision answer is a point-in-time value; a stored copy is a stale one.
     # Set on every response, including a 406, so nothing caches the refusal either.

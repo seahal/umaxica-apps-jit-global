@@ -256,41 +256,57 @@ module OidcClientRegistry
   def logout_hosts_for(resource_type)
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     case normalize_resource_type(resource_type)
-    when "operator"
-      [
-        normalize_host(hosts.sign_staff),
-        normalize_host(hosts.auth_staff),
-        normalize_host(hosts.base_staff),
-        normalize_host(hosts.core_staff),
-        normalize_host(hosts.warp_staff),
-        normalize_host(ENV.fetch("PUBLIC_EDIT_STAFF_URL", nil)),
-        normalize_host(ENV.fetch("PRIVATE_AUTH_STAFF_URL", nil)),
-        normalize_host(ENV.fetch("PUBLIC_AUTH_STAFF_URL", nil)),
-        normalize_host(ENV.fetch("BASE_STAFF_URL", nil)),
-      ].compact_blank.uniq
-    when "visitor"
-      [
-        normalize_host(hosts.sign_corporate),
-        normalize_host(hosts.auth_corporate),
-        normalize_host(hosts.base_corporate),
-        normalize_host(hosts.core_corporate),
-        normalize_host(hosts.warp_corporate),
-        normalize_host(ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", nil)),
-        normalize_host(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", nil)),
-        normalize_host(ENV.fetch("BASE_CORPORATE_URL", nil)),
-      ].compact_blank.uniq
-    else
-      [
-        normalize_host(hosts.sign_service),
-        normalize_host(hosts.auth_service),
-        normalize_host(hosts.base_service),
-        normalize_host(hosts.core_service),
-        normalize_host(hosts.warp_service),
-        normalize_host(ENV.fetch("PRIVATE_AUTH_SERVICE_URL", nil)),
-        normalize_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", nil)),
-        normalize_host(ENV.fetch("BASE_SERVICE_URL", nil)),
-      ].compact_blank.uniq
+    when "operator" then operator_logout_hosts(hosts)
+    when "visitor" then visitor_logout_hosts(hosts)
+    else client_logout_hosts(hosts)
     end
+  end
+
+  def operator_logout_hosts(hosts)
+    [
+      normalize_host(hosts.sign_staff),
+      normalize_host(hosts.auth_staff),
+      normalize_host(hosts.base_staff),
+      normalize_host(hosts.core_staff),
+      normalize_host(hosts.warp_staff),
+      configured_logout_host("PUBLIC_EDIT_STAFF_URL"),
+      configured_logout_host("PRIVATE_AUTH_STAFF_URL"),
+      configured_logout_host("PUBLIC_AUTH_STAFF_URL"),
+      configured_logout_host("BASE_STAFF_URL"),
+    ].compact_blank.uniq
+  end
+
+  def visitor_logout_hosts(hosts)
+    [
+      normalize_host(hosts.sign_corporate),
+      normalize_host(hosts.auth_corporate),
+      normalize_host(hosts.base_corporate),
+      normalize_host(hosts.core_corporate),
+      normalize_host(hosts.warp_corporate),
+      configured_logout_host("PRIVATE_AUTH_CORPORATE_URL"),
+      configured_logout_host("PUBLIC_AUTH_CORPORATE_URL"),
+      configured_logout_host("BASE_CORPORATE_URL"),
+    ].compact_blank.uniq
+  end
+
+  def client_logout_hosts(hosts)
+    [
+      normalize_host(hosts.sign_service),
+      normalize_host(hosts.auth_service),
+      normalize_host(hosts.base_service),
+      normalize_host(hosts.core_service),
+      normalize_host(hosts.warp_service),
+      configured_logout_host("PRIVATE_AUTH_SERVICE_URL"),
+      configured_logout_host("PUBLIC_AUTH_SERVICE_URL"),
+      configured_logout_host("BASE_SERVICE_URL"),
+    ].compact_blank.uniq
+  end
+
+  def configured_logout_host(name)
+    value = ENV[name]
+    return if value.nil?
+
+    normalize_host(value)
   end
 
   def redirect_uris_by_realm_for(config)

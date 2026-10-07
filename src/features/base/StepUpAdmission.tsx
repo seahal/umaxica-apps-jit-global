@@ -34,7 +34,9 @@ export default function StepUpAdmission({
         className="flex flex-col gap-4"
         onSubmit={(event) => {
           const field = event.currentTarget.elements.namedItem("authenticity_token");
-          if (field instanceof HTMLInputElement) field.value = csrfToken();
+          if (field instanceof HTMLInputElement) {
+            field.value = csrfToken();
+          }
         }}
       >
         <input

@@ -4,6 +4,8 @@
 class IdentityTelephoneCeremonyFinalCommitter
   CONFIG = {
     "app" => {
+      outbox_class: ClientContactAuditOutbox,
+      actor_type: :client,
       record_class: ClientTelephone,
       owner_key: :user_id,
       status_key: :user_telephone_status_id,
@@ -17,6 +19,8 @@ class IdentityTelephoneCeremonyFinalCommitter
       binding: true,
     },
     "com" => {
+      outbox_class: VisitorContactAuditOutbox,
+      actor_type: :visitor,
       record_class: VisitorTelephone,
       owner_key: :visitor_id,
       status_key: :visitor_telephone_status_id,
@@ -25,6 +29,7 @@ class IdentityTelephoneCeremonyFinalCommitter
       binding: true,
     },
     "org" => {
+      actor_type: :operator,
       record_class: OperatorTelephone,
       owner_key: :staff_id,
       status_key: :staff_telephone_status_id,
@@ -35,12 +40,16 @@ class IdentityTelephoneCeremonyFinalCommitter
 
   Commit = Data.define(:transaction, :result, :telephone)
 
-  def self.call!(result_token:, actor:, session_ref:, surface:, now: Time.current)
-    new(result_token: result_token, actor: actor, session_ref: session_ref, surface: surface, now: now).call!
+  def self.call!(result_token:, actor_context:, actor:, session_ref:, surface:, now: Time.current)
+    new(
+      result_token: result_token, actor_context: actor_context, actor: actor,
+      session_ref: session_ref, surface: surface, now: now,
+    ).call!
   end
 
-  def initialize(result_token:, actor:, session_ref:, surface:, now: Time.current)
+  def initialize(result_token:, actor_context:, actor:, session_ref:, surface:, now: Time.current)
     @result_token = result_token
+    @actor_context = actor_context
     @actor = actor
     @session_ref = session_ref.to_s
     @surface = surface.to_s
@@ -49,17 +58,18 @@ class IdentityTelephoneCeremonyFinalCommitter
 
   def call!
     validate_actor_binding!
+    return reconcile_committed_result! if transaction.consumed?
+
     validate_transaction_state!
     validate_candidate_before_consumption!
     consumption = IdentityTelephoneCeremonyResultConsumer.new(transaction: transaction, now: now).call(result_token)
     commit_candidate!
-    record_audit!(telephone)
     Commit.new(transaction: consumption.transaction, result: consumption.result, telephone: telephone)
   end
 
   private
 
-  attr_reader :result_token, :actor, :session_ref, :surface, :now
+  attr_reader :result_token, :actor_context, :actor, :session_ref, :surface, :now
 
   def validate_actor_binding!
     raise IdentityTelephoneCeremony::Error, "actor is required" if actor.blank?
@@ -70,6 +80,11 @@ class IdentityTelephoneCeremonyFinalCommitter
           "result session does not match current session" unless result["session_ref"].to_s == session_ref
     raise IdentityTelephoneCeremony::Error,
           "result surface does not match current surface" unless result["surface"].to_s == surface
+    raise IdentityTelephoneCeremony::Error, "surface is invalid" unless CONFIG.key?(surface)
+    unless actor_context.is_a?(ActorValuesContext) && actor_context.actor_type == config.fetch(:actor_type) &&
+        actor_context.subject == actor && actor_context.tld.to_s == surface
+      raise ArgumentError, "actor context does not match Contact audit owner"
+    end
   end
 
   def validate_candidate_before_consumption!
@@ -78,6 +93,10 @@ class IdentityTelephoneCeremonyFinalCommitter
     raise IdentityTelephoneCeremony::Error,
           "telephone candidate digest does not match result" if result["normalized_number_digest"].present? &&
             result["normalized_number_digest"].to_s != telephone.number_digest.to_s
+    unless transaction.telephone_candidate_ref == result["telephone_candidate_ref"] &&
+        transaction.normalized_number_digest == result["normalized_number_digest"]
+      raise IdentityTelephoneCeremony::Error, "telephone result candidate does not match Ticket"
+    end
   end
 
   def validate_transaction_state!
@@ -86,7 +105,9 @@ class IdentityTelephoneCeremonyFinalCommitter
   end
 
   def commit_candidate!
-    config.fetch(:record_class).transaction do
+    actor.with_lock do
+      raise IdentityTelephoneCeremony::Error, "Contact owner is unavailable" unless actor.active?
+
       locked = config.fetch(:record_class).lock.find(telephone.id)
       raise IdentityTelephoneCeremony::Error,
             "telephone candidate owner changed" unless locked.public_send(config.fetch(:owner_key)) == actor.id
@@ -95,13 +116,60 @@ class IdentityTelephoneCeremonyFinalCommitter
               config.fetch(:unverified_status)
 
       attributes = { config.fetch(:status_key) => config.fetch(:verified_status) }
-      attributes[:binding_finalized_at] = now if config.fetch(:binding, false)
+      unless locked.number_digest == transaction.normalized_number_digest
+        raise IdentityTelephoneCeremony::Error, "telephone candidate digest changed"
+      end
+
+      attributes[:binding_finalized_at] = locked.class.database_now if config.fetch(:binding, false)
       locked.update!(attributes)
+      record_audit!(locked)
       @telephone = locked
     end
   end
 
+  def reconcile_committed_result!
+    raise IdentityTelephoneCeremony::Error, "transaction is expired" if transaction.expired?(now: now)
+
+    unless config[:binding] && config.fetch(:outbox_class).exists?(
+      operation_ref: result["transaction_id"], owner_ref: actor.public_id, actor_ref: actor.public_id,
+      contact_ref: result["telephone_candidate_ref"], contact_kind: "telephone", event_name: "finalized",
+    )
+      raise IdentityTelephoneCeremony::Error, "transaction is already consumed"
+    end
+    unless committed_provenance_matches?
+      raise IdentityTelephoneCeremony::Error, "committed Contact result provenance mismatch"
+    end
+
+    actor.with_lock do
+      locked = config.fetch(:record_class).lock.find(telephone.id)
+      unless actor.active? && locked.binding_effective? &&
+          locked.number_digest.to_s == result["normalized_number_digest"].to_s
+        raise IdentityTelephoneCeremony::Error, "committed Contact binding is unavailable"
+      end
+
+      Commit.new(transaction: transaction, result: result, telephone: locked)
+    end
+  end
+
+  def committed_provenance_matches?
+    transaction.result_jti == result["result_jti"] &&
+      transaction.grant_jti == result["grant_jti"] &&
+      transaction.operation == result["operation"] &&
+      transaction.actor_ref == result["actor_ref"] &&
+      transaction.session_ref == result["session_ref"] &&
+      transaction.surface == result["surface"] &&
+      transaction.telephone_candidate_ref == result["telephone_candidate_ref"] &&
+      transaction.normalized_number_digest == result["normalized_number_digest"]
+  end
+
   def record_audit!(subject)
+    if config.fetch(:binding, false)
+      return ContactBindingAuditRecorder.call!(
+        actor_context: actor_context, actor: actor, contact: subject,
+        operation_ref: transaction.transaction_id, event_name: "finalized",
+      )
+    end
+
     return if config[:audit_event_id].blank?
 
     ChronicleRecord.connected_to(role: :writing) do

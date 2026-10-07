@@ -108,11 +108,7 @@ class ClientSecretPresentationIssuer
     end
 
     def with_authorization(context, token, issuance)
-      unless context.is_a?(ActorValuesContext) && context.client? && context.tld == :app &&
-          context.surface == :base && context.subject.is_a?(Client) &&
-          token.is_a?(ClientToken) && issuance.is_a?(ClientSecretIssuance)
-        raise Denied, "Secret presentation requires its Base Client and browser"
-      end
+      validate_presentation_context!(context, token, issuance)
 
       AppTicketRecord.connected_to(role: :writing) do
         ClientToken.transaction do
@@ -124,33 +120,46 @@ class ClientSecretPresentationIssuer
                 client_id: context.subject.id,
               )
               now = Client.database_now
-              unless current && owned && owned.browser_session_ref == current.public_id &&
-                  owned.sign_up_flow_ref.nil? && context.subject.login_allowed?
-                raise Denied, "Secret presentation context mismatch"
-              end
-
-              scope = (owned.origin == "manual") ? "settings_secret_credential" : "settings_passkey"
-              requirement = StepUpRequirement.new(
-                scope: scope, step_up_required: true, allowed_methods: %i(passkey totp email_otp),
-                phishing_resistant_required: false, user_verification_required: false,
-                full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app", session_binding: current.public_id,
-                token_binding: current.public_id, require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
-                actor_ref: context.subject.public_id, resource_ref: nil, tenant_ref: nil,
-              )
-              unless current.currently_usable?(ClientToken.database_now) && !current.restricted? &&
-                  StepUpResolver.call(
-                    token: current, requirement: requirement,
-                    now: ClientToken.database_now,
-                  ).satisfied? &&
-                  owned.expires_at && owned.expires_at > now && owned.canceled_at.nil?
-                raise Denied, "Secret presentation requires current scoped Step-Up and issuance"
-              end
-
+              validate_owned_presentation!(context, current, owned, now)
               yield owned, context, now
             end
           end
         end
       end
+    end
+
+    def validate_presentation_context!(context, token, issuance)
+      return if context.is_a?(ActorValuesContext) && context.client? && context.tld == :app &&
+        context.surface == :base && context.subject.is_a?(Client) &&
+        token.is_a?(ClientToken) && issuance.is_a?(ClientSecretIssuance)
+
+      raise Denied, "Secret presentation requires its Base Client and browser"
+    end
+
+    def validate_owned_presentation!(context, current, owned, now)
+      unless current && owned && owned.browser_session_ref == current.public_id &&
+          owned.sign_up_flow_ref.nil? && context.subject.login_allowed?
+        raise Denied, "Secret presentation context mismatch"
+      end
+
+      requirement = presentation_step_up_requirement(context, current, owned)
+      unless current.currently_usable?(ClientToken.database_now) && !current.restricted? &&
+          StepUpResolver.call(token: current, requirement: requirement, now: ClientToken.database_now).satisfied? &&
+          owned.expires_at && owned.expires_at > now && owned.canceled_at.nil?
+        raise Denied, "Secret presentation requires current scoped Step-Up and issuance"
+      end
+    end
+
+    def presentation_step_up_requirement(context, current, owned)
+      scope = (owned.origin == "manual") ? "settings_secret_credential" : "settings_passkey"
+      StepUpRequirement.new(
+        scope: scope, step_up_required: true, allowed_methods: %i(passkey totp email_otp),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
+        session_binding: current.public_id, token_binding: current.public_id,
+        require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
+        actor_ref: context.subject.public_id, resource_ref: nil, tenant_ref: nil,
+      )
     end
   end
 end

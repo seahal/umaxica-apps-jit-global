@@ -4,6 +4,23 @@
 require "test_helper"
 
 class MfaStatusTrackableTest < ActiveSupport::TestCase
+  test "credential callback refreshes persisted MFA without saving or discarding unrelated cached owner edits" do
+    owner = Client.create!
+    persisted_status = owner.status_id
+    owner.status_id = ClientStatus::ACTIVE
+    ClientEmail.create!(
+      user: owner, address: "cached-owner-mfa@example.test", binding_finalized_at: ClientEmail.database_now,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+
+    assert_equal ClientStatus::ACTIVE, owner.status_id
+    assert_predicate owner, :changed?
+    persisted = Client.find(owner.id)
+
+    assert_equal persisted_status, persisted.status_id
+    assert_equal ClientMfaStatus::ACTIVE, persisted.mfa_status_id
+  end
+
   test "new actors default status to unconfigured" do
     assert_equal ClientMfaStatus::UNCONFIGURED, Client.new.mfa_status_id
     assert_equal OperatorMfaStatus::UNCONFIGURED, Operator.new.mfa_status_id
@@ -43,6 +60,7 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
     ClientEmail.create!(
       user: user,
       address: "mfs-user-#{SecureRandom.hex(4)}@example.com",
+      binding_finalized_at: ClientEmail.database_now,
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
 
@@ -58,6 +76,7 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
     ClientEmail.create!(
       user: user,
       address: "mfs-unconfigured-user-#{SecureRandom.hex(4)}@example.com",
+      binding_finalized_at: ClientEmail.database_now,
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
 
@@ -71,6 +90,7 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
     ClientEmail.create!(
       user: user,
       address: "mfs-stale-user-#{SecureRandom.hex(4)}@example.com",
+      binding_finalized_at: ClientEmail.database_now,
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
 
@@ -82,6 +102,7 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
     email = ClientEmail.create!(
       user: user,
       address: "mfs-demote-user-#{SecureRandom.hex(4)}@example.com",
+      binding_finalized_at: ClientEmail.database_now,
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
 
@@ -110,6 +131,7 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
     VisitorEmail.create!(
       visitor: visitor,
       address: "mfs-visitor-#{SecureRandom.hex(4)}@example.com",
+      binding_finalized_at: VisitorEmail.database_now,
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
 

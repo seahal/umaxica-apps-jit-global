@@ -15,7 +15,67 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
   setup do
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+    )
+    get "/sign/in", params: { entry_ref: admission.reference, ri: "jp" }, headers: { "Host" => @host }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" },
+                               headers: { "Host" => @host }
+
+    assert_response :see_other
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/in", params: { entry_ref: admission.reference, ri: "jp" }, headers: { "Host" => @host }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/sign/in", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" },
+                     headers: { "Host" => @host }
+
+    assert_response :see_other
     ActionMailer::Base.deliveries.clear
+  end
+
+  test "a released Contact cannot mint a new resend state from a stale code entry page" do
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = { "success" => true }
+    address = "stale-resend-#{SecureRandom.hex(8)}@example.test"
+    owner = Client.create!(
+      id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+    )
+    contact = owner.client_emails.create!(
+      address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+    ).tap(&:finalize_binding!)
+    post(
+      "/sign/in/email", params: { :user_email => { address: address }, "cf-turnstile-response" => "test" },
+                        headers: { "Host" => @host },
+    )
+
+    assert_response :redirect
+    entry_url = URI.parse(response.location).request_uri
+    contact.release_binding!
+    get(entry_url, params: { ri: "jp" }, headers: { "Host" => @host })
+
+    assert_response :redirect
+    assert_redirected_to %r{/sign/in/email/new}
+    assert_predicate contact.reload, :binding_released?
+  ensure
+    TurnstileVerifierStub.challenge_enabled = false
+    TurnstileVerifierStub.challenge_response = nil
+  end
+
+  test "a signed resend state cannot authorize a browser without confirmed admission" do
+    state = SignInOtpResendState.issue(
+      kind: :email, target: "unadmitted-app-#{SecureRandom.hex(8)}@example.test", surface: :app,
+      browser_binding: "b" * 64,
+      contact: nil,
+    )
+    browser = open_session
+    browser.host!(@host)
+    assert_no_difference "EmailOccurrence.count" do
+      browser.post("/web/v0/in/email/otp", params: { state: state }, headers: { "Host" => @host }, as: :json)
+    end
+
+    assert_equal 400, browser.response.status
   end
 
   test "recent issued returns 429 with retry_after and header" do
@@ -39,10 +99,54 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     assert_equal response.parsed_body["retry_after"].to_s, response.headers["Retry-After"]
   end
 
+  test "resend state from another admitted browser cannot reserve dispatch for its destination" do
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = { "success" => true }
+    address = "bound-resend-#{SecureRandom.hex(8)}@example.test"
+    post(
+      "/sign/in/email", params: {
+        :user_email => { address: address }, "cf-turnstile-response" => "test",
+      }, headers: { "Host" => @host },
+    )
+
+    assert_response :redirect
+    assert_redirected_to %r{/sign/in/email/edit}
+    assert_not_nil SignAppInEmailAuthenticationState.load(session)
+    get(URI.parse(response.location).request_uri, params: { ri: "jp" }, headers: { "Host" => @host })
+
+    assert_response :success
+    state = inertia_props.fetch("otp_resend").fetch("state")
+    other = open_session
+    other.host!(@host)
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+    )
+    other.get("/sign/in", params: { entry_ref: admission.reference, ri: "jp" })
+    csrf = other.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    other.post("/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" })
+
+    assert_equal 303, other.response.status
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    other.get("/sign/in", params: { entry_ref: admission.reference, ri: "jp" })
+    csrf = other.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    other.post("/sign/in", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" })
+
+    assert_equal 303, other.response.status
+    assert_no_difference "EmailOccurrence.count" do
+      other.post("/web/v0/in/email/otp", params: { state: state }, as: :json)
+    end
+
+    assert_equal 400, other.response.status
+  ensure
+    TurnstileVerifierStub.challenge_enabled = false
+    TurnstileVerifierStub.challenge_response = nil
+  end
+
   test "after cooldown returns 200 and logs issued occurrence" do
     user = clients(:one)
     email = "ok_#{SecureRandom.hex(4)}@example.com"
-    user.client_emails.create!(address: email, user_email_status_id: ClientEmailStatus::VERIFIED)
+    user.client_emails.create!(address: email, user_email_status_id: ClientEmailStatus::VERIFIED).finalize_binding!
 
     hmac = OccurrenceHmac.digest(kind: :email, body: email)
     EmailOccurrence.where(body: hmac).delete_all
@@ -73,33 +177,83 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     assert_match(/issued=[0-9,]+/, occurrence.memo)
   end
 
-  test "success rotates OTP so only latest code verifies" do
+  test "a retained resend state cannot resolve a released destination to another Identity" do
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = { "success" => true }
+    address = "released-resend-#{SecureRandom.hex(8)}@example.test"
+    owner = Client.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE)
+    original = owner.client_emails.create!(
+      address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+    ).tap(&:finalize_binding!)
+    post(
+      "/sign/in/email", params: { :user_email => { address: address }, "cf-turnstile-response" => "test" },
+                        headers: { "Host" => @host },
+    )
+
+    assert_response :redirect
+    get(URI.parse(response.location).request_uri, params: { ri: "jp" }, headers: { "Host" => @host })
+
+    assert_response :success
+    state = inertia_props.fetch("otp_resend").fetch("state")
+    original.release_binding!
+    replacement_owner = Client.create!(
+      id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+    )
+    replacement = replacement_owner.client_emails.create!(
+      address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+    ).tap(&:finalize_binding!)
+    unchanged = replacement.reload.attributes
+    post("/web/v0/in/email/otp", params: { state: state }, headers: { "Host" => @host }, as: :json)
+
+    assert_response :bad_request
+    assert_equal unchanged, replacement.reload.attributes
+    assert_predicate original.reload, :binding_released?
+  ensure
+    TurnstileVerifierStub.challenge_enabled = false
+    TurnstileVerifierStub.challenge_response = nil
+  end
+
+  test "success replaces its Ticket OTP generation while retaining Source OTP" do
     user = clients(:one)
     email_record = user.client_emails.create!(
       address: "rotate_#{SecureRandom.hex(4)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
-    old_private_key = ROTP::Base32.random_base32
-    old_counter = 1024
-    email_record.store_otp(old_private_key, old_counter, 12.minutes.from_now.to_i)
+    state = state_for(email_record.address)
+    cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(cookies[cookie_name])
+    original = ceremony.reload.email_otp_context
+    source = email_record.reload.attributes
 
-    post auth_app_web_v0_in_email_otp_path,
-         params: { state: state_for(email_record.address) },
-         headers: { "Host" => @host },
-         as: :json
+    perform_enqueued_jobs do
+      post auth_app_web_v0_in_email_otp_path,
+           params: { state: state }, headers: { "Host" => @host }, as: :json
+    end
 
     assert_response :ok
 
-    email_record.reload
-    otp_data = email_record.get_otp
+    assert_equal source, email_record.reload.attributes
+    assert_not_equal original.fetch("generation"), ceremony.reload.email_otp_context.fetch("generation")
+    # Boolean assertions keep proof digests out of failure output.
+    proof_rotated = original.fetch("code_digest") != ceremony.email_otp_context.fetch("code_digest")
 
-    assert_not_nil otp_data
+    assert proof_rotated,
+           "generation binding invalidates the old stored proof even when six-digit values coincide"
+    code = ActionMailer::Base.deliveries.last.text_part.body.decoded.match(/Pass Code:\s*([0-9]{6})/)[1]
+
+    assert_predicate ceremony.verify_email_otp!(code: code), :success?
   end
 
   private
 
   def state_for(email)
-    SignInOtpResendState.issue(kind: :email, target: email, surface: :app)
+    cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(cookies[cookie_name])
+    contact = ClientEmail.effective_binding.with_address(email).take
+    ceremony.issue_email_otp!(contact: contact, destination: email)
+    SignInOtpResendState.issue(
+      kind: :email, target: email, surface: :app, browser_binding: ceremony.sid_digest, contact: contact,
+    )
   end
 end

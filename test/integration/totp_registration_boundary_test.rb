@@ -200,7 +200,8 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
         requirement: StepUpRequirement.new(
           scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
           phishing_resistant_required: false, user_verification_required: false,
-          full_reauthentication_required: false, ttl: 15.minutes, allowed_methods: [:passkey], audience: "step_up:#{surface}",
+          full_reauthentication_required: false, ttl: 15.minutes, allowed_methods: [:passkey],
+          audience: "step_up:#{surface}",
           session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
           actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
         ), return_to: "/identity/birthdate", base_browser_nonce: "test-browser-nonce", base_token: token,
@@ -536,8 +537,13 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_nil auth.cookies[AuthenticationCookieName.access]
     entry = Rack::Utils.parse_nested_query(URI.parse(destination).query).fetch("entry_ref")
     redeem_auth_ceremony_session!(
-      auth, auth_app_verification_path(ri: "jp"), reference: entry,
-                                                  params: { ri: "jp" }, headers: auth_headers, confirm_via_http: true, base_browser: self,
+      auth,
+      auth_app_verification_path(ri: "jp"),
+      reference: entry,
+      params: { ri: "jp" },
+      headers: auth_headers,
+      confirm_via_http: true,
+      base_browser: self,
     )
 
     assert_equal 303, auth.response.status

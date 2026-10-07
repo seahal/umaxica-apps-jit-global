@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="<%= I18n.locale %>">
+  <head>
+    <meta charset="utf-8">
+    <meta name="robots" content="noindex,nofollow">
+    <meta name="referrer" content="no-referrer">
+    <title><%= t("actions.restart") %></title>
+  </head>
+  <body>
+    <main>
+      <form method="post" action="<%= action_url %>" data-turbo="false">
+        <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+        <%= hidden_field_tag :scope, scope %>
+        <%= hidden_field_tag :pt, pt %>
+        <%= hidden_field_tag :ri, params[:ri] if params[:ri].present? %>
+        <%= hidden_field_tag :restart_of, binding.entry_ref %>
+        <button type="submit"><%= t(binding.redeemed? ? "actions.cancel_and_start" : "actions.restart") %></button>
+      </form>
+    </main>
+  </body>
+</html>

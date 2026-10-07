@@ -152,13 +152,6 @@ describe("OtpResendButton", () => {
     failed_message: "失敗しました",
   };
 
-  const resend = async () => {
-    const button = container.querySelector("button")!;
-    await act(async () => {
-      button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-  };
-
   it("reports a delivered code and clears the field", async () => {
     const onResent = vi.fn();
     answer(200, { resendable: true });
@@ -171,7 +164,9 @@ describe("OtpResendButton", () => {
       />,
     );
 
-    await resend();
+    await act(async () => {
+      container.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
 
     expect(onResent).toHaveBeenCalled();
     expect(container.textContent).toContain("送信しました");
@@ -187,13 +182,17 @@ describe("OtpResendButton", () => {
       />,
     );
 
-    await resend();
+    await act(async () => {
+      container.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
 
     expect(container.textContent).toContain("しばらく待ってください (30s)");
     expect(container.querySelector("button")!.disabled).toBe(true);
 
     // A second press while the cooldown runs must not reach the endpoint again.
-    await resend();
+    await act(async () => {
+      container.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
 
     expect(fetch).toHaveBeenCalledTimes(1);
   });
@@ -208,7 +207,9 @@ describe("OtpResendButton", () => {
       />,
     );
 
-    await resend();
+    await act(async () => {
+      container.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
 
     expect(container.textContent).toContain("失敗しました");
   });
@@ -223,21 +224,15 @@ describe("OtpResendButton", () => {
       />,
     );
 
-    await resend();
+    await act(async () => {
+      container.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
 
     expect(container.textContent).toContain("失敗しました");
   });
 });
 
 describe("credential forms", () => {
-  const submit = () => {
-    act(() => {
-      container
-        .querySelector("form")!
-        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    });
-  };
-
   it("SignInEmailNew posts to the action the server resolved", () => {
     mount(
       <SignInEmailNew
@@ -253,7 +248,11 @@ describe("credential forms", () => {
     );
 
     type(container.querySelector<HTMLInputElement>("input[type='email']")!, "name@example.com");
-    submit();
+    act(() => {
+      container
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
 
     expect(setData).toHaveBeenCalledWith("user_email", { address: "name@example.com" });
     expect(postRequest).toHaveBeenCalledWith("/sign/in/email");
@@ -273,7 +272,11 @@ describe("credential forms", () => {
     );
 
     type(container.querySelector<HTMLInputElement>("input[type='text']")!, "iPhone");
-    submit();
+    act(() => {
+      container
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
 
     expect(setData).toHaveBeenCalledWith("visitor_passkey", { description: "iPhone" });
     expect(patchRequest).toHaveBeenCalledWith("/settings/passkey/pk_1");

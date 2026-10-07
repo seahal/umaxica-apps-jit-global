@@ -557,10 +557,14 @@ en:
         title: Settings
   actions:
     actions: Actions
+    add: Add
     back: Back
     cancel: Cancel
     connect: Connect
     continue: Continue
+    restart: Restart verification
+    cancel_and_start: Cancel and start new verification
+    delete: Delete
     destroy: Delete
     disconnect: Disconnect
     edit: Edit
@@ -603,6 +607,16 @@ en:
         mfa_status: MFA status
         user_status: Status
         visibility: Visibility
+      client_contact_audit_outbox:
+        acknowledged_at: Acknowledged at
+        actor_ref: Actor reference
+        contact_kind: Contact kind
+        contact_ref: Contact reference
+        event_name: Event
+        event_uuid: Event UUID
+        occurred_at: Occurred at
+        operation_ref: Operation reference
+        owner_ref: Owner reference
       client_email:
         address: Email address
         address_digest: Email address digest
@@ -676,6 +690,16 @@ en:
         created_at: Created
         last_otp_at: Last used
         title: Name
+      visitor_contact_audit_outbox:
+        acknowledged_at: Acknowledged at
+        actor_ref: Actor reference
+        contact_kind: Contact kind
+        contact_ref: Contact reference
+        event_name: Event
+        event_uuid: Event UUID
+        occurred_at: Occurred at
+        operation_ref: Operation reference
+        owner_ref: Owner reference
       visitor_email:
         address: Email address
         address_digest: Email address digest
@@ -1666,6 +1690,22 @@ en:
           userinfo: UserInfo
       identity:
         up_link: Back
+        passkeys:
+          description: Manage your passkeys.
+          title: Passkeys
+        totps:
+          description: Manage your authenticator apps.
+          remove_confirm: Remove this authenticator app?
+          show_description: Review or rename this authenticator app.
+          show_title: Authenticator app
+          status_label: Status
+          statuses:
+            active: Active
+            deleted: Deleted
+            inactive: Inactive
+            nothing: Not configured
+            revoked: Revoked
+          title: Authenticator apps
         activities:
           title: Activity history
           description: Recent security-related activity for your account.
@@ -3960,6 +4000,9 @@ en:
           authenticate_with_passkey: Authenticate with Passkey
           back: Back
           description: Use your passkey to verify your identity.
+          title: Verification
+        new:
+          description: Verify your identity before continuing.
           title: Verification
         setup:
           description: Please register a passkey or an email address before continuing.

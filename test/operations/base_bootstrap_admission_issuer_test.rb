@@ -11,7 +11,8 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
     requirement = StepUpRequirement.new(
       step_up_required: false, scope: "settings_birthdate", purpose: "bootstrap",
       phishing_resistant_required: false, user_verification_required: false,
-      full_reauthentication_required: false, ttl: 15.minutes, audience: "step_up:app", allowed_methods: %i(passkey totp),
+      full_reauthentication_required: false, ttl: 15.minutes, audience: "step_up:app",
+      allowed_methods: %i(passkey totp),
       session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
       actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
@@ -67,7 +68,8 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
       requirement = StepUpRequirement.new(
         step_up_required: false, scope: "settings_birthdate", purpose: "bootstrap",
         phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, ttl: 15.minutes, audience: "step_up:app", allowed_methods: %i(passkey totp),
+        full_reauthentication_required: false, ttl: 15.minutes, audience: "step_up:app",
+        allowed_methods: %i(passkey totp),
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
@@ -99,8 +101,17 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
   end
 
   test "bootstrap is refused for a session that records no root login" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    # Keep this prerequisite independent of orphan credentials left by nontransactional cases.
+    actor = Client.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: nil)
+
+    assert_equal [[], [], []],
+                 [
+                   actor.client_passkeys.pluck(:id),
+                   actor.client_totp_credentials.pluck(:id),
+                   actor.client_emails.pluck(:id),
+                 ],
+                 "bootstrap freshness requires an otherwise unregistered test Identity"
 
     error =
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
@@ -109,7 +120,8 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
           requirement: StepUpRequirement.new(
             step_up_required: false, scope: "settings_birthdate", purpose: "bootstrap",
             phishing_resistant_required: false, user_verification_required: false,
-            full_reauthentication_required: false, ttl: 15.minutes, audience: "step_up:app", allowed_methods: %i(passkey totp),
+            full_reauthentication_required: false, ttl: 15.minutes, audience: "step_up:app",
+            allowed_methods: %i(passkey totp),
             session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
             actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
           ), return_to: "/identity/birthdate", base_browser_nonce: "test-browser-nonce", base_token: token,
@@ -153,7 +165,8 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
           requirement: StepUpRequirement.new(
             step_up_required: false, scope: "settings_birthdate", purpose: "bootstrap",
             phishing_resistant_required: false, user_verification_required: false,
-            full_reauthentication_required: false, ttl: 15.minutes, audience: "step_up:app", allowed_methods: %i(passkey totp),
+            full_reauthentication_required: false, ttl: 15.minutes, audience: "step_up:app",
+            allowed_methods: %i(passkey totp),
             session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
             actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
           ), return_to: "/identity/birthdate", base_browser_nonce: "test-browser-nonce", base_token: token,
@@ -188,7 +201,8 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
       requirement = StepUpRequirement.new(
         step_up_required: false, scope: "settings_birthdate", purpose: "bootstrap",
         phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, ttl: 15.minutes, audience: "step_up:app", allowed_methods: %i(passkey totp),
+        full_reauthentication_required: false, ttl: 15.minutes, audience: "step_up:app",
+        allowed_methods: %i(passkey totp),
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )

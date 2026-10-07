@@ -153,6 +153,12 @@ module Auth
 
             @user_email.pass_code = update_pass_code_params[:pass_code]
 
+            if email_authentication_state&.dummy?
+              result = verify_dummy_otp(@user_email)
+              ensure_min_elapsed(start_time)
+              return respond_to_failed_email_login(result)
+            end
+
             unless @user_email.valid?
               respond_to do |format|
                 format.html { render_email_edit(status: :unprocessable_content) }
@@ -173,6 +179,8 @@ module Auth
             else
               respond_to_failed_email_login(result)
             end
+          ensure
+            ensure_email_auth_verification_elapsed(start_time, code: @user_email&.pass_code)
           end
 
           private
@@ -292,11 +300,19 @@ module Auth
 
               @otp_resend_state = SignInOtpResendState.issue(
                 kind: :email, target: @user_email.address, surface: :app,
+                contact: @user_email,
+                browser_binding: admitted_auth_ceremony_session.sid_digest,
               )
             else
+              unless admitted_auth_ceremony_session.email_otp_challenge_current?(contact: nil)
+                return redirect_to_email_session_expired
+              end
+
               @user_email = ClientEmail.new(address: state.address)
               @otp_resend_state = SignInOtpResendState.issue(
                 kind: :email, target: state.address, surface: :app,
+                contact: nil,
+                browser_binding: admitted_auth_ceremony_session.sid_digest,
               )
             end
           end
@@ -308,7 +324,7 @@ module Auth
           def find_existing_email_for_verification(id)
             scope = ClientEmail.includes(:user_email_status, :user)
             email = defined?(Prosopite) ? Prosopite.pause { scope.find_by(id: id) } : scope.find_by(id: id)
-            return nil if email.blank? || email.otp_expired?
+            return nil if email.blank? || !admitted_auth_ceremony_session.email_otp_challenge_current?(contact: email)
 
             email
           end
@@ -318,29 +334,35 @@ module Auth
           end
 
           def process_email_authentication(normalized_address)
+            started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
             existing_email = find_email_with_timing_protection(normalized_address)
 
             if existing_email&.user&.login_allowed?
               SignAppInEmailAuthenticationState.store_existing!(session, existing_email)
 
-              return :ok if existing_email.locked?
+              otp_code = admitted_auth_ceremony_session.issue_email_otp!(
+                contact: existing_email, destination: normalized_address,
+              )
+              return :ok if otp_code.nil?
               return :cooldown if otp_request_rate_limited?(existing_email)
-
-              otp_code = generate_otp_for(existing_email)
 
               OtpAdapter.for(surface: :app, channel: :email).deliver(
                 record: existing_email,
                 otp_code: otp_code,
                 purpose: :sign_in,
+                auth_ceremony_session_ref: admitted_auth_ceremony_session.id.to_s,
+                auth_email_otp_generation: admitted_auth_ceremony_session.email_otp_context.fetch("generation"),
               )
             else
               # Dummy work to simulate OTP generation for timing attack protection
-              perform_dummy_otp_generation
+              admitted_auth_ceremony_session.issue_email_otp!(contact: nil, destination: normalized_address)
 
               SignAppInEmailAuthenticationState.store_dummy!(session, normalized_address)
             end
 
             :ok
+          ensure
+            ensure_min_elapsed(started, CommonOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
           end
 
           def verify_otp_and_login(user_email)
@@ -353,14 +375,10 @@ module Auth
           end
 
           def verify_existing_email_otp(user_email)
-            user = nil
-            result =
-              verify_otp_code_and_consume(user_email, user_email.pass_code) do |record|
-                user = user_from_user_email(record)
-                user&.login_allowed?
-              end
+            verification = admitted_auth_ceremony_session.verify_email_otp!(code: user_email.pass_code)
+            user = verification.contact&.user
 
-            if result[:success]
+            if verification.success?
               SignAppInEmailAuthenticationState.clear!(session)
               pt = peek_pt
               result = AuthenticationSessionCommitter.call(
@@ -380,12 +398,10 @@ module Auth
                 { success: true, tokens: sign_in_result.token }
               elsif sign_in_result.proceed?
                 # OIDC evidence recorded: no tokens; the sign-in sequence decides the next step.
-                { success: true }
+                { success: true, status: sign_in_result.status }
               else
                 { success: false, error: t("sign.app.authentication.email.update.invalid_code") }
               end
-            elsif result[:error] == :consumption_rejected
-              { success: false, error: t("sign.app.authentication.email.update.invalid_code") }
             else
               handle_failed_otp_attempt(user_email, user)
             end
@@ -393,6 +409,7 @@ module Auth
 
           def verify_dummy_otp(user_email)
             super(user_email.pass_code)
+            admitted_auth_ceremony_session.verify_email_otp!(code: user_email.pass_code)
             { success: false, error: t("sign.app.authentication.email.update.invalid_code") }
           end
 
@@ -435,6 +452,11 @@ module Auth
                 status: "session_limit_pending",
                 redirect_url: result[:redirect_path],
                 message: I18n.t("sign.app.in.session.restricted_notice"),
+              }, status: :ok
+            elsif result[:status] == :authentication_evidence_recorded
+              render json: {
+                status: "authentication_evidence_recorded",
+                redirect_url: sign_in_sequence_redirect_path(pt: retrieve_pt),
               }, status: :ok
             else
               render json: result[:tokens], status: :ok

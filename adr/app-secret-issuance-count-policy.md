@@ -73,3 +73,11 @@ requires real multi-connection issuance/confirmation/claim races, both registrat
 paths across A=0..20, atomic confirmation, zero-generation omission and browser
 notification tests. See the [integration acceptance catalog](../plans/analysis/base-secret-core-acceptance.md)
 and [persistence proposal](../plans/analysis/app-secret-persistence-shape-proposal.md).
+
+## Delivered reconciliation (2026-10-06)
+
+Capacity is enforced under the Client writer lock with `A <= 20` and `A + R <= 20`. Manual
+issuance reserves one; passkey registration reserves two at `A = 0..18` and one at `A = 19`; at
+`A = 20` the operation creates no material or candidate. The checked boundaries are implemented
+by database constraints, reservation operations and Phase 21 tests. Retention and delivery facts
+are independent of the capacity counter.

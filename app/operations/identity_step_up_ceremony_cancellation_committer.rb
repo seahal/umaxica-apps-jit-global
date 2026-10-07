@@ -11,7 +11,7 @@ class IdentityStepUpCeremonyCancellationCommitter
       actor.class.connection_class_for_self.connected_to(role: :writing) do
         actor.with_lock do
           transaction.class.connection_owner.connected_to(role: :writing) do
-            token.with_lock do
+            with_device_and_token_locks!(token) do
               unless transaction.actor_ref == actor.public_id &&
                   transaction.session_ref == token.public_id
                 raise IdentityStepUpCeremonyContract::Error.new(
@@ -20,17 +20,17 @@ class IdentityStepUpCeremonyCancellationCommitter
                 )
               end
 
-              record = session_model.lock.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
-              unless owned_record?(record, token)
-                raise IdentityStepUpCeremonyContract::Error.new(
-                  "step-up cancellation session mismatch",
-                  code: "session_binding_mismatch",
-                )
-              end
-
               transaction.with_lock do
+                record = session_model.lock.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
+                unless owned_record?(record, token)
+                  raise IdentityStepUpCeremonyContract::Error.new(
+                    "step-up cancellation session mismatch", code: "session_binding_mismatch",
+                  )
+                end
                 now = transaction.class.database_now
-                unless token.currently_usable?(now)
+                device = token.device_session
+                unless actor.login_allowed? && token.currently_usable?(now) && device.usable? &&
+                    device.current_refresh_token_id == token.id
                   raise IdentityStepUpCeremonyContract::Error.new(
                     "step-up cancellation session unavailable",
                     code: "session_expired",
@@ -59,6 +59,10 @@ class IdentityStepUpCeremonyCancellationCommitter
     end
 
     private
+
+    def with_device_and_token_locks!(token, &)
+      token.device_session.with_lock { token.with_lock(&) }
+    end
 
     def binding_for(actor, token, transaction)
       case [actor, token, transaction]

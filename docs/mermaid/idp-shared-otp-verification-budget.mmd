@@ -1,0 +1,23 @@
+stateDiagram-v2
+    state "No failure key" as absent
+    state "1 to 4 failures; fixed deadline" as available
+    state "5 failures; same deadline" as exhausted
+    [*] --> absent
+    absent --> available: first admissible wrong OTP / SET 1 EX 900
+    available --> available: wrong OTP below fifth / INCR preserves deadline
+    available --> exhausted: fifth wrong OTP / INCR to 5
+    absent --> absent: correct OTP / no write
+    available --> available: correct OTP / no reset or deadline change
+    exhausted --> exhausted: any OTP / refuse without write
+    available --> absent: native Valkey expiry
+    exhausted --> absent: native Valkey expiry
+    note right of exhausted
+        App/com signup and email sign-in; app/com/org destination confirmation.
+        Existing recovery/reentry callers use their own purpose scopes.
+        Dummy email sign-in counts well-formed attempts and cannot succeed.
+        Key scope: surface, purpose, channel, normalized destination digest.
+        Candidate, flow, browser and owner do not partition the budget.
+        Candidate lock and OTP expiry remain independent controls.
+        Corruption or dependency failure raises; verification cannot consume OTP.
+        Same-scope third-party exhaustion can deny verification for at most 15 minutes.
+    end note
