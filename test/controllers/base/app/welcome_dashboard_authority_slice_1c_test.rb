@@ -196,9 +196,13 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_equal "base/app/roots/index", inertia_component
   end
 
-  test "root_with_a_credential_for_a_missing_app_session_record_renders_the_home" do
-    get base_app_root_url(ri: "jp"),
-        headers: as_user_headers(@user, host: @host, session_public_id: "missing-session-0001")
+  # The RP credential is checked against its live RP Session on every request, so a credential
+  # whose RP Session row is gone is refused although the root cookie beside it is still valid.
+  test "root_with_a_credential_whose_app_rp_session_record_is_gone_renders_the_home" do
+    headers = as_user_headers(@user, host: @host)
+    ClientRpSession.where(oidc_client_id: "base-app-ww").delete_all
+
+    get base_app_root_url(ri: "jp"), headers: headers
 
     assert_response :success
     assert_equal "base/app/roots/index", inertia_component
@@ -303,7 +307,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                  labelled.fetch(I18n.t("base.shared.identity.links.activities", locale: :ja))
     assert_equal base_app_identity_standing_path(ri: "jp"),
                  labelled.fetch(I18n.t("base.shared.identity.links.standing", locale: :ja))
-    assert_equal base_app_identity_passkeys_url(ri: "jp"),
+    assert_equal base_app_identity_passkeys_path(ri: "jp"),
                  labelled.fetch(I18n.t("controller.sign.app.setting.index.passkey", locale: :ja))
     assert_equal auth_app_settings_totps_url(ri: "jp", host: @sign_host, protocol: "https"),
                  labelled.fetch(I18n.t("controller.sign.app.setting.index.totp", locale: :ja))

@@ -187,9 +187,13 @@ class Base::Org::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_equal "base/org/roots/index", inertia_component
   end
 
-  test "root_with_a_credential_for_a_missing_org_session_record_renders_the_home" do
-    get base_org_root_url(ri: "jp"),
-        headers: as_staff_headers(@staff, host: @host, session_public_id: "missing-session-0001")
+  # The RP credential is checked against its live RP Session on every request, so a credential
+  # whose RP Session row is gone is refused although the root cookie beside it is still valid.
+  test "root_with_a_credential_whose_org_rp_session_record_is_gone_renders_the_home" do
+    headers = as_staff_headers(@staff, host: @host)
+    OperatorRpSession.where(oidc_client_id: "base-org-ww").delete_all
+
+    get base_org_root_url(ri: "jp"), headers: headers
 
     assert_response :success
     assert_equal "base/org/roots/index", inertia_component
