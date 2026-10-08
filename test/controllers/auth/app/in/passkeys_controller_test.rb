@@ -21,6 +21,8 @@ module Auth::App::In
       TurnstileVerifierStub.response = { "success" => true }
       @user = create_verified_user_with_email(email_address: "passkey_test_user_#{SecureRandom.hex(6)}@example.com")
       @user_email = @user.client_emails.first # Use the email created by the helper
+      # Only an effective binding counts as a verified contact (D-85).
+      @user_email.finalize_binding!
 
       @user_telephone = ClientTelephone.create!(
         user: @user,
@@ -32,6 +34,13 @@ module Auth::App::In
       # verification exercises the actual signature/RP ID/origin/UV path.
       @fake_client = webauthn_fake_client
       @passkey = register_fake_client_passkey!(client: @fake_client, user: @user, description: "Login Key")
+      # Auth runs a ceremony only for a browser that Base admitted (D-82).
+      ensure_local_sign_in_admission!(
+        surface: "app",
+        path: auth_app_sign_in_path,
+        params: { ri: "jp" },
+        headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL") },
+      )
     end
 
     teardown do
@@ -148,7 +157,7 @@ module Auth::App::In
     end
 
     # Case G-1: Verification success
-    test "verification logs user in on success" do
+    test "verification records authentication evidence and issues no session" do
       assert_not_nil @passkey, "Passkey must exist"
       # Get challenge
       email = ClientEmail.find_by(user: @user).address
@@ -168,9 +177,12 @@ module Auth::App::In
       json = response.parsed_body
 
       assert_equal "ok", json["status"]
-      assert_not_nil json["access_token"]
-      assert_equal "Bearer", json["token_type"]
-      assert_equal AuthenticationBase::ACCESS_TOKEN_TTL.to_i, json["expires_in"]
+      # Auth proves the credential and hands the result to Base; it issues no session (D-10).
+      assert_equal %w(redirect_url status), json.keys.sort
+      assert_equal 0, ClientToken.where(user_id: @user.id).count
+      ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(cookies["auth_sid"])
+
+      assert_predicate ceremony, :authentication_evidence_recorded?
       assert_equal auth_app_sign_in_check_path(ri: "jp"), json["redirect_url"]
 
       # Challenge verification updates sign count
@@ -258,7 +270,12 @@ module Auth::App::In
 
       assert_response :ok
       assert_equal "ok", response.parsed_body["status"]
-      assert_operator ClientToken.where(user_id: @user.id).count, :>, 0
+      # The evidence names the credential owner, never the forged handle; Auth issues no session (D-10).
+      assert_equal 0, ClientToken.where(user_id: @user.id).count
+      ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(cookies["auth_sid"])
+
+      assert_predicate ceremony, :authentication_evidence_recorded?
+      assert_equal @user.id, ClientSignInFlow.find_by!(public_id: ceremony.local_sign_in_flow_ref).principal_id
     end
 
     test "verification rejects a disabled discoverable credential" do

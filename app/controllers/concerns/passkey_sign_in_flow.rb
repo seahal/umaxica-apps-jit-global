@@ -314,23 +314,17 @@ module PasskeySignInFlow
   def handle_login_result(result)
     sign_in_result = sign_in_result_from_session_result(result)
     return if handle_domain_specific_login_status(result)
-    return render_passkey_success(result) if sign_in_result.proceed?
+    return render_passkey_success if sign_in_result.proceed?
 
     render_error("errors.login_failed", :unprocessable_content)
   end
 
-  def render_passkey_success(result)
+  # An Auth ceremony records evidence and issues no credential, so the answer names only where to go.
+  def render_passkey_success
     pt = retrieve_pt_for_checkpoint if respond_to?(:retrieve_pt_for_checkpoint, true)
     render json: {
       status: "ok",
-      access_token: result[:access_token],
-      token_type: result[:token_type],
-      # API contract: this is the actual remaining JWT lifetime in seconds.
-      # It may be shorter than the default access TTL when the backing token
-      # has an earlier revocation boundary.
-      expires_in: result[:expires_in],
       redirect_url: sign_in_sequence_redirect_path(pt: pt, default_path: passkey_default_redirect_url),
-      dbsc: result[:dbsc],
     }, status: :ok
   end
 
