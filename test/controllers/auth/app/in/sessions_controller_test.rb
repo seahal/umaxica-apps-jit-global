@@ -234,7 +234,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
 
     assert_predicate response, :redirect?, response.body
 
-    pass_code = store_otp_and_return_code(email)
+    pass_code = delivered_email_code
     patch(
       auth_app_sign_in_email_url(ri: "jp"),
       params: { client_email: { pass_code: pass_code } },
@@ -360,13 +360,16 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     existing = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { create_active_session(@user) }
-    email = @user.client_emails.create!(address: "limit_#{SecureRandom.hex(4)}@example.com")
+    # Only an effective binding identifies a Client; a candidate row would take the dummy flow.
+    email = @user.client_emails.create!(address: "limit_#{SecureRandom.hex(4)}@example.com").tap(&:finalize_binding!)
     host!(@host)
+    # No sign-in credential ceremony starts before the browser is admitted (D-82).
+    admit_auth_local_entry!(surface: "app")
     post(
       auth_app_sign_in_email_url(ri: "jp"),
       params: { :user_email => { address: email.address }, "cf-turnstile-response" => "t" },
     )
-    pass_code = store_otp_and_return_code(email)
+    pass_code = delivered_email_code
     patch(
       auth_app_sign_in_email_url(ri: "jp"),
       params: { "user_email" => { "pass_code" => pass_code }, "cf-turnstile-response" => "t" },
@@ -415,12 +418,13 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     ).transaction
   end
 
-  def store_otp_and_return_code(email)
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
-    email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
-    pass_code
+  # The code exists only inside the encrypted delivery the ceremony enqueued; nothing on the
+  # identifier row can reproduce it.
+  def delivered_email_code
+    delivery_class = OtpEmailNotifierRollout.enabled?("app") ? OtpNotifierEmailDeliveryJob : OtpMailDeliveryJob
+    delivery = ActiveJob::Base.queue_adapter.enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == delivery_class }
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
   end
 
   def as_user_headers_with_token(user, token, host:, expires_at: 30.minutes.from_now)
