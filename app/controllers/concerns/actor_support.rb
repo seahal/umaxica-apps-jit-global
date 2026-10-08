@@ -207,7 +207,7 @@ module ActorSupport
     return Actor::StepUp::NULL unless respond_to?(:current_session_token, true)
 
     scope = resolved_current_step_up_scope
-    return Actor::StepUp::NULL if scope.blank? || !respond_to?(:step_up_requirement, true)
+    return Actor::StepUp::NULL if scope.blank?
 
     # This runs before the authentication gate. A request without a session has no Step-Up state to
     # resolve, and a requirement cannot be built without a session binding; the gate refuses it.

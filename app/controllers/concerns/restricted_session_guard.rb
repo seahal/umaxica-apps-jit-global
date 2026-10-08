@@ -18,10 +18,8 @@ module RestrictedSessionGuard
   private
 
   def enforce_restricted_session_guard!
-    security_context = current_browser_session_security_context if respond_to?(
-      :current_browser_session_security_context, true,
-    )
-    current_resource if security_context.nil? && respond_to?(:current_resource, true)
+    security_context = current_browser_session_security_context if browser_rp_controller?
+    current_resource if security_context.nil?
     return unless respond_to?(:current_session_restricted?, true)
 
     restricted = current_session_restricted?
@@ -77,7 +75,7 @@ module RestrictedSessionGuard
   end
 
   def browser_rp_root_token_for_guard
-    return unless respond_to?(:current_browser_session_security_context, true)
+    return unless browser_rp_controller?
 
     current_browser_session_security_context&.root_token
   end

@@ -295,19 +295,28 @@ module BaseStepUpIntent
     }.fetch(surface)
 
     if transaction.purpose == "bootstrap" && transaction.allowed_methods_array == ["email_otp"]
-      redirect_to(
-        public_send("new_base_#{surface}_identity_emails_registration_path", ri: params[:ri]), status: :see_other,
-      )
+      registration_path =
+        case surface
+        when "app" then new_base_app_identity_emails_registration_path(ri: params[:ri])
+        when "com" then new_base_com_identity_emails_registration_path(ri: params[:ri])
+        when "org" then new_base_org_identity_emails_registration_path(ri: params[:ri])
+        end
+      redirect_to(registration_path, status: :see_other)
       return
     end
 
-    route =
-      (transaction.purpose == "bootstrap") ? "new_auth_#{surface}_verification_setup_url" :
-           "auth_#{surface}_verification_url"
-    redirect_to_surface_url(
-      public_send(route, entry_ref: entry_ref, ri: params[:ri], host: ENV.fetch(host_env), protocol: "https"),
-      status: :see_other,
-    )
+    route_options = { entry_ref: entry_ref, ri: params[:ri], host: ENV.fetch(host_env), protocol: "https" }
+    bootstrap = transaction.purpose == "bootstrap"
+    admission_url =
+      case surface
+      when "app"
+        bootstrap ? new_auth_app_verification_setup_url(**route_options) : auth_app_verification_url(**route_options)
+      when "com"
+        bootstrap ? new_auth_com_verification_setup_url(**route_options) : auth_com_verification_url(**route_options)
+      when "org"
+        bootstrap ? new_auth_org_verification_setup_url(**route_options) : auth_org_verification_url(**route_options)
+      end
+    redirect_to_surface_url(admission_url, status: :see_other)
   end
 
   def conflict_step_up_requirement(state, token)

@@ -267,6 +267,10 @@ module BrowserRpAuthentication
       {}
   end
 
+  # Guards shared with root-authenticated controllers branch on this instead of probing for
+  # Browser RP methods.
+  def browser_rp_controller? = true
+
   def browser_rp_authenticated?
     browser_rp_access_state.status == :valid
   end

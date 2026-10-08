@@ -171,13 +171,10 @@ module FlowBase
   end
 
   def cycle_status_id_for(status_name)
-    if respond_to?(:status_id_for)
-      status_id_for(status_name)
-    elsif respond_to?(:state_id_for)
-      state_id_for(status_name)
-    else
-      self.class.status_id_for(status_name)
-    end
+    # Sign-in carries `state_id`; every other lifecycle still carries `status_id`.
+    return state_id_for(status_name) if is_a?(SignInFlow)
+
+    self.class.status_id_for(status_name)
   end
 
   def cycle_transition_attributes(next_status_id, now, changes, timestamp_fields: [])

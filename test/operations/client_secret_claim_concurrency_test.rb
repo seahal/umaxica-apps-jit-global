@@ -69,6 +69,9 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
           ensure
             source.execute("RESET lock_timeout")
           end
+        ensure
+          # Leases taken on this pooled thread outlive the future unless released here.
+          ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end
     pids, results =

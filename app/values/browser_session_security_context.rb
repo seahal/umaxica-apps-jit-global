@@ -19,7 +19,7 @@ class BrowserSessionSecurityContext < Data.define(
   end
 
   def restricted?
-    root_token&.respond_to?(:restricted?) && root_token.restricted?
+    root_token&.restricted? || false
   end
 
   def root_session_public_id

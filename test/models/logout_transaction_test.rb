@@ -167,6 +167,9 @@ class LogoutTransactionTest < ActiveSupport::TestCase
               purpose: "sign_out",
             )
           end
+        ensure
+          # Leases taken on this pooled thread outlive the future unless released here.
+          ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end
 

@@ -8,10 +8,7 @@ module AuthenticationSequenceGate
 
   def sign_in_sequence_redirect_path(pt: nil, default_path: after_dashboard_path)
     cycle = current_db_sign_in_flow_for_sequence
-    return sign_in_session_limit_path(pt: pt) if respond_to?(
-      :session_limit_resolution,
-      true,
-    ) && session_limit_resolution
+    return sign_in_session_limit_path(pt: pt) if session_limit_resolution
 
     if cycle
       url_pt = signed_pt_token(pt || cycle.return_to)
@@ -354,10 +351,8 @@ module AuthenticationSequenceGate
   def current_db_sign_in_flow_for_sequence
     return auth_ceremony_local_sign_in_flow if local_authentication_ceremony?
 
-    if respond_to?(:session_limit_resolution, true)
-      resolution = session_limit_resolution
-      return resolution.sign_in_flow if resolution
-    end
+    resolution = session_limit_resolution
+    return resolution.sign_in_flow if resolution
 
     @current_db_sign_in_flow_for_sequence ||=
       begin
@@ -514,7 +509,7 @@ module AuthenticationSequenceGate
   # resolved and the parent remains pending for a fresh resolution.
   def promote_current_session_limit_cycle!(actor)
     cycle = current_db_sign_in_flow_for_sequence
-    resolution = respond_to?(:session_limit_resolution, true) ? session_limit_resolution : nil
+    resolution = session_limit_resolution
     return false unless cycle && resolution
     return false unless resolution.actor_ref == actor.public_id && resolution.resolved?
 

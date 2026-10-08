@@ -84,6 +84,9 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
           rescue StandardError => e
             ready << e
             raise
+          ensure
+            # Leases taken on this pooled thread outlive the future unless released here.
+            ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         end
       pids = nil
@@ -200,6 +203,9 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
         rescue StandardError => e
           ready << e
           raise
+        ensure
+          # Leases taken on this pooled thread outlive the future unless released here.
+          ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end
     pids = nil
@@ -301,6 +307,9 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
         rescue StandardError => e
           ready << e
           raise
+        ensure
+          # Leases taken on this pooled thread outlive the future unless released here.
+          ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end
     pids = nil

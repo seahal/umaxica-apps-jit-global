@@ -116,6 +116,7 @@ class SignOrgVerificationBaseDirectCoverageTest < ActiveSupport::TestCase
     # about a specific public id/session override these again afterwards.
     harness.define_singleton_method(:current_session_public_id) { nil }
     harness.define_singleton_method(:token_class) { OperatorToken }
+    harness.define_singleton_method(:browser_rp_controller?) { false }
     harness
   end
 end

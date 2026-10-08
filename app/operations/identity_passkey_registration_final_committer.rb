@@ -17,7 +17,6 @@ class IdentityPasskeyRegistrationFinalCommitter
       passkey_class: ClientPasskey,
       owner_key: :user_id,
       token_key: :user_token_id,
-      owner_association: :client_passkeys,
       audit_event_id: ClientChronicleEvent::PASSKEY_REGISTERED,
       surface: "app",
     },
@@ -32,7 +31,6 @@ class IdentityPasskeyRegistrationFinalCommitter
       passkey_class: VisitorPasskey,
       owner_key: :visitor_id,
       token_key: :visitor_token_id,
-      owner_association: :visitor_passkeys,
       surface: "com",
     },
     "org" => {
@@ -46,7 +44,6 @@ class IdentityPasskeyRegistrationFinalCommitter
       passkey_class: OperatorPasskey,
       owner_key: :staff_id,
       token_key: :staff_token_id,
-      owner_association: :staff_passkeys,
       audit_event_id: OperatorChronicleEvent::PASSKEY_REGISTERED,
       surface: "org",
     },
@@ -94,7 +91,7 @@ class IdentityPasskeyRegistrationFinalCommitter
 
     def validate_initial_binding!(config, actor, token, transaction)
       actor_key = config.fetch(:owner_key)
-      unless token.public_send(actor_key) == actor.id && transaction.surface == config.fetch(:surface) &&
+      unless token[actor_key] == actor.id && transaction.surface == config.fetch(:surface) &&
           transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
           %w(bootstrap credential_registration).include?(transaction.purpose)
         refuse!("passkey registration binding mismatch")
@@ -232,8 +229,8 @@ class IdentityPasskeyRegistrationFinalCommitter
     end
 
     def existing_credential!(actor, transaction, candidate, ceremony, config)
-      association = actor.public_send(config.fetch(:owner_association))
-      credential = association.active.lock.find_by!(public_id: transaction.verified_credential_ref)
+      credential = config.fetch(:passkey_class).where(config.fetch(:owner_key) => actor.id)
+        .active.lock.find_by!(public_id: transaction.verified_credential_ref)
       return credential if candidate.consumed_at == transaction.consumed_at && ceremony.completed? &&
         credential.webauthn_id == candidate.webauthn_id &&
         ActiveSupport::SecurityUtils.secure_compare(credential.public_key, candidate.public_key)

@@ -85,8 +85,8 @@ class IdentityPasskeyRegistrationVerificationCommitter
 
       unless actor.is_a?(binding.fetch(:actor_class)) && token.is_a?(binding.fetch(:token_class)) &&
           transaction.is_a?(binding.fetch(:transaction_class)) && session_record.is_a?(binding.fetch(:session_class)) &&
-          token.public_send(binding.fetch(:actor_key)) == actor.id &&
-          session_record.public_send(binding.fetch(:token_key)) == token.id &&
+          token[binding.fetch(:actor_key)] == actor.id &&
+          session_record[binding.fetch(:token_key)] == token.id &&
           session_record.step_up_ceremony_transaction_ref == transaction.transaction_id
         refuse!("passkey registration binding mismatch")
       end

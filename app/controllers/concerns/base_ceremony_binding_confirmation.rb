@@ -91,7 +91,7 @@ module BaseCeremonyBindingConfirmation
     when :step_up_ceremony_transaction
       transaction = binding.step_up_ceremony_transaction
       actor = Actor.subject
-      unless actor.respond_to?(:public_id) && transaction.actor_ref == actor.public_id &&
+      unless actor.is_a?(ApplicationRecord) && transaction.actor_ref == actor.public_id &&
           transaction.session_ref == token.public_id &&
           %w(pending
              verified).include?(transaction.status) && !transaction.expired?(now: transaction.class.database_now)

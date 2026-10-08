@@ -65,6 +65,9 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
                 connection.execute("RESET lock_timeout")
               end
             end
+          ensure
+            # Leases taken on this pooled thread outlive the future unless released here.
+            ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         worker_pid = Timeout.timeout(10) { ready.pop }
         source_pids << worker_pid
@@ -182,6 +185,9 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
                 connection.execute("RESET lock_timeout")
               end
             end
+          ensure
+            # Leases taken on this pooled thread outlive the future unless released here.
+            ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         worker_pid = Timeout.timeout(10) { ready.pop }
         source_pids << worker_pid

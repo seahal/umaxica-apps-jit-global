@@ -61,9 +61,7 @@ module SignIn
     end
 
     def sign_in_flow?
-      record.respond_to?(:state_id_for) &&
-        record.respond_to?(:sign_in_completed?) &&
-        record.respond_to?(:sign_in_failed?)
+      record.is_a?(SignInFlow)
     end
 
     def terminal?

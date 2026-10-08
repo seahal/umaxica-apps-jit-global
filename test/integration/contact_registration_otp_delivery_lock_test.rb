@@ -152,6 +152,9 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
           rescue StandardError => e
             ready << e
             raise
+          ensure
+            # Leases taken on this pooled thread outlive the future unless released here.
+            ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         holding = Timeout.timeout(20) { ready.pop }
         raise holding if holding.is_a?(Exception)

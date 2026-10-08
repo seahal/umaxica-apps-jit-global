@@ -16,7 +16,7 @@ class CeremonyOwnedOtpConcurrencyTest < ActiveSupport::TestCase
       ready = Queue.new
       release = Queue.new
       results = Queue.new
-      model.connection_pool.release_connection
+      ActiveRecord::Base.connection_handler.clear_active_connections!
       threads =
         2.times.map do
           Thread.new do # rubocop:disable ThreadSafety/NewThread
@@ -29,6 +29,13 @@ class CeremonyOwnedOtpConcurrencyTest < ActiveSupport::TestCase
                 session_ref: "concurrent-browser", operation: "registration", candidate_ref: "concurrent-candidate",
               )
             end
+          rescue StandardError => e
+            # A thread that fails before signalling must still answer both queues, or the main
+            # thread waits forever and the whole parallel run hangs.
+            ready << e
+            results << e
+          ensure
+            ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         end
       2.times { ready.pop }
@@ -56,7 +63,7 @@ class CeremonyOwnedOtpConcurrencyTest < ActiveSupport::TestCase
       ready = Queue.new
       release = Queue.new
       results = Queue.new
-      model.connection_pool.release_connection
+      ActiveRecord::Base.connection_handler.clear_active_connections!
       threads =
         2.times.map do
           Thread.new do # rubocop:disable ThreadSafety/NewThread
@@ -69,6 +76,13 @@ class CeremonyOwnedOtpConcurrencyTest < ActiveSupport::TestCase
                 session_ref: "concurrent-browser", operation: "registration", candidate_ref: "concurrent-candidate",
               )
             end
+          rescue StandardError => e
+            # A thread that fails before signalling must still answer both queues, or the main
+            # thread waits forever and the whole parallel run hangs.
+            ready << e
+            results << e
+          ensure
+            ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         end
       2.times { ready.pop }

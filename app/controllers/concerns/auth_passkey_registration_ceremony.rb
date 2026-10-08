@@ -103,11 +103,15 @@ module AuthPasskeyRegistrationCeremony
   end
 
   def registration_passkey_scope
-    @step_up_ceremony_actor.public_send(registration_passkey_association).active
-  end
-
-  def registration_passkey_association
-    raise NotImplementedError, "#{self.class} must define #registration_passkey_association"
+    actor = @step_up_ceremony_actor
+    passkeys =
+      case actor
+      when Client then actor.client_passkeys
+      when Visitor then actor.visitor_passkeys
+      when Operator then actor.staff_passkeys
+      else raise ArgumentError, "unsupported passkey registration actor"
+      end
+    passkeys.active
   end
 
   def registration_handoff_path

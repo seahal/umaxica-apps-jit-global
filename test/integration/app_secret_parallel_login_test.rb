@@ -106,6 +106,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
             )
             auth.response.status
           end
+        ensure
+          # Leases taken on this pooled thread outlive the future unless released here.
+          ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end
     pids, statuses =
@@ -178,6 +181,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
             post_oidc_result!(browser)
             browser.response.status
           end
+        ensure
+          # Leases taken on this pooled thread outlive the future unless released here.
+          ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end
     pids, statuses =

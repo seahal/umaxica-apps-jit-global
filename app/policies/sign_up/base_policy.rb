@@ -60,7 +60,7 @@ module SignUp
     end
 
     def expired?
-      ticket.respond_to?(:expired?) && ticket.expired?(ticket.class.database_now)
+      ticket.is_a?(FlowSignUp) && ticket.expired?(ticket.class.database_now)
     end
 
     def terminal?

@@ -182,6 +182,11 @@ module AuthenticationBase
   AuthenticationJwtConfiguration = AuthenticationJwtConfiguration
   AuthenticationToken = AuthenticationToken
 
+  # Root-authenticated controllers read session state from the root token, never through a
+  # Browser RP session.
+  def browser_rp_controller? = false
+  public :browser_rp_controller?
+
   def logged_in?
     current_resource.present?
   end
@@ -997,7 +1002,6 @@ module AuthenticationBase
 
   def issue_session_limit_gate_for_pending_login(issuance, resource, sign_in_flow)
     return unless issuance[:status] == :session_limit_pending && issuance[:resolution_challenge].present?
-    return unless respond_to?(:issue_session_limit_gate!, true)
 
     issue_session_limit_gate!(
       pt: sign_in_flow&.return_to || session_limit_gate_pt,

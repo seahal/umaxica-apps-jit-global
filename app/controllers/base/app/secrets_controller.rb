@@ -105,7 +105,7 @@ class Base::App::SecretsController < Base::App::ApplicationController
   def prepare_manual_operation_locator!
     token_ref = current_session_token&.public_id.to_s
     locator = session[:client_secret_operation]
-    locator = locator.stringify_keys if locator.respond_to?(:stringify_keys)
+    locator = locator.stringify_keys if locator.is_a?(Hash)
     valid_locator = locator.is_a?(Hash) && locator["id"].is_a?(String) &&
       locator["id"].match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/) &&
       locator["session_ref"].to_s == token_ref
@@ -123,7 +123,7 @@ class Base::App::SecretsController < Base::App::ApplicationController
   def exact_manual_operation_id
     operation_id = params[:operation_id]
     locator = session[:client_secret_operation]
-    locator = locator.stringify_keys if locator.respond_to?(:stringify_keys)
+    locator = locator.stringify_keys if locator.is_a?(Hash)
     valid_id = operation_id.is_a?(String) &&
       operation_id.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/)
     valid_locator = locator.is_a?(Hash) && locator["id"] == operation_id &&

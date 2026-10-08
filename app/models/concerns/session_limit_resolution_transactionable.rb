@@ -183,7 +183,7 @@ module SessionLimitResolutionTransactionable
       unless oidc_authorization_transaction.actor_ref == actor.public_id
         raise ArgumentError, "authorization transaction actor binding mismatch"
       end
-      if oidc_authorization_transaction.respond_to?(:secret_sign_in_flow_id) &&
+      if oidc_authorization_transaction.is_a?(ClientOidcAuthorizationTransaction) &&
           oidc_authorization_transaction.secret_sign_in_flow_id.present? &&
           oidc_authorization_transaction.secret_sign_in_flow_id != sign_in_flow.id
         raise ArgumentError, "authorization transaction flow binding mismatch"

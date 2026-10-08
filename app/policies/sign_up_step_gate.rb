@@ -194,7 +194,7 @@ class SignUpStepGate
   def unusable_ticket?(ticket)
     return true if ticket.expired? || (ticket.respond_to?(:lapsed?) && ticket.lapsed?)
 
-    ticket.respond_to?(:sign_up_terminal?) && ticket.sign_up_terminal?
+    ticket.is_a?(FlowSignUp) && ticket.sign_up_terminal?
   end
 
   def committed_email_finalization_retry?(ticket, registry, current_step)

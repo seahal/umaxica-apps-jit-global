@@ -20,8 +20,6 @@ class Auth::Org::Verification::Registration::PasskeysController < ::Auth::Org::A
 
   def ceremony_supported_methods = %i(passkey)
 
-  def registration_passkey_association = :staff_passkeys
-
   def registration_component = "auth/org/verification/registration/passkeys/new"
 
   def registration_options_path = auth_org_verification_registration_passkey_options_path(ri: params[:ri])

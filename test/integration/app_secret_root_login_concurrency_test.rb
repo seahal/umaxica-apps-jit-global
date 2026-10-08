@@ -125,6 +125,9 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
             rescue StandardError => e
               ready << e
               raise
+            ensure
+              # Leases taken on this pooled thread outlive the future unless released here.
+              ActiveRecord::Base.connection_handler.clear_active_connections!
             end
           end
         pids = Timeout.timeout(10) { [ready.pop, ready.pop] }
@@ -153,6 +156,9 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
             rescue StandardError => e
               ready << e
               raise
+            ensure
+              # Leases taken on this pooled thread outlive the future unless released here.
+              ActiveRecord::Base.connection_handler.clear_active_connections!
             end,
           ]
           pid = Timeout.timeout(10) { ready.pop }

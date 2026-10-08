@@ -63,6 +63,9 @@ class StepUpFinalizationRestartRaceTest < ActiveSupport::TestCase
             end
           end
         end
+      ensure
+        # Leases taken on this pooled thread outlive the future unless released here.
+        ActiveRecord::Base.connection_handler.clear_active_connections!
       end
     finalizer_backend = Timeout.timeout(10) { ready.pop }
     restarter =
@@ -82,6 +85,9 @@ class StepUpFinalizationRestartRaceTest < ActiveSupport::TestCase
             )
           end
         end
+      ensure
+        # Leases taken on this pooled thread outlive the future unless released here.
+        ActiveRecord::Base.connection_handler.clear_active_connections!
       end
     restarter_backend, stale_status = Timeout.timeout(10) { ready.pop }
     release << true

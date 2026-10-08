@@ -20,8 +20,6 @@ class Auth::App::Verification::Registration::PasskeysController < ::Auth::App::A
 
   def ceremony_supported_methods = %i(passkey totp email_otp)
 
-  def registration_passkey_association = :client_passkeys
-
   def registration_component = "auth/app/verification/registration/passkeys/new"
 
   def registration_options_path = auth_app_verification_registration_passkey_options_path(ri: params[:ri])

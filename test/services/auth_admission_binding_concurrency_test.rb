@@ -34,6 +34,9 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
                 locked.base_confirmed_at
               end
             end
+          ensure
+            # Leases taken on this pooled thread outlive the future unless released here.
+            ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         end
       backends = Timeout.timeout(10) { Array.new(2) { ready.pop } }
@@ -96,6 +99,9 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
             rescue BaseAuthAdmissionCoordinator::Denied, AuthCeremonySession::InvalidTransition
               [:refused, nil]
             end
+          ensure
+            # Leases taken on this pooled thread outlive the future unless released here.
+            ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         end
       backends = Timeout.timeout(10) { Array.new(2) { ready.pop } }
@@ -153,6 +159,9 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
             rescue AuthAdmissionBinding::InvalidTransition => e
               [:refused, e.class]
             end
+          ensure
+            # Leases taken on this pooled thread outlive the future unless released here.
+            ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         end
       backends = Timeout.timeout(10) { Array.new(2) { ready.pop } }

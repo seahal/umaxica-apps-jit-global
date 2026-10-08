@@ -1,0 +1,3 @@
+# Empty fixture — ensures the table is truncated during fixture loading
+# so that identifier rows left by an interrupted non-transactional test cannot outlive their
+# owners, whose tables fixture loading empties on every run.

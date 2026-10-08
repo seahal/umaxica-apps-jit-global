@@ -138,7 +138,7 @@ module OidcRpLogoutLauncher
     Rails.logger.warn(
       "auth.sign_out.browser_rp_origin_failed " \
       "error_class=#{e.class.name} " \
-      "error_fields=#{e.respond_to?(:record) ? e.record.errors.attribute_names.join(",") : "none"} " \
+      "error_fields=#{e.is_a?(ActiveRecord::RecordInvalid) ? e.record.errors.attribute_names.join(",") : "none"} " \
       "result=unavailable",
     )
     render_oidc_rp_logout_unavailable

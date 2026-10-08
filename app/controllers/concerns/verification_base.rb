@@ -404,7 +404,7 @@ module VerificationBase
   def current_session_token
     return @current_session_token if defined?(@current_session_token)
 
-    if respond_to?(:current_browser_session_security_context, true)
+    if browser_rp_controller?
       return @current_session_token = current_browser_session_security_context&.root_token
     end
 
@@ -417,7 +417,7 @@ module VerificationBase
   def current_actor_token
     return @current_actor_token if defined?(@current_actor_token)
 
-    if respond_to?(:current_browser_session_security_context, true)
+    if browser_rp_controller?
       token = current_browser_session_security_context&.root_token
       return @current_actor_token = token if token&.currently_usable?
 
@@ -584,7 +584,11 @@ module VerificationBase
     surface = bootstrap_pt_surface
     raise ArgumentError, "unsupported verification surface" unless %w(app com org).include?(surface)
 
-    public_send("base_#{surface}_dashboard_path", **args)
+    case surface
+    when "app" then base_app_dashboard_path(**args)
+    when "com" then base_com_dashboard_path(**args)
+    when "org" then base_org_dashboard_path(**args)
+    end
   end
 
   private :verification_requirement, :recorded_step_up_satisfied?
