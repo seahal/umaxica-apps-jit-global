@@ -270,22 +270,110 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     assert_raises(RpSession::IssuanceRejected) { @rp_session.reload.issue_refresh_token! }
   end
 
-  test "DBGMEASURE" do
+  test "an access credential stops authenticating as soon as its root token is revoked" do
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
-    queries = []
-    callback =
-      lambda do |_name, start, finish, _id, payload|
-        next if payload[:name] == "SCHEMA" || payload[:cached]
+    @root_token.revoke!
 
-        queries << [payload[:sql].gsub(/\s+/, " ")[0, 110], ((finish - start) * 1000).round(2)]
+    get :show, params: { required: "1" }
+
+    assert_response :unauthorized
+  end
+
+  test "an access credential stops authenticating once the Browser Session points at another root token" do
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
+    replacement = ClientToken.create!(user: @client)
+    @root_token.device_session.update_columns(current_refresh_token_id: replacement.id)
+
+    get :show, params: { required: "1" }
+
+    assert_response :unauthorized
+  end
+
+  test "a deactivated actor is answered withdrawal_required and keeps the credential" do
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
+    @client.update_columns(
+      withdrawal_started_at: 2.hours.ago, deactivated_at: 1.hour.ago, purge_eligible_at: 31.days.from_now,
+    )
+
+    get :show, params: { required: "1" }, format: :json
+
+    assert_response :forbidden
+    assert_equal "withdrawal_required", response.parsed_body.fetch("error_code")
+    assert_nil response.headers["Set-Cookie"]
+  end
+
+  test "a deactivated actor is not identified on a page that does not require authentication" do
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
+    @client.update_columns(
+      withdrawal_started_at: 2.hours.ago, deactivated_at: 1.hour.ago, purge_eligible_at: 31.days.from_now,
+    )
+
+    get :show
+
+    assert_response :success
+    assert_empty response.body
+  end
+
+  # No fallback to cryptographic-only verification: when live state cannot be read the request
+  # fails closed and the credentials are left for the retry.
+  test "a database failure while reading live state answers 503 and keeps the cookies" do
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = @refresh_token
+
+    ClientRpSession.stub(:find_by, ->(*) { raise ActiveRecord::ConnectionNotEstablished, "injected" }) do
+      OidcTokenExchangeCoordinator.stub(:call, ->(**) { raise RuntimeError, "refresh must not run" }) do
+        get :show, params: { required: "1" }
       end
-    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+    end
+
+    assert_response :service_unavailable
+    assert_not_includes response.body, @client.public_id
+    assert_nil response.headers["Set-Cookie"]
+  end
+
+  test "a visitor-realm credential does not authenticate a client-realm controller" do
+    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    visitor_token = VisitorToken.create!(visitor: visitor)
+    visitor_token.rotate_refresh_token!
+    visitor_client = OidcClientRegistry.find!("core-com")
+    visitor_rp_session = VisitorRpSession.create!(
+      visitor_token: visitor_token, oidc_client_id: visitor_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_auth_time: 1.minute.ago, refresh_token_expires_at: 10.minutes.from_now,
+    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
+      visitor,
+      host: request.host, resource_type: "visitor", session_public_id: visitor_token.public_id,
+      base_session_public_id: visitor_token.public_id, oidc_sid: visitor_rp_session.public_id,
+      oidc_jti: visitor_rp_session.oidc_jti, expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+      issuer: OidcIssuer.for_resource_type("visitor"), audiences: [visitor_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(visitor_client),
+      subject: OidcSubject.for(visitor, resource_type: "visitor"), client_id: visitor_client.client_id,
+    )
+
+    get :show, params: { required: "1" }
+
+    assert_response :unauthorized
+  end
+
+  # One authenticated request reads each link of the live chain once: RP Session, Browser Session,
+  # actor, current root token, and the database clock. More than that is a repeated or N+1 read.
+  test "live validation reads the chain once per request" do
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
+    statements = []
+    subscriber =
+      lambda do |_name, _start, _finish, _id, payload|
+        statements << payload[:sql] unless payload[:name] == "SCHEMA" || payload[:cached]
+      end
+
+    ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
       get :show, params: { required: "1" }
     end
 
     assert_response :success
-    puts "QCOUNT #{queries.size} total_ms=#{queries.sum(&:last).round(2)}"
-    queries.each { |q| puts "Q #{q[1]}ms #{q[0]}" }
+    assert_equal 5, statements.size, statements.join("\n")
+    %w(client_rp_sessions client_device_sessions clients client_tokens).each do |table|
+      assert_equal 1, statements.count { |sql| sql.include?(%("#{table}")) }, table
+    end
   end
 
   # --- Refresh credential values (RP3) -----------------------------------------------------------
