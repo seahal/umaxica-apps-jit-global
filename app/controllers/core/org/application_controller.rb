@@ -93,6 +93,8 @@ module Core
         "operator"
       end
 
+      public :browser_rp_client_id, :browser_rp_resource_type
+
       def oidc_sign_host
         ENV.fetch("PRIVATE_AUTH_STAFF_URL")
       end

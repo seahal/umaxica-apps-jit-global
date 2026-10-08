@@ -104,7 +104,7 @@ class OperatorEmailTest < ActiveSupport::TestCase
       staff: @staff,
     )
 
-    expected = IdentifierBlindIndex.bidx_for_email("staff-bidx@example.com")
+    expected = IdentifierBlindIndex.bidx_for_email("staff-bidx@example.com", realm: :org)
 
     assert_equal expected, staff_email.address_digest
   end
@@ -117,8 +117,10 @@ class OperatorEmailTest < ActiveSupport::TestCase
     )
 
     assert_equal staff_email,
-                 OperatorEmail.find_by(address_digest: IdentifierBlindIndex.bidx_for_email("STAFF-FIND@example.com"))
-    assert_nil OperatorEmail.find_by(address_digest: IdentifierBlindIndex.bidx_for_email("not-an-email"))
+                 OperatorEmail.find_by(
+                   address_digest: IdentifierBlindIndex.bidx_for_email("STAFF-FIND@example.com", realm: :org),
+                 )
+    assert_nil OperatorEmail.find_by(address_digest: IdentifierBlindIndex.bidx_for_email("not-an-email", realm: :org))
   end
 
   test "should downcase email address before saving" do

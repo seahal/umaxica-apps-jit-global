@@ -12,6 +12,8 @@ class Base::App::Identity::TelephonesControllerTest < ActionDispatch::Integratio
            :client_token_dbsc_statuses
 
   setup do
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = { "success" => true }
     https!
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! @host
@@ -45,6 +47,11 @@ class Base::App::Identity::TelephonesControllerTest < ActionDispatch::Integratio
     install_base_browser_rp_credentials!(surface: "app", host: @host, actor: @user, token: @token)
     @headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
       .except("Cookie", "HTTP_COOKIE")
+  end
+
+  teardown do
+    TurnstileVerifierStub.challenge_enabled = false
+    TurnstileVerifierStub.challenge_response = nil
   end
 
   test "index lists the telephones owned by the signed-in client" do
@@ -110,6 +117,7 @@ class Base::App::Identity::TelephonesControllerTest < ActionDispatch::Integratio
   end
 
   test "create starts telephone verification and moves on to the registration step" do
+    clear_enqueued_jobs
     number = "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}"
 
     post base_app_identity_telephones_url(ri: "jp", host: @host),
@@ -118,6 +126,26 @@ class Base::App::Identity::TelephonesControllerTest < ActionDispatch::Integratio
 
     assert_response :see_other
     assert_redirected_to edit_base_app_identity_telephones_registration_url(ri: "jp", host: @host)
+    telephone = ClientTelephone.find(session[:settings_telephone_registration_id])
+    transaction = ClientTelephoneCeremonyTransaction.find_by!(
+      transaction_id: session[:settings_telephone_registration_transaction_ref],
+    )
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+    payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+
+    assert_equal telephone.public_id, transaction.telephone_candidate_ref
+    assert_equal ["app", "credential_registration", transaction.transaction_id, telephone.public_id,
+                  transaction.otp_generation,], payload.fetch(:otp_binding)
+    assert_not_includes JSON.generate(job.fetch(:args)), payload.fetch(:otp_code)
+
+    patch base_app_identity_telephones_registration_url(ri: "jp", host: @host),
+          params: { user_telephone: { pass_code: payload.fetch(:otp_code) } }, headers: @headers
+
+    assert_redirected_to base_app_identity_telephones_url(ri: "jp", host: @host)
+    assert_predicate telephone.reload, :binding_effective?
+    assert_predicate transaction.reload, :consumed?
+    assert_nil session[:settings_telephone_registration_id]
+    assert_nil session[:settings_telephone_registration_transaction_ref]
   end
 
   test "create re-renders the form when the number cannot be verified" do

@@ -1,6 +1,11 @@
 # Restore `locked_at` Timestamp When OTP Attempts Reach Threshold
 
 Status: ALREADY_SATISFIED (verified 2026-09-22) Severity: Low (audit / diagnostic completeness)
+
+> Superseded contract (2026-10-07): shared `OtpLockable` is removed. Email and Telephone retain
+> separate attempt/lockout implementations; issuance, replacement codes, expiry and cancellation
+> preserve failure counts. The row-lock atomicity requirement remains. See
+> `adr/realm-separated-identifiers-and-dead-history.md`; the verification below is historical.
 Origin: Security review follow-up; verified working tree on 2026-05-05.
 
 ## Summary

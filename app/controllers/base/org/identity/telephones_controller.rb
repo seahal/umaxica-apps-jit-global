@@ -19,6 +19,8 @@ module Base
         # Verification guards remain in place.
         before_action :authorize_telephone_registration!, only: %i(new create)
 
+        public
+
         def index
           authorize!(OperatorTelephone, to: :index?)
           @staff_telephones = current_operator.staff_telephones.order(created_at: :asc)
@@ -47,6 +49,7 @@ module Base
             return
           end
 
+          session[:staff_telephone_registration_id] = @staff_telephone.id
           redirect_to(edit_base_org_identity_telephones_registration_path(ri: params[:ri]))
         end
 

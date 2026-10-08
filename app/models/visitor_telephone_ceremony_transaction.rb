@@ -34,6 +34,9 @@
 #
 class VisitorTelephoneCeremonyTransaction < ComTicketRecord
   include TelephoneCeremonyTransactionable
+  include TelephoneCeremonyOtp
+
+  validate :immutable_telephone_otp_terminal_facts
 
   ceremony_surface "com"
 end

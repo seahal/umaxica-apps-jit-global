@@ -23,7 +23,7 @@ class RecoveryPasscodeTopUpTest < ActiveSupport::TestCase
     actor = visitors(:reserved_visitor)
     address = "com-top-up@example.com"
     actor.visitor_emails.create!(
-      address: address, address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address: address, address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24), otp_counter: "", otp_attempts_count: 0,
     )

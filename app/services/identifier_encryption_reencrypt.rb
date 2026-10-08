@@ -20,8 +20,14 @@ class IdentifierEncryptionReencrypt
     VisitorTelephone,
   ].freeze
 
+  public
+
   def initialize(models: MODELS)
-    @models = models
+    unless models.is_a?(Array) && models.any? && models.uniq == models && (models - MODELS).empty?
+      raise ArgumentError, "unsupported identifier encryption targets"
+    end
+
+    @models = models.dup.freeze
   end
 
   def call
@@ -53,23 +59,17 @@ class IdentifierEncryptionReencrypt
   private
 
   def reencrypt_records(model)
-    return 0 unless model.column_names.any?
-
     updated = 0
     model.unscoped.in_batches(of: 1000) do |relation|
       relation.each do |record|
-        begin
-          model.encrypted_attributes.each do |attr_name|
-            value = record.public_send(attr_name)
-            record.public_send("#{attr_name}_will_change!")
-            record.public_send("#{attr_name}=", value)
-          end
-
-          record.save!
-          updated += 1
-        rescue ActiveRecord::Encryption::Errors::Decryption, OpenSSL::Cipher::CipherError
-          next
+        model.encrypted_attributes.each do |attr_name|
+          value = record.public_send(attr_name)
+          record.public_send("#{attr_name}_will_change!")
+          record.public_send("#{attr_name}=", value)
         end
+
+        record.save!
+        updated += 1
       end
     end
     updated

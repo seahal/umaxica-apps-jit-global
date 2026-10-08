@@ -211,7 +211,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   test "base authorize endpoint uses request windows and ignores old token history" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     Rails.configuration.x.rate_limit.fetch(:store).clear
 
     create_old_client_tokens(count: 25)
@@ -221,7 +221,8 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       **oidc_authorize_params(scope: "openid"),
     ), headers: { "Host" => host }
 
-    assert_response :redirect
+    assert_response :success
+    assert_select "form#base-authorization-ceremony-start-form[method='post'][action='/oauth/authorize']"
     assert_not_equal 429, response.status
   end
 
@@ -232,7 +233,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       client_redirect_host: RateLimitProfiles::Profile.new(to: 100, within: 10.minutes, retry_after: 600),
     )
 
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     Rails.configuration.x.rate_limit.fetch(:store).clear
 
     logs = []
@@ -243,7 +244,8 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
           **oidc_authorize_params(scope: "openid"),
         ), headers: { "Host" => host }
 
-        assert_response :redirect
+        assert_response :success
+        assert_select "form#base-authorization-ceremony-start-form[method='post'][action='/oauth/authorize']"
 
         get base_app_oauth_authorization_url(
           host: host,
@@ -835,30 +837,42 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   test "base oauth authorize starts sign in ceremony on unauthenticated requests" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host!(host)
+    https!
 
-    get "/oauth/authorize", params: oidc_authorize_params, headers: browser_headers
+    assert_no_difference "ClientOidcAuthorizationTransaction.count" do
+      get("/oauth/authorize", params: oidc_authorize_params)
+    end
+
+    assert_response :success
+    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+    post(
+      form["action"], params: submission,
+                      headers: { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" },
+    )
 
     assert_response :redirect
     uri = URI.parse(jump_rt_url_from_location(response.location))
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
 
-    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), uri.host
+    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), uri.host
     assert_equal "/sign/in", uri.path
-    assert_predicate query["transaction_ref"], :present?
+    assert_predicate query["entry_ref"], :present?
     assert_nil query["login_challenge"]
 
-    payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
-      reference: query["transaction_ref"],
-      surface: "app",
-      expected_intent: "authentication",
-    )
-    transaction = ClientOidcAuthorizationTransaction.find_by!(transaction_id: payload.fetch("subject_ref"))
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(reference: query.fetch("entry_ref"), surface: "app")
+    transaction = ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id)
 
     assert_equal "app", transaction.surface
     assert_equal "authentication", transaction.intent
     assert_equal "openid profile", transaction.scope
+    assert_not_predicate binding, :redeemed?
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
   test "base oauth authorize issues an SSO code from an existing Browser Session" do
@@ -985,7 +999,9 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   test "base app authorize prompt login starts a fresh ceremony" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     actor = clients(:one)
     ensure_user_token_reference_records!
     token = ClientToken.create!(
@@ -998,45 +1014,77 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     )
 
     host!(host)
-    get "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "login"),
-                            headers: as_user_headers(actor, host: host, session_public_id: token.public_id)
+    https!
+    harness = as_user_headers(actor, host: host, session_public_id: token.public_id)
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = harness.fetch("Cookie").split("=", 2).last
+    headers = harness.except("Cookie", "HTTP_COOKIE", "Authorization").merge(
+      "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin",
+    )
+    get(
+      "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "login"),
+                          headers: headers,
+    )
+
+    assert_response :success
+    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+    post(form["action"], params: submission, headers: headers)
 
     assert_response :redirect
-    assert_predicate response.location, :present?
+    target = URI.parse(jump_rt_url_from_location(response.location))
+
+    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), target.host
+    assert_equal "/sign/in", target.path
+    assert_predicate Rack::Utils.parse_nested_query(target.query.to_s)["entry_ref"], :present?
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
   test "base oauth authorize keeps first-party ceremony neutral when screen_hint requests signup" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host!(host)
+    https!
+    headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
 
-    get "/oauth/authorize", params: oidc_authorize_params(screen_hint: "signup"), headers: browser_headers
+    get("/oauth/authorize", params: oidc_authorize_params(screen_hint: "signup"), headers: headers)
+
+    assert_response :success
+    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+    post(form["action"], params: submission, headers: headers)
 
     assert_response :redirect
     uri = URI.parse(jump_rt_url_from_location(response.location))
 
-    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), uri.host
+    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), uri.host
     assert_equal "/sign/in", uri.path
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
   test "first-party browser RPs keep ordinary authentication intent neutral" do
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
     ["signup", "signin"].each do |screen_hint|
       [
         {
-          host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
+          host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
           client_id: "core-app",
           resource_type: "client",
           surface: "app",
           transaction_model: ClientOidcAuthorizationTransaction,
         },
         {
-          host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
+          host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
           client_id: "core-com",
           resource_type: "visitor",
           surface: "com",
           transaction_model: VisitorOidcAuthorizationTransaction,
         },
         {
-          host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
+          host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
           client_id: "core-org",
           resource_type: "operator",
           surface: "org",
@@ -1044,6 +1092,8 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
         },
       ].each do |surface|
         host!(surface.fetch(:host))
+        https!
+        headers = { "Origin" => "https://#{surface.fetch(:host)}", "Sec-Fetch-Site" => "same-origin" }
         recognized_route = Rails.application.routes.recognize_path(
           "https://#{surface.fetch(:host)}/oauth/authorize",
           method: :get,
@@ -1055,28 +1105,33 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
           resource_type: surface.fetch(:resource_type),
           screen_hint: screen_hint,
         )
-        last_transaction_id = surface.fetch(:transaction_model).order(id: :desc).first&.id
+        assert_no_changes -> { surface.fetch(:transaction_model).order(id: :desc).first&.id } do
+          get("/oauth/authorize", params: params, headers: headers)
+        end
 
-        get "/oauth/authorize", params: params, headers: browser_headers.merge("Host" => surface.fetch(:host))
+        assert_response :success
+        form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+        submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+        post(form["action"], params: submission, headers: headers)
 
         assert_response :redirect
-        transaction =
-          surface.fetch(:transaction_model).where("id > ?", last_transaction_id || 0).order(id: :desc).first
-
-        assert_not_nil transaction
-        assert_equal "authentication", transaction.intent
-
         uri = URI.parse(jump_rt_url_from_location(response.location))
         query = Rack::Utils.parse_nested_query(uri.query.to_s)
-        admission = BaseAuthAdmissionCoordinator.consume_entry_reference!(
-          reference: query.fetch("transaction_ref"),
-          surface: surface.fetch(:surface),
-          expected_intent: "authentication",
+        binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          reference: query.fetch("entry_ref"), surface: surface.fetch(:surface),
         )
+        transaction = surface.fetch(:transaction_model).find(binding.authorization_transaction_id)
 
-        assert_equal transaction.transaction_id, admission.fetch("subject_ref")
+        assert_equal "authentication", transaction.intent
+        assert_equal surface.fetch(:client_id), transaction.client_id
+        assert_equal surface.fetch(:surface), transaction.surface
+        assert_equal params.fetch(:state), transaction.state
+        assert_equal transaction.id, binding.authorization_transaction_id
+        assert_not_predicate binding, :redeemed?
       end
     end
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
   test "base app authorize returns login_required for prompt none without a session" do
@@ -1116,22 +1171,79 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   test "base oauth authorize can retry a finalized result without a second root session" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host!(host)
+    https!
+    headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
     token_count_before = ClientToken.where(user_id: clients(:one).id).count
-    issuance = OidcAuthorizationTransactionCoordinator.issue!(
-      surface: "app", intent: "sign_in",
-      params: oidc_authorize_params,
+    get("/oauth/authorize", params: oidc_authorize_params)
+
+    assert_response :success
+    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    post(form["action"], params: form.css("input").to_h { |input| [input["name"], input["value"]] }, headers: headers)
+
+    assert_response :redirect
+    entry = URI.parse(jump_rt_url_from_location(response.location))
+    entry_ref = Rack::Utils.parse_nested_query(entry.query.to_s).fetch("entry_ref")
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
+    transaction = ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id)
+    cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+    raw = response.headers["Set-Cookie"] || response.headers["set-cookie"]
+    lines = (raw.is_a?(String) && raw.start_with?("[")) ? JSON.parse(raw) : Array(raw)
+    cookie_line =
+      lines.flat_map { |line| line.to_s.split("\n") }.find do |line|
+        line.split(";", 2).first.start_with?("#{cookie_name}=")
+      end
+
+    assert_not_nil cookie_line
+    cookies.delete(cookie_name)
+    _received_cookie = cookies.merge(cookie_line.split(";", 2).first, URI.parse("https://#{host}/"))
+    auth = open_session
+    auth.host!(auth_host)
+    auth.https!
+    auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+    auth.get(entry.path, params: Rack::Utils.parse_nested_query(entry.query.to_s).merge("ri" => "jp"))
+
+    assert_equal 200, auth.response.status
+    csrf = auth.response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+    auth.post(
+      "/ceremony_bindings", params: { entry_ref: entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
     )
 
+    assert_equal 303, auth.response.status
+    confirmation = URI.parse(auth.response.location)
+    get(confirmation.request_uri)
+
+    assert_response :success
+    csrf = response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+    post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: headers)
+
+    assert_response :see_other
+    auth.get(URI.parse(response.location).request_uri)
+    csrf = auth.response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+    auth.post(
+      "/sign/in", params: { entry_ref: entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
+    )
+
+    assert_equal 303, auth.response.status
+    assert_predicate binding.reload, :redeemed?
     result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "app",
-      login_challenge: issuance.transaction.login_challenge,
+      login_challenge: transaction.login_challenge,
       actor: clients(:one),
       authentication_event_at: Time.current,
       session_ref: "session-1",
       auth_method: "passkey",
+      ceremony_session_ref: binding.admitted_auth_ceremony_session_id.to_s,
     )
+    get("/oauth/authorize", params: { result_ref: result.reference, transaction_ref: transaction.transaction_id })
+
+    assert_response :success
+    form = response.parsed_body.at_css("form")
+    submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
 
     locks = []
     subscriber =
@@ -1143,13 +1255,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
         end
       end
     ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
-      post "/oauth/authorize", params: {
-        result: result.code,
-        transaction_ref: result.transaction.transaction_id,
-      }, headers: browser_headers.merge(
-        "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}",
-        "Sec-Fetch-Site" => "same-site",
-      )
+      post("/oauth/authorize", params: submission, headers: headers)
     end
 
     assert_not_nil locks.index(:actor)
@@ -1162,61 +1268,125 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_predicate query["code"], :present?
     assert_equal oidc_authorize_params[:state], query["state"]
-    assert_predicate issuance.transaction.reload, :consumed?
-    browser_session_ref = issuance.transaction.browser_session_ref
+    assert_predicate transaction.reload, :consumed?
+    browser_session_ref = transaction.browser_session_ref
 
     assert_predicate browser_session_ref, :present?
     assert_equal token_count_before + 1, ClientToken.where(user_id: clients(:one).id).count
 
-    post "/oauth/authorize", params: {
-      result: result.code,
-      transaction_ref: result.transaction.transaction_id,
-    }, headers: browser_headers.merge(
-      "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}",
-      "Sec-Fetch-Site" => "same-site",
+    raw = response.headers["Set-Cookie"] || response.headers["set-cookie"]
+    lines = (raw.is_a?(String) && raw.start_with?("[")) ? JSON.parse(raw) : Array(raw)
+    cookie_line =
+      lines.flat_map { |line| line.to_s.split("\n") }.find do |line|
+        line.split(";", 2).first.start_with?("#{cookie_name}=")
+      end
+
+    assert_not_nil cookie_line
+    cookies.delete(cookie_name)
+    _received_cookie = cookies.merge(cookie_line.split(";", 2).first, URI.parse("https://#{host}/"))
+    get("/oauth/authorize", params: { result_ref: result.reference, transaction_ref: transaction.transaction_id })
+
+    assert_response :success
+    form = response.parsed_body.at_css("form")
+    submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+    post(
+      "/oauth/authorize", params: submission, headers: headers,
     )
 
     assert_response :redirect
-    assert_equal browser_session_ref, issuance.transaction.reload.browser_session_ref
+    assert_equal browser_session_ref, transaction.reload.browser_session_ref
     assert_equal token_count_before + 1, ClientToken.where(user_id: clients(:one).id).count
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
   test "credential changes reject previously issued OIDC results on all Base surfaces without root issuance" do
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
     %i(app com org).each do |surface|
       reset!
-      actor, model, tokens, owner_key, base_host, auth_host =
+      actor, model, tokens, owner_key, base_host, auth_host, client_id, realm =
         case surface
         when :app
           [Client.create!(id: 9_125_000_000_000), ClientOidcAuthorizationTransaction, ClientToken, :user_id,
-           ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),]
+           ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "core-app", "client",]
         when :com
           [Visitor.create!(id: 9_125_000_000_000), VisitorOidcAuthorizationTransaction, VisitorToken, :visitor_id,
-           ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),]
+           ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "core-com", "visitor",]
         when :org
           [Operator.create!(id: 9_125_000_000_000), OperatorOidcAuthorizationTransaction, OperatorToken, :staff_id,
-           ENV.fetch("PUBLIC_BASE_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"),]
+           ENV.fetch("PUBLIC_BASE_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"), "core-org", "operator",]
         end
       host!(base_host)
-      now = model.database_now
-      parent = model.create_transaction!(
-        surface: surface, intent: "authentication", client_id: "revocation-test",
-        redirect_uri: "https://rp.example.test/callback", response_type: "code", scope: "openid",
-        state: SecureRandom.hex(16), nonce: SecureRandom.hex(16), code_challenge: "a" * 43,
-        code_challenge_method: "S256", login_challenge: SecureRandom.hex(32),
-        login_challenge_expires_at: now + 5.minutes, expires_at: now + 5.minutes,
+      parameters = oidc_authorize_params(client_id: client_id, resource_type: realm)
+      https!
+      headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+      get("/oauth/authorize", params: parameters)
+
+      assert_response :success
+      form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+      post(form["action"], params: form.css("input").to_h { |input| [input["name"], input["value"]] }, headers: headers)
+
+      assert_response :redirect
+      entry = URI.parse(jump_rt_url_from_location(response.location))
+      entry_ref = Rack::Utils.parse_nested_query(entry.query.to_s).fetch("entry_ref")
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: surface.to_s, reference: entry_ref)
+      parent = model.find(binding.authorization_transaction_id)
+      cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+      raw = response.headers["Set-Cookie"] || response.headers["set-cookie"]
+      lines = (raw.is_a?(String) && raw.start_with?("[")) ? JSON.parse(raw) : Array(raw)
+      cookie_line =
+        lines.flat_map { |line| line.to_s.split("\n") }.find do |line|
+          line.split(";", 2).first.start_with?("#{cookie_name}=")
+        end
+
+      assert_not_nil cookie_line
+      cookies.delete(cookie_name)
+      _received_cookie = cookies.merge(cookie_line.split(";", 2).first, URI.parse("https://#{base_host}/"))
+      auth = open_session
+      auth.host!(auth_host)
+      auth.https!
+      auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+      auth.get(entry.path, params: Rack::Utils.parse_nested_query(entry.query.to_s).merge("ri" => "jp"))
+
+      assert_equal 200, auth.response.status
+      csrf = auth.response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+      auth.post(
+        "/ceremony_bindings", params: { entry_ref: entry_ref, ri: "jp", authenticity_token: csrf },
+                              headers: auth_headers,
       )
-      # Synthetic Auth proof isolates stale result rejection; this is not an Auth ceremony test.
+
+      assert_equal 303, auth.response.status
+      confirmation = URI.parse(auth.response.location)
+      get(confirmation.request_uri)
+
+      assert_response :success
+      csrf = response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+      post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: headers)
+
+      assert_response :see_other
+      auth.get(URI.parse(response.location).request_uri)
+      csrf = auth.response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+      auth.post("/sign/in", params: { entry_ref: entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers)
+
+      assert_equal 303, auth.response.status
+      assert_predicate binding.reload, :redeemed?
       result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
         surface: surface.to_s, login_challenge: parent.login_challenge, actor: actor,
-        authentication_event_at: now, session_ref: nil, auth_method: "passkey",
+        authentication_event_at: model.database_now, session_ref: "ceremony-result", auth_method: "passkey",
+        ceremony_session_ref: binding.admitted_auth_ceremony_session_id.to_s,
       )
+      get("/oauth/authorize", params: { result_ref: result.reference, transaction_ref: parent.transaction_id })
+
+      assert_response :success
+      form = response.parsed_body.at_css("form")
+      submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
       CredentialSecurityTransition.call(
         actor: actor, current_session: nil, reason: :mfa_reset, affected_surface: surface,
         revoke_other_sessions: false,
       )
       assert_no_difference(-> { tokens.where(owner_key => actor.id).count }) do
-        post "/oauth/authorize", params: { result: result.code, transaction_ref: parent.transaction_id },
-                                 headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-site", "Accept" => "text/html" }
+        post("/oauth/authorize", params: submission, headers: headers)
       end
 
       assert_response :bad_request
@@ -1226,41 +1396,94 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
       assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
     end
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
   test "base oauth authorize rejects expired login challenge" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    host!(host)
-    issuance =
-      OidcAuthorizationTransactionCoordinator.issue!(
-        surface: "app",
-        intent: "sign_in",
-        params: oidc_authorize_params,
-        login_challenge_ttl: 1.minute,
-        now: Time.current,
-      )
-    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
-      surface: "app",
-      login_challenge: issuance.transaction.login_challenge,
-      actor: clients(:one),
-      authentication_event_at: Time.current,
-      session_ref: "session-1",
-      auth_method: "passkey",
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    host!(base_host)
+    surface = :app
+    model = ClientOidcAuthorizationTransaction
+    actor = clients(:one)
+    parameters = oidc_authorize_params
+    https!
+    headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/oauth/authorize", params: parameters)
+
+    assert_response :success
+    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    post(form["action"], params: form.css("input").to_h { |input| [input["name"], input["value"]] }, headers: headers)
+
+    assert_response :redirect
+    entry = URI.parse(jump_rt_url_from_location(response.location))
+    entry_ref = Rack::Utils.parse_nested_query(entry.query.to_s).fetch("entry_ref")
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: surface.to_s, reference: entry_ref)
+    parent = model.find(binding.authorization_transaction_id)
+    cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+    raw = response.headers["Set-Cookie"] || response.headers["set-cookie"]
+    lines = (raw.is_a?(String) && raw.start_with?("[")) ? JSON.parse(raw) : Array(raw)
+    cookie_line =
+      lines.flat_map { |line| line.to_s.split("\n") }.find do |line|
+        line.split(";", 2).first.start_with?("#{cookie_name}=")
+      end
+
+    assert_not_nil cookie_line
+    cookies.delete(cookie_name)
+    _received_cookie = cookies.merge(cookie_line.split(";", 2).first, URI.parse("https://#{base_host}/"))
+    auth = open_session
+    auth.host!(auth_host)
+    auth.https!
+    auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+    auth.get(entry.path, params: Rack::Utils.parse_nested_query(entry.query.to_s).merge("ri" => "jp"))
+
+    assert_equal 200, auth.response.status
+    csrf = auth.response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+    auth.post(
+      "/ceremony_bindings", params: { entry_ref: entry_ref, ri: "jp", authenticity_token: csrf },
+                            headers: auth_headers,
     )
 
-    result.transaction.update!(
-      login_challenge_expires_at: result.transaction.class.database_now - 1.second,
+    assert_equal 303, auth.response.status
+    confirmation = URI.parse(auth.response.location)
+    get(confirmation.request_uri)
+
+    assert_response :success
+    csrf = response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+    post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: headers)
+
+    assert_response :see_other
+    auth.get(URI.parse(response.location).request_uri)
+    csrf = auth.response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+    auth.post("/sign/in", params: { entry_ref: entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers)
+
+    assert_equal 303, auth.response.status
+    assert_predicate binding.reload, :redeemed?
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
+      surface: surface.to_s, login_challenge: parent.login_challenge, actor: actor,
+      authentication_event_at: model.database_now, session_ref: "ceremony-result", auth_method: "passkey",
+      ceremony_session_ref: binding.admitted_auth_ceremony_session_id.to_s,
     )
-    post "/oauth/authorize", params: {
-      result: result.code,
-      transaction_ref: result.transaction.transaction_id,
-    }, headers: browser_headers.merge(
-      "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}",
-      "Sec-Fetch-Site" => "same-site",
-    )
+    get("/oauth/authorize", params: { result_ref: result.reference, transaction_ref: parent.transaction_id })
+
+    assert_response :success
+    form = response.parsed_body.at_css("form")
+    submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+
+    parent.update!(login_challenge_expires_at: model.database_now - 1.second)
+    assert_no_difference -> { ClientToken.where(user_id: actor.id).count } do
+      post("/oauth/authorize", params: submission, headers: headers)
+    end
 
     assert_response :bad_request
     assert_equal "invalid authorization request", response.parsed_body["error_description"]
+    assert_nil parent.reload.base_finalized_at
+    assert_nil parent.browser_session_ref
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
   private
@@ -1585,7 +1808,7 @@ class BaseOauthOidcAuthorityTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

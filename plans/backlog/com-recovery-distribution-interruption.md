@@ -21,3 +21,7 @@ separately; no transport or persistence proposal is approved by this deferral.
 Retain the failing reproduction and its evidence. No test deletion, skip or
 relaxation is authorized. Final verification must identify a failure in this
 deferred contract explicitly rather than claiming a fully passing suite.
+
+The [2026-10-08 ceremony-migration reproduction](../../evidence/2026-10-08-email-signup-http-and-deferred-recovery-2R6C.md)
+retains the same COM failure: original credentials/reveal survive, but the retry loses its recovery
+distribution destination (24 cases, one failure, seed 51931). Its assertions remain enabled.

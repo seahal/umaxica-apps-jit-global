@@ -2,6 +2,13 @@
 
 Status: partial hardening recorded on 2026-09-21
 
+> Contract supersession (2026-10-07): the record-owned HOTP and shared stateful policy below are
+> historical, not the current recommendation. See `adr/realm-separated-identifiers-and-dead-history.md`
+> for independent Email/Telephone policies, failure-count preservation, ceremony ownership and
+> realm-separated keys. Its controller/delivery migration is in progress. All verification counts
+> below belong to their historical runs and do not certify this migration. Step-Up is not merged
+> into identifier-backed or ceremony-record HOTP.
+
 ## Classification
 
 Email OTP used for sign-in and Step-Up is an explicit product risk acceptance
@@ -13,14 +20,36 @@ Email and SMS codes used during signup are contact-confirmation codes, not
 general authentication credentials. TOTP is a separate authenticator and is
 app-only.
 
-## Current implementation guarantees
+## Current ceremony-owned signup boundary
+
+APP/COM Email and Telephone signup now use independently implemented typed ceremony operations.
+Random six-digit proof has a five-minute limit clamped to the original parent deadline; Root,
+browser, actor, purpose and candidate binding are not replaced by a public lookup reference.
+Resend rotates the original unconsumed generation without resetting candidate or shared failures.
+Consumption is atomic on the Ticket ceremony, while Source failure reset is a separate guarded
+operation that preserves newer writes. Bounded receipt retries are not fresh verification;
+live wrong-code receipt guesses use both failure budgets, and expired receipts grant no authority.
+Canonical UTC timestamps preserve keyed verification across request and worker timezones.
+
+Email codes are encrypted before Noticed queue persistence, and concrete Mailers validate current
+transaction/generation immediately around delivery. Telephone signup carries its code and fixed
+transaction/generation tuple inside the encrypted version-three SMS envelope. Cancellation,
+expiry and superseded generations refuse transport. Generic SMS and remaining credential
+registration delivery have separate purposes; neither is a signup HOTP fallback.
+
+This does not certify complete OTP migration. Authenticated credential-registration and remaining
+legacy dependencies are still being replaced; full-suite/gate verification is not complete.
+See `adr/realm-separated-identifiers-and-dead-history.md` for the current contract and retained
+implementation boundaries.
+
+## Historical implementation guarantees (2026-09-21)
 
 - Authentication OTPs use a ten-minute maximum lifetime.
 - Signup confirmation codes use the same ten-minute lifetime, including SMS.
-- `CommonOtpPolicy::MAX_OOB_TTL` is the single finite upper-bound source for
-  those two purpose-specific policies; `AUTHENTICATION_TTL` and
-  `SIGN_UP_CONFIRMATION_TTL` retain their semantic names but cannot drift to
-  different values without changing that shared policy.
+- EmailOtpPolicy and TelephoneOtpPolicy own independent lifetime, resend and overwrite-window
+  constants. The former CommonOtpPolicy is removed. The existing record-backed paths retain their
+  ten-minute bounds during caller replacement; the new ceremony-owned verifier has its own
+  five-minute bound clamped to the parent transaction deadline. Complete HTTP migration is pending.
 - HOTP material and counters are generated with the existing CSPRNG-backed
   `ROTP` and `SecureRandom` paths. Generated codes are compared at their
   fixed six-digit width, preserving leading-zero semantics.

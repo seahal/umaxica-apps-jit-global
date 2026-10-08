@@ -65,6 +65,36 @@ CREATE FUNCTION public.check_staff_identity_telephones_limit() RETURNS trigger
     AS $$ DECLARE telephones_count integer; BEGIN IF NEW.staff_id IS NULL THEN RETURN NEW; END IF; SELECT COUNT(*) INTO telephones_count FROM staff_identity_telephones WHERE staff_id = NEW.staff_id; IF telephones_count >= 4 THEN RAISE EXCEPTION 'staff_identity_telephones limit (4) exceeded for staff %', NEW.staff_id USING ERRCODE = '23514'; END IF; RETURN NEW; END; $$;
 
 
+--
+-- Name: enforce_operator_rotation_audit(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_operator_rotation_audit() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_org_email_hmac_definer_68092a83e365' AND NEW.channel = 'email') OR (current_user = 'umaxica_org_telephone_hmac_definer_68092a83e365' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
+
+
+--
+-- Name: rotate_operator_emails_hmac(bigint, text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rotate_operator_emails_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_email_hmac_definer_68092a83e365' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.operator_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+
+
+--
+-- Name: rotate_operator_telephones_hmac(bigint, text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rotate_operator_telephones_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_telephone_hmac_definer_68092a83e365' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.operator_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -212,7 +242,7 @@ CREATE TABLE public.agent_lifecycles (
     state_changed_at timestamp(6) with time zone DEFAULT clock_timestamp() NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_agent_lifecycles_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'discarded'::character varying, 'deleted'::character varying, 'retained'::character varying])::text[])))
+    CONSTRAINT chk_agent_lifecycles_state CHECK (((state)::text = ANY (ARRAY[('active'::character varying)::text, ('inactive'::character varying)::text, ('discarded'::character varying)::text, ('deleted'::character varying)::text, ('retained'::character varying)::text])))
 );
 
 
@@ -386,7 +416,7 @@ CREATE TABLE public.agent_ownership_transfer_requests (
     CONSTRAINT chk_agent_transfer_requests_distinct_parties CHECK ((source_operator_id <> destination_operator_id)),
     CONSTRAINT chk_agent_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_agent_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_agent_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
+    CONSTRAINT chk_agent_transfer_requests_status CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('accepted'::character varying)::text, ('rejected'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text, ('invalidated'::character varying)::text])))
 );
 
 
@@ -662,7 +692,7 @@ CREATE TABLE public.bureau_lifecycles (
     state_changed_at timestamp(6) with time zone DEFAULT clock_timestamp() NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_bureau_lifecycles_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'discarded'::character varying, 'deleted'::character varying, 'retained'::character varying])::text[])))
+    CONSTRAINT chk_bureau_lifecycles_state CHECK (((state)::text = ANY (ARRAY[('active'::character varying)::text, ('inactive'::character varying)::text, ('discarded'::character varying)::text, ('deleted'::character varying)::text, ('retained'::character varying)::text])))
 );
 
 
@@ -708,7 +738,7 @@ CREATE TABLE public.bureau_ownership_transfer_requests (
     CONSTRAINT chk_bureau_transfer_requests_distinct_parties CHECK ((source_operator_id <> destination_operator_id)),
     CONSTRAINT chk_bureau_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_bureau_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_bureau_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
+    CONSTRAINT chk_bureau_transfer_requests_status CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('accepted'::character varying)::text, ('rejected'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text, ('invalidated'::character varying)::text])))
 );
 
 
@@ -1252,11 +1282,11 @@ CREATE TABLE public.operator_capability_grants (
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_operator_capability_grants_capability CHECK (((capability)::text = ANY ((ARRAY['support.console.read'::character varying, 'support.account.read.app'::character varying, 'support.account.read.com'::character varying, 'support.session.revoke.app'::character varying, 'support.session.revoke.com'::character varying, 'enforcement.read.app'::character varying, 'enforcement.read.com'::character varying, 'enforcement.apply.app'::character varying, 'enforcement.apply.com'::character varying, 'enforcement.approve.app'::character varying, 'enforcement.approve.com'::character varying, 'enforcement.release.app'::character varying, 'enforcement.release.com'::character varying, 'enforcement.review_appeal.app'::character varying, 'enforcement.review_appeal.com'::character varying, 'iam.capability.read'::character varying, 'iam.capability.grant'::character varying, 'iam.capability.revoke'::character varying])::text[]))),
+    CONSTRAINT chk_operator_capability_grants_capability CHECK (((capability)::text = ANY (ARRAY[('support.console.read'::character varying)::text, ('support.account.read.app'::character varying)::text, ('support.account.read.com'::character varying)::text, ('support.session.revoke.app'::character varying)::text, ('support.session.revoke.com'::character varying)::text, ('enforcement.read.app'::character varying)::text, ('enforcement.read.com'::character varying)::text, ('enforcement.apply.app'::character varying)::text, ('enforcement.apply.com'::character varying)::text, ('enforcement.approve.app'::character varying)::text, ('enforcement.approve.com'::character varying)::text, ('enforcement.release.app'::character varying)::text, ('enforcement.release.com'::character varying)::text, ('enforcement.review_appeal.app'::character varying)::text, ('enforcement.review_appeal.com'::character varying)::text, ('iam.capability.read'::character varying)::text, ('iam.capability.grant'::character varying)::text, ('iam.capability.revoke'::character varying)::text]))),
     CONSTRAINT chk_operator_capability_grants_granter CHECK (((((origin)::text = 'grant'::text) AND (granted_by_operator_id IS NOT NULL) AND (granted_by_operator_id <> operator_id)) OR (((origin)::text = 'bootstrap'::text) AND (granted_by_operator_id IS NULL)))),
-    CONSTRAINT chk_operator_capability_grants_origin CHECK (((origin)::text = ANY ((ARRAY['grant'::character varying, 'bootstrap'::character varying])::text[]))),
-    CONSTRAINT chk_operator_capability_grants_reason_code CHECK ((((reason_code)::text = ANY ((ARRAY['bootstrap'::character varying, 'duty_assignment'::character varying, 'incident_response'::character varying, 'access_review'::character varying])::text[])) AND (((origin)::text = 'bootstrap'::text) = ((reason_code)::text = 'bootstrap'::text)))),
-    CONSTRAINT chk_operator_capability_grants_revocation CHECK ((((revoked_at IS NULL) AND (revoke_reason_code IS NULL) AND (revoked_by_operator_id IS NULL)) OR ((revoked_at IS NOT NULL) AND (revoke_reason_code IS NOT NULL) AND ((revoke_reason_code)::text = ANY ((ARRAY['duty_ended'::character varying, 'access_review'::character varying, 'security_incident'::character varying, 'operator_error_recovery'::character varying])::text[]))))),
+    CONSTRAINT chk_operator_capability_grants_origin CHECK (((origin)::text = ANY (ARRAY[('grant'::character varying)::text, ('bootstrap'::character varying)::text]))),
+    CONSTRAINT chk_operator_capability_grants_reason_code CHECK ((((reason_code)::text = ANY (ARRAY[('bootstrap'::character varying)::text, ('duty_assignment'::character varying)::text, ('incident_response'::character varying)::text, ('access_review'::character varying)::text])) AND (((origin)::text = 'bootstrap'::text) = ((reason_code)::text = 'bootstrap'::text)))),
+    CONSTRAINT chk_operator_capability_grants_revocation CHECK ((((revoked_at IS NULL) AND (revoke_reason_code IS NULL) AND (revoked_by_operator_id IS NULL)) OR ((revoked_at IS NOT NULL) AND (revoke_reason_code IS NOT NULL) AND ((revoke_reason_code)::text = ANY (ARRAY[('duty_ended'::character varying)::text, ('access_review'::character varying)::text, ('security_incident'::character varying)::text, ('operator_error_recovery'::character varying)::text]))))),
     CONSTRAINT chk_operator_capability_grants_validity_window CHECK ((isfinite(starts_at) AND isfinite(expires_at) AND (expires_at > starts_at) AND (expires_at <= (starts_at + '366 days'::interval))))
 );
 
@@ -1278,6 +1308,39 @@ CREATE SEQUENCE public.operator_capability_grants_id_seq
 --
 
 ALTER SEQUENCE public.operator_capability_grants_id_seq OWNED BY public.operator_capability_grants.id;
+
+
+--
+-- Name: operator_email_histories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.operator_email_histories (
+    id bigint NOT NULL,
+    staff_id bigint NOT NULL,
+    fingerprint character varying NOT NULL,
+    attached_at timestamp(6) with time zone NOT NULL,
+    detached_at timestamp(6) with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: operator_email_histories_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.operator_email_histories_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: operator_email_histories_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.operator_email_histories_id_seq OWNED BY public.operator_email_histories.id;
 
 
 --
@@ -1484,6 +1547,41 @@ CREATE SEQUENCE public.operator_google_identity_statuses_id_seq
 --
 
 ALTER SEQUENCE public.operator_google_identity_statuses_id_seq OWNED BY public.operator_google_identity_statuses.id;
+
+
+--
+-- Name: operator_identifier_rotation_audits; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.operator_identifier_rotation_audits (
+    id bigint NOT NULL,
+    operation_ref uuid NOT NULL,
+    channel character varying NOT NULL,
+    record_id bigint NOT NULL,
+    actor_role character varying NOT NULL,
+    occurred_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT operator_rotation_channel CHECK (((channel)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying])::text[]))),
+    CONSTRAINT operator_rotation_subject CHECK (((record_id > 0) AND ((actor_role)::text <> ''::text)))
+);
+
+
+--
+-- Name: operator_identifier_rotation_audits_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.operator_identifier_rotation_audits_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: operator_identifier_rotation_audits_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.operator_identifier_rotation_audits_id_seq OWNED BY public.operator_identifier_rotation_audits.id;
 
 
 --
@@ -2617,6 +2715,39 @@ ALTER SEQUENCE public.operator_statuses_id_seq OWNED BY public.operator_statuses
 
 
 --
+-- Name: operator_telephone_histories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.operator_telephone_histories (
+    id bigint NOT NULL,
+    staff_id bigint NOT NULL,
+    fingerprint character varying NOT NULL,
+    attached_at timestamp(6) with time zone NOT NULL,
+    detached_at timestamp(6) with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: operator_telephone_histories_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.operator_telephone_histories_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: operator_telephone_histories_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.operator_telephone_histories_id_seq OWNED BY public.operator_telephone_histories.id;
+
+
+--
 -- Name: operator_telephone_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2660,7 +2791,8 @@ CREATE TABLE public.operator_telephones (
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     staff_identity_telephone_status_id bigint DEFAULT 0 NOT NULL,
-    number_digest character varying
+    number_digest character varying,
+    otp_last_sent_at timestamp(6) with time zone
 );
 
 
@@ -2837,8 +2969,8 @@ CREATE TABLE public.operators (
     token_valid_after_at timestamp(6) with time zone,
     reactivated_at timestamp(6) with time zone,
     webauthn_user_handle character varying NOT NULL,
-    CONSTRAINT chk_operators_access_state CHECK (((access_state)::text = ANY ((ARRAY['enabled'::character varying, 'admin_locked'::character varying])::text[]))),
-    CONSTRAINT chk_operators_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY ((ARRAY['abuse'::character varying, 'security_incident'::character varying, 'chargeback'::character varying, 'terms_violation'::character varying, 'support_request'::character varying, 'legal_hold'::character varying, 'operator_error_recovery'::character varying, 'other'::character varying])::text[])))),
+    CONSTRAINT chk_operators_access_state CHECK (((access_state)::text = ANY (ARRAY[('enabled'::character varying)::text, ('admin_locked'::character varying)::text]))),
+    CONSTRAINT chk_operators_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY (ARRAY[('abuse'::character varying)::text, ('security_incident'::character varying)::text, ('chargeback'::character varying)::text, ('terms_violation'::character varying)::text, ('support_request'::character varying)::text, ('legal_hold'::character varying)::text, ('operator_error_recovery'::character varying)::text, ('other'::character varying)::text])))),
     CONSTRAINT chk_operators_birthdate_length CHECK (((birthdate IS NULL) OR (char_length(birthdate) <= 1000))),
     CONSTRAINT chk_staffs_public_id_format CHECK (((public_id)::text ~ '^[0-9A-FGHJKMNPQRSTVWXYZ]{16}$'::text)),
     CONSTRAINT chk_staffs_public_id_length CHECK ((char_length((public_id)::text) = 16)),
@@ -2883,7 +3015,7 @@ CREATE TABLE public.org_enforcement_appeals (
     redacted_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_org_enforcement_appeals_state CHECK (((state)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'approved'::character varying, 'rejected'::character varying, 'redacted'::character varying])::text[])))
+    CONSTRAINT chk_org_enforcement_appeals_state CHECK (((state)::text = ANY (ARRAY[('submitted'::character varying)::text, ('under_review'::character varying)::text, ('approved'::character varying)::text, ('rejected'::character varying)::text, ('redacted'::character varying)::text])))
 );
 
 
@@ -2921,8 +3053,8 @@ CREATE TABLE public.org_enforcement_authentication_method_effects (
     ended_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_org_enforcement_method_effects_effect CHECK (((effect)::text = ANY ((ARRAY['mutation_locked'::character varying, 'unusable'::character varying, 'permanently_frozen'::character varying])::text[]))),
-    CONSTRAINT chk_org_enforcement_method_effects_method CHECK (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'entra'::character varying])::text[])))
+    CONSTRAINT chk_org_enforcement_method_effects_effect CHECK (((effect)::text = ANY (ARRAY[('mutation_locked'::character varying)::text, ('unusable'::character varying)::text, ('permanently_frozen'::character varying)::text]))),
+    CONSTRAINT chk_org_enforcement_method_effects_method CHECK (((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('entra'::character varying)::text])))
 );
 
 
@@ -2978,18 +3110,18 @@ CREATE TABLE public.org_enforcement_cases (
     CONSTRAINT chk_org_enforcement_cases_approval_separation CHECK (((approved_by_operator_public_id IS NULL) OR ((approved_by_operator_public_id)::text <> (applied_by_operator_public_id)::text))),
     CONSTRAINT chk_org_enforcement_cases_break_glass_approver CHECK (((break_glass = false) OR (break_glass_approved_by_operator_public_id IS NOT NULL))),
     CONSTRAINT chk_org_enforcement_cases_cooldown_duration CHECK ((((kind)::text <> 'cooldown'::text) OR (((duration_mode)::text = 'timed'::text) AND (expires_at IS NOT NULL) AND (expires_at <= (effective_at + '30 days'::interval))))),
-    CONSTRAINT chk_org_enforcement_cases_duration_mode CHECK (((duration_mode)::text = ANY ((ARRAY['timed'::character varying, 'indefinite'::character varying, 'permanent'::character varying])::text[]))),
-    CONSTRAINT chk_org_enforcement_cases_end_reason CHECK (((end_reason IS NULL) OR ((end_reason)::text = ANY ((ARRAY['expired'::character varying, 'revoked'::character varying, 'superseded'::character varying, 'corrected'::character varying, 'appeal_approved'::character varying, 'break_glass_released'::character varying, 'verification_completed'::character varying])::text[])))),
+    CONSTRAINT chk_org_enforcement_cases_duration_mode CHECK (((duration_mode)::text = ANY (ARRAY[('timed'::character varying)::text, ('indefinite'::character varying)::text, ('permanent'::character varying)::text]))),
+    CONSTRAINT chk_org_enforcement_cases_end_reason CHECK (((end_reason IS NULL) OR ((end_reason)::text = ANY (ARRAY[('expired'::character varying)::text, ('revoked'::character varying)::text, ('superseded'::character varying)::text, ('corrected'::character varying)::text, ('appeal_approved'::character varying)::text, ('break_glass_released'::character varying)::text, ('verification_completed'::character varying)::text])))),
     CONSTRAINT chk_org_enforcement_cases_hidden CHECK ((((visibility)::text <> 'hidden'::text) OR ((kind)::text = 'permanent_ban'::text))),
     CONSTRAINT chk_org_enforcement_cases_indefinite_freeze_review CHECK ((((kind)::text <> 'temporary_freeze'::text) OR ((duration_mode)::text <> 'indefinite'::text) OR ((review_due_at IS NOT NULL) AND ((release_mode)::text = 'operator'::text)))),
-    CONSTRAINT chk_org_enforcement_cases_kind CHECK (((kind)::text = ANY ((ARRAY['security_lock'::character varying, 'cooldown'::character varying, 'temporary_freeze'::character varying, 'permanent_ban'::character varying, 'method_protection'::character varying])::text[]))),
+    CONSTRAINT chk_org_enforcement_cases_kind CHECK (((kind)::text = ANY (ARRAY[('security_lock'::character varying)::text, ('cooldown'::character varying)::text, ('temporary_freeze'::character varying)::text, ('permanent_ban'::character varying)::text, ('method_protection'::character varying)::text]))),
     CONSTRAINT chk_org_enforcement_cases_no_self_action CHECK (((principal_public_id)::text <> (applied_by_operator_public_id)::text)),
     CONSTRAINT chk_org_enforcement_cases_permanent_ban_duration CHECK ((((kind)::text <> 'permanent_ban'::text) OR (((duration_mode)::text = 'permanent'::text) AND (expires_at IS NULL)))),
-    CONSTRAINT chk_org_enforcement_cases_release_mode CHECK (((release_mode)::text = ANY ((ARRAY['automatic'::character varying, 'operator'::character varying, 'verification_required'::character varying, 'break_glass_only'::character varying])::text[]))),
+    CONSTRAINT chk_org_enforcement_cases_release_mode CHECK (((release_mode)::text = ANY (ARRAY[('automatic'::character varying)::text, ('operator'::character varying)::text, ('verification_required'::character varying)::text, ('break_glass_only'::character varying)::text]))),
     CONSTRAINT chk_org_enforcement_cases_security_lock_release CHECK ((((kind)::text <> 'security_lock'::text) OR ((release_mode)::text = 'verification_required'::text))),
-    CONSTRAINT chk_org_enforcement_cases_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'pending_approval'::character varying, 'active'::character varying, 'ended'::character varying, 'failed'::character varying])::text[]))),
-    CONSTRAINT chk_org_enforcement_cases_temp_freeze_duration_mode CHECK ((((kind)::text <> 'temporary_freeze'::text) OR ((duration_mode)::text = ANY ((ARRAY['timed'::character varying, 'indefinite'::character varying])::text[])))),
-    CONSTRAINT chk_org_enforcement_cases_visibility CHECK (((visibility)::text = ANY ((ARRAY['visible'::character varying, 'hidden'::character varying])::text[])))
+    CONSTRAINT chk_org_enforcement_cases_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('pending_approval'::character varying)::text, ('active'::character varying)::text, ('ended'::character varying)::text, ('failed'::character varying)::text]))),
+    CONSTRAINT chk_org_enforcement_cases_temp_freeze_duration_mode CHECK ((((kind)::text <> 'temporary_freeze'::text) OR ((duration_mode)::text = ANY (ARRAY[('timed'::character varying)::text, ('indefinite'::character varying)::text])))),
+    CONSTRAINT chk_org_enforcement_cases_visibility CHECK (((visibility)::text = ANY (ARRAY[('visible'::character varying)::text, ('hidden'::character varying)::text])))
 );
 
 
@@ -3033,7 +3165,7 @@ CREATE TABLE public.org_enforcement_identifier_effects (
     ended_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_org_enforcement_identifier_effects_kind CHECK (((identifier_kind)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'identity_id'::character varying])::text[])))
+    CONSTRAINT chk_org_enforcement_identifier_effects_kind CHECK (((identifier_kind)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('identity_id'::character varying)::text])))
 );
 
 
@@ -3111,7 +3243,7 @@ CREATE TABLE public.org_enforcement_principal_links (
     ended_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_org_enforcement_principal_links_relationship_kind CHECK (((relationship_kind)::text = ANY ((ARRAY['target_principal'::character varying, 'former_principal'::character varying, 'related_principal'::character varying, 'suspected_duplicate'::character varying, 'reinstated_principal'::character varying, 'false_positive'::character varying])::text[])))
+    CONSTRAINT chk_org_enforcement_principal_links_relationship_kind CHECK (((relationship_kind)::text = ANY (ARRAY[('target_principal'::character varying)::text, ('former_principal'::character varying)::text, ('related_principal'::character varying)::text, ('suspected_duplicate'::character varying)::text, ('reinstated_principal'::character varying)::text, ('false_positive'::character varying)::text])))
 );
 
 
@@ -3818,6 +3950,13 @@ ALTER TABLE ONLY public.operator_capability_grants ALTER COLUMN id SET DEFAULT n
 
 
 --
+-- Name: operator_email_histories id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_email_histories ALTER COLUMN id SET DEFAULT nextval('public.operator_email_histories_id_seq'::regclass);
+
+
+--
 -- Name: operator_email_statuses id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -3857,6 +3996,13 @@ ALTER TABLE ONLY public.operator_google_identities ALTER COLUMN id SET DEFAULT n
 --
 
 ALTER TABLE ONLY public.operator_google_identity_statuses ALTER COLUMN id SET DEFAULT nextval('public.operator_google_identity_statuses_id_seq'::regclass);
+
+
+--
+-- Name: operator_identifier_rotation_audits id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_identifier_rotation_audits ALTER COLUMN id SET DEFAULT nextval('public.operator_identifier_rotation_audits_id_seq'::regclass);
 
 
 --
@@ -4102,6 +4248,13 @@ ALTER TABLE ONLY public.operator_secret_credentials ALTER COLUMN id SET DEFAULT 
 --
 
 ALTER TABLE ONLY public.operator_statuses ALTER COLUMN id SET DEFAULT nextval('public.operator_statuses_id_seq'::regclass);
+
+
+--
+-- Name: operator_telephone_histories id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_telephone_histories ALTER COLUMN id SET DEFAULT nextval('public.operator_telephone_histories_id_seq'::regclass);
 
 
 --
@@ -4591,6 +4744,14 @@ ALTER TABLE ONLY public.operator_capability_grants
 
 
 --
+-- Name: operator_email_histories operator_email_histories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_email_histories
+    ADD CONSTRAINT operator_email_histories_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: operator_email_statuses operator_email_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4636,6 +4797,14 @@ ALTER TABLE ONLY public.operator_google_identities
 
 ALTER TABLE ONLY public.operator_google_identity_statuses
     ADD CONSTRAINT operator_google_identity_statuses_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: operator_identifier_rotation_audits operator_identifier_rotation_audits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_identifier_rotation_audits
+    ADD CONSTRAINT operator_identifier_rotation_audits_pkey PRIMARY KEY (id);
 
 
 --
@@ -4916,6 +5085,14 @@ ALTER TABLE ONLY public.operator_secret_credentials
 
 ALTER TABLE ONLY public.operator_statuses
     ADD CONSTRAINT operator_statuses_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: operator_telephone_histories operator_telephone_histories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_telephone_histories
+    ADD CONSTRAINT operator_telephone_histories_pkey PRIMARY KEY (id);
 
 
 --
@@ -5766,6 +5943,13 @@ CREATE INDEX index_operator_bulletins_on_staff_id ON public.operator_bulletins U
 
 
 --
+-- Name: index_operator_email_histories_on_staff_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_operator_email_histories_on_staff_id ON public.operator_email_histories USING btree (staff_id);
+
+
+--
 -- Name: index_operator_emails_on_address_digest; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6172,6 +6356,13 @@ CREATE UNIQUE INDEX index_operator_social_googles_on_staff_id_unique ON public.o
 
 
 --
+-- Name: index_operator_telephone_histories_on_staff_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_operator_telephone_histories_on_staff_id ON public.operator_telephone_histories USING btree (staff_id);
+
+
+--
 -- Name: index_operator_telephones_on_number_digest; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6480,6 +6671,20 @@ CREATE INDEX index_user_workspaces_on_workspace_id ON public.user_workspaces USI
 
 
 --
+-- Name: operator_rotation_operation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX operator_rotation_operation ON public.operator_identifier_rotation_audits USING btree (operation_ref, channel, record_id);
+
+
+--
+-- Name: operator_identifier_rotation_audits operator_rotation_audit_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER operator_rotation_audit_guard BEFORE INSERT OR UPDATE ON public.operator_identifier_rotation_audits FOR EACH ROW EXECUTE FUNCTION public.enforce_operator_rotation_audit();
+
+
+--
 -- Name: agent_memberships fk_agent_memberships_unit_same_bureau; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6669,6 +6874,14 @@ ALTER TABLE ONLY public.operator_capability_grants
 
 ALTER TABLE ONLY public.agent_memberships
     ADD CONSTRAINT fk_rails_27ba6b71fd FOREIGN KEY (revoked_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL NOT VALID;
+
+
+--
+-- Name: operator_telephone_histories fk_rails_293adf211a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_telephone_histories
+    ADD CONSTRAINT fk_rails_293adf211a FOREIGN KEY (staff_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
 
 
 --
@@ -7128,6 +7341,14 @@ ALTER TABLE ONLY public.bureau_units
 
 
 --
+-- Name: operator_email_histories fk_rails_b7d67d4386; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_email_histories
+    ADD CONSTRAINT fk_rails_b7d67d4386 FOREIGN KEY (staff_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: bureau_ownership_transfer_requests fk_rails_b92efe9d3e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7414,6 +7635,9 @@ ALTER TABLE ONLY public.operator_secret_credentials
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261008025009'),
+('20261007224316'),
+('20261007220248'),
 ('20261006180002'),
 ('20261006110002'),
 ('20260926120000'),

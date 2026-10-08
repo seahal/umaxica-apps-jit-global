@@ -45,6 +45,11 @@
 #
 
 class ClientEmail < AppPrincipalRecord
+  IDENTIFIER_REALM = "app"
+  encrypts :address, downcase: true,
+                     key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
+  encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
+
   EDITABLE_SUBSCRIPTION_PREFERENCE_STATUS_IDS = [
     ClientEmailStatus::VERIFIED,
     ClientEmailStatus::VERIFIED_WITH_SIGN_UP,
@@ -53,9 +58,14 @@ class ClientEmail < AppPrincipalRecord
   include PublicId
   include Retainable
   include Email
+  include EmailDeadIdentifierHistory
+
+  after_initialize :initialize_email_otp_state
+  before_destroy :archive_dead_email_identifier, prepend: true
+
   include MfaStatusCredential
   include PromotionalEmailUnsubscribable
-  include ContactBinding
+  include EmailContactBinding
 
   scope :effective_binding, -> { where.not(binding_finalized_at: nil).where(binding_released_at: nil) }
   validate :effective_binding_has_digest
@@ -84,6 +94,8 @@ class ClientEmail < AppPrincipalRecord
                  record_name: "emails",
                  owner_name: "user"
   before_destroy :prevent_destroy_when_undeletable
+
+  public
 
   def to_param
     public_id

@@ -9,6 +9,8 @@ require "test_helper"
 # handed back to the relying party, instead of landing on the ordinary
 # post-sign-in destination.
 class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   fixtures :clients, :client_statuses, :client_email_statuses,
            :client_telephone_statuses, :client_token_kinds, :client_token_statuses,
            :client_token_binding_methods, :client_token_dbsc_statuses
@@ -926,14 +928,37 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :found
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 55_555
-    pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
-    @email_record.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
+    ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
+    delivery_job =
+      enqueued_jobs.reverse.find do |job|
+        next false unless job.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        delivery = ActiveJob::Arguments.deserialize(job.fetch(:args)).last.fetch(:params)
+        delivery.fetch(:auth_ceremony_session_ref) == "#{ceremony.id}"
+      end
+
+    assert_not_nil delivery_job
+    delivery = ActiveJob::Arguments.deserialize(delivery_job.fetch(:args)).last.fetch(:params)
+    context = ceremony.email_otp_context
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+    correct_parent = context.fetch("parent_ref") == @transaction.transaction_id
+    correct_contact = context.fetch("contact_ref") == @email_record.public_id
+    correct_owner = context.fetch("owner_ref") == @user.public_id
+    correct_generation = context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
+    plaintext_queued = delivery_job.fetch(:args).to_s.include?(pass_code)
+
+    assert correct_parent, "Delivery must bind the original OIDC Parent"
+    assert correct_contact, "Delivery must bind the actual Contact"
+    assert correct_owner, "Delivery must bind the actual owner"
+    assert correct_generation, "Delivery must bind the current ceremony generation"
+    assert_not plaintext_queued, "Delivery must not queue plaintext code"
+    assert_equal "sign_in", delivery.fetch(:purpose)
+    assert_equal "oidc", context.fetch("parent_kind")
 
     patch(
       auth_app_sign_in_email_url(ri: "jp"),
-      params: { user_email: { pass_code: pass_code } },
+      params: { :user_email => { pass_code: pass_code }, "cf-turnstile-response" => "test_token" },
       headers: { "Host" => @host },
     )
   end

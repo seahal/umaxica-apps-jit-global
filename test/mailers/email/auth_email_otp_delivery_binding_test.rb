@@ -6,11 +6,14 @@ class AuthEmailOtpDeliveryBindingTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
   setup do
+    ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
+    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
     ActionMailer::Base.deliveries.clear
   end
 
   %w(app com).each do |surface|
-    %w(reissued verified expired released halted revoked wrong_generation wrong_destination wrong_code missing_reference).each do |condition|
+    %w(reissued verified expired released halted revoked wrong_generation
+       wrong_destination wrong_code missing_reference).each do |condition|
       test "#{surface} sign-in delivery refuses #{condition} evidence without reviving it" do
         address = "late-email-#{SecureRandom.hex(8)}@example.test"
         if surface == "app"
@@ -37,7 +40,8 @@ class AuthEmailOtpDeliveryBindingTest < ActiveSupport::TestCase
         code = ceremony.issue_email_otp!(contact: contact, destination: address)
         payload = {
           encrypted_hotp_token: OutboundSensitivePayload.encrypt_email_otp(code),
-          email_address: address, purpose: "sign_in",
+          email_address: address,
+          purpose: "sign_in",
           auth_ceremony_session_ref: ceremony.id.to_s,
           auth_email_otp_generation: ceremony.reload.email_otp_context.fetch("generation"),
         }
@@ -58,6 +62,7 @@ class AuthEmailOtpDeliveryBindingTest < ActiveSupport::TestCase
         source = contact.reload.attributes
         deadline = Time.iso8601(ceremony.email_otp_context.fetch("expires_at"))
         decision_time = (condition == "expired") ? deadline : model.database_now
+
         model.stub(:database_now, decision_time) do
           assert_no_difference "ActionMailer::Base.deliveries.count" do
             if condition == "missing_reference"

@@ -12,7 +12,8 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_statuses, :client_email_statuses
 
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    clear_enqueued_jobs
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     @user = clients(:one)
@@ -52,13 +53,38 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       auth_app_sign_in_email_path,
       params: { :user_email => { address: @email.address }, "cf-turnstile-response" => "t", :ri => "jp" },
     )
-    secret = "JBSWY3DPEHPK3PXP"
-    @email.reload.store_otp(secret, 7, 5.minutes.from_now.to_i)
+    delivery_job = enqueued_jobs.reverse.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil delivery_job
+    delivery = ActiveJob::Arguments.deserialize(delivery_job.fetch(:args)).last.fetch(:params).symbolize_keys
+    ceremony = ClientAuthCeremonySession.find(delivery.fetch(:auth_ceremony_session_ref))
+    context = ceremony.email_otp_context
+    code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # assert_match would disclose the delivered secret on failure.
+    # rubocop:disable Minitest/AssertMatch
+    assert code.match?(/\A[0-9]{6}\z/), "Delivery must contain one six-digit code"
+    # rubocop:enable Minitest/AssertMatch
+    assert_equal "sign_in", delivery.fetch(:purpose)
+    assert_equal "app", context.fetch("surface")
+    assert_equal "authentication", context.fetch("purpose")
+    assert_equal "local_sign_in", context.fetch("parent_kind")
+    assert_equal "real", context.fetch("mode")
+    # Boolean comparisons keep ceremony bindings and keyed proof out of failure output.
+    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
+    assert context.fetch("parent_ref") == flow.public_id
+    assert context.fetch("contact_ref") == @email.public_id
+    assert context.fetch("owner_ref") == @user.public_id
+    assert context.fetch("sid_digest") == ceremony.sid_digest
+    assert context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
+    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_nil context.fetch("verified_at")
+    assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
     audit_count = ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
     assert_no_difference(-> { ClientToken.where(user_id: @user.id).count }) do
       auth_browser.patch(
         auth_app_sign_in_email_path,
-        params: { :user_email => { pass_code: ROTP::HOTP.new(secret).at(7).to_s },
+        params: { :user_email => { pass_code: code },
                   "cf-turnstile-response" => "t",
                   :ri => "jp", },
       )
@@ -126,11 +152,36 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       auth_app_sign_in_email_path,
       params: { :user_email => { address: @email.address }, "cf-turnstile-response" => "t", :ri => "jp" },
     )
-    secret = "JBSWY3DPEHPK3PXP"
-    @email.reload.store_otp(secret, 7, 5.minutes.from_now.to_i)
+    delivery_job = enqueued_jobs.reverse.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil delivery_job
+    delivery = ActiveJob::Arguments.deserialize(delivery_job.fetch(:args)).last.fetch(:params).symbolize_keys
+    ceremony = ClientAuthCeremonySession.find(delivery.fetch(:auth_ceremony_session_ref))
+    context = ceremony.email_otp_context
+    code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # assert_match would disclose the delivered secret on failure.
+    # rubocop:disable Minitest/AssertMatch
+    assert code.match?(/\A[0-9]{6}\z/), "Delivery must contain one six-digit code"
+    # rubocop:enable Minitest/AssertMatch
+    assert_equal "sign_in", delivery.fetch(:purpose)
+    assert_equal "app", context.fetch("surface")
+    assert_equal "authentication", context.fetch("purpose")
+    assert_equal "local_sign_in", context.fetch("parent_kind")
+    assert_equal "real", context.fetch("mode")
+    # Boolean comparisons keep ceremony bindings and keyed proof out of failure output.
+    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
+    assert context.fetch("parent_ref") == flow.public_id
+    assert context.fetch("contact_ref") == @email.public_id
+    assert context.fetch("owner_ref") == @user.public_id
+    assert context.fetch("sid_digest") == ceremony.sid_digest
+    assert context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
+    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_nil context.fetch("verified_at")
+    assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
     auth_browser.patch(
       auth_app_sign_in_email_path,
-      params: { :user_email => { pass_code: ROTP::HOTP.new(secret).at(7).to_s },
+      params: { :user_email => { pass_code: code },
                 "cf-turnstile-response" => "t",
                 :ri => "jp", },
     )
@@ -193,13 +244,38 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       auth_app_sign_in_email_path,
       params: { :user_email => { address: @email.address }, "cf-turnstile-response" => "t", :ri => "jp" },
     )
-    secret = "JBSWY3DPEHPK3PXP"
-    @email.reload.store_otp(secret, 7, 5.minutes.from_now.to_i)
+    delivery_job = enqueued_jobs.reverse.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil delivery_job
+    delivery = ActiveJob::Arguments.deserialize(delivery_job.fetch(:args)).last.fetch(:params).symbolize_keys
+    ceremony = ClientAuthCeremonySession.find(delivery.fetch(:auth_ceremony_session_ref))
+    context = ceremony.email_otp_context
+    code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # assert_match would disclose the delivered secret on failure.
+    # rubocop:disable Minitest/AssertMatch
+    assert code.match?(/\A[0-9]{6}\z/), "Delivery must contain one six-digit code"
+    # rubocop:enable Minitest/AssertMatch
+    assert_equal "sign_in", delivery.fetch(:purpose)
+    assert_equal "app", context.fetch("surface")
+    assert_equal "authentication", context.fetch("purpose")
+    assert_equal "local_sign_in", context.fetch("parent_kind")
+    assert_equal "real", context.fetch("mode")
+    # Boolean comparisons keep ceremony bindings and keyed proof out of failure output.
+    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
+    assert context.fetch("parent_ref") == flow.public_id
+    assert context.fetch("contact_ref") == @email.public_id
+    assert context.fetch("owner_ref") == @user.public_id
+    assert context.fetch("sid_digest") == ceremony.sid_digest
+    assert context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
+    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_nil context.fetch("verified_at")
+    assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
     audit_count = ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
     assert_no_difference(-> { ClientToken.where(user_id: @user.id).count }) do
       auth_browser.patch(
         auth_app_sign_in_email_path,
-        params: { :user_email => { pass_code: ROTP::HOTP.new(secret).at(7).to_s },
+        params: { :user_email => { pass_code: code },
                   "cf-turnstile-response" => "t",
                   :ri => "jp", },
       )
@@ -267,13 +343,38 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       auth_app_sign_in_email_path,
       params: { :user_email => { address: @email.address }, "cf-turnstile-response" => "t", :ri => "jp" },
     )
-    secret = "JBSWY3DPEHPK3PXP"
-    @email.reload.store_otp(secret, 7, 5.minutes.from_now.to_i)
+    delivery_job = enqueued_jobs.reverse.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil delivery_job
+    delivery = ActiveJob::Arguments.deserialize(delivery_job.fetch(:args)).last.fetch(:params).symbolize_keys
+    ceremony = ClientAuthCeremonySession.find(delivery.fetch(:auth_ceremony_session_ref))
+    context = ceremony.email_otp_context
+    code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # assert_match would disclose the delivered secret on failure.
+    # rubocop:disable Minitest/AssertMatch
+    assert code.match?(/\A[0-9]{6}\z/), "Delivery must contain one six-digit code"
+    # rubocop:enable Minitest/AssertMatch
+    assert_equal "sign_in", delivery.fetch(:purpose)
+    assert_equal "app", context.fetch("surface")
+    assert_equal "authentication", context.fetch("purpose")
+    assert_equal "local_sign_in", context.fetch("parent_kind")
+    assert_equal "real", context.fetch("mode")
+    # Boolean comparisons keep ceremony bindings and keyed proof out of failure output.
+    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
+    assert context.fetch("parent_ref") == flow.public_id
+    assert context.fetch("contact_ref") == @email.public_id
+    assert context.fetch("owner_ref") == @user.public_id
+    assert context.fetch("sid_digest") == ceremony.sid_digest
+    assert context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
+    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_nil context.fetch("verified_at")
+    assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
     audit_count = ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
     assert_no_difference(-> { ClientToken.where(user_id: @user.id).count }) do
       auth_browser.patch(
         auth_app_sign_in_email_path,
-        params: { :user_email => { pass_code: ROTP::HOTP.new(secret).at(7).to_s },
+        params: { :user_email => { pass_code: code },
                   "cf-turnstile-response" => "t",
                   :ri => "jp", },
       )
@@ -351,13 +452,38 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       auth_app_sign_in_email_path,
       params: { :user_email => { address: @email.address }, "cf-turnstile-response" => "t", :ri => "jp" },
     )
-    secret = "JBSWY3DPEHPK3PXP"
-    @email.reload.store_otp(secret, 7, 5.minutes.from_now.to_i)
+    delivery_job = enqueued_jobs.reverse.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil delivery_job
+    delivery = ActiveJob::Arguments.deserialize(delivery_job.fetch(:args)).last.fetch(:params).symbolize_keys
+    ceremony = ClientAuthCeremonySession.find(delivery.fetch(:auth_ceremony_session_ref))
+    context = ceremony.email_otp_context
+    code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # assert_match would disclose the delivered secret on failure.
+    # rubocop:disable Minitest/AssertMatch
+    assert code.match?(/\A[0-9]{6}\z/), "Delivery must contain one six-digit code"
+    # rubocop:enable Minitest/AssertMatch
+    assert_equal "sign_in", delivery.fetch(:purpose)
+    assert_equal "app", context.fetch("surface")
+    assert_equal "authentication", context.fetch("purpose")
+    assert_equal "local_sign_in", context.fetch("parent_kind")
+    assert_equal "real", context.fetch("mode")
+    # Boolean comparisons keep ceremony bindings and keyed proof out of failure output.
+    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
+    assert context.fetch("parent_ref") == flow.public_id
+    assert context.fetch("contact_ref") == @email.public_id
+    assert context.fetch("owner_ref") == @user.public_id
+    assert context.fetch("sid_digest") == ceremony.sid_digest
+    assert context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
+    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_nil context.fetch("verified_at")
+    assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
     audit_count = ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
     assert_no_difference(-> { ClientToken.where(user_id: @user.id).count }) do
       auth_browser.patch(
         auth_app_sign_in_email_path,
-        params: { :user_email => { pass_code: ROTP::HOTP.new(secret).at(7).to_s },
+        params: { :user_email => { pass_code: code },
                   "cf-turnstile-response" => "t",
                   :ri => "jp", },
       )
@@ -457,13 +583,38 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
                         "cf-turnstile-response" => "t",
                         :ri => "jp", },
             )
-            secret = "JBSWY3DPEHPK3PXP"
-            attempt_email.reload.store_otp(secret, 7, 5.minutes.from_now.to_i)
+            delivery_job = enqueued_jobs.reverse.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+            assert_not_nil delivery_job
+            delivery = ActiveJob::Arguments.deserialize(delivery_job.fetch(:args)).last.fetch(:params).symbolize_keys
+            ceremony = ClientAuthCeremonySession.find(delivery.fetch(:auth_ceremony_session_ref))
+            context = ceremony.email_otp_context
+            code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+            # assert_match would disclose the delivered secret on failure.
+            # rubocop:disable Minitest/AssertMatch
+            assert code.match?(/\A[0-9]{6}\z/), "Delivery must contain one six-digit code"
+            # rubocop:enable Minitest/AssertMatch
+            assert_equal "sign_in", delivery.fetch(:purpose)
+            assert_equal "app", context.fetch("surface")
+            assert_equal "authentication", context.fetch("purpose")
+            assert_equal "local_sign_in", context.fetch("parent_kind")
+            assert_equal "real", context.fetch("mode")
+            # Boolean comparisons keep ceremony bindings and keyed proof out of failure output.
+            # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
+            assert context.fetch("parent_ref") == flow.public_id
+            assert context.fetch("contact_ref") == attempt_email.public_id
+            assert context.fetch("owner_ref") == @user.public_id
+            assert context.fetch("sid_digest") == ceremony.sid_digest
+            assert context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
+            # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+            assert_nil context.fetch("verified_at")
+            assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
             audit_count = ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
             assert_no_difference(-> { ClientToken.where(user_id: @user.id).count }) do
               auth_browser.patch(
                 auth_app_sign_in_email_path,
-                params: { :user_email => { pass_code: ROTP::HOTP.new(secret).at(7).to_s },
+                params: { :user_email => { pass_code: code },
                           "cf-turnstile-response" => "t",
                           :ri => "jp", },
               )

@@ -11,6 +11,8 @@ require "test_helper"
 # Full template coverage lives in test/unit/views/template_compilation_test.rb,
 # which compiles all templates. These tests pin the routes themselves.
 class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   test "com recovery session entry point renders" do
     get "http://base.com.localhost/identity/recovery/session/new?ri=jp"
 
@@ -71,13 +73,10 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     client = create_client
     email = create_verified_client_email(client, address: "recovery-equivalence-client@example.test")
     activate_recovery_case(AppEnforcementCase, client)
-    deliveries = []
-    adapter = Object.new
-    adapter.define_singleton_method(:deliver) { |**args| deliveries << args }
     registered_session = open_session
     unknown_session = open_session
 
-    OtpAdapter.stub(:for, adapter) do
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       registered_session.post(
         "http://base.app.localhost/identity/recovery/session?ri=jp",
         params: { recovery_reentry: { address: email.address } },
@@ -97,20 +96,16 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     assert_match "Account recovery", unknown_session.response.body
     assert_match "Verification code", registered_session.response.body
     assert_match "Verification code", unknown_session.response.body
-    assert_equal 1, deliveries.length
   end
 
   test "com recovery start keeps registered and unknown email responses equivalent across sessions" do
     visitor = create_visitor
     email = create_verified_visitor_email(visitor, address: "recovery-equivalence-visitor@example.test")
     activate_recovery_case(ComEnforcementCase, visitor)
-    deliveries = []
-    adapter = Object.new
-    adapter.define_singleton_method(:deliver) { |**args| deliveries << args }
     registered_session = open_session
     unknown_session = open_session
 
-    OtpAdapter.stub(:for, adapter) do
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       registered_session.post(
         "http://base.com.localhost/identity/recovery/session?ri=jp",
         params: { recovery_reentry: { address: email.address } },
@@ -130,7 +125,6 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     assert_match "Account recovery", unknown_session.response.body
     assert_match "Verification code", registered_session.response.body
     assert_match "Verification code", unknown_session.response.body
-    assert_equal 1, deliveries.length
   end
 
   test "app recovery issues a ceremony only after a verified email OTP for an active security lock" do
@@ -138,13 +132,24 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     email = create_verified_client_email(client, address: "recovery-client@example.test")
     activate_recovery_case(AppEnforcementCase, client)
 
-    with_otp_delivery_stub do
+    original_proof = email.attributes.slice("otp_private_key", "otp_counter", "otp_expires_at")
+
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post "http://base.app.localhost/identity/recovery/session?ri=jp",
            params: { recovery_reentry: { address: email.address } }
     end
 
     assert_response :success
-    pass_code = otp_code_for(email)
+    proof_unchanged = original_proof == email.reload.attributes.slice(*original_proof.keys)
+
+    assert proof_unchanged
+    payload = ActiveJob::Arguments.deserialize(enqueued_jobs.last.fetch(:args)).last.fetch(:params)
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: payload.fetch(:email_ceremony_transaction_ref),
+    )
+
+    assert_equal "recovery", transaction.operation
 
     assert_difference -> { ClientEnforcementRecoveryCeremony.count }, 1 do
       post "http://base.app.localhost/identity/recovery/session?ri=jp", params: { pass_code: pass_code }
@@ -152,6 +157,9 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
 
     assert_response :see_other
     assert_redirected_to base_app_identity_recovery_path(ri: "jp")
+    assert transaction.reload.otp_consumed_at
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
   end
 
   private
@@ -199,16 +207,5 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
       visitor: visitor, address: address, confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     ).tap(&:finalize_binding!)
-  end
-
-  def otp_code_for(email)
-    otp_data = email.reload.get_otp
-    ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
-  end
-
-  def with_otp_delivery_stub
-    adapter = Object.new
-    adapter.define_singleton_method(:deliver) { |**_args| true }
-    OtpAdapter.stub(:for, adapter) { yield }
   end
 end

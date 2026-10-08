@@ -18,7 +18,7 @@ module EmailValidation
     target_seconds = email_lookup_timing_protection_seconds
     start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-    digest = IdentifierBlindIndex.bidx_for_email(email)
+    digest = IdentifierBlindIndex.bidx_for_email(email, realm: identity_email_model.identifier_hmac_realm)
     result = digest ? identity_email_model.effective_binding.find_by(address_digest: digest) : nil
 
     elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time

@@ -1,6 +1,8 @@
 # typed: false
 # frozen_string_literal: true
 
+# Guest signup callers provide process_email_registration_under_lock and send_verification_email;
+# authenticated settings callers own initiation rather than inheriting guest proof issuance.
 module SignEmailRegistrable
   extend ActiveSupport::Concern
 
@@ -102,70 +104,6 @@ module SignEmailRegistrable
     true
   end
 
-  def process_email_registration_under_lock
-    has_errors = @user_email.errors.details.except(:user, :user_id).any?
-
-    cleanup_pending_signup!
-    return { status: false } if has_errors
-
-    create_pending_user!
-
-    otp_number = generate_otp_attributes(@user_email)
-    @user_email.otp_last_sent_at = Time.current
-    @user_email.save!
-    { status: :ok, otp_number: otp_number }
-  end
-
-  def complete_email_verification!(id, submitted_code, token = nil, commit_verified_status: true)
-    @user_email = ClientEmail.find_by(public_id: id)
-
-    # Session validation should be done in controller
-    # This method assumes valid session
-
-    # Verify token if provided (strict verification)
-    if token.present?
-      unless @user_email.verify_verification_token(token)
-        @user_email.errors.add(:base, t("sign.app.registration.email.update.invalid_token"))
-        return false
-      end
-    end
-
-    result = nil
-    begin
-      @user_email.transaction do
-        result = verify_otp_code_and_consume(
-          @user_email, submitted_code,
-          verification_scope: { surface: :app,
-                                purpose: :credential_registration,
-                                channel: :email, },
-        )
-        if result[:success]
-          @user_email.user_email_status_id = verified_email_status_id if commit_verified_status
-
-          yield(@user_email) if block_given?
-          @user_email.save! if @user_email.changed?
-        end
-      end
-    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved => e
-      # Transaction rolled back
-      @user_email.errors.add(:base, e.message) if @user_email.errors.empty?
-      return false
-    end
-
-    unless result[:success]
-      if @user_email.locked?
-        @user_email.destroy!
-        @user_email.errors.add(:base, :locked)
-        return :locked
-      end
-
-      @user_email.errors.add(:pass_code, t("sign.app.registration.email.update.invalid_code"))
-      return false
-    end
-
-    true
-  end
-
   def ensure_turnstile!(email_address, confirm_policy)
     turnstile_result = email_registration_turnstile_validation
     return true if turnstile_result["success"]
@@ -208,34 +146,11 @@ module SignEmailRegistrable
     user_email.present? && pending_email_status_ids.include?(user_email.user_email_status_id)
   end
 
-  def create_pending_user!
-    @pending_user = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
-    @user_email.user = @pending_user
-    # Pending actor is tracked through the sign-up flow ticket (principal_id) after
-    # bind_sign_up_flow_to_email! runs; no session key is needed here.
-  end
-
   def ensure_signup_reference_defaults!
     ClientStatus.ensure_defaults!
     ClientVisibility.ensure_defaults!
     ClientMfaLevel.ensure_defaults!
     ClientMfaStatus.ensure_defaults!
     ClientEmailStatus.ensure_defaults!
-  end
-
-  def send_verification_email(otp_number)
-    token = @user_email.generate_verification_token
-
-    OtpAdapter.for(surface: :app, channel: :email).deliver(
-      record: @user_email,
-      otp_code: otp_number,
-      verification_token: token,
-      public_id: @user_email.public_id,
-      purpose: email_otp_purpose,
-    )
-  end
-
-  def email_otp_purpose
-    nil
   end
 end

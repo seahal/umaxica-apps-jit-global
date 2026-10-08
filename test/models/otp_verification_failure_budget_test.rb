@@ -6,7 +6,7 @@ class OtpVerificationFailureBudgetTest < ActiveSupport::TestCase
   setup do
     @namespace = "otp-verification:#{SecureRandom.hex(12)}"
     @connection = Umaxica::Valkey::Connection.new(namespace: @namespace)
-    @budget = OtpVerificationFailureBudget.new(connection: @connection)
+    @budget = EmailOtpVerificationFailureBudget.new(connection: @connection)
     @scope = { surface: :app, purpose: :sign_up, channel: :email, destination_digest: "a" * 64 }
     @key = @connection.key("app:sign_up:email:#{"a" * 64}")
   end
@@ -41,9 +41,12 @@ class OtpVerificationFailureBudgetTest < ActiveSupport::TestCase
 
     [{ surface: :com }, { purpose: :authentication }, { purpose: :credential_registration },
      { purpose: :enforcement_recovery }, { purpose: :withdrawal_reentry },
-     { channel: :telephone }, { destination_digest: "b" * 64 },].each do |difference|
+     { destination_digest: "b" * 64 },].each do |difference|
       assert_equal :verified, @budget.verify!(**@scope.merge(difference), valid: true)
     end
+    assert_equal :verified, TelephoneOtpVerificationFailureBudget.new(connection: @connection).verify!(
+      **@scope.merge(channel: :telephone), valid: true,
+    )
   end
 
   test "corrupt persistent or out of range counters refuse even a correct code" do
@@ -59,7 +62,7 @@ class OtpVerificationFailureBudgetTest < ActiveSupport::TestCase
     results = 12.times.map do
       Concurrent::Promises.future do
         connection = Umaxica::Valkey::Connection.new(namespace: @namespace)
-        OtpVerificationFailureBudget.new(connection: connection).verify!(**@scope, valid: false)
+        EmailOtpVerificationFailureBudget.new(connection: connection).verify!(**@scope, valid: false)
       ensure
         connection&.close
       end

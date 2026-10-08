@@ -169,7 +169,9 @@ module Base
 
           def load_resolution_transaction
             @resolution_binding = session_limit_resolution_binding
-            @resolution = ClientSessionLimitResolutionTransaction.find_by(challenge: @resolution_challenge)
+            @resolution = ClientSessionLimitResolutionTransaction.find_by(
+              challenge_digest: ClientSessionLimitResolutionTransaction.digest_challenge(@resolution_challenge),
+            )
             return unless @resolution && @resolution_binding.present?
 
             validate_loaded_resolution

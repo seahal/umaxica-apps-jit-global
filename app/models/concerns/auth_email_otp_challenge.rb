@@ -6,7 +6,7 @@ module AuthEmailOtpChallenge
   public
 
   def issue_email_otp!(contact:, destination:)
-    digest = IdentifierBlindIndex.bidx_for_email(destination)
+    digest = IdentifierBlindIndex.bidx_for_email(destination, realm: email_otp_surface)
     raise ArgumentError, "email destination required" if digest.blank?
 
     expired_local_parent = false
@@ -30,12 +30,12 @@ module AuthEmailOtpChallenge
             raise AuthCeremonySession::InvalidTransition, "email authentication binding unavailable"
           end
 
-          code = ROTP::HOTP.new(ROTP::Base32.random_base32).at(SecureRandom.random_number(1 << 64)).to_s
+          code = SecureRandom.random_number(1_000_000).to_s.rjust(6, "0")
           context = email_otp_binding_context(locked, digest)
           context.merge!(
             "version" => 1, "generation" => SecureRandom.uuid, "issued_at" => now.utc.iso8601(6),
             "expires_at" => [
-              now + CommonOtpPolicy::AUTHENTICATION_TTL, expires_at, email_otp_parent_deadline(parent),
+              now + EmailOtpPolicy::AUTHENTICATION_TTL, expires_at, email_otp_parent_deadline(parent),
             ].min.utc.iso8601(6),
             "verified_at" => nil, "result_expires_at" => nil,
           )
@@ -52,7 +52,7 @@ module AuthEmailOtpChallenge
   end
 
   def verify_email_otp!(code:)
-    return email_otp_refusal(:invalid_code) unless code.is_a?(String) && code.match?(/\A[0-9]{6}\z/)
+    return email_otp_refusal(:invalid_code) unless well_formed_email_otp_code?(code)
 
     with_email_otp_parent_lock do |parent, now|
       context = email_otp_context
@@ -112,7 +112,10 @@ module AuthEmailOtpChallenge
         return false unless active?(now: now) && email_otp_parent_pending?(parent, now)
         return false unless email_otp_binding_current?(context, locked) && !locked.locked?
         return false unless Time.iso8601(context.fetch("expires_at")) > now &&
-          context.fetch("destination_digest") == IdentifierBlindIndex.bidx_for_email(destination)
+          context.fetch("destination_digest") == IdentifierBlindIndex.bidx_for_email(
+            destination,
+            realm: email_otp_surface,
+          )
         return false unless ActiveSupport::SecurityUtils.secure_compare(
           context.fetch("code_digest"), AuthEmailOtpCodeDigest.for(context: context, code: code),
         )
@@ -125,11 +128,15 @@ module AuthEmailOtpChallenge
 
   private
 
+  def well_formed_email_otp_code?(code)
+    code.is_a?(String) && code.valid_encoding? && code.match?(/\A[0-9]{6}\z/)
+  end
+
   def verify_email_otp_comparison!(context, contact, code, now, parent)
     valid = contact.present? && ActiveSupport::SecurityUtils.secure_compare(
       context.fetch("code_digest"), AuthEmailOtpCodeDigest.for(context: context, code: code),
     )
-    outcome = OtpVerificationFailureBudget.new.verify!(
+    outcome = EmailOtpVerificationFailureBudget.new.verify!(
       surface: email_otp_surface.to_sym, purpose: :authentication, channel: :email,
       destination_digest: context.fetch("destination_digest"), valid: valid,
     )

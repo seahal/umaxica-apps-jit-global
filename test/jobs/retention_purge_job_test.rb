@@ -90,7 +90,10 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
   end
 
   test "anonymizes account records where purge_eligible_at is in the past" do
-    user_to_purge = Client.create!(public_id: "purge_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)
+    user_to_purge = Client.create!(
+      public_id: "purge_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE,
+      created_at: 2.hours.ago,
+    )
     user_to_keep = Client.create!(public_id: "keep_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)
 
     user_to_purge.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
@@ -113,7 +116,10 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
   # that routed Operators through `anonymize_accounts` (or Clients through
   # `purge_operators`) would silently corrupt one actor type's lifecycle.
   test "purge physically removes due operators but anonymizes due users in place" do
-    user = Client.create!(public_id: "puser_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)
+    user = Client.create!(
+      public_id: "puser_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE,
+      created_at: 2.hours.ago,
+    )
     operator_due = Operator.create!
     operator_pending = Operator.create!
 
@@ -141,7 +147,10 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
   # Re-running the worker must be safe: already-anonymized users are skipped via
   # `where(terminated_at: nil)` and already-deleted operators are simply absent.
   test "purge is idempotent across repeated runs" do
-    user = Client.create!(public_id: "iuser_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)
+    user = Client.create!(
+      public_id: "iuser_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE,
+      created_at: 2.hours.ago,
+    )
     operator = Operator.create!
     user.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
     operator.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
@@ -175,6 +184,12 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
   end
 
   test "runs sign up artifact cleanup before purging signup cycles" do
+    ClientSignUpFlowStatus::DEFAULTS.each do |id|
+      ClientSignUpFlowStatus.find_or_create_by!(id: id)
+    end
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each do |id|
+      ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id)
+    end
     user = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     email = ClientEmail.create!(
       user: user,

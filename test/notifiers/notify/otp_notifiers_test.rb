@@ -21,6 +21,7 @@ class Notify::OtpNotifiersTest < ActiveSupport::TestCase
   }.freeze
 
   setup do
+    ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
     ActionMailer::Base.deliveries.clear
   end
 

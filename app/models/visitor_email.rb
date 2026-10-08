@@ -44,12 +44,22 @@
 #  fk_rails_...  (visitor_id => visitors.id)
 #
 class VisitorEmail < ComPrincipalRecord
+  IDENTIFIER_REALM = "com"
+  encrypts :address, downcase: true,
+                     key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
+  encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
+
   include PublicId
   include Retainable
   include Email
+  include EmailDeadIdentifierHistory
+
+  after_initialize :initialize_email_otp_state
+  before_destroy :archive_dead_email_identifier, prepend: true
+
   include MfaStatusCredential
   include PromotionalEmailUnsubscribable
-  include ContactBinding
+  include EmailContactBinding
 
   scope :effective_binding, -> { where.not(binding_finalized_at: nil).where(binding_released_at: nil) }
   validate :effective_binding_has_digest
@@ -79,6 +89,8 @@ class VisitorEmail < ComPrincipalRecord
                  record_name: "emails",
                  owner_name: "visitor"
   before_destroy :prevent_destroy_when_undeletable
+
+  public
 
   def to_param
     public_id

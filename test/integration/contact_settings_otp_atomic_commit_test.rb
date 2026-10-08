@@ -7,6 +7,8 @@ require "webauthn/fake_client"
 # The real Step-Up and fault/retry journey intentionally has more than thirty assertions.
 # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
 class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   %w(app com).each do |surface|
     %w(email telephone).each do |channel|
       test "#{surface} settings #{channel} binding failure preserves verification and identical HTTP retry" do
@@ -210,6 +212,7 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
                    "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}"
         contact_fields = { input_key => destination }
         contact_fields[:confirm_policy] = "1" if surface == "app"
+        clear_enqueued_jobs
         browser.post(
           registration_path, params: {
             parameter_scope => contact_fields,
@@ -223,8 +226,33 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
 
         assert_not_nil candidate
         candidate_ref = candidate.public_id
-        otp = candidate.get_otp
-        code = ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter)).to_s
+        flow_model =
+          case [surface, channel]
+          when ["app", "email"] then ClientEmailCeremonyTransaction
+          when ["app", "telephone"] then ClientTelephoneCeremonyTransaction
+          when ["com", "email"] then VisitorEmailCeremonyTransaction
+          when ["com", "telephone"] then VisitorTelephoneCeremonyTransaction
+          end
+        code, transaction_ref, generation =
+          if channel == "email"
+            job = enqueued_jobs.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+            assert_not_nil job
+            payload = ActiveJob::Arguments.deserialize(job.fetch(:args)).last.fetch(:params).symbolize_keys
+            [OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token)),
+             payload.fetch(:contact_ceremony_transaction_ref), payload.fetch(:contact_otp_generation),]
+          else
+            job = enqueued_jobs.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+
+            assert_not_nil job
+            payload = OutboundSensitivePayload.decrypt_sms_delivery(
+              job.fetch(:args).fetch(0).fetch("encrypted_payload"),
+            )
+            [payload.fetch(:otp_code), payload.fetch(:otp_binding).fetch(2), payload.fetch(:otp_binding).fetch(4)]
+          end
+        flow = flow_model.find_by!(transaction_id: transaction_ref)
+
+        assert generation == flow.otp_generation, "Delivery must name the original issued generation"
         old_facts = old_contact.reload.attributes
         browser.get(URI.parse(browser.response.location).request_uri, params: { ri: "jp" })
 
@@ -250,24 +278,19 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
         assert_nil candidate.reload.binding_finalized_at
         assert old_facts == old_contact.reload.attributes, "Failure must preserve the original effective binding"
         assert other_facts == other_contact.reload.attributes, "Failure must preserve another owner's binding"
-        assert_nil candidate.get_otp, "Verification consumes the OTP before independent binding finalization"
-        proof = candidate.credential_registration_otp_context.deep_dup
+        assert_nil flow.reload.otp_verifier, "Verification consumes OTP before independent binding finalization"
+        proof = flow.attributes.slice(
+          "purpose", "otp_generation", "otp_expires_at", "otp_consumed_at", "otp_cancelled_at",
+          "otp_verifier", "otp_receipt_verifier", "otp_result_expires_at",
+        )
 
         assert_not_nil proof, "Failed binding persistence must retain the original flow-specific verification result"
-        assert_not_nil proof.fetch("verified_at")
-        assert_operator Time.iso8601(proof.fetch("result_expires_at")), :>, candidate.class.database_now
-        flow_model =
-          case [surface, channel]
-          when ["app", "email"] then ClientEmailCeremonyTransaction
-          when ["app", "telephone"] then ClientTelephoneCeremonyTransaction
-          when ["com", "email"] then VisitorEmailCeremonyTransaction
-          when ["com", "telephone"] then VisitorTelephoneCeremonyTransaction
-          end
-        flow = flow_model.find_by!(transaction_id: proof.fetch("flow_ref"))
+        assert_not_nil proof.fetch("otp_consumed_at")
+        assert_operator proof.fetch("otp_result_expires_at"), :>, flow_model.database_now
 
         assert_not flow.consumed?
-        assert_equal [Time.iso8601(proof.fetch("verified_at")) + 60.seconds, flow.expires_at].min,
-                     Time.iso8601(proof.fetch("result_expires_at"))
+        assert_equal [proof.fetch("otp_consumed_at") + 60.seconds, flow.expires_at].min,
+                     proof.fetch("otp_result_expires_at")
         browser.patch(registration_path, params: submission, headers: headers)
 
         assert_includes [302, 303], browser.response.status
@@ -275,8 +298,8 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
         assert_equal actor.id, candidate[owner_key]
         assert_predicate candidate, :binding_effective?,
                          "The original candidate must be finalized by the identical retry"
-        assert_nil candidate.get_otp
-        assert proof == candidate.credential_registration_otp_context,
+        assert_nil flow.reload.otp_verifier
+        assert proof == flow.attributes.slice(*proof.keys),
                "Identical HTTP retry must preserve the original immutable verification result"
         assert_predicate flow.reload, :consumed?
         assert_not_nil old_contact.reload.binding_released_at

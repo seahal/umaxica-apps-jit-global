@@ -141,7 +141,7 @@ class Base::Org::SelectorControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",
@@ -156,7 +156,7 @@ class Base::Org::SelectorControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
           otp_private_key: SecureRandom.base64(24),
           otp_counter: "",
@@ -395,7 +395,7 @@ class Base::Org::SelectorControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

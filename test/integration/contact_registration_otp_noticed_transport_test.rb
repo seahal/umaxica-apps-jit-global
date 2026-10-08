@@ -11,7 +11,7 @@ class ContactRegistrationOtpNoticedTransportTest < ActiveSupport::TestCase
   %i(app com).each do |surface|
     %i(current verified reissued revoked expired).each do |state|
       test "#{surface} Noticed registration OTP #{state} retains original delivery authority" do
-        actor, token, contact, flow_model, notifier_name =
+        actor, token, contact, flow_model, notifier, notifier_name =
           case surface
           when :app
             owner = Client.create!(status_id: ClientStatus::ACTIVE)
@@ -19,36 +19,34 @@ class ContactRegistrationOtpNoticedTransportTest < ActiveSupport::TestCase
             candidate = owner.client_emails.create!(
               raw_address: "noticed-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
             )
-            [owner, root, candidate, ClientEmailCeremonyTransaction, "Notify::App::OtpNotifier::Notification"]
+            [owner, root, candidate, ClientEmailCeremonyTransaction, Notify::App::OtpNotifier,
+             "Notify::App::OtpNotifier::Notification",]
           when :com
             owner = Visitor.create!
             root = VisitorToken.create!(visitor: owner, discard_at: 1.day.from_now)
             candidate = owner.visitor_emails.create!(
               raw_address: "noticed-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
             )
-            [owner, root, candidate, VisitorEmailCeremonyTransaction, "Notify::Com::OtpNotifier::Notification"]
+            [owner, root, candidate, VisitorEmailCeremonyTransaction, Notify::Com::OtpNotifier,
+             "Notify::Com::OtpNotifier::Notification",]
           end
         token.rotate_refresh_token!
-        secret = ROTP::Base32.random_base32
-        contact.store_otp(secret, 1, (contact.class.database_now + 10.minutes).to_i)
-        otp = contact.get_otp
-        code = ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter)).to_s
         nonce = SecureRandom.urlsafe_base64(32)
-        transaction = ContactRegistrationOtpIssuer.call!(
-          actor:, token:, contact:, channel: :email, browser_nonce: nonce, code:,
+        issued = EmailCredentialRegistrationOtpIssuer.call(
+          actor:, token:, email: contact, browser_nonce: nonce,
         )
+
+        assert_instance_of EmailCredentialRegistrationOtpIssueResult, issued
+        assert_predicate issued, :success?
+        transaction = issued.transaction
+        code = issued.code
         clear_enqueued_jobs
         clear_performed_jobs
-        OtpEmailNotifierRollout.stub(:enabled?, ->(requested_surface) { requested_surface == surface }) do
-          adapter = OtpAdapter.for(surface:, channel: :email)
-
-          assert_instance_of OtpEmailNotifierAdapter, adapter
-
-          adapter.deliver(
-            record: contact, otp_code: code, purpose: "credential_registration", public_id: contact.public_id,
-            contact_ceremony_transaction_ref: transaction.transaction_id, contact_otp_counter: "1",
-          )
-        end
+        notifier.issue(
+          record: contact, otp_code: code, purpose: "credential_registration", public_id: contact.public_id,
+          contact_ceremony_transaction_ref: transaction.transaction_id,
+          contact_otp_generation: transaction.otp_generation,
+        )
 
         assert_equal 1, enqueued_jobs.length
         job = enqueued_jobs.first
@@ -66,21 +64,30 @@ class ContactRegistrationOtpNoticedTransportTest < ActiveSupport::TestCase
         assert params.fetch("contact_ceremony_transaction_ref") == transaction.transaction_id,
                "Noticed must queue the original ceremony UUID"
         assert params.fetch("public_id") == contact.public_id, "Noticed must queue the original Contact reference"
-        assert_equal "1", params.fetch("contact_otp_counter")
+        assert params.fetch("contact_otp_generation") == transaction.otp_generation,
+               "Noticed must queue the original independent Email generation"
         assert OutboundSensitivePayload.decrypt_email_otp(params.fetch("encrypted_hotp_token")) == code,
-               "Noticed must encrypt the issued HOTP before enqueue"
+               "Noticed must encrypt the issued random code before enqueue"
         assert_not serialized_arguments.to_s.include?(code), "Noticed must not queue a plaintext OTP"
         assert_not params.key?("otp_code"), "Noticed must not retain the raw OTP parameter"
 
         case state
         when :verified
-          assert_equal :verified, ContactRegistrationOtpVerificationCommitter.call!(
-            actor:, token:, contact:, transaction:, channel: :email, browser_nonce: nonce, code:,
+          verified = EmailCredentialRegistrationOtpVerificationCommitter.call(
+            actor:, token:, email: contact, transaction:, browser_nonce: nonce, code:,
           )
-          assert_nil contact.reload.get_otp
-          assert_not_nil contact.credential_registration_otp_context.fetch("verified_at")
+
+          assert_predicate verified, :success?
+          assert_predicate verified, :verified_evidence?
+          assert_nil transaction.reload.otp_verifier
+          assert_not_nil transaction.otp_consumed_at
+          assert_not_nil transaction.otp_receipt_verifier
         when :reissued
-          contact.store_otp(secret, 2, (contact.class.database_now + 10.minutes).to_i)
+          generation = transaction.otp_generation
+          transaction.reissue_email_otp!
+
+          assert_not_equal transaction.reload.otp_generation, generation,
+                           "Reissuance must supersede the queued generation"
         when :revoked
           token.revoke!
         when :expired
@@ -105,7 +112,7 @@ class ContactRegistrationOtpNoticedTransportTest < ActiveSupport::TestCase
           assert delivered.text_part.body.decoded.include?(code), "Noticed must deliver the actual issued OTP"
         end
 
-        assert contact_facts == contact.reload.attributes, "Noticed must preserve Source OTP and retained proof"
+        assert contact_facts == contact.reload.attributes, "Noticed must preserve Source failure and issuance facts"
         assert ticket_facts == transaction.reload.attributes, "Noticed must preserve the original pending Ticket"
         assert root_facts == token.reload.attributes, "Noticed must preserve root facts"
         assert device_facts == token.device_session.reload.attributes, "Noticed must preserve device facts"

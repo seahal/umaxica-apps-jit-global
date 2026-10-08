@@ -4,6 +4,11 @@
 
 Accepted
 
+The 2026-10-07 [identifier/dead-history decision](realm-separated-identifiers-and-dead-history.md)
+supersedes set-based Email/Telephone collection only. Their channel-specific purgers lock the owner
+and live row, respect legal/enforcement holds, create a minimal dead history and destroy the live
+identifier in one owning-database transaction. Other retention deletion remains set-based.
+
 ## context
 
 Applications require retention management in many models, but the current challenges include:

@@ -17,7 +17,7 @@ module Auth
 
           include CommonRedirect
 
-          include CommonOtp
+          include EmailOtpResponseTiming
 
           include SessionLimitGate
 
@@ -51,7 +51,7 @@ module Auth
           )
           rate_limit(
             to: 1,
-            within: CommonOtpPolicy::SEND_COOLDOWN,
+            within: EmailOtpPolicy::SEND_COOLDOWN,
             by: -> { sign_in_identifier_rate_limit_key },
             scope: "auth_app_sign_in",
             name: "email_create_identifier_cooldown",
@@ -200,7 +200,7 @@ module Auth
             normalized_address = validate_and_normalize_email(raw_address)
             return "invalid:#{request.remote_ip}" if normalized_address.blank?
 
-            "email:#{IdentifierBlindIndex.bidx_for_email(normalized_address)}"
+            "email:#{IdentifierBlindIndex.bidx_for_email(normalized_address, realm: :app)}"
           end
 
           # The two ceremony pages are rendered from more than one action, so the component name is
@@ -362,7 +362,7 @@ module Auth
 
             :ok
           ensure
-            ensure_min_elapsed(started, CommonOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
+            ensure_min_elapsed(started, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
           end
 
           def verify_otp_and_login(user_email)
@@ -378,7 +378,7 @@ module Auth
             verification = admitted_auth_ceremony_session.verify_email_otp!(code: user_email.pass_code)
             user = verification.contact&.user
 
-            if verification.success?
+            if verification.verified_evidence?
               SignAppInEmailAuthenticationState.clear!(session)
               pt = peek_pt
               result = AuthenticationSessionCommitter.call(
@@ -513,7 +513,7 @@ module Auth
             last_sent_at = session[:sign_in_email_cooldown_at]
             return false if last_sent_at.blank?
 
-            last_sent_at.to_i > CommonOtpPolicy::SEND_COOLDOWN.ago.to_i
+            last_sent_at.to_i > EmailOtpPolicy::SEND_COOLDOWN.ago.to_i
           end
 
           def record_sign_in_email_cooldown!(normalized_address)

@@ -5,21 +5,22 @@ require "test_helper"
 class SignupSmsEnvelopeTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  test "bound SMS preserves exactly version two and the original five field binding" do
-    tuple = %w(app sign_up flow contact 0)
+  test "bound SMS preserves exactly version three and the ceremony generation binding" do
+    tuple = ["app", "sign_up", "flow", SecureRandom.uuid, SecureRandom.uuid]
     token = OutboundSensitivePayload.encrypt_sms_delivery(
-      to: "+819012345670", title: "Verification code", body: "001234", otp_binding: tuple,
+      to: "+819012345670", title: "Verification code", body: "Your verification code: 001234",
+      otp_binding: tuple, otp_code: "001234",
     )
     payload = OutboundSensitivePayload.decrypt_sms_delivery(token)
 
-    assert_equal 2, payload.fetch(:version)
+    assert_equal 3, payload.fetch(:version)
     assert_equal tuple, payload.fetch(:otp_binding)
-    assert_equal %i(body otp_binding title to version), payload.keys.sort
+    assert_equal %i(body otp_binding otp_code title to version), payload.keys.sort
     assert_not token.include?("001234")
   end
 
   test "bound SMS refuses missing extra and neighboring tuple sizes before enqueue encryption" do
-    tuple = %w(app sign_up flow contact 1)
+    tuple = ["app", "sign_up", "flow", SecureRandom.uuid, SecureRandom.uuid]
 
     [[], tuple.take(4), tuple + ["extra"], "tuple", {}].each do |invalid|
       assert_raises(ArgumentError) do
@@ -32,17 +33,21 @@ class SignupSmsEnvelopeTest < ActiveSupport::TestCase
 
   test "queued ciphertext refuses unsupported versions absent binding and extra fields without reconstruction" do
     valid = {
-      "version" => 2,
+      "version" => 3,
       "to" => "+819012345670",
       "title" => "Verification code",
-      "body" => "001234",
-      "otp_binding" => %w(com sign_up flow contact 1),
+      "body" => "Your verification code: 001234",
+      "otp_code" => "001234",
+      "otp_binding" => ["com", "sign_up", "flow", SecureRandom.uuid, SecureRandom.uuid],
     }
     invalid_payloads = [
-      valid.merge("version" => 1), valid.merge("version" => 3), valid.merge("version" => nil),
+      valid.merge("version" => 1), valid.merge("version" => 2), valid.merge("version" => nil),
       valid.except("otp_binding"), valid.merge("extra" => "field"),
       valid.merge("otp_binding" => nil), valid.merge("otp_binding" => valid.fetch("otp_binding").take(4)),
       valid.merge("to" => ""), valid.merge("title" => 1), valid.merge("body" => nil),
+      valid.except("otp_code"), valid.merge("otp_code" => nil), valid.merge("otp_code" => ""),
+      valid.merge("otp_code" => 123_456), valid.merge("otp_code" => "12345"),
+      valid.merge("otp_code" => "1234567"), valid.merge("otp_code" => "wrong!"),
     ]
     invalid_payloads.each do |payload|
       token = OutboundSensitivePayload.encrypt(

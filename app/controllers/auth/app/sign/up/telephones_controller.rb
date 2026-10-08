@@ -14,8 +14,6 @@ module Auth
 
           include CommonRedirect
 
-          include CommonOtp
-
           include EnforcementIdentifierGate
 
           include SignUpSuspensionGuard
@@ -114,15 +112,29 @@ module Auth
             end
 
             begin
-              result = SignAppUpTelephoneSignupCreator.call(
+              result = TelephoneSignUpCandidateCreator.call(
                 telephone: @user_telephone,
               )
 
               @user_telephone = result.telephone
+              if result.status == :rate_limited
+                render_sign_up_telephone_new(status: :too_many_requests)
+                return
+              end
+              raise ArgumentError, "unsupported telephone signup outcome" unless result.status == :created
+
               session[:user_telephone_registration] = result.session_payload
               bind_sign_up_flow_to_telephone!(@user_telephone)
-              SignUpOtpDeliveryIssuer.call(
-                flow: current_sign_up_flow, record: @user_telephone, channel: :telephone,
+              issued = TelephoneSignUpOtpDeliveryIssuer.call(
+                flow: current_sign_up_flow, telephone: @user_telephone,
+                session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
+              )
+              unless issued.success?
+                render_sign_up_telephone_new(status: :unprocessable_content)
+                return
+              end
+              session[:user_telephone_registration] = result.session_payload.merge(
+                expires_at: issued.transaction.otp_expires_at.to_i,
               )
               redirect_to(
                 auth_app_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params),
@@ -246,20 +258,10 @@ module Auth
           end
 
           def valid_telephone_session?
-            return false unless @user_telephone
-
-            context = @user_telephone.sign_up_otp_context
-            if context&.fetch("verified_at") && @sign_up_ticket
-              return context.fetch("surface") == "app" && context.fetch("purpose") == "sign_up" &&
-                  context.fetch("flow_ref") == @sign_up_ticket.public_id &&
-                  context.fetch("nonce_digest") == @sign_up_ticket.nonce_digest &&
-                  context.fetch("contact_ref") == @user_telephone.public_id &&
-                  !@user_telephone.binding_finalized_at && !@user_telephone.binding_released? &&
-                  Time.iso8601(context.fetch("result_expires_at")) > @user_telephone.class.database_now
-            end
-            return false if @user_telephone.otp_expired?
-
-            @user_telephone.user_telephone_status_id == ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
+            TelephoneSignUpOtpFormQuery.call(
+              flow: @sign_up_ticket, telephone: @user_telephone,
+              session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
+            )
           end
 
           def redirect_telephone_session_expired
@@ -290,7 +292,7 @@ module Auth
             last_sent_at = session[:user_telephone_otp_last_sent_at]
             return false if last_sent_at.blank?
 
-            last_sent_at.to_i > CommonOtpPolicy::SEND_COOLDOWN.ago.to_i
+            last_sent_at.to_i > TelephoneOtpPolicy::SEND_COOLDOWN.ago.to_i
           end
 
           def log_signup_telephone_errors

@@ -17,3 +17,5 @@ stateDiagram-v2
     [*] --> VERIFIED_WITH_SIGN_UP
     [*] --> NOTHING
     UNVERIFIED_WITH_SIGN_UP --> VERIFIED_WITH_SIGN_UP: contact/signup final commit
+    UNVERIFIED_WITH_SIGN_UP --> VERIFIED_WITH_SIGN_UP: finalize_email_sign_up! / original live checkpoint and finalized own Email
+    UNVERIFIED_WITH_SIGN_UP --> VERIFIED_WITH_SIGN_UP: finalize_telephone_sign_up! / original live checkpoint, finalized own Telephone and required passkey

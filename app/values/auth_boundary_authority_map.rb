@@ -21,7 +21,7 @@ module AuthBoundaryAuthorityMap
 
   BASE_SELF_RP_CLIENT_IDS = %w(base-app-ww base-com-ww base-org-ww).freeze
 
-  # Approved expand-and-contract target. The active seven-client registry above remains in place
+  # Approved expand-and-contract target. The active ten-client registry above remains in place
   # until each caller, URI, key namespace, and RP-session binding has migrated.
   REGIONAL_RP_CLIENT_IDS = %w(
     core-app-jp

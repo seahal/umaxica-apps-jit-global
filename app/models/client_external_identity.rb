@@ -29,6 +29,8 @@ class ClientExternalIdentity < AppPrincipalRecord
     state == "active" && released_at.blank?
   end
 
+  public :active?
+
   def touch_authenticated!
     update!(last_authenticated_at: Time.current)
   end

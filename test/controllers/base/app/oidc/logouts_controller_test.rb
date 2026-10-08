@@ -9,7 +9,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   # include AuthHelpers
 
   setup do
-    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     @client = OidcClientRegistry.find!("core-app")
     @user = clients(:one)
     @token = ClientToken.create!(
@@ -156,7 +156,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_content
   end
 
-  test "GET request with a valid logout_challenge is rejected as retired legacy handoff" do
+  test "GET request with a valid logout_challenge renders receiver-local confirmation without cleanup" do
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
@@ -173,7 +173,13 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         params: { logout_challenge: transaction.logout_challenge, ri: "jp" },
         headers: session_headers
 
-    assert_response :unprocessable_content
+    assert_response :success
+    page = response.parsed_body.at_css("script[data-page='app'][type='application/json']")
+    props = JSON.parse(page.text).fetch("props")
+
+    assert_equal base_app_oidc_logout_path, props.fetch("form").fetch("action")
+    assert_equal transaction.logout_challenge, props.fetch("form").fetch("logout_challenge")
+    assert_not_predicate @token.reload, :revoked?
     assert_not_predicate transaction.reload, :finalized?
   end
 
@@ -589,7 +595,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
   # D2: the coordinated-logout CSRF declaration used to replace the inherited check, so an ordinary
   # POST without logout_challenge ran no CSRF verification at all.
-  test "D2 coordinated POST with a live challenge from the Auth origin passes with forgery protection on" do
+  test "D2 Auth navigation with a live challenge completes through a receiver-local protected POST" do
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
@@ -604,9 +610,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
 
     with_forgery_protection do
+      get base_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+          headers: session_headers.merge("Sec-Fetch-Site" => "same-site")
+
+      assert_response :success
+      assert_not_predicate @token.reload, :revoked?
+      assert_not_predicate transaction.reload, :finalized?
+      csrf = response.parsed_body.at_css("meta[name='csrf-token']")["content"]
       post base_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+           params: { authenticity_token: csrf },
            headers: session_headers.except("X-CSRF-Token").merge(
-             "Sec-Fetch-Site" => "same-site", "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}",
+             "Sec-Fetch-Site" => "same-origin", "Origin" => "https://#{@host}",
            )
     end
 
@@ -818,7 +832,7 @@ class Base::App::Oidc::LogoutsControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

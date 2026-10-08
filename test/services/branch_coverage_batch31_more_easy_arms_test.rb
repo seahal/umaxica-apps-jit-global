@@ -72,23 +72,24 @@ class BranchCoverageBatch31MoreEasyArmsTest < ActiveSupport::TestCase
     assert_raises(ArgumentError) { CredentialSecurityTransition.new(actor: nil, event: :rotate) }
   end
 
-  test "SignTelephoneOtpDelivery assign writes otp fields" do
-    telephone_class =
-      Class.new do
-        def self.database_now = Time.current
-      end
-    telephone = telephone_class.new
-    telephone.define_singleton_method(:otp_private_key=) { |v| @k = v }
-    telephone.define_singleton_method(:otp_counter=) { |v| @c = v }
-    telephone.define_singleton_method(:otp_expires_at=) { |v| @e = v }
-    telephone.define_singleton_method(:otp_last_sent_at=) { |v| @s = v }
-    telephone.define_singleton_method(:respond_to?) { |m, *|
-      %i(otp_private_key= otp_counter= otp_expires_at= otp_last_sent_at=).include?(m) || super(m)
-    }
+  test "Telephone signup issuer writes typed ceremony proof and Source send time" do
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    telephone = ClientTelephone.new(raw_number: "+819012399928", confirm_policy: true, confirm_using_mfa: true)
+    TelephoneSignUpCandidateCreator.call(telephone: telephone)
+    now = ClientSignUpFlow.database_now
+    nonce = "branch-coverage-original-browser"
+    flow = ClientSignUpFlow.create!(
+      principal_id: telephone.user_id, status_id: ClientSignUpFlowStatus::CONTACT_PENDING, step: "contact",
+      nonce_digest: ClientSignUpFlow.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
+      entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
+    )
+    issued = TelephoneSignUpOtpIssuer.call(flow: flow, telephone: telephone, session_nonce: nonce)
 
-    code = SignTelephoneOtpDelivery.assign(telephone)
-
-    assert_match(/\A\d+\z/, code)
+    assert issued.code.is_a?(String) && issued.code.match?(/\A[0-9]{6}\z/), "Code must contain six ASCII digits"
+    assert_predicate issued.transaction.otp_verifier, :present?
+    assert_predicate telephone.otp_last_sent_at, :present?
+    assert_predicate issued.transaction.otp_expires_at, :present?
   end
 
   test "AuthMethodGuard and single-use token easy rejects" do

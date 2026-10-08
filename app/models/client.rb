@@ -68,15 +68,15 @@
 # * `deactivated_at` -- Withdrawal/suspension lifecycle marker. Reversible. Not a
 #   deletion signal. Forced administrative access removal is represented by
 #   `access_state: "admin_locked"` plus the `admin_locked_*` metadata columns.
-# * `terminated_at` -- Set by `RetentionPurgeJob#anonymize_accounts` AFTER
-#   `WithdrawalPersonalDataAnonymizer` finishes. Marks "PII has been scrubbed
-#   on this row"; distinct from `discard_at` (logical hide) and `purge_eligible_at`
-#   (physical delete). Anonymized rows are retained for audit linkage with
-#   anonymous PII placeholders.
+# * `terminated_at` is not a PII erasure receipt: early termination can precede
+#   identifier retention and legal-hold expiry. Retained Identity rows preserve
+#   audit linkage; identifier-only purge preserves their dead histories.
 class Client < AppPrincipalRecord
   encrypts :admin_locked_reason_note
 
   include Retainable
+
+  before_destroy :admit_identifier_history_erasure, prepend: true
   include Withdrawable
   include HasBirthdate
   include ::PublicId
@@ -272,6 +272,8 @@ class Client < AppPrincipalRecord
   validates :public_id, uniqueness: true, length: { maximum: 21 }
   include Retainable
 
+  before_destroy :erase_dead_identifier_histories
+
   def totp_enabled?
     if client_totp_credentials.loaded?
       client_totp_credentials.any? { |otp| otp.user_totp_credential_status_id == ClientTotpCredentialStatus::ACTIVE }
@@ -378,7 +380,71 @@ class Client < AppPrincipalRecord
     verified_telephone?
   end
 
+  public
+
+  def finalize_email_sign_up!(email:, flow:)
+    with_lock do
+      unless email.is_a?(ClientEmail) && flow.is_a?(ClientSignUpFlow) &&
+          email.user_id == id && flow.principal_id == id && flow.pending_contact_type == "email" &&
+          flow.pending_contact_id == email.id && flow.sign_up_checkpoint_pending? &&
+          flow.expires_at > flow.class.database_now && flow.requirement_cleared?(:otp) &&
+          email.binding_effective? && email.user_email_status_id == ClientEmailStatus::VERIFIED_WITH_SIGN_UP &&
+          active? && access_enabled? && accessible?(self.class.database_now)
+        raise ActiveRecord::RecordNotSaved, "APP Email signup owner authority is unavailable"
+      end
+      return self if status_id == ClientStatus::VERIFIED_WITH_SIGN_UP
+
+      unless status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
+        raise ActiveRecord::RecordNotSaved, "APP Email signup owner is not pending"
+      end
+
+      update!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+      self
+    end
+  end
+
+  def finalize_telephone_sign_up!(telephone:, flow:)
+    with_lock do
+      unless telephone.is_a?(ClientTelephone) && flow.is_a?(ClientSignUpFlow) &&
+          telephone.user_id == id && flow.principal_id == id && flow.pending_contact_type == "telephone" &&
+          flow.pending_contact_id == telephone.id && flow.sign_up_checkpoint_pending? &&
+          flow.expires_at > flow.class.database_now && flow.requirement_cleared?(:otp) &&
+          telephone.binding_effective? &&
+          telephone.user_telephone_status_id == ClientTelephoneStatus::VERIFIED_WITH_SIGN_UP && active? &&
+          access_enabled? && accessible?(self.class.database_now) && client_passkeys.active.exists?
+        raise ActiveRecord::RecordNotSaved, "APP Telephone signup owner authority is unavailable"
+      end
+      return self if status_id == ClientStatus::VERIFIED_WITH_SIGN_UP
+
+      unless status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
+        raise ActiveRecord::RecordNotSaved, "APP Telephone signup owner is not pending"
+      end
+
+      update!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+      self
+    end
+  end
+
   private
+
+  def admit_identifier_history_erasure
+    with_lock do
+      now = self.class.database_now
+      if !lapsed?(now) || !purgeable?(now) || client_retention_holds.active_at(now).exists? ||
+          AppEnforcementCase.principal_effect_blocking?(public_id, :withdrawal_purge_blocked) ||
+          AppEnforcementCase.principal_effect_blocking?(public_id, :principal_hard_delete_blocked)
+        errors.add(:base, "Identity is recoverable or legally retained")
+        throw(:abort)
+      end
+
+      RetentionCrossDatabaseChildPurge.call(actor: self)
+    end
+  end
+
+  def erase_dead_identifier_histories
+    ClientEmailHistory.where(user_id: id).delete_all
+    ClientTelephoneHistory.where(user_id: id).delete_all
+  end
 
   def configured_mfa_level_methods
     step_up_methods

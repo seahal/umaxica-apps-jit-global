@@ -30,7 +30,11 @@ class SocialCompletionCrossHostCsrfTest < ActionDispatch::IntegrationTest
   end
 
   test "a cross-host POST is rejected by standard Rails CSRF protection" do
-    token = receiver_csrf_token
+    get base_app_social_authentication_completion_path(id: "google", result_ref: @result_ref, ri: "jp"),
+        headers: { "Host" => @base_host }
+
+    assert_response :success
+    token = response.parsed_body.at_css("input[name='authenticity_token']")["value"]
 
     post base_app_social_authentication_completion_path(id: "google"),
          params: { result_ref: @result_ref, authenticity_token: token, ri: "jp" },
@@ -45,7 +49,11 @@ class SocialCompletionCrossHostCsrfTest < ActionDispatch::IntegrationTest
   end
 
   test "a receiver-local CSRF-protected POST reaches result validation" do
-    token = receiver_csrf_token
+    get base_app_social_authentication_completion_path(id: "google", result_ref: @result_ref, ri: "jp"),
+        headers: { "Host" => @base_host }
+
+    assert_response :success
+    token = response.parsed_body.at_css("input[name='authenticity_token']")["value"]
 
     post base_app_social_authentication_completion_path(id: "google"),
          params: { result_ref: @result_ref, authenticity_token: token, ri: "jp" },
@@ -61,7 +69,11 @@ class SocialCompletionCrossHostCsrfTest < ActionDispatch::IntegrationTest
   end
 
   test "a null Origin cannot substitute for the receiver-local CSRF check" do
-    token = receiver_csrf_token
+    get base_app_social_authentication_completion_path(id: "google", result_ref: @result_ref, ri: "jp"),
+        headers: { "Host" => @base_host }
+
+    assert_response :success
+    token = response.parsed_body.at_css("input[name='authenticity_token']")["value"]
 
     post base_app_social_authentication_completion_path(id: "google"),
          params: { result_ref: @result_ref, authenticity_token: token, ri: "jp" },
@@ -73,17 +85,5 @@ class SocialCompletionCrossHostCsrfTest < ActionDispatch::IntegrationTest
 
     assert_response :unprocessable_content
     assert_not_equal I18n.t("sign.app.social.sessions.create.failure"), response.body
-  end
-
-  private
-
-  def receiver_csrf_token
-    get(
-      base_app_social_authentication_completion_path(id: "google", result_ref: @result_ref, ri: "jp"),
-      headers: { "Host" => @base_host },
-    )
-
-    assert_response :success
-    response.parsed_body.at_css("input[name='authenticity_token']")["value"]
   end
 end

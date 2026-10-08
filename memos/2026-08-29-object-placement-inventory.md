@@ -6,6 +6,11 @@ truth (`project/repository-knowledge-tree.mdc`).
 
 Counts were regenerated from the tree on 2026-08-29 and will drift as the moves land.
 
+Historical entries for `SignAppUpTelephoneSignupCreator`, `SignComUpTelephoneSignupCreator` and
+`SignTelephoneOtpDelivery` were retired on 2026-10-08. Current signup uses the independent
+`TelephoneSignUpCandidateCreator` and ceremony-owned Telephone issuer/delivery operations;
+this historical inventory is not evidence that the retired definitions still exist.
+
 ## Method, and its limits
 
 Each file's role was derived from three signals rather than from its name:

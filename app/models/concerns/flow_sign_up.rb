@@ -38,6 +38,8 @@ module FlowSignUp
     end
   end
 
+  public
+
   def sign_up_started?
     cycle_status?(status_id_for("STARTED"))
   end

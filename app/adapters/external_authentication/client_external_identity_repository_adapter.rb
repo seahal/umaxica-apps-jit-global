@@ -95,6 +95,8 @@ module ExternalAuthentication
       nil
     end
 
+    public :find_by_subject_for_link, :find_for_user_for_link
+
     private
 
     def issuer

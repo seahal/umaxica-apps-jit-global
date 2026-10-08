@@ -4,7 +4,7 @@
 # Resends a sign-in OTP. Email is the only supported channel: SMS OTP is not an
 # accepted sign-in proof, so no telephone branch exists to be re-enabled.
 class SignInOtpResender
-  include CommonOtp
+  include EmailOtpResponseTiming
 
   KIND = "email"
   SURFACES = SignInOtpResendState::SURFACES.map(&:to_sym).freeze
@@ -55,7 +55,7 @@ class SignInOtpResender
     Rails.error.report(e, handled: false, context: { service: "otp_resend", kind: @kind })
     raise
   ensure
-    ensure_min_elapsed(started, CommonOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS) if started
+    ensure_min_elapsed(started, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS) if started
   end
 
   private
@@ -135,7 +135,7 @@ class SignInOtpResender
     owner_id = (@surface == :app) ? target.user_id : target.visitor_id
     return false unless owner_id.to_s.rjust(20, "0") == parsed.fetch(:owner_ref) &&
       target.binding_finalized_at.utc.iso8601(6) == parsed.fetch(:binding_fact) &&
-      target.address_digest == IdentifierBlindIndex.bidx_for_email(normalized_target)
+      target.address_digest == IdentifierBlindIndex.bidx_for_email(normalized_target, realm: @surface)
 
     otp_code = @ceremony.issue_email_otp!(contact: target, destination: normalized_target)
     return true if otp_code.nil?

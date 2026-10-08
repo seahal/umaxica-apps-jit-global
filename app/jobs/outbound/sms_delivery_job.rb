@@ -16,56 +16,63 @@ module Outbound
     # delivery gap while preserving the no-plaintext-delivery boundary.
     discard_on ArgumentError, report: true
 
-    def perform(encrypted_payload: nil, to: nil, title: nil, encrypted_body: nil, body: nil)
-      payload = delivery_payload(encrypted_payload:, to:, title:, encrypted_body:, body:)
+    def perform(encrypted_payload: nil)
+      payload = OutboundSensitivePayload.decrypt_sms_delivery(encrypted_payload)
       if payload.key?(:otp_binding)
-        if payload.fetch(:otp_binding)[1] == "credential_registration"
-          return deliver_current_registration_otp(payload)
+        case payload.fetch(:otp_binding)[1]
+        when "credential_registration" then return deliver_current_registration_otp(payload)
+        when "sign_up" then return deliver_current_signup_otp(payload)
+        else raise ArgumentError, "unsupported bound SMS purpose"
         end
-
-        binding = SignUpOtpDeliveryBindingValue.for_sms(otp_binding: payload.fetch(:otp_binding))
-        flow_class = (binding.surface == "app") ? ClientSignUpFlow : VisitorSignUpFlow
-        flow = flow_class.find_by(public_id: binding.flow_ref)
-        return unless flow
-
-        return SignUpOtpDeliveryGuard.call(
-          flow: flow, channel: :telephone, contact_ref: binding.contact_ref,
-          counter: binding.counter, destination: payload.fetch(:to),
-        ) { OutboundSms.deliver_now(**payload.slice(:to, :title, :body)) }
       end
       OutboundSms.deliver_now(**payload.slice(:to, :title, :body))
     end
 
     private
 
-    def deliver_current_registration_otp(payload)
-      binding = ContactRegistrationOtpDeliveryBindingValue.for_sms(otp_binding: payload.fetch(:otp_binding))
-      transaction_class =
-        (binding.surface == "app") ? ClientTelephoneCeremonyTransaction : VisitorTelephoneCeremonyTransaction
-      transaction = transaction_class.find_by(transaction_id: binding.flow_ref)
-      return unless transaction
+    def deliver_current_signup_otp(payload)
+      binding = TelephoneSignUpOtpDeliveryBindingValue.for_sms(otp_binding: payload.fetch(:otp_binding))
+      flow_model, telephone_model, transaction_model =
+        case binding.surface
+        when "app" then [ClientSignUpFlow, ClientTelephone, ClientTelephoneCeremonyTransaction]
+        when "com" then [VisitorSignUpFlow, VisitorTelephone, VisitorTelephoneCeremonyTransaction]
+        else raise ArgumentError, "unsupported Telephone signup delivery realm"
+        end
+      flow = flow_model.find_by(public_id: binding.flow_ref)
+      transaction = transaction_model.find_by(transaction_id: binding.transaction_ref)
+      return false unless flow && transaction
 
-      ContactRegistrationOtpDeliveryIssuer.call(
-        transaction: transaction, contact_ref: binding.contact_ref, counter: binding.counter,
-        destination: payload.fetch(:to), message_body: payload.fetch(:body),
+      telephone = telephone_model.find_by(public_id: transaction.telephone_candidate_ref)
+      return false unless telephone
+
+      TelephoneSignUpOtpDeliveryGuard.call(
+        flow: flow, telephone: telephone, transaction: transaction, generation: binding.generation,
+        destination: payload.fetch(:to), code: payload.fetch(:otp_code),
       ) { OutboundSms.deliver_now(**payload.slice(:to, :title, :body)) }
     end
 
-    # Existing encrypted-body jobs may remain in a deployed queue during rollout.
-    # New producers only enqueue the versioned full-payload envelope.
-    def delivery_payload(encrypted_payload:, to:, title:, encrypted_body:, body:)
-      if encrypted_payload.present?
-        if [to, title, encrypted_body, body].any?(&:present?)
-          raise ArgumentError, "Mixed SMS job payload formats are not accepted"
+    def deliver_current_registration_otp(payload)
+      binding = TelephoneCredentialRegistrationOtpDeliveryBindingValue.for_sms(otp_binding: payload.fetch(:otp_binding))
+      transaction_model, telephone_model =
+        case binding.surface
+        when "app" then [ClientTelephoneCeremonyTransaction, ClientTelephone]
+        when "com" then [VisitorTelephoneCeremonyTransaction, VisitorTelephone]
+        when "org" then [OperatorTelephoneCeremonyTransaction, OperatorTelephone]
+        else raise ArgumentError, "unsupported Telephone registration delivery realm"
         end
+      transaction = transaction_model.find_by(transaction_id: binding.transaction_ref)
+      telephone =
+        if binding.surface == "org"
+          telephone_model.find_by(id: binding.candidate_ref)
+        else
+          telephone_model.find_by(public_id: binding.candidate_ref)
+        end
+      return false unless transaction && telephone
 
-        return OutboundSensitivePayload.decrypt_sms_delivery(encrypted_payload)
-      end
-
-      raise ArgumentError, "Plaintext SMS job payload is no longer accepted" if body.present?
-      raise ArgumentError, "Incomplete legacy SMS job payload" if to.blank? || title.blank? || encrypted_body.blank?
-
-      { to:, title:, body: OutboundSensitivePayload.decrypt_sms_body(encrypted_body) }
+      TelephoneCredentialRegistrationOtpDeliveryGuard.call(
+        transaction: transaction, telephone: telephone, generation: binding.generation,
+        destination: payload.fetch(:to), code: payload.fetch(:otp_code),
+      ) { OutboundSms.deliver_now(**payload.slice(:to, :title, :body)) }
     end
   end
 end

@@ -99,8 +99,8 @@ class ContactRegistrationOtpDeliveryIssuer
   def context_matches?(context, owner, token, contact)
     digest = (channel == :email) ? contact.address_digest : contact.number_digest
     delivered_digest =
-      (channel == :email) ? IdentifierBlindIndex.bidx_for_email(destination) :
-                           IdentifierBlindIndex.bidx_for_telephone(destination)
+      (channel == :email) ? IdentifierBlindIndex.bidx_for_email(destination, realm: surface) :
+                           IdentifierBlindIndex.bidx_for_telephone(destination, realm: surface)
     ticket_matches =
       if channel == :email
         transaction.email_candidate_ref == contact_ref && transaction.normalized_email_digest == digest

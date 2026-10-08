@@ -96,7 +96,7 @@ class OrgOperatorLifecycleInvitationAcceptanceTest < ActiveSupport::TestCase
     assert_includes results.filter_map { |result| result[:error] }, "Invitation has already been used"
 
     assert_equal 1, OrganizationInvitation.where(id: invitation.id).where.not(consumed_at: nil).count
-    email_scope = OperatorEmail.where(address_digest: IdentifierBlindIndex.bidx_for_email(invitation.email))
+    email_scope = OperatorEmail.where(address_digest: IdentifierBlindIndex.bidx_for_email(invitation.email, realm: :org))
 
     assert_equal 1, email_scope.count
     operator_ids = email_scope.pluck(:staff_id)

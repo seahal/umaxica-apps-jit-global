@@ -9,7 +9,7 @@ class Base::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   # include AuthHelpers
 
   setup do
-    @host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+    @host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     @client = OidcClientRegistry.find!("core-com")
     @visitor = visitors(:reserved_visitor)
     @token = VisitorToken.create!(
@@ -135,6 +135,8 @@ class Base::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "POST with a cross-origin challenge hands off to the sign surface for this realm" do
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "core",
@@ -148,16 +150,32 @@ class Base::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       ).transaction
     AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
 
-    post base_com_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
-         headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+    get(
+      base_com_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+      headers: session_headers,
+    )
 
     assert_response :success
+    assert_not_predicate @token.reload, :revoked?
+    assert_equal "acme_cleared", transaction.reload.expected_step
+    csrf = response.parsed_body.at_css("meta[name='csrf-token']")["content"]
+    post(
+      base_com_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+      params: { authenticity_token: csrf },
+      headers: session_headers.except("X-CSRF-Token").merge("Sec-Fetch-Site" => "same-origin", "Origin" => "https://#{@host}"),
+    )
+
+    assert_response :see_other
     assert_equal "sign_cleared", transaction.reload.expected_step
-    sign_host = ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", "auth.com.localhost")
-    handoff_uri = URI.parse(css_select("form#sign-out-handoff-form").first["action"])
+    assert_predicate @token.reload, :revoked?
+    sign_host = ENV.fetch("PRIVATE_AUTH_CORPORATE_URL")
+    handoff_uri = URI.parse(response.location)
 
     assert_equal sign_host, handoff_uri.host
     assert_equal "/sign/out", handoff_uri.path
+    assert_equal transaction.logout_challenge, Rack::Utils.parse_nested_query(handoff_uri.query.to_s)["logout_challenge"]
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
   test "cross-site coordinated logout is rejected without cleanup or transaction advancement" do
@@ -172,29 +190,33 @@ class Base::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     ).transaction
     AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
     expected_step_before = transaction.reload.expected_step
-    observed = { info: [], warn: [] }
-    logger = Rails.logger
+    blocked = []
+    subscriber = ->(_name, _start, _finish, _id, payload) { blocked << payload.fetch(:sec_fetch_site) }
 
-    logger.stub(:warn, ->(*args, &block) { observed[:warn] << (args.first || block&.call).to_s }) do
-      logger.stub(:info, ->(*args, &block) { observed[:info] << (args.first || block&.call).to_s }) do
-        post base_com_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
-             headers: session_headers.merge(
-               "Sec-Fetch-Site" => "cross-site",
-               "Origin" => "https://attacker.example",
-             )
-      end
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    ActiveSupport::Notifications.subscribed(subscriber, "csrf_request_blocked.action_controller") do
+      post(
+        base_com_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+        headers: session_headers.merge(
+          "Sec-Fetch-Site" => "cross-site",
+          "Origin" => "https://attacker.example",
+        ),
+      )
     end
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
+    assert_nil response.location
     assert_not_predicate @token.reload, :revoked?
     assert_equal expected_step_before, transaction.reload.expected_step
-    events = (observed[:info] + observed[:warn]).join("\n")
-
-    assert_includes events, "auth.sign_out.fetch_metadata.rejected"
-    assert_not_includes events, "auth.sign_out.fetch_metadata.accepted"
+    assert_equal ["cross-site"], blocked
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
-  test "missing fetch metadata is rejected without cleanup or transaction advancement" do
+  test "missing fetch metadata and CSRF token are rejected without cleanup or transaction advancement" do
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
     transaction = AcmeLogoutTransactionCoordinator.issue!(
       origin_surface: "core",
       initiating_client_id: "core-com",
@@ -207,15 +229,22 @@ class Base::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
     expected_step_before = transaction.reload.expected_step
 
-    post base_com_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
-         headers: session_headers.merge("Sec-Fetch-Site" => nil)
+    post(
+      base_com_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+      headers: session_headers.except("X-CSRF-Token").merge("Sec-Fetch-Site" => nil, "Origin" => "https://#{@host}"),
+    )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
+    assert_nil response.location
     assert_not_predicate @token.reload, :revoked?
     assert_equal expected_step_before, transaction.reload.expected_step
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
   test "untrusted origin is rejected without cleanup or transaction advancement" do
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
     transaction = AcmeLogoutTransactionCoordinator.issue!(
       origin_surface: "core",
       initiating_client_id: "core-com",
@@ -228,15 +257,20 @@ class Base::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
     expected_step_before = transaction.reload.expected_step
 
-    post base_com_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
-         headers: session_headers.merge(
-           "Sec-Fetch-Site" => "same-origin",
-           "Origin" => "https://attacker.example",
-         )
+    post(
+      base_com_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+      headers: session_headers.merge(
+        "Sec-Fetch-Site" => "same-origin",
+        "Origin" => "https://attacker.example",
+      ),
+    )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
+    assert_nil response.location
     assert_not_predicate @token.reload, :revoked?
     assert_equal expected_step_before, transaction.reload.expected_step
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
   # D2: the coordinated-logout CSRF declaration used to replace the inherited check, so an ordinary
@@ -420,7 +454,7 @@ class Base::Com::Oidc::LogoutsControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

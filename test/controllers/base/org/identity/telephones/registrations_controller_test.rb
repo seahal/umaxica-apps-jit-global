@@ -7,11 +7,14 @@ require "test_helper"
 # staff surface: the two-step OTP flow plus the Turnstile, missing-code,
 # wrong-code, lock-out, and expired-session branches guarding it.
 class Base::Org::Identity::Telephones::RegistrationsControllerTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   fixtures :operators, :operator_statuses, :operator_telephone_statuses,
            :operator_token_kinds, :operator_token_statuses, :operator_token_binding_methods,
            :operator_token_dbsc_statuses, :operator_passkeys
 
   setup do
+    clear_enqueued_jobs
     https!
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! @host
@@ -70,6 +73,31 @@ class Base::Org::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     assert_nil session[:staff_telephone_registration_id]
   end
 
+  test "management create starts own numeric candidate ceremony and completes through registration" do
+    post base_org_identity_telephones_url(ri: "jp", host: @host),
+         params: { staff_telephone: { raw_number: "+15558675332" } }, headers: @headers
+
+    assert_redirected_to edit_base_org_identity_telephones_registration_path(ri: "jp")
+    telephone = OperatorTelephone.find(session[:staff_telephone_registration_id])
+    transaction = OperatorTelephoneCeremonyTransaction.find_by!(
+      transaction_id: session[:settings_telephone_registration_transaction_ref],
+    )
+    job = enqueued_jobs.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+    payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+
+    assert_equal ["org", "credential_registration", transaction.transaction_id, telephone.id.to_s,
+                  transaction.otp_generation,], payload.fetch(:otp_binding)
+
+    patch base_org_identity_telephones_registration_url(ri: "jp", host: @host),
+          params: { staff_telephone: { pass_code: payload.fetch(:otp_code) } }, headers: @headers
+
+    assert_redirected_to base_org_identity_telephones_url(ri: "jp", host: @host)
+    assert_equal OperatorTelephoneStatus::VERIFIED, telephone.reload.staff_telephone_status_id
+    assert_predicate transaction.reload, :consumed?
+    assert_nil session[:staff_telephone_registration_id]
+    assert_nil session[:settings_telephone_registration_transaction_ref]
+  end
+
   test "edit redirects back to new when no registration is in progress" do
     get edit_base_org_identity_telephones_registration_url(ri: "jp", host: @host), headers: @headers
 
@@ -98,6 +126,27 @@ class Base::Org::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     assert_nil session[:staff_telephone_registration_id]
   end
 
+  test "telephone capacity permits MAX minus one and MAX then rejects MAX plus one" do
+    assert_equal 0, @operator.staff_telephones.count
+    OperatorTelephone::MAX_TELEPHONES_PER_STAFF.times do |index|
+      assert_difference("OperatorTelephone.count", 1) do
+        post base_org_identity_telephones_registration_url(ri: "jp", host: @host),
+             params: { staff_telephone: { raw_number: "+1555867#{format("%04d", 5500 + index)}" } }, headers: @headers
+      end
+
+      assert_redirected_to edit_base_org_identity_telephones_registration_path(ri: "jp")
+      assert_equal index + 1, @operator.staff_telephones.count
+    end
+    assert_no_difference("OperatorTelephone.count") do
+      post base_org_identity_telephones_registration_url(ri: "jp", host: @host),
+           params: { staff_telephone: { raw_number: "+15558675599" } }, headers: @headers
+    end
+
+    assert_response :unprocessable_content
+    assert_equal OperatorTelephone::MAX_TELEPHONES_PER_STAFF, @operator.staff_telephones.count
+    assert_includes response.body, "maximum telephones"
+  end
+
   test "create stores the pending registration and moves the ceremony to the verification step" do
     assert_difference("OperatorTelephone.count", 1) do
       post base_org_identity_telephones_registration_url(ri: "jp", host: @host),
@@ -109,6 +158,21 @@ class Base::Org::Identity::Telephones::RegistrationsControllerTest < ActionDispa
 
     assert_equal @operator.id, registered.staff_id
     assert_equal OperatorTelephoneStatus::UNVERIFIED, registered.staff_telephone_status_id
+    transaction = OperatorTelephoneCeremonyTransaction.find_by!(
+      transaction_id: session[:settings_telephone_registration_transaction_ref],
+    )
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+    payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+
+    assert_equal ["org", "credential_registration", transaction.transaction_id, registered.id.to_s,
+                  transaction.otp_generation,], payload.fetch(:otp_binding)
+    assert_equal @operator.public_id, transaction.actor_ref
+    assert_equal "registration", transaction.operation
+    assert_equal "credential_registration", transaction.purpose
+    assert_equal @token.public_id,
+                 CredentialRegistrationOtpSessionValue.load(session_ref: transaction.session_ref).root_ref
+    assert_match(/\A[0-9]{6}\z/, payload.fetch(:otp_code))
+    assert_not_includes JSON.generate(job.fetch(:args)), payload.fetch(:otp_code)
   end
 
   test "edit renders the verification step while the registration session is valid" do
@@ -157,55 +221,224 @@ class Base::Org::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     post base_org_identity_telephones_registration_url(ri: "jp", host: @host),
          params: { staff_telephone: { raw_number: "+15558675326" } }, headers: @headers
     pending = OperatorTelephone.find(session[:staff_telephone_registration_id])
-    otp = pending.get_otp
-    wrong_code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter] + 1).to_s
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+    payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+    wrong_code = (payload.fetch(:otp_code) == "000000") ? "000001" : "000000"
 
     patch base_org_identity_telephones_registration_url(ri: "jp", host: @host),
           params: { staff_telephone: { pass_code: wrong_code } }, headers: @headers
 
     assert_response :unprocessable_content
     assert_equal OperatorTelephoneStatus::UNVERIFIED, pending.reload.staff_telephone_status_id
+    assert_equal 1, pending.otp_attempts_count
   end
 
-  test "update discards the pending registration once the attempt limit locks it" do
+  test "update clears the session but retains candidate failures once the attempt limit locks it" do
     post base_org_identity_telephones_registration_url(ri: "jp", host: @host),
          params: { staff_telephone: { raw_number: "+15558675327" } }, headers: @headers
     pending_id = session[:staff_telephone_registration_id]
     pending = OperatorTelephone.find(pending_id)
-    otp = pending.get_otp
-    wrong_code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter] + 1).to_s
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+    payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+    wrong_code = (payload.fetch(:otp_code) == "000000") ? "000001" : "000000"
 
-    OtpLockable::MAX_OTP_ATTEMPTS.times do
+    TelephoneOtpPolicy::MAX_OTP_ATTEMPTS.times do
       patch base_org_identity_telephones_registration_url(ri: "jp", host: @host),
             params: { staff_telephone: { pass_code: wrong_code } }, headers: @headers
     end
 
     assert_redirected_to new_base_org_identity_telephones_registration_path(ri: "jp")
-    assert_nil OperatorTelephone.find_by(id: pending_id)
+    assert_nil session[:staff_telephone_registration_id]
+    assert_nil session[:settings_telephone_registration_transaction_ref]
+    assert_equal TelephoneOtpPolicy::MAX_OTP_ATTEMPTS, pending.reload.otp_attempts_count
+    assert pending.locked_at
+    assert_equal OperatorTelephoneStatus::UNVERIFIED, pending.staff_telephone_status_id
   end
 
   test "update verifies the telephone number and returns to the identity page on the correct code" do
     post base_org_identity_telephones_registration_url(ri: "jp", host: @host),
          params: { staff_telephone: { raw_number: "+15558675328" } }, headers: @headers
     pending = OperatorTelephone.find(session[:staff_telephone_registration_id])
-    otp = pending.get_otp
-    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+    transaction = OperatorTelephoneCeremonyTransaction.find_by!(
+      transaction_id: session[:settings_telephone_registration_transaction_ref],
+    )
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+    payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+    code = payload.fetch(:otp_code)
 
     patch base_org_identity_telephones_registration_url(ri: "jp", host: @host),
           params: { staff_telephone: { pass_code: code } }, headers: @headers
 
     assert_redirected_to base_org_identity_telephones_url(ri: "jp", host: @host)
     assert_nil session[:staff_telephone_registration_id]
+    assert_nil session[:settings_telephone_registration_transaction_ref]
+    assert_equal OperatorTelephoneStatus::VERIFIED, pending.reload.staff_telephone_status_id
+    assert_predicate transaction.reload, :consumed?
+    assert transaction.otp_consumed_at
   end
 
   test "update treats an expired one-time passcode as an expired registration session" do
     post base_org_identity_telephones_registration_url(ri: "jp", host: @host),
          params: { staff_telephone: { raw_number: "+15558675329" } }, headers: @headers
-    OperatorTelephone.find(session[:staff_telephone_registration_id]).update!(otp_expires_at: 1.minute.ago)
+    transaction = OperatorTelephoneCeremonyTransaction.find_by!(
+      transaction_id: session[:settings_telephone_registration_transaction_ref],
+    )
+    transaction.update!(otp_expires_at: 1.minute.ago)
 
     patch base_org_identity_telephones_registration_url(ri: "jp", host: @host),
           params: { staff_telephone: { pass_code: "123456" } }, headers: @headers
 
     assert_redirected_to new_base_org_identity_telephones_registration_path(ri: "jp")
+  end
+
+  %w(foreign_actor foreign_session foreign_candidate wrong_operation canceled).each do |mismatch|
+    test "update refuses #{mismatch} Telephone ceremony without finalizing or counting a guess" do
+      post base_org_identity_telephones_registration_url(ri: "jp", host: @host),
+           params: { staff_telephone: { raw_number: "+15558675330" } }, headers: @headers
+      pending = OperatorTelephone.find(session[:staff_telephone_registration_id])
+      transaction = OperatorTelephoneCeremonyTransaction.find_by!(
+        transaction_id: session[:settings_telephone_registration_transaction_ref],
+      )
+      job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+      payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+      case mismatch
+      when "foreign_actor" then transaction.update!(actor_ref: operators(:two).public_id)
+      when "foreign_session"
+        foreign = CredentialRegistrationOtpSessionValue.for(
+          surface: "org", channel: :telephone, transaction_ref: transaction.transaction_id,
+          root_ref: @token.public_id, browser_nonce: SecureRandom.urlsafe_base64(32),
+        )
+        transaction.update!(session_ref: foreign.dump)
+      when "foreign_candidate" then transaction.update!(telephone_candidate_ref: "0")
+      when "wrong_operation" then transaction.update!(operation: "sign_in")
+      when "canceled" then transaction.cancel_telephone_otp!
+      end
+
+      patch base_org_identity_telephones_registration_url(ri: "jp", host: @host),
+            params: { staff_telephone: { pass_code: payload.fetch(:otp_code) } }, headers: @headers
+
+      assert_redirected_to new_base_org_identity_telephones_registration_path(ri: "jp")
+      assert_equal OperatorTelephoneStatus::UNVERIFIED, pending.reload.staff_telephone_status_id
+      assert_equal 0, pending.otp_attempts_count
+      assert_nil transaction.reload.consumed_at
+      assert_nil session[:staff_telephone_registration_id]
+      assert_nil session[:settings_telephone_registration_transaction_ref]
+    end
+  end
+
+  %w(current canceled expired reissued root_revoked owner_changed).each do |state|
+    test "HTTP created ORG registration SMS checks #{state} numeric candidate proof before transport" do
+      post base_org_identity_telephones_registration_url(ri: "jp", host: @host),
+           params: { staff_telephone: { raw_number: "+15558675331" } }, headers: @headers
+
+      assert_redirected_to edit_base_org_identity_telephones_registration_path(ri: "jp")
+      telephone = OperatorTelephone.find(session[:staff_telephone_registration_id])
+      transaction = OperatorTelephoneCeremonyTransaction.find_by!(
+        transaction_id: session[:settings_telephone_registration_transaction_ref],
+      )
+      job = enqueued_jobs.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+      payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+
+      assert_equal 4, payload.fetch(:version)
+      assert_equal telephone.id.to_s, payload.fetch(:otp_binding).fetch(3)
+      assert_not_includes JSON.generate(job.fetch(:args)), payload.fetch(:otp_code)
+      assert_not_includes JSON.generate(job.fetch(:args)), telephone.number
+      transaction.cancel_telephone_otp! if state == "canceled"
+      transaction.issue_telephone_otp!(purpose: "credential_registration") if state == "reissued"
+      @token.update!(discard_at: @token.class.database_now) if state == "root_revoked"
+      telephone.update!(staff: operators(:two)) if state == "owner_changed"
+      now = (state == "expired") ? transaction.otp_expires_at : transaction.class.database_now
+      transported = []
+      transaction.class.stub(:database_now, now) do
+        OutboundSms.stub(:deliver_now, ->(**message) { transported << message }) do
+          perform_enqueued_jobs(only: Outbound::SmsDeliveryJob)
+        end
+      end
+
+      assert_equal (state == "current") ? 1 : 0, transported.length
+      if state == "current"
+        assert_equal telephone.number, transported.fetch(0).fetch(:to)
+        assert_includes transported.fetch(0).fetch(:body), payload.fetch(:otp_code)
+      end
+    end
+  end
+
+  %w(source_rollback ticket_fault lost_freshness lost_passkey foreign_browser).each do |state|
+    test "ORG named Telephone finalizer #{state} preserves Source before bounded Ticket reconciliation" do
+      telephone = @operator.staff_telephones.create!(
+        raw_number: "+15558675333", confirm_policy: true, confirm_using_mfa: true,
+      )
+      nonce = SecureRandom.urlsafe_base64(32)
+      issued = TelephoneCredentialRegistrationOtpIssuer.call(
+        actor: @operator, token: @token, telephone: telephone, browser_nonce: nonce,
+      )
+      verified = TelephoneCredentialRegistrationOtpVerificationCommitter.call(
+        actor: @operator, token: @token, telephone: telephone, transaction: issued.transaction,
+        browser_nonce: nonce, code: issued.code,
+      )
+
+      assert_predicate verified, :success?
+      arguments = {
+        actor: @operator,
+        token: @token,
+        telephone: telephone,
+        transaction: issued.transaction,
+        browser_nonce: nonce,
+        code: issued.code,
+        actor_context: ActorValuesContext.empty.with(
+          subject: @operator, actor_type: :operator, tld: :org, surface: :base,
+        ),
+        requirement: OperatorTelephonePolicy.new(telephone, user: @operator)
+          .credential_registration_requirement(token: @token),
+      }
+      case state
+      when "source_rollback"
+        rollback =
+          lambda do |&finalization|
+            telephone.class.transaction(requires_new: true) do
+              telephone.lock!
+              finalization.call
+              raise ActiveRecord::StatementInvalid
+            end
+          end
+
+        telephone.stub(:with_lock, rollback) do
+          assert_raises(ActiveRecord::StatementInvalid) do
+            OperatorTelephoneRegistrationOtpFinalizer.call!(**arguments)
+          end
+        end
+
+        assert_equal OperatorTelephoneStatus::UNVERIFIED, telephone.reload.staff_telephone_status_id
+        assert_nil issued.transaction.reload.consumed_at
+      when "ticket_fault"
+        issued.transaction.stub(:consume_registration_result!, -> { raise ActiveRecord::StatementInvalid }) do
+          assert_raises(ActiveRecord::StatementInvalid) do
+            OperatorTelephoneRegistrationOtpFinalizer.call!(**arguments)
+          end
+        end
+
+        assert_equal OperatorTelephoneStatus::VERIFIED, telephone.reload.staff_telephone_status_id
+        assert_nil issued.transaction.reload.consumed_at
+        assert_equal :finalized, OperatorTelephoneRegistrationOtpFinalizer.call!(**arguments)
+        assert_predicate issued.transaction.reload, :consumed?
+        deadline = issued.transaction.otp_result_expires_at
+
+        issued.transaction.class.stub(:database_now, deadline) do
+          assert_equal :unavailable, OperatorTelephoneRegistrationOtpFinalizer.call!(**arguments)
+        end
+
+        assert_equal OperatorTelephoneStatus::VERIFIED, telephone.reload.staff_telephone_status_id
+      else
+        case state
+        when "lost_freshness" then @token.update!(last_step_up_at: @token.class.database_now - 15.minutes)
+        when "lost_passkey" then @operator.operator_passkeys.first!.update!(status_id: OperatorPasskeyStatus::REVOKED)
+        when "foreign_browser" then arguments[:browser_nonce] = SecureRandom.urlsafe_base64(32)
+        end
+
+        assert_equal :unavailable, OperatorTelephoneRegistrationOtpFinalizer.call!(**arguments)
+        assert_equal OperatorTelephoneStatus::UNVERIFIED, telephone.reload.staff_telephone_status_id
+        assert_nil issued.transaction.reload.consumed_at
+      end
+    end
   end
 end

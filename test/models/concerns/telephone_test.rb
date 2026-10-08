@@ -7,20 +7,27 @@ class TelephoneTest < ActiveSupport::TestCase
   fixtures :operators, :operator_statuses
 
   setup do
-    @telephone = OperatorTelephone.new(
-      number: "+1234567890",
-      staff: operators(:none_staff),
+    @actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    @token = OperatorToken.create!(staff: @actor)
+    @token.rotate_refresh_token!
+    @telephone = OperatorTelephone.create!(
+      raw_number: "+1234567890", staff: @actor, confirm_policy: true, confirm_using_mfa: true,
     )
-    @telephone.save!(validate: false)
+    @browser_nonce = SecureRandom.urlsafe_base64(32)
+    issued = TelephoneCredentialRegistrationOtpIssuer.call(
+      actor: @actor, token: @token, telephone: @telephone, browser_nonce: @browser_nonce,
+    )
+    @transaction = issued.transaction
+    @code = issued.code
   end
 
-  test "store_otp updates otp fields" do
-    expires_at = 5.minutes.from_now.to_i
-    @telephone.store_otp("secret_credential", 123, expires_at)
-
-    assert_equal "secret_credential", @telephone.otp_private_key
-    assert_equal "123", @telephone.otp_counter
-    assert_equal Time.zone.at(expires_at), @telephone.otp_expires_at
+  test "own registration issuance stores keyed verifier generation and finite expiry on the typed ceremony" do
+    assert_match(/\A[0-9]{6}\z/, @code)
+    assert_predicate @transaction.otp_verifier, :present?
+    assert_predicate @transaction.otp_generation, :present?
+    assert_equal @telephone.id.to_s, @transaction.telephone_candidate_ref
+    assert_operator @transaction.otp_expires_at, :<=, @transaction.expires_at
+    assert_operator @transaction.otp_expires_at, :>, @transaction.created_at
     assert_equal 0, @telephone.otp_attempts_count
     # unlocked sentinel
     locked = @telephone.locked_at
@@ -28,110 +35,99 @@ class TelephoneTest < ActiveSupport::TestCase
     assert locked.nil? || locked.to_s == "-infinity" || (locked.is_a?(Float) && locked == -Float::INFINITY)
   end
 
-  test "encrypts the OTP private key at rest" do
-    secret = "otp-private-key-#{SecureRandom.hex(12)}"
+  test "durable ceremony stores a keyed verifier rather than a plaintext code or reconstructible private key" do
+    raw = OperatorTelephoneCeremonyTransaction.where(transaction_id: @transaction.transaction_id).pick(:otp_verifier)
 
-    @telephone.store_otp(secret, 123, 5.minutes.from_now.to_i)
-
-    raw = OperatorTelephone.connection.select_value(
-      "SELECT otp_private_key FROM #{OperatorTelephone.connection.quote_table_name(OperatorTelephone.table_name)} " \
-      "WHERE id = #{Integer(@telephone.id)}",
-    )
-
-    assert_equal secret, @telephone.reload.otp_private_key
-    assert_not_equal secret, raw
-    assert_not_includes raw.to_s, secret
+    assert_equal @transaction.reload.otp_verifier, raw
+    assert_not_equal @code, raw
+    assert_not_includes @transaction.attributes.values, @code
   end
 
-  test "store_otp does not clear active lockout" do
+  test "registration issuance refuses active lockout without clearing Source failures" do
     lockout_expires_at = 10.minutes.from_now
     @telephone.update!(
       locked_at: lockout_expires_at,
       otp_attempts_count: Telephone::MAX_OTP_ATTEMPTS,
     )
 
-    @telephone.store_otp("secret_credential", 123, 5.minutes.from_now.to_i)
+    refused = TelephoneCredentialRegistrationOtpIssuer.call(
+      actor: @actor, token: @token, telephone: @telephone, browser_nonce: @browser_nonce,
+    )
 
+    assert_equal :locked, refused.status
+    assert_nil refused.code
     assert_equal Telephone::MAX_OTP_ATTEMPTS, @telephone.reload.otp_attempts_count
     assert_equal lockout_expires_at.to_i, @telephone.locked_at.to_i
     assert_predicate @telephone, :locked?
   end
 
-  test "get_otp returns otp details if valid" do
-    expires_at = 5.minutes.from_now.to_i
-    @telephone.store_otp("secret_credential", 123, expires_at)
-
-    otp = @telephone.get_otp
-
-    assert_equal "secret_credential", otp[:otp_private_key]
-    assert_equal 123, otp[:otp_counter]
-    assert_equal expires_at, otp[:otp_expires_at]
+  test "registration form admits the original typed current proof" do
+    assert TelephoneCredentialRegistrationOtpFormQuery.call(
+      actor: @actor, token: @token, telephone: @telephone, transaction: @transaction,
+      browser_nonce: @browser_nonce,
+    )
   end
 
-  test "get_otp returns nil if otp_private_key is blank" do
-    @telephone.otp_private_key = ""
-    @telephone.save!(validate: false) # Use empty string as DB requires not null
+  test "registration form refuses a missing ceremony verifier" do
+    @transaction.update!(otp_verifier: nil)
 
-    assert_nil @telephone.get_otp
+    assert_not TelephoneCredentialRegistrationOtpFormQuery.call(
+      actor: @actor, token: @token, telephone: @telephone, transaction: @transaction,
+      browser_nonce: @browser_nonce,
+    )
   end
 
-  test "get_otp returns nil if otp expired" do
-    @telephone.store_otp("secret_credential", 123, 5.minutes.ago.to_i)
-
-    assert_nil @telephone.get_otp
+  test "registration form refuses proof exactly at OTP expiry" do
+    OperatorTelephoneCeremonyTransaction.stub(:database_now, @transaction.otp_expires_at) do
+      assert_not TelephoneCredentialRegistrationOtpFormQuery.call(
+        actor: @actor, token: @token, telephone: @telephone, transaction: @transaction,
+        browser_nonce: @browser_nonce,
+      )
+    end
   end
 
-  test "get_otp returns nil if locked" do
-    @telephone.store_otp("secret_credential", 123, 5.minutes.from_now.to_i)
+  test "registration verification refuses a locked candidate without consuming its typed proof" do
     @telephone.update!(locked_at: 1.minute.from_now)
 
-    assert_nil @telephone.get_otp
+    refused = TelephoneCredentialRegistrationOtpVerificationCommitter.call(
+      actor: @actor, token: @token, telephone: @telephone, transaction: @transaction,
+      browser_nonce: @browser_nonce, code: @code,
+    )
+
+    assert_equal :locked, refused.status
+    assert_nil @transaction.reload.otp_consumed_at
   end
 
-  test "clear_otp clears otp fields" do
-    @telephone.store_otp("secret_credential", 123, 5.minutes.from_now.to_i)
-    @telephone.clear_otp
+  test "ceremony cancellation clears active verifier but retains generation expiry and Source failures" do
+    @telephone.update!(otp_attempts_count: 2, locked_at: 1.minute.from_now)
+    source_facts = @telephone.attributes.slice("otp_attempts_count", "locked_at", "otp_last_sent_at")
+    proof_facts = @transaction.attributes.slice("otp_generation", "otp_expires_at")
 
-    assert_equal "secret_credential", @telephone.otp_private_key # Persists
-    assert_equal "0", @telephone.otp_counter
-    # Expect -infinity logic
-    expires = @telephone.otp_expires_at
-
-    assert expires.nil? || expires.to_s == "-infinity" || (expires.is_a?(Float) && expires == -Float::INFINITY)
-
-    assert_equal 0, @telephone.otp_attempts_count
-
-    locked = @telephone.locked_at
-
-    assert locked.nil? || locked.to_s == "-infinity" || (locked.is_a?(Float) && locked == -Float::INFINITY)
+    assert @transaction.cancel_telephone_otp!
+    assert_nil @transaction.reload.otp_verifier
+    assert_predicate @transaction.otp_cancelled_at, :present?
+    assert_equal proof_facts, @transaction.attributes.slice(*proof_facts.keys)
+    assert_equal source_facts, @telephone.reload.attributes.slice(*source_facts.keys)
   end
 
-  test "otp_expired? returns true if expired or nil" do
-    @telephone.update!(otp_expires_at: "-infinity") # Use sentinel
+  test "unissued ceremony has nil expiry and cannot be delivered because issued nil expiry is forbidden" do
+    unissued = OperatorTelephoneCeremonyTransaction.create_transaction!(
+      actor_ref: @actor.public_id, session_ref: "unissued-model-browser", operation: "registration",
+      telephone_candidate_ref: @telephone.id.to_s, normalized_number_digest: @telephone.number_digest,
+    )
 
-    assert_predicate @telephone, :otp_expired?
-
-    @telephone.update!(otp_expires_at: 5.minutes.ago)
-
-    assert_predicate @telephone, :otp_expired?
-
-    @telephone.update!(otp_expires_at: 5.minutes.from_now)
-
-    assert_not @telephone.otp_expired?
+    assert_nil unissued.otp_expires_at
+    assert_not unissued.telephone_otp_deliverable?(
+      generation: nil, at: OperatorTelephoneCeremonyTransaction.database_now,
+    )
   end
 
-  test "otp_active? returns true if not expired and not locked" do
-    @telephone.store_otp("secret_credential", 123, 5.minutes.from_now.to_i)
-
-    assert_predicate @telephone, :otp_active?
-
-    @telephone.update!(locked_at: 1.minute.from_now)
-
-    assert_not @telephone.otp_active?
-
-    @telephone.update!(locked_at: "-infinity", otp_expires_at: 5.minutes.ago)
-
-    assert_not @telephone.otp_active?
+  test "ceremony proof is deliverable immediately below but not at or above OTP expiry" do
+    [-Rational(1, 1_000_000), 0, Rational(1, 1_000_000)].each do |offset|
+      assert_equal offset.negative?, @transaction.telephone_otp_deliverable?(
+        generation: @transaction.otp_generation, at: @transaction.otp_expires_at + offset,
+      )
+    end
   end
 
   test "locked? returns true if lockout active or attempts exceeded in window" do
@@ -141,14 +137,15 @@ class TelephoneTest < ActiveSupport::TestCase
 
     assert_predicate @telephone, :locked?
 
-    @telephone.update!(locked_at: "-infinity", otp_attempts_count: Telephone::MAX_OTP_ATTEMPTS)
+    @telephone.update!(
+      locked_at: "-infinity", otp_attempts_count: Telephone::MAX_OTP_ATTEMPTS,
+      otp_last_sent_at: Time.current,
+    )
 
     assert_predicate @telephone, :locked?
   end
 
   test "increment_attempts! increments counter and locks if threshold reached" do
-    @telephone.store_otp("secret_credential", 123, 5.minutes.from_now.to_i)
-
     (Telephone::MAX_OTP_ATTEMPTS - 1).times do |index|
       @telephone.increment_attempts!
 
@@ -164,8 +161,6 @@ class TelephoneTest < ActiveSupport::TestCase
   end
 
   test "increment_attempts! sets locked_at timestamp when threshold is reached" do
-    @telephone.store_otp("secret_credential", 123, 5.minutes.from_now.to_i)
-
     # Initially locked_at should be a sentinel (-infinity)
     locked = @telephone.locked_at
 
@@ -181,8 +176,6 @@ class TelephoneTest < ActiveSupport::TestCase
   end
 
   test "increment_attempts! keeps locked_at stable when incrementing beyond threshold" do
-    @telephone.store_otp("secret_credential", 123, 5.minutes.from_now.to_i)
-
     Telephone::MAX_OTP_ATTEMPTS.times { @telephone.increment_attempts! }
     @telephone.reload
 
@@ -217,16 +210,16 @@ class TelephoneTest < ActiveSupport::TestCase
     assert_not @telephone.locked?
   end
 
-  test "attempts outside observation window reset before lockout" do
+  test "attempts outside observation window are retained and still reach lockout" do
     @telephone.update!(
       otp_attempts_count: Telephone::MAX_OTP_ATTEMPTS - 1,
-      created_at: (Telephone::OTP_ATTEMPT_WINDOW + 1.second).ago,
+      otp_last_sent_at: (Telephone::OTP_ATTEMPT_WINDOW + 1.second).ago,
     )
 
     @telephone.increment_attempts!
 
-    assert_equal 1, @telephone.reload.otp_attempts_count
-    assert_not @telephone.locked?
+    assert_equal Telephone::MAX_OTP_ATTEMPTS, @telephone.reload.otp_attempts_count
+    assert_predicate @telephone, :locked?
   end
 
   test "validate_number_format adds specific error for country code" do
@@ -237,12 +230,12 @@ class TelephoneTest < ActiveSupport::TestCase
                     :country_code_cannot_start_with_zero
   end
 
-  test "reregistration_window_active? uses independent ten second window" do
-    @telephone.update!(created_at: 9.seconds.ago)
+  test "reregistration_window_active? uses the explicit issuance timestamp and independent ten second window" do
+    @telephone.update!(otp_last_sent_at: 9.seconds.ago)
 
     assert_predicate @telephone, :reregistration_window_active?
 
-    @telephone.update!(created_at: 11.seconds.ago)
+    @telephone.update!(otp_last_sent_at: 11.seconds.ago)
 
     assert_not @telephone.reregistration_window_active?
   end
@@ -280,7 +273,7 @@ class TelephoneTest < ActiveSupport::TestCase
       confirm_using_mfa: true,
     )
 
-    assert_equal IdentifierBlindIndex.bidx_for_telephone("090-1234-5678"),
+    assert_equal IdentifierBlindIndex.bidx_for_telephone("090-1234-5678", realm: :org),
                  telephone.number_digest
   end
 

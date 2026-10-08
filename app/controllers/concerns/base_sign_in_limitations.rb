@@ -138,7 +138,9 @@ module BaseSignInLimitations
 
   def load_resolution_transaction
     @resolution_binding = session_limit_resolution_binding
-    @resolution = resolution_transaction_class.find_by(challenge: @resolution_challenge)
+    @resolution = resolution_transaction_class.find_by(
+      challenge_digest: resolution_transaction_class.digest_challenge(@resolution_challenge),
+    )
     return unless @resolution && @resolution_binding.present?
 
     validate_loaded_resolution

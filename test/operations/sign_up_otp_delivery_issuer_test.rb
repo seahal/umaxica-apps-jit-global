@@ -5,6 +5,13 @@ require "test_helper"
 class SignUpOtpDeliveryIssuerTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
+  setup do
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+  end
+
   [
     [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
     [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
@@ -30,27 +37,37 @@ class SignUpOtpDeliveryIssuerTest < ActiveSupport::TestCase
         ((channel == :email) ? :address : :number) => destination,
       )
       now = flow_model.database_now
-      private_key = ROTP::Base32.random_base32
-      contact.store_otp(private_key, 1, (now + 10.minutes).to_i)
-      code = ROTP::HOTP.new(private_key).at(1).to_s
+      nonce = SecureRandom.hex(32)
       flow = flow_model.create!(
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
-        nonce_digest: flow_model.digest_nonce(SecureRandom.hex(32)), issued_at: now,
+        nonce_digest: flow_model.digest_nonce(nonce), issued_at: now,
         expires_at: now + 15.minutes, entry_method: channel.to_s,
         pending_contact_type: channel.to_s, pending_contact_id: contact.id,
       )
 
-      assert SignUpOtpChallengeRecorder.call(flow: flow, record: contact, channel: channel, code: code)
-      verified = SignOtpCeremony.verify!(
-        purpose: :sign_up, surface: surface, channel: channel, subject: flow,
-        destination: destination, code: code, session_nonce: flow.public_id,
-      )
+      issuer = (channel == :email) ? EmailSignUpOtpIssuer : TelephoneSignUpOtpIssuer
+      verifier = (channel == :email) ? EmailSignUpOtpVerificationCommitter : TelephoneSignUpOtpVerificationCommitter
+      delivery = (channel == :email) ? EmailSignUpOtpDeliveryIssuer : TelephoneSignUpOtpDeliveryIssuer
+      arguments = { :flow => flow, channel => contact, :session_nonce => nonce }
+      issued = issuer.call(**arguments)
+
+      assert_predicate issued, :success?
+      verified = verifier.call(**arguments, code: issued.code)
 
       assert_predicate verified, :success?
-      contact.reload.store_otp(private_key, 1, (now + 10.minutes).to_i)
+      contact.reload.update!(otp_last_sent_at: now - 2.minutes, otp_attempts_count: 1)
+      original_proof = issued.transaction.reload.attributes
       assert_no_enqueued_jobs do
-        assert_not SignUpOtpDeliveryIssuer.call(flow: flow, record: contact, channel: channel)
+        refused = delivery.call(**arguments)
+
+        assert_not refused.success?
+        assert_nil refused.code
+        assert_nil refused.transaction
       end
+      unchanged = original_proof == issued.transaction.reload.attributes
+
+      assert unchanged, "Refused issuance preserves the original committed ceremony proof"
+      assert_equal 1, contact.reload.otp_attempts_count
     end
   end
 end

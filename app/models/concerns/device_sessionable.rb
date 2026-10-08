@@ -17,6 +17,8 @@ module DeviceSessionable
     scope :active, -> { where(revoked_at: nil, status_id: STATUS_ACTIVE) }
   end
 
+  public
+
   def revoked?
     revoked_at.present? || status_id == STATUS_REVOKED
   end

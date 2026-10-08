@@ -14,7 +14,7 @@ class Auth::Com::VerificationsControllerTest < ActionDispatch::IntegrationTest
     actor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     address = "com-entry-#{SecureRandom.hex(4)}@example.com"
     VisitorEmail.create!(
-      visitor_id: actor.id, address: address, address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      visitor_id: actor.id, address: address, address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED, otp_private_key: SecureRandom.base64(24),
       binding_finalized_at: VisitorEmail.database_now, otp_counter: "", otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),

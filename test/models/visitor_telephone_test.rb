@@ -49,8 +49,6 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
       visitor: @visitor,
       number: "090-1234-#{rand(1000..9999)}",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
     )
 
     assert_equal telephone.public_id, telephone.to_param
@@ -64,8 +62,6 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
         visitor: @visitor,
         visitor_telephone_status: status,
         number: "090-2222-#{format("%04d", index)}",
-        otp_counter: "0",
-        otp_private_key: "secret_credential",
       )
     end
 
@@ -73,8 +69,6 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
       visitor: @visitor,
       visitor_telephone_status: status,
       number: "090-3333-0000",
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
     )
 
     assert_not extra.valid?
@@ -86,15 +80,11 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
       visitor: @visitor,
       number: "090-4444-0000",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
     ).finalize_binding!
     duplicate = VisitorTelephone.create!(
       visitor: @visitor,
       number: "+819044440000",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
     )
 
     assert_equal existing.number_digest, duplicate.number_digest
@@ -107,8 +97,6 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
       visitor: @visitor,
       number: "+1 (555) 444-0001",
       visitor_telephone_status_id: VisitorTelephoneStatus::DELETED,
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
       discard_at: 1.minute.ago,
       purge_eligible_at: 29.minutes.from_now,
     )
@@ -116,8 +104,6 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
       visitor: @visitor,
       number: "+15554440001",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
     )
 
     assert_predicate retry_telephone, :valid?
@@ -131,11 +117,9 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
       visitor: @visitor,
       number: "+1 (555) 765-4321",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
     )
 
-    expected = IdentifierBlindIndex.bidx_for_telephone("+15557654321")
+    expected = IdentifierBlindIndex.bidx_for_telephone("+15557654321", realm: :com)
 
     assert_equal expected, telephone.number_digest
   end
@@ -243,7 +227,7 @@ class VisitorTelephoneTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",
@@ -258,7 +242,7 @@ class VisitorTelephoneTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
           otp_private_key: SecureRandom.base64(24),
           otp_counter: "",
@@ -554,7 +538,7 @@ class VisitorTelephoneTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

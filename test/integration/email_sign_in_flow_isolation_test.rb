@@ -50,7 +50,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
         edit_csrf_tokens = []
         original_time = Time.current
         browsers.each_with_index do |browser, index|
-          travel_to(original_time + (index * (CommonOtpPolicy::SEND_COOLDOWN + 1.second)))
+          travel_to(original_time + (index * (EmailOtpPolicy::SEND_COOLDOWN + 1.second)))
           browser.get("/sign/in/email/new", params: { ri: "jp" })
 
           assert_equal 200, browser.response.status
@@ -134,7 +134,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
         assert second_before == ceremonies.last.reload.email_otp_context,
                "foreign resend state must not mutate B"
 
-        travel_to(original_time + (2 * (CommonOtpPolicy::SEND_COOLDOWN + 1.second)))
+        travel_to(original_time + (2 * (EmailOtpPolicy::SEND_COOLDOWN + 1.second)))
         delivery_count = ActionMailer::Base.deliveries.size
         perform_enqueued_jobs do
           browsers.last.post(

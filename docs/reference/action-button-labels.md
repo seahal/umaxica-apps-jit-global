@@ -15,8 +15,8 @@ Apple Human Interface Guidelines,
 The latest entry in its change log is 2024-02-02, "Enhanced guidance for using default and Cancel
 buttons". The pause outcome comes from
 [Progress indicators](https://developer.apple.com/design/human-interface-guidelines/progress-indicators),
-read the same day by the same route. The Japanese edition of the page could not be retrieved, so no Japanese wording below is
-attributed to Apple.
+read the same day by the same route. The Japanese edition of the page could not be retrieved, so no
+Japanese wording below is attributed to Apple. [References](#references) lists every page read.
 
 Relevant sentences, quoted verbatim:
 
@@ -117,8 +117,10 @@ offers it.
    `AFFIRMATIVE` and `NEGATIVE` are borrowed from radiotelephony phraseology; that origin was not
    checked against a primary aviation source when this page was written.
 7. **Offer Pause when abandoning would lose progress.** When interrupting a running process has
-   negative side effects, provide a button labelled `Pause` in addition to `Cancel`, and a way to
-   resume. The Japanese label for Pause has not been fixed yet. A `Cancel` that discards progress
+   negative side effects, provide a pause button in addition to `Cancel`, and a way to resume. Its
+   label is exactly `Pause` in English and `一時停止` in Japanese, fixed per language in the same way
+   as rule 2. The bare word `停止` is not used for this button, because the Japanese bundles already
+   use it for account, access, and mail suspension, which are not resumable halts of a process. A `Cancel` that discards progress
    asks for confirmation first, following the Progress indicators guidance.
 
 ## Current state
@@ -132,3 +134,15 @@ Observed on 2026-10-08 across the four locale bundles; no locale file was change
 - No locale bundle contains a Pause label, and no code or locale key uses `AFFIRMATIVE` or
   `NEGATIVE` yet. Existing key names such as `accept`,
   `confirm`, and `ok` predate rule 6 and have not been renamed.
+
+## References
+
+All three are Apple Human Interface Guidelines pages, read on 2026-10-08.
+
+- [Alerts](https://developer.apple.com/design/human-interface-guidelines/alerts): the fixed
+  `Cancel` title, verb-phrase titles, and the limits on "OK" and "Yes" / "No". Rules 1 and 2.
+- [Action sheets](https://developer.apple.com/design/human-interface-guidelines/action-sheets):
+  Cancel dismisses the view without taking any action. The `CANCEL` outcome.
+- [Progress indicators](https://developer.apple.com/design/human-interface-guidelines/progress-indicators):
+  Pause in addition to Cancel when interruption has negative side effects, and confirmation before
+  a cancellation that loses progress. Rule 7.

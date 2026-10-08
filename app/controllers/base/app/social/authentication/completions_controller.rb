@@ -75,6 +75,8 @@ module Base
             render_social_completion_failure(message: e.message)
           end
 
+          public :create
+
           private
 
           def reject_social_link_completion!(provider)

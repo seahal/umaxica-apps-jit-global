@@ -9,7 +9,6 @@ module Base
           include CloudflareTurnstile
 
           include SignOperatorTelephoneRegistrable
-          include SignSettingsTelephoneRegistration
 
           include EnforcementIdentifierGate
 
@@ -24,6 +23,8 @@ module Base
           # for the authenticated operator, so gate by actor type. Each step builds/looks up the record
           # for current_operator. Verification/turnstile guards remain on the flow.
           before_action :authorize_telephone_registration!, only: %i(new create edit update)
+
+          public
 
           def new
             @staff_telephone = OperatorTelephone.new
@@ -73,12 +74,6 @@ module Base
             end
 
             session[registration_session_key] = @staff_telephone.id
-            start_telephone_ceremony!(
-              surface: "org",
-              actor: current_operator,
-              session_ref: current_session_public_id,
-              candidate: @staff_telephone,
-            )
             redirect_to(
               edit_base_org_identity_telephones_registration_path,
             )
@@ -109,7 +104,7 @@ module Base
 
             result = complete_staff_telephone_verification(@staff_telephone.id, submitted_code)
 
-            handle_registration_update_result(result)
+            handle_registration_update_result(result, submitted_code)
           end
 
           private
@@ -170,15 +165,20 @@ module Base
             authorize!(OperatorTelephone, to: :create?)
           end
 
-          def handle_registration_update_result(result)
+          def handle_registration_update_result(result, submitted_code)
             case result
             when :success
-              finish_telephone_ceremony!(
-                surface: "org",
-                actor: current_operator,
-                session_ref: current_session_public_id,
-                candidate: @staff_telephone,
+              finalized = OperatorTelephoneRegistrationOtpFinalizer.call!(
+                actor: current_operator, actor_context: current_actor.with(surface: :base),
+                token: current_session_token, telephone: @staff_telephone, transaction: registration_otp_transaction,
+                browser_nonce: base_admission_browser_nonce, code: submitted_code,
+                requirement: OperatorTelephonePolicy.new(@staff_telephone, user: current_operator)
+                  .credential_registration_requirement(token: current_session_token),
               )
+              unless finalized == :finalized
+                reset_registration_session!
+                return redirect_to(new_base_org_identity_telephones_registration_path)
+              end
               reset_registration_session!
               redirect_to_surface_url(
                 base_org_identity_telephones_url(
@@ -201,9 +201,17 @@ module Base
           end
 
           def valid_registration_session?
-            @staff_telephone.present? &&
-              !@staff_telephone.otp_expired? &&
-              @staff_telephone.staff_telephone_status_id == OperatorTelephoneStatus::UNVERIFIED
+            TelephoneCredentialRegistrationOtpFormQuery.call(
+              actor: current_operator, token: current_session_token, telephone: @staff_telephone,
+              transaction: registration_otp_transaction, browser_nonce: base_admission_browser_nonce,
+            )
+          end
+
+          def registration_otp_transaction
+            reference = session[:settings_telephone_registration_transaction_ref]
+            return unless reference
+
+            OperatorTelephoneCeremonyTransaction.find_by(transaction_id: reference)
           end
 
           def registration_session_key
@@ -212,7 +220,7 @@ module Base
 
           def reset_registration_session!
             session.delete(registration_session_key)
-            reset_telephone_ceremony_session!
+            session.delete(:settings_telephone_registration_transaction_ref)
           end
 
           def verification_required_action?

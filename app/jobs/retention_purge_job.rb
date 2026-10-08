@@ -6,10 +6,9 @@
 # The set-based `delete_all` here is the Accepted, ADR-sanctioned exception to
 # the forbidden-method rule on `delete_all`: see
 # `adr/retainable-concern-and-retention-purge.md` and the "ADR-sanctioned
-# data-retention exceptions" section of
-# `docs/reference/forbidden-rails-methods.md`. Do not rewrite it as row-by-row
-# `destroy` -- the batch DELETE (FK cascades, no AR callbacks) is the intended
-# behavior.
+# data-retention exceptions" section of `docs/reference/forbidden-rails-methods.md`.
+# Email/Telephone instead use their separate locked history-aware purgers under
+# `adr/realm-separated-identifiers-and-dead-history.md`; other batch deletion stays set-based.
 require "digest"
 
 class RetentionPurgeJob < ApplicationJob
@@ -91,7 +90,11 @@ class RetentionPurgeJob < ApplicationJob
   end
 
   def purge_special_retained_model(klass, now:, batch_size:)
-    if [Client, Visitor].include?(klass)
+    if [ClientEmail, VisitorEmail].include?(klass)
+      purge_email_identifiers(klass, now: now, batch_size: batch_size)
+    elsif [ClientTelephone, VisitorTelephone].include?(klass)
+      purge_telephone_identifiers(klass, now: now, batch_size: batch_size)
+    elsif [Client, Visitor].include?(klass)
       anonymize_accounts(klass, now: now, batch_size: batch_size)
     elsif klass == Operator
       purge_operators(now: now, batch_size: batch_size)
@@ -110,6 +113,18 @@ class RetentionPurgeJob < ApplicationJob
       return false
     end
     true
+  end
+
+  def purge_email_identifiers(klass, now:, batch_size:)
+    klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
+      batch.each { |email| EmailIdentifierPurger.call(record: email) }
+    end
+  end
+
+  def purge_telephone_identifiers(klass, now:, batch_size:)
+    klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
+      batch.each { |telephone| TelephoneIdentifierPurger.call(record: telephone) }
+    end
   end
 
   def purge_client_authentication_flows(klass, now:, batch_size:)
@@ -272,22 +287,29 @@ class RetentionPurgeJob < ApplicationJob
     nil
   end
 
-  # Operator rows are removed set-based (no callbacks/`dependent:`), so their
-  # non-audit cross-DB children must be purged explicitly before deletion.
-  # Enforcement-blocked rows (D3 principal_hard_delete_blocked /
-  # withdrawal_purge_blocked) are excluded from the batch delete entirely.
+  # Cross-DB cleanup cannot be rolled back with Zenith. Its idempotent deletes precede
+  # the local commit so a partial failure retains the operator for the next retry.
   def purge_operators(now:, batch_size:)
     Operator.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
-      blocked_ids = []
-      batch.find_each do |operator|
-        if enforcement_blocks_purge?(operator)
-          blocked_ids << operator.id
-          next
-        end
+      batch.find_each do |candidate|
+        Operator.transaction do
+          operator = Operator.lock.find_by(id: candidate.id)
+          next unless operator
 
-        RetentionCrossDatabaseChildPurge.call(actor: operator)
+          decision_time = Operator.database_now
+          next unless operator.lapsed?(decision_time) && operator.purgeable?(decision_time)
+          next if enforcement_blocks_purge?(operator)
+
+          RetentionCrossDatabaseChildPurge.call(actor: operator)
+          operator.staff_emails.order(:id).find_each { |email| EmailIdentifierPurger.call(record: email) }
+          operator.staff_telephones.order(:id).find_each do |telephone|
+            TelephoneIdentifierPurger.call(record: telephone)
+          end
+          OperatorEmailHistory.where(staff_id: operator.id).delete_all
+          OperatorTelephoneHistory.where(staff_id: operator.id).delete_all
+          Operator.where(id: operator.id).delete_all
+        end
       end
-      batch.where.not(id: blocked_ids).delete_all
     end
   end
 
@@ -315,31 +337,51 @@ class RetentionPurgeJob < ApplicationJob
   def anonymize_accounts(klass, now:, batch_size:)
     klass.where(purge_eligible_at: ..now).where(terminated_at: nil).in_batches(of: batch_size) do |batch|
       batch.find_each do |actor|
-        if active_retention_hold_for(actor, now: now)
-          handle_actor_purge_skipped_by_hold(actor, now: now)
-          next
-        end
+        retired =
+          actor.with_lock do
+            decision_time = klass.database_now
+            next false if actor.terminated_at || !actor.lapsed?(decision_time) || !actor.purgeable?(decision_time)
 
-        # adr/unified-enforcement.md, Retention interaction: a Principal
-        # Effect with withdrawal_purge_blocked or principal_hard_delete_blocked
-        # skips purge the same way a retention hold does. No FK is involved
-        # (Purge protection) -- this is the model-layer half of the guard;
-        # the database trigger (D20) is the other half.
-        if enforcement_blocks_purge?(actor)
-          WithdrawalOccurrenceRecording.record!(subject: actor, event_type: "withdrawal.purge_skipped_by_enforcement")
-          next
-        end
+            if active_retention_hold_for(actor, now: decision_time)
+              handle_actor_purge_skipped_by_hold(actor, now: decision_time)
+              next false
+            end
+            if enforcement_blocks_purge?(actor)
+              WithdrawalOccurrenceRecording.record!(
+                subject: actor,
+                event_type: "withdrawal.purge_skipped_by_enforcement",
+              )
+              next false
+            end
 
-        WithdrawalPersonalDataAnonymizer.call(actor: actor)
-        if actor.respond_to?(:terminated_at=)
-          actor.withdrawn_at = now if actor.respond_to?(:withdrawn_at=)
-          actor.terminated_at = now
-          actor.save!(validate: false)
-        end
+            WithdrawalPersonalDataAnonymizer.call(actor: actor)
+            next false unless collect_actor_identifiers(actor)
+
+            actor.update!(withdrawn_at: decision_time, terminated_at: decision_time)
+            true
+          end
+        next unless retired
+
         WithdrawalOccurrenceRecording.record!(subject: actor, event_type: "withdrawal.purged")
         WithdrawalOccurrenceRecording.record!(subject: actor, event_type: "withdrawal.shredded")
       end
     end
+  end
+
+  def collect_actor_identifiers(actor)
+    emails, telephones =
+      case actor
+      when Client then [actor.client_emails, actor.client_telephones]
+      when Visitor then [actor.visitor_emails, actor.visitor_telephones]
+      else raise ArgumentError, "unsupported identifier retirement actor"
+      end
+    emails.where(purge_eligible_at: ..emails.klass.database_now).order(:id).find_each do |email|
+      EmailIdentifierPurger.call(record: email)
+    end
+    telephones.where(purge_eligible_at: ..telephones.klass.database_now).order(:id).find_each do |telephone|
+      TelephoneIdentifierPurger.call(record: telephone)
+    end
+    !emails.exists? && !telephones.exists?
   end
 
   def active_retention_hold_for(actor, now:)

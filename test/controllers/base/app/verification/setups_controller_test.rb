@@ -5,6 +5,8 @@ require "test_helper"
 # Base owns the choice of a first authenticator. Each choice starts its own bootstrap transaction;
 # none of them grants Step-Up freshness.
 class Base::App::Verification::SetupsControllerTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   fixtures :client_statuses, :client_email_statuses, :client_token_kinds, :client_token_statuses,
            :client_token_binding_methods, :client_token_dbsc_statuses, :client_chronicle_events,
            :client_chronicle_levels, :client_totp_credential_statuses
@@ -192,13 +194,25 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     get new_base_app_identity_emails_registration_path(ri: "jp"), headers: @headers
 
     assert_response :success
+    clear_enqueued_jobs
     post base_app_identity_emails_registration_path(ri: "jp"),
          params: { user_email: { raw_address: "first-email-#{SecureRandom.hex(4)}@example.com" } }, headers: @headers
 
     assert_response :redirect
     pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    otp = pending.get_otp
-    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+    delivery = enqueued_jobs.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil delivery
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params).symbolize_keys
+    ceremony = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: session[:email_registration_transaction_ref],
+    )
+    code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+
+    assert_equal ceremony.transaction_id, payload.fetch(:contact_ceremony_transaction_ref)
+    assert_equal ceremony.otp_generation, payload.fetch(:contact_otp_generation)
+    assert_equal pending.public_id, ceremony.email_candidate_ref
+    assert_equal @user.public_id, ceremony.actor_ref
 
     patch base_app_identity_emails_registration_path(ri: "jp"),
           params: { user_email: { pass_code: code } }, headers: @headers
@@ -212,6 +226,8 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     assert_equal "none", bootstrap.aal
     assert_equal pending.public_id, bootstrap.verified_credential_ref
     assert_equal ClientEmailStatus::VERIFIED, pending.reload.user_email_status_id
+    assert_not_nil ceremony.reload.otp_consumed_at
+    assert_nil ceremony.otp_verifier
     assert_nil session[:base_step_up_transaction_ref]
     @token.reload
 
@@ -237,11 +253,22 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     post base_app_verification_setup_path(ri: "jp"),
          params: { scope: "settings_telephone", pt: @pt, registration_method: "email_otp" }, headers: @headers
     bootstrap = latest_bootstrap_transaction
+    clear_enqueued_jobs
     post base_app_identity_emails_registration_path(ri: "jp"),
          params: { user_email: { raw_address: "wrong-code-#{SecureRandom.hex(4)}@example.com" } }, headers: @headers
     pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    otp = pending.get_otp
-    wrong = format("%06d", (Integer(ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]), 10) + 1) % 1_000_000)
+    delivery = enqueued_jobs.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil delivery
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params).symbolize_keys
+    ceremony = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: session[:email_registration_transaction_ref],
+    )
+    code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+    wrong = format("%06d", (Integer(code, 10) + 1) % 1_000_000)
+
+    assert_equal ceremony.transaction_id, payload.fetch(:contact_ceremony_transaction_ref)
+    assert_equal ceremony.otp_generation, payload.fetch(:contact_otp_generation)
 
     patch base_app_identity_emails_registration_path(ri: "jp"),
           params: { user_email: { pass_code: wrong } }, headers: @headers
@@ -249,6 +276,8 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     assert_response :unprocessable_content
     assert_equal "pending", bootstrap.reload.status
     assert_equal ClientEmailStatus::UNVERIFIED, pending.reload.user_email_status_id
+    assert_nil ceremony.reload.otp_consumed_at
+    assert_not_nil ceremony.otp_verifier
     assert_nil @token.reload.last_step_up_at
   end
 

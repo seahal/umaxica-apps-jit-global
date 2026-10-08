@@ -1,0 +1,23 @@
+stateDiagram-v2
+    [*] --> Source
+    Source --> Retained: logical deletion / scheduled retention
+    Retained --> Source: authorized recovery before irreversible purge
+    Source --> DeadHistory: permitted ordinary physical destruction
+    Retained --> DeadHistory: retention deadlines reached and purge permitted
+    Source --> Source: protected Email / legal hold / enforcement refuses destruction
+    Retained --> Retained: recoverable window / hold / enforcement refuses destruction
+    DeadHistory --> [*]: authorized legal / retention deletion
+    note right of DeadHistory
+        APP / COM / ORG remain independent.
+        Owner lock, fresh Source lock, fingerprint INSERT,
+        and Source DELETE share the owning DB transaction.
+        A later destroy failure rolls back the INSERT.
+        No transition restores Source from History.
+        Due ORG whole-Identity erasure removes its History
+        in the same local transaction as Operator deletion.
+        APP / COM model erasure checks fresh retention and holds
+        before children, then removes only its own histories.
+        Source children, History removal and parent DELETE share
+        the local transaction; external cleanup is retryable.
+        Routine APP / COM retention keeps Identity tombstones.
+    end note

@@ -8,10 +8,12 @@ class IdentifierEncryptionRotationDrillTest < ActionDispatch::IntegrationTest
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
+    @original_forgery_protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
     host! ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
     @service_host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
     @staff_host = ENV.fetch("PRIVATE_AUTH_STAFF_URL")
-    @corporate_host = ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", "sign.com.localhost")
+    @corporate_host = ENV.fetch("PRIVATE_AUTH_CORPORATE_URL")
 
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
@@ -20,6 +22,7 @@ class IdentifierEncryptionRotationDrillTest < ActionDispatch::IntegrationTest
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED_WITH_SIGN_UP)
+    ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
 
     @user = clients(:one)
     @staff = operators(:one)
@@ -28,104 +31,159 @@ class IdentifierEncryptionRotationDrillTest < ActionDispatch::IntegrationTest
   end
 
   teardown do
+    ActionController::Base.allow_forgery_protection = @original_forgery_protection
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
   end
 
   test "rotation drill preserves existing records and keeps app org and com flows working" do
-    old_primary_key = SecureRandom.hex(32)
-    new_primary_key = SecureRandom.hex(32)
+    original_realm_providers =
+      %w(app com org).index_with do |realm|
+        RealmIdentifierEncryptionKeyProvider.key_provider(realm: realm)
+      end
 
     app_email_address = "rotation-app-email-#{SecureRandom.hex(4)}@example.com"
     app_telephone_number = "+1555#{SecureRandom.random_number(10_000_000).to_s.rjust(7, "0")}"
     staff_email_address = "rotation-org-email-#{SecureRandom.hex(4)}@example.com"
     visitor_email_address = "rotation-com-email-#{SecureRandom.hex(4)}@example.com"
 
-    old_provider = encryption_key_provider(old_primary_key)
-    rotation_provider = encryption_key_provider(new_primary_key, old_primary_key)
-    ActiveRecord::Encryption.with_encryption_context(key_provider: old_provider) do
-      old_app_email = ClientEmail.create!(
-        user: @user,
-        raw_address: app_email_address,
-        confirm_policy: true,
-        user_email_status_id: ClientEmailStatus::VERIFIED,
-      )
-      old_app_telephone = ClientTelephone.create!(
-        user: @user,
-        raw_number: app_telephone_number,
-        confirm_policy: true,
-        confirm_using_mfa: true,
-        user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-      )
-      old_staff_email = OperatorEmail.create!(
-        staff: @staff,
-        raw_address: staff_email_address,
-        confirm_policy: true,
-        staff_email_status_id: OperatorEmailStatus::VERIFIED,
-      )
-      visitor = Visitor.create!(
-        status_id: VisitorStatus::ACTIVE,
-        visibility_id: VisitorVisibility::VISITOR,
-      )
-      old_visitor_email = VisitorEmail.create!(
-        visitor: visitor,
-        address: visitor_email_address,
-        confirm_policy: true,
-        visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      )
+    old_app_email = ClientEmail.create!(
+      user: @user,
+      raw_address: app_email_address,
+      confirm_policy: true,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    old_app_email.finalize_binding!
+    old_app_telephone = ClientTelephone.create!(
+      user: @user,
+      raw_number: app_telephone_number,
+      confirm_policy: true,
+      confirm_using_mfa: true,
+      user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+    )
+    old_app_telephone.finalize_binding!
+    old_staff_email = OperatorEmail.create!(
+      staff: @staff,
+      raw_address: staff_email_address,
+      confirm_policy: true,
+      staff_email_status_id: OperatorEmailStatus::VERIFIED,
+    )
+    visitor = Visitor.create!(
+      status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
+    old_visitor_email = VisitorEmail.create!(
+      visitor: visitor,
+      address: visitor_email_address,
+      confirm_policy: true,
+      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+    )
+    old_visitor_email.finalize_binding!
 
-      ActiveRecord::Encryption.with_encryption_context(key_provider: rotation_provider) do
-        reencrypt_result = IdentifierEncryptionReencrypt.new.call
+    original_types =
+      [
+        [ClientEmail, "address", "app"], [ClientTelephone, "number", "app"],
+        [VisitorEmail, "address", "com"], [VisitorTelephone, "number", "com"],
+        [OperatorEmail, "address", "org"], [OperatorTelephone, "number", "org"],
+      ].map { |model, column, realm| [model, column, realm, model.type_for_attribute(column)] }
+    original_environment = {}
+    rotated_providers =
+      %w(app com org).index_with do |realm|
+        prefix = realm.upcase
+        current_name = "#{prefix}_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY"
+        previous_name = "#{prefix}_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY_PREVIOUS"
+        current = ENV.fetch(current_name)
+        previous_json = ENV[previous_name]
+        original_environment[current_name] = current
+        original_environment[previous_name] = previous_json
+        previous = previous_json.nil? ? [] : JSON.parse(previous_json)
+        ENV[current_name] = SecureRandom.hex(32)
+        ENV[previous_name] = JSON.generate(previous + [current])
+        RealmIdentifierEncryptionKeyProvider.key_provider(realm: realm)
+      end
+    original_types.each do |model, column, realm, type|
+      scheme = type.scheme.merge(key_provider: rotated_providers.fetch(realm))
+      rotated_type = ActiveRecord::Encryption::EncryptedAttributeType.new(
+        scheme: scheme, cast_type: type.cast_type, default: model.columns_hash.fetch(column).default,
+      )
+      model.attribute(column, rotated_type)
+    end
+    reencrypt_result = IdentifierEncryptionReencrypt.new.call
 
-        assert_operator reencrypt_result.user_emails_reencrypted, :>=, 1
-        assert_operator reencrypt_result.user_telephones_reencrypted, :>=, 1
-        assert_operator reencrypt_result.staff_emails_reencrypted, :>=, 1
-        assert_operator reencrypt_result.visitor_emails_reencrypted, :>=, 1
+    assert_operator reencrypt_result.user_emails_reencrypted, :>=, 1
+    assert_operator reencrypt_result.user_telephones_reencrypted, :>=, 1
+    assert_operator reencrypt_result.staff_emails_reencrypted, :>=, 1
+    assert_operator reencrypt_result.visitor_emails_reencrypted, :>=, 1
 
-        assert_equal app_email_address, old_app_email.reload.address
-        assert_equal app_telephone_number, old_app_telephone.reload.number
-        assert_equal staff_email_address, old_staff_email.reload.address
-        assert_equal visitor_email_address, old_visitor_email.reload.address
+    assert_equal app_email_address, old_app_email.reload.address
+    assert_equal app_telephone_number, old_app_telephone.reload.number
+    assert_equal staff_email_address, old_staff_email.reload.address
+    assert_equal visitor_email_address, old_visitor_email.reload.address
 
-        travel 31.seconds do
-          assert_app_sign_in_email_flow(app_email_address)
-        end
+    [
+      [old_app_email, "address", "app"], [old_app_telephone, "number", "app"],
+      [old_staff_email, "address", "org"], [old_visitor_email, "address", "com"],
+    ].each do |record, column, realm|
+      assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
+        ActiveRecord::Encryption.encryptor.decrypt(
+          record.read_attribute_before_type_cast(column), key_provider: original_realm_providers.fetch(realm),
+        )
       end
     end
+
+    travel(31.seconds) do
+      assert_app_sign_in_email_flow(app_email_address)
+    end
+  ensure
+    original_types&.each { |model, column, _, type| model.attribute(column, type) }
+    original_environment&.each { |name, value| value.nil? ? ENV.delete(name) : ENV[name] = value }
   end
 
   private
 
   def assert_app_sign_in_email_flow(address)
-    post(
-      sign_app_sign_in_email_url(ri: "jp"),
-      params: {
-        user_email: { address: address },
-        "cf-turnstile-response": "test",
-      },
-      headers: { "Host" => @service_host },
-    )
+    https!
+    admit_auth_local_entry!(surface: "app")
+    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/sign/in/email/new", params: { ri: "jp" })
+
+    assert_response :ok
+    csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
+    delivery_count = ActionMailer::Base.deliveries.size
+    perform_enqueued_jobs do
+      post(
+        "/sign/in/email", params: {
+          client_email: { address: address },
+          authenticity_token: csrf,
+          "cf-turnstile-response": "test",
+          ri: "jp",
+        }, headers:,
+      )
+    end
 
     assert_response :found
+    assert_equal delivery_count + 1, ActionMailer::Base.deliveries.size
+    match = ActionMailer::Base.deliveries.last.text_part.body.decoded.match(/Pass Code:\s*([0-9]{6})/)
 
-    email = ClientEmail.find_by!(address_digest: IdentifierBlindIndex.bidx_for_email(address))
-    otp_data = email.get_otp
-    code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    assert_predicate match, :present?, "expected a delivered ceremony OTP"
+    code = match[1]
+    get(URI.parse(response.location).request_uri, params: { ri: "jp" })
+
+    assert_response :ok
+    csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
 
     patch(
-      sign_app_sign_in_email_url(ri: "jp"),
-      params: { user_email: { pass_code: code } },
-      headers: { "Host" => @service_host },
+      "/sign/in/email", params: {
+        client_email: { pass_code: code },
+        authenticity_token: csrf,
+        "cf-turnstile-response": "test",
+        ri: "jp",
+      }, headers:,
     )
 
     assert_response :found
     assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
-  end
-
-  def encryption_key_provider(*passwords)
-    ActiveRecord::Encryption::KeyProvider.new(
-      passwords.map { |password| ActiveRecord::Encryption::Key.derive_from(password) },
-    )
   end
 end
 
@@ -230,7 +288,7 @@ class IdentifierEncryptionRotationDrillTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",
@@ -245,7 +303,7 @@ class IdentifierEncryptionRotationDrillTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
           otp_private_key: SecureRandom.base64(24),
           otp_counter: "",
@@ -575,7 +633,7 @@ class IdentifierEncryptionRotationDrillTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

@@ -230,8 +230,14 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     post base_app_identity_emails_registration_url(ri: "jp", host: @host),
          params: { user_email: { raw_address: "app_email_reg_wrong@example.com" } }, headers: @headers
     pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    otp = pending.get_otp
-    wrong_code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter] + 1).to_s
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == pending.public_id
+    end.last
+    issued_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
+    wrong_code = (issued_code == "000000") ? "000001" : "000000"
 
     patch base_app_identity_emails_registration_url(ri: "jp", host: @host),
           params: { user_email: { pass_code: wrong_code } }, headers: @headers
@@ -244,10 +250,16 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     post base_app_identity_emails_registration_url(ri: "jp", host: @host),
          params: { user_email: { raw_address: "app_email_reg_locked@example.com" } }, headers: @headers
     pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    otp = pending.get_otp
-    wrong_code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter] + 1).to_s
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
 
-    OtpLockable::MAX_OTP_ATTEMPTS.times do
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == pending.public_id
+    end.last
+    issued_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
+    wrong_code = (issued_code == "000000") ? "000001" : "000000"
+
+    EmailOtpPolicy::MAX_OTP_ATTEMPTS.times do
       patch base_app_identity_emails_registration_url(ri: "jp", host: @host),
             params: { user_email: { pass_code: wrong_code } }, headers: @headers
     end
@@ -266,12 +278,22 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     post base_app_identity_emails_registration_url(ri: "jp", host: @host),
          params: { user_email: { raw_address: "replacement-app-binding@example.test" } }, headers: @headers
     pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    otp = pending.get_otp
-    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == pending.public_id
+    end.last
+    code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     assert_predicate previous.reload, :binding_effective?
     assert_not pending.reload.binding_effective?
-    operation_ref = pending.credential_registration_otp_context.fetch("flow_ref")
+    operation_ref = session[:email_registration_transaction_ref]
+    flow = ClientEmailCeremonyTransaction.find_by!(transaction_id: operation_ref)
+
+    assert_nil pending.credential_registration_otp_context
+    assert_equal(-Float::INFINITY, pending.otp_expires_at)
+    assert flow.email_otp_deliverable?(generation: flow.otp_generation, at: flow.class.database_now)
 
     assert_not ClientContactAuditOutbox.exists?(operation_ref: operation_ref)
     patch base_app_identity_emails_registration_url(ri: "jp", host: @host),
@@ -290,8 +312,14 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     post base_app_identity_emails_registration_url(ri: "jp", host: @host),
          params: { user_email: { raw_address: "app_email_reg_verified@example.com" } }, headers: @headers
     pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    otp = pending.get_otp
-    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+    operation_ref = session[:email_registration_transaction_ref]
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == pending.public_id
+    end.last
+    code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     patch base_app_identity_emails_registration_url(ri: "jp", host: @host),
           params: { user_email: { pass_code: code } }, headers: @headers
@@ -302,38 +330,46 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
 
     assert_equal @user.public_id, intent.owner_ref
     assert_equal @user.public_id, intent.actor_ref
-    assert_equal pending.credential_registration_otp_context.fetch("flow_ref"), intent.operation_ref
+    assert_equal operation_ref, intent.operation_ref
     assert_nil intent.acknowledged_at
     assert_nil session[:email_registration_public_id]
+    assert_nil session[:email_registration_transaction_ref]
   end
 
   test "redelivery issues a new passcode for the pending registration" do
     post base_app_identity_emails_registration_url(ri: "jp", host: @host),
          params: { user_email: { raw_address: "app_email_reg_resend@example.com" } }, headers: @headers
     pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    first_counter = pending.otp_counter
+    flow = ClientEmailCeremonyTransaction.find_by!(transaction_id: session[:email_registration_transaction_ref])
+    first_generation = flow.otp_generation
+    original_deadline = flow.otp_expires_at
+    pending.update!(otp_attempts_count: 1)
 
-    decision_time = pending.otp_last_sent_at + 5.minutes
+    decision_time = pending.otp_last_sent_at + 1.minute
     ClientEmail.stub(:database_now, decision_time) do
-      travel 5.minutes do
+      ClientEmailCeremonyTransaction.stub(:database_now, decision_time) do
         post base_app_identity_emails_registration_redelivery_url(ri: "jp", host: @host), headers: @headers
       end
     end
 
     assert_response :redirect
-    assert_not_equal first_counter, pending.reload.otp_counter
+    assert_not_equal first_generation, flow.reload.otp_generation
+    assert_equal original_deadline, flow.otp_expires_at
+    assert_equal 1, pending.reload.otp_attempts_count
   end
 
   test "redelivery inside the cooldown window does not reissue the passcode" do
     post base_app_identity_emails_registration_url(ri: "jp", host: @host),
          params: { user_email: { raw_address: "app_email_reg_cooldown@example.com" } }, headers: @headers
     pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
-    first_counter = pending.otp_counter
+    flow = ClientEmailCeremonyTransaction.find_by!(transaction_id: session[:email_registration_transaction_ref])
+    first_generation = flow.otp_generation
 
     post base_app_identity_emails_registration_redelivery_url(ri: "jp", host: @host), headers: @headers
 
     assert_response :redirect
-    assert_equal first_counter, pending.reload.otp_counter
+    assert_equal first_generation, flow.reload.otp_generation
+    assert_equal 0, pending.reload.otp_attempts_count
   end
 
   test "redelivery without a pending registration returns to the registration form" do

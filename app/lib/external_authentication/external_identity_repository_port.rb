@@ -3,6 +3,8 @@
 
 module ExternalAuthentication
   module ExternalIdentityRepositoryPort
+    public
+
     def find_by_subject(subject, lock:)
       raise NotImplementedError
     end

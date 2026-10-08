@@ -158,8 +158,14 @@ class Base::Org::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     post base_org_identity_emails_registration_url(ri: "jp", host: @host),
          params: { staff_email: { raw_address: "org_reg_wrong_code@example.com" } }, headers: @headers
     pending = OperatorEmail.find_by!(public_id: session[:staff_email_registration_public_id])
-    otp = pending.get_otp
-    wrong_code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter] + 1).to_s
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == pending.public_id
+    end.last
+    issued_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
+    wrong_code = (issued_code == "000000") ? "000001" : "000000"
 
     patch base_org_identity_emails_registration_url(ri: "jp", host: @host),
           params: { staff_email: { pass_code: wrong_code } }, headers: @headers
@@ -173,41 +179,121 @@ class Base::Org::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
          params: { staff_email: { raw_address: "org_reg_locked@example.com" } }, headers: @headers
     pending_public_id = session[:staff_email_registration_public_id]
     pending = OperatorEmail.find_by!(public_id: pending_public_id)
-    otp = pending.get_otp
-    wrong_code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter] + 1).to_s
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
 
-    OtpLockable::MAX_OTP_ATTEMPTS.times do
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == pending.public_id
+    end.last
+    issued_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
+    wrong_code = (issued_code == "000000") ? "000001" : "000000"
+
+    EmailOtpPolicy::MAX_OTP_ATTEMPTS.times do
       patch base_org_identity_emails_registration_url(ri: "jp", host: @host),
             params: { staff_email: { pass_code: wrong_code } }, headers: @headers
     end
 
     assert_redirected_to new_base_org_identity_emails_registration_path(ri: "jp")
-    assert_nil OperatorEmail.find_by(public_id: pending_public_id)
+    retained = OperatorEmail.find_by!(public_id: pending_public_id)
+
+    assert_equal EmailOtpPolicy::MAX_OTP_ATTEMPTS, retained.otp_attempts_count
+    assert_equal OperatorEmailStatus::UNVERIFIED, retained.staff_email_status_id
+    assert_nil session[:staff_email_registration_public_id]
   end
 
   test "update verifies the address and returns to the identity page on the correct code" do
     post base_org_identity_emails_registration_url(ri: "jp", host: @host),
          params: { staff_email: { raw_address: "org_reg_verified@example.com" } }, headers: @headers
     pending = OperatorEmail.find_by!(public_id: session[:staff_email_registration_public_id])
-    otp = pending.get_otp
-    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == pending.public_id
+    end.last
+    code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
+    transaction = OperatorEmailCeremonyTransaction.find_by!(
+      transaction_id: session[:staff_email_registration_transaction_ref],
+    )
+
+    assert_equal pending.public_id, transaction.email_candidate_ref
+    assert_nil pending.otp_expires_at
 
     patch base_org_identity_emails_registration_url(ri: "jp", host: @host),
           params: { staff_email: { pass_code: code } }, headers: @headers
 
     assert_redirected_to base_org_identity_emails_url(ri: "jp", host: @host)
+    assert_equal OperatorEmailStatus::VERIFIED, pending.reload.staff_email_status_id
+    assert_equal "consumed", transaction.reload.status
     assert_nil session[:staff_email_registration_public_id]
+    assert_nil session[:staff_email_registration_transaction_ref]
   end
 
   test "update treats an expired one-time passcode as an expired registration session" do
     post base_org_identity_emails_registration_url(ri: "jp", host: @host),
          params: { staff_email: { raw_address: "org_reg_expired@example.com" } }, headers: @headers
-    OperatorEmail.find_by!(public_id: session[:staff_email_registration_public_id])
+    OperatorEmailCeremonyTransaction.find_by!(transaction_id: session[:staff_email_registration_transaction_ref])
       .update!(otp_expires_at: 1.minute.ago)
 
     patch base_org_identity_emails_registration_url(ri: "jp", host: @host),
           params: { staff_email: { pass_code: "123456" } }, headers: @headers
 
     assert_redirected_to new_base_org_identity_emails_registration_path(ri: "jp")
+  end
+
+  %i(browser policy_scope weakened_policy lost_credential actor_context).each do |change|
+    test "ORG Email finalization rejects #{change} even after the original OTP was consumed" do
+      post base_org_identity_emails_registration_url(ri: "jp", host: @host),
+           params: {
+             staff_email: { raw_address: "org-finalizer-#{SecureRandom.hex(8)}@example.test" },
+           }, headers: @headers
+      email = @operator.staff_emails.find_by!(public_id: session[:staff_email_registration_public_id])
+      transaction = OperatorEmailCeremonyTransaction.find_by!(
+        transaction_id: session[:staff_email_registration_transaction_ref],
+      )
+      notification = enqueued_jobs.filter_map do |entry|
+        next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        value if value.fetch(:params)[:public_id] == email.public_id
+      end.last
+      code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
+      nonce = session.fetch("auth_admission_browser_nonce")
+      verified = EmailCredentialRegistrationOtpVerificationCommitter.call(
+        actor: @operator, token: @token, email: email, transaction: transaction, browser_nonce: nonce, code: code,
+      )
+
+      assert_predicate verified, :success?
+      requirement = OperatorEmailPolicy.new(email, user: @operator).credential_registration_requirement(token: @token)
+      context = ActorValuesContext.empty.with(subject: @operator, actor_type: :operator, tld: :org, surface: :base)
+      arguments = {
+        actor: @operator,
+        actor_context: context,
+        token: @token,
+        email: email,
+        transaction: transaction,
+        browser_nonce: nonce,
+        code: code,
+        requirement: requirement,
+      }
+      case change
+      when :browser then arguments[:browser_nonce] = SecureRandom.urlsafe_base64(32)
+      when :policy_scope
+        arguments[:requirement] = StepUpRequirement.new(**requirement.to_h.merge(scope: "settings_telephone"))
+      when :weakened_policy
+        arguments[:requirement] = StepUpRequirement.new(
+          **requirement.to_h.merge(allowed_methods: %i(email_otp passkey)),
+        )
+      when :lost_credential then @token.update!(last_step_up_credential_ref: SecureRandom.uuid)
+      when :actor_context then arguments[:actor_context] = context.with(tld: :app)
+      end
+      proof = transaction.reload.attributes
+
+      assert_equal :unavailable, OperatorEmailRegistrationOtpFinalizer.call!(**arguments)
+      assert_equal OperatorEmailStatus::UNVERIFIED, email.reload.staff_email_status_id
+      unchanged = transaction.reload.attributes == proof
+
+      assert unchanged, "Rejected finalization must not rewrite the verified Ticket"
+    end
   end
 end

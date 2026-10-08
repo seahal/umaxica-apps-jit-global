@@ -16,6 +16,9 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
+    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     cookies["csrf_token"] = csrf_token_value
     TurnstileVerifierStub.challenge_enabled = true
@@ -264,7 +267,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_difference("Visitor.count", 1) do
       assert_difference("VisitorEmail.count", 1) do
-        assert_enqueued_emails 1 do
+        assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
           post auth_com_sign_up_email_url(ri: "jp"),
                params: {
                  visitor_email: {
@@ -292,6 +295,35 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_nil candidate.binding_finalized_at
     assert(original_facts == existing_email.reload.attributes, "protected record facts remain unchanged")
     assert(original_owner_facts == visitor.reload.attributes, "protected record facts remain unchanged")
+  end
+
+  test "replacement email signup retains the halted candidate and Identity until retention purge" do
+    destination = "com-replacement-#{SecureRandom.hex(8)}@example.test"
+    submission = {
+      visitor_email: { raw_address: destination, confirm_policy: "1" }, "cf-turnstile-response": "test",
+    }
+    post auth_com_sign_up_email_url(ri: "jp"), params: submission, headers: default_headers
+
+    assert_response :redirect
+    first = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    candidate = VisitorEmail.find(first.pending_contact_id)
+    owner_id = candidate.visitor_id
+
+    travel EmailOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
+      assert_difference("VisitorEmail.count", 1) do
+        assert_difference("Visitor.count", 1) do
+          post auth_com_sign_up_email_url(ri: "jp"), params: submission, headers: default_headers
+        end
+      end
+    end
+
+    assert_response :redirect
+    assert VisitorEmail.exists?(candidate.id)
+    assert Visitor.exists?(owner_id)
+    assert_predicate first.reload, :sign_up_halted?
+    assert_predicate first, :cleanup_completed?
+    assert_operator candidate.reload.purge_eligible_at, :>, candidate.discard_at
+    assert_empty VisitorEmailHistory.where(visitor_id: owner_id)
   end
 
   test "fresh sessions cannot distinguish pending and registered email sign-up" do
@@ -374,8 +406,17 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal 409, browsers.last.response.status
     assert(own_candidate_facts == candidates.last.reload.attributes, "protected record facts remain unchanged")
     assert(foreign_candidate_facts == candidates.first.reload.attributes, "protected record facts remain unchanged")
-    foreign_otp = candidates.first.get_otp
-    foreign_code = ROTP::HOTP.new(foreign_otp.fetch(:otp_private_key)).at(foreign_otp.fetch(:otp_counter)).to_s
+    foreign_delivery =
+      (enqueued_jobs + performed_jobs).find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == candidates.first.public_id
+      end
+    foreign_notification = ActiveJob::Arguments.deserialize(foreign_delivery.fetch(:args)).last
+    foreign_code = OutboundSensitivePayload.decrypt_email_otp(
+      foreign_notification.fetch(:params).fetch(:encrypted_hotp_token),
+    )
     assert_no_difference("VisitorToken.count") do
       browsers.last.patch(
         targets.first.request_uri,
@@ -416,7 +457,8 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     target = URI.parse(response.location)
     cycle = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
     email = VisitorEmail.find(cycle.pending_contact_id)
-    email.update!(otp_expires_at: VisitorEmail.database_now - 1.minute)
+    transaction = VisitorEmailCeremonyTransaction.where(operation: "sign_up", email_candidate_ref: email.public_id).sole
+    transaction.update!(otp_expires_at: VisitorEmailCeremonyTransaction.database_now - 1.minute)
     completed_requirements = cycle.completed_requirements.deep_dup
     flow_count = VisitorSignUpFlow.count
 
@@ -549,7 +591,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     )
     first_owner = first_candidate.visitor.reload
 
-    travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
+    travel EmailOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
       assert_difference("VisitorEmail.count", 1) do
         assert_difference("Visitor.count", 1) do
           post auth_com_sign_up_email_url(ri: "jp"),
@@ -601,7 +643,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       actor_operator_public_id: the_case.applied_by_operator_public_id,
     )
 
-    assert_enqueued_emails 0 do
+    assert_enqueued_jobs 0, only: OtpNotifierEmailDeliveryJob do
       post auth_com_sign_up_email_url(ri: "jp"),
            params: {
              visitor_email: {
@@ -784,7 +826,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",
@@ -799,7 +841,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
           otp_private_key: SecureRandom.base64(24),
           otp_counter: "",
@@ -1118,7 +1160,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

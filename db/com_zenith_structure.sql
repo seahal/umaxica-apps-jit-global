@@ -25,29 +25,41 @@ COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
 --
+-- Name: enforce_visitor_credential_registration_otp_proof(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_visitor_credential_registration_otp_proof() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN IF OLD.credential_registration_otp_context->>'verified_at' IS NOT NULL AND NEW.credential_registration_otp_context IS DISTINCT FROM OLD.credential_registration_otp_context THEN RAISE EXCEPTION 'committed credential registration OTP proof is immutable'; END IF; RETURN NEW; END; $$;
+
+
+--
 -- Name: enforce_visitor_emails_binding_facts(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.enforce_visitor_emails_binding_facts() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF OLD.binding_finalized_at IS NOT NULL AND
-     (NEW.visitor_id IS DISTINCT FROM OLD.visitor_id OR
-      NEW.address_digest IS DISTINCT FROM OLD.address_digest) THEN
-    RAISE EXCEPTION 'effective contact binding owner and digest are immutable';
-  END IF;
-  IF OLD.binding_finalized_at IS NOT NULL AND
-     NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN
-    RAISE EXCEPTION 'effective contact binding finalization is immutable';
-  END IF;
-  IF OLD.binding_released_at IS NOT NULL AND
-     NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN
-    RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten';
-  END IF;
-  RETURN NEW;
-END;
-$$;
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$ BEGIN IF current_user = 'umaxica_com_email_hmac_definer_88340cbd4f93' AND (to_jsonb(NEW) - 'address_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'address_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.visitor_id IS DISTINCT FROM OLD.visitor_id OR (NEW.address_digest IS DISTINCT FROM OLD.address_digest AND current_user <> 'umaxica_com_email_hmac_definer_88340cbd4f93')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
+
+
+--
+-- Name: enforce_visitor_rotation_audit(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_visitor_rotation_audit() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_com_email_hmac_definer_88340cbd4f93' AND NEW.channel = 'email') OR (current_user = 'umaxica_com_telephone_hmac_definer_88340cbd4f93' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
+
+
+--
+-- Name: enforce_visitor_sign_up_otp_proof(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_visitor_sign_up_otp_proof() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN IF OLD.sign_up_otp_context->>'verified_at' IS NOT NULL AND NEW.sign_up_otp_context IS DISTINCT FROM OLD.sign_up_otp_context THEN RAISE EXCEPTION 'committed signup OTP proof is immutable'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -56,24 +68,28 @@ $$;
 
 CREATE FUNCTION public.enforce_visitor_telephones_binding_facts() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF OLD.binding_finalized_at IS NOT NULL AND
-     (NEW.visitor_id IS DISTINCT FROM OLD.visitor_id OR
-      NEW.number_digest IS DISTINCT FROM OLD.number_digest) THEN
-    RAISE EXCEPTION 'effective contact binding owner and digest are immutable';
-  END IF;
-  IF OLD.binding_finalized_at IS NOT NULL AND
-     NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN
-    RAISE EXCEPTION 'effective contact binding finalization is immutable';
-  END IF;
-  IF OLD.binding_released_at IS NOT NULL AND
-     NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN
-    RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten';
-  END IF;
-  RETURN NEW;
-END;
-$$;
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$ BEGIN IF current_user = 'umaxica_com_telephone_hmac_definer_88340cbd4f93' AND (to_jsonb(NEW) - 'number_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'number_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.visitor_id IS DISTINCT FROM OLD.visitor_id OR (NEW.number_digest IS DISTINCT FROM OLD.number_digest AND current_user <> 'umaxica_com_telephone_hmac_definer_88340cbd4f93')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
+
+
+--
+-- Name: rotate_visitor_emails_hmac(bigint, text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rotate_visitor_emails_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_com_email_hmac_definer_88340cbd4f93' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.visitor_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.visitor_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.visitor_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+
+
+--
+-- Name: rotate_visitor_telephones_hmac(bigint, text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rotate_visitor_telephones_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_com_telephone_hmac_definer_88340cbd4f93' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.visitor_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.visitor_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.visitor_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 SET default_tablespace = '';
@@ -145,7 +161,7 @@ CREATE TABLE public.com_enforcement_appeals (
     redacted_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_com_enforcement_appeals_state CHECK (((state)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'approved'::character varying, 'rejected'::character varying, 'redacted'::character varying])::text[])))
+    CONSTRAINT chk_com_enforcement_appeals_state CHECK (((state)::text = ANY (ARRAY[('submitted'::character varying)::text, ('under_review'::character varying)::text, ('approved'::character varying)::text, ('rejected'::character varying)::text, ('redacted'::character varying)::text])))
 );
 
 
@@ -183,8 +199,8 @@ CREATE TABLE public.com_enforcement_authentication_method_effects (
     ended_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_com_enforcement_method_effects_effect CHECK (((effect)::text = ANY ((ARRAY['mutation_locked'::character varying, 'unusable'::character varying, 'permanently_frozen'::character varying])::text[]))),
-    CONSTRAINT chk_com_enforcement_method_effects_method CHECK (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying])::text[])))
+    CONSTRAINT chk_com_enforcement_method_effects_effect CHECK (((effect)::text = ANY (ARRAY[('mutation_locked'::character varying)::text, ('unusable'::character varying)::text, ('permanently_frozen'::character varying)::text]))),
+    CONSTRAINT chk_com_enforcement_method_effects_method CHECK (((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text])))
 );
 
 
@@ -240,18 +256,18 @@ CREATE TABLE public.com_enforcement_cases (
     CONSTRAINT chk_com_enforcement_cases_approval_separation CHECK (((approved_by_operator_public_id IS NULL) OR ((approved_by_operator_public_id)::text <> (applied_by_operator_public_id)::text))),
     CONSTRAINT chk_com_enforcement_cases_break_glass_approver CHECK (((break_glass = false) OR (break_glass_approved_by_operator_public_id IS NOT NULL))),
     CONSTRAINT chk_com_enforcement_cases_cooldown_duration CHECK ((((kind)::text <> 'cooldown'::text) OR (((duration_mode)::text = 'timed'::text) AND (expires_at IS NOT NULL) AND (expires_at <= (effective_at + '30 days'::interval))))),
-    CONSTRAINT chk_com_enforcement_cases_duration_mode CHECK (((duration_mode)::text = ANY ((ARRAY['timed'::character varying, 'indefinite'::character varying, 'permanent'::character varying])::text[]))),
-    CONSTRAINT chk_com_enforcement_cases_end_reason CHECK (((end_reason IS NULL) OR ((end_reason)::text = ANY ((ARRAY['expired'::character varying, 'revoked'::character varying, 'superseded'::character varying, 'corrected'::character varying, 'appeal_approved'::character varying, 'break_glass_released'::character varying, 'verification_completed'::character varying])::text[])))),
+    CONSTRAINT chk_com_enforcement_cases_duration_mode CHECK (((duration_mode)::text = ANY (ARRAY[('timed'::character varying)::text, ('indefinite'::character varying)::text, ('permanent'::character varying)::text]))),
+    CONSTRAINT chk_com_enforcement_cases_end_reason CHECK (((end_reason IS NULL) OR ((end_reason)::text = ANY (ARRAY[('expired'::character varying)::text, ('revoked'::character varying)::text, ('superseded'::character varying)::text, ('corrected'::character varying)::text, ('appeal_approved'::character varying)::text, ('break_glass_released'::character varying)::text, ('verification_completed'::character varying)::text])))),
     CONSTRAINT chk_com_enforcement_cases_hidden CHECK ((((visibility)::text <> 'hidden'::text) OR ((kind)::text = 'permanent_ban'::text))),
     CONSTRAINT chk_com_enforcement_cases_indefinite_freeze_review CHECK ((((kind)::text <> 'temporary_freeze'::text) OR ((duration_mode)::text <> 'indefinite'::text) OR ((review_due_at IS NOT NULL) AND ((release_mode)::text = 'operator'::text)))),
-    CONSTRAINT chk_com_enforcement_cases_kind CHECK (((kind)::text = ANY ((ARRAY['security_lock'::character varying, 'cooldown'::character varying, 'temporary_freeze'::character varying, 'permanent_ban'::character varying, 'method_protection'::character varying])::text[]))),
+    CONSTRAINT chk_com_enforcement_cases_kind CHECK (((kind)::text = ANY (ARRAY[('security_lock'::character varying)::text, ('cooldown'::character varying)::text, ('temporary_freeze'::character varying)::text, ('permanent_ban'::character varying)::text, ('method_protection'::character varying)::text]))),
     CONSTRAINT chk_com_enforcement_cases_no_self_action CHECK (((principal_public_id)::text <> (applied_by_operator_public_id)::text)),
     CONSTRAINT chk_com_enforcement_cases_permanent_ban_duration CHECK ((((kind)::text <> 'permanent_ban'::text) OR (((duration_mode)::text = 'permanent'::text) AND (expires_at IS NULL)))),
-    CONSTRAINT chk_com_enforcement_cases_release_mode CHECK (((release_mode)::text = ANY ((ARRAY['automatic'::character varying, 'operator'::character varying, 'verification_required'::character varying, 'break_glass_only'::character varying])::text[]))),
+    CONSTRAINT chk_com_enforcement_cases_release_mode CHECK (((release_mode)::text = ANY (ARRAY[('automatic'::character varying)::text, ('operator'::character varying)::text, ('verification_required'::character varying)::text, ('break_glass_only'::character varying)::text]))),
     CONSTRAINT chk_com_enforcement_cases_security_lock_release CHECK ((((kind)::text <> 'security_lock'::text) OR ((release_mode)::text = 'verification_required'::text))),
-    CONSTRAINT chk_com_enforcement_cases_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'pending_approval'::character varying, 'active'::character varying, 'ended'::character varying, 'failed'::character varying])::text[]))),
-    CONSTRAINT chk_com_enforcement_cases_temp_freeze_duration_mode CHECK ((((kind)::text <> 'temporary_freeze'::text) OR ((duration_mode)::text = ANY ((ARRAY['timed'::character varying, 'indefinite'::character varying])::text[])))),
-    CONSTRAINT chk_com_enforcement_cases_visibility CHECK (((visibility)::text = ANY ((ARRAY['visible'::character varying, 'hidden'::character varying])::text[])))
+    CONSTRAINT chk_com_enforcement_cases_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('pending_approval'::character varying)::text, ('active'::character varying)::text, ('ended'::character varying)::text, ('failed'::character varying)::text]))),
+    CONSTRAINT chk_com_enforcement_cases_temp_freeze_duration_mode CHECK ((((kind)::text <> 'temporary_freeze'::text) OR ((duration_mode)::text = ANY (ARRAY[('timed'::character varying)::text, ('indefinite'::character varying)::text])))),
+    CONSTRAINT chk_com_enforcement_cases_visibility CHECK (((visibility)::text = ANY (ARRAY[('visible'::character varying)::text, ('hidden'::character varying)::text])))
 );
 
 
@@ -295,7 +311,7 @@ CREATE TABLE public.com_enforcement_identifier_effects (
     ended_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_com_enforcement_identifier_effects_kind CHECK (((identifier_kind)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'identity_id'::character varying])::text[])))
+    CONSTRAINT chk_com_enforcement_identifier_effects_kind CHECK (((identifier_kind)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('identity_id'::character varying)::text])))
 );
 
 
@@ -373,7 +389,7 @@ CREATE TABLE public.com_enforcement_principal_links (
     ended_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_com_enforcement_principal_links_relationship_kind CHECK (((relationship_kind)::text = ANY ((ARRAY['target_principal'::character varying, 'former_principal'::character varying, 'related_principal'::character varying, 'suspected_duplicate'::character varying, 'reinstated_principal'::character varying, 'false_positive'::character varying])::text[])))
+    CONSTRAINT chk_com_enforcement_principal_links_relationship_kind CHECK (((relationship_kind)::text = ANY (ARRAY[('target_principal'::character varying)::text, ('former_principal'::character varying)::text, ('related_principal'::character varying)::text, ('suspected_duplicate'::character varying)::text, ('reinstated_principal'::character varying)::text, ('false_positive'::character varying)::text])))
 );
 
 
@@ -538,7 +554,7 @@ CREATE TABLE public.company_lifecycles (
     state_changed_at timestamp(6) with time zone DEFAULT clock_timestamp() NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_company_lifecycles_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'discarded'::character varying, 'deleted'::character varying, 'retained'::character varying])::text[])))
+    CONSTRAINT chk_company_lifecycles_state CHECK (((state)::text = ANY (ARRAY[('active'::character varying)::text, ('inactive'::character varying)::text, ('discarded'::character varying)::text, ('deleted'::character varying)::text, ('retained'::character varying)::text])))
 );
 
 
@@ -584,7 +600,7 @@ CREATE TABLE public.company_ownership_transfer_requests (
     CONSTRAINT chk_company_transfer_requests_distinct_parties CHECK ((source_visitor_id <> destination_visitor_id)),
     CONSTRAINT chk_company_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_company_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_company_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
+    CONSTRAINT chk_company_transfer_requests_status CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('accepted'::character varying)::text, ('rejected'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text, ('invalidated'::character varying)::text])))
 );
 
 
@@ -922,7 +938,7 @@ CREATE TABLE public.individual_lifecycles (
     state_changed_at timestamp(6) with time zone DEFAULT clock_timestamp() NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_individual_lifecycles_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'discarded'::character varying, 'deleted'::character varying, 'retained'::character varying])::text[])))
+    CONSTRAINT chk_individual_lifecycles_state CHECK (((state)::text = ANY (ARRAY[('active'::character varying)::text, ('inactive'::character varying)::text, ('discarded'::character varying)::text, ('deleted'::character varying)::text, ('retained'::character varying)::text])))
 );
 
 
@@ -1096,7 +1112,7 @@ CREATE TABLE public.individual_ownership_transfer_requests (
     CONSTRAINT chk_individual_transfer_requests_distinct_parties CHECK ((source_visitor_id <> destination_visitor_id)),
     CONSTRAINT chk_individual_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_individual_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_individual_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
+    CONSTRAINT chk_individual_transfer_requests_status CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('accepted'::character varying)::text, ('rejected'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text, ('invalidated'::character varying)::text])))
 );
 
 
@@ -1362,6 +1378,82 @@ ALTER SEQUENCE public.visitor_banners_id_seq OWNED BY public.visitor_banners.id;
 
 
 --
+-- Name: visitor_contact_audit_outboxes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.visitor_contact_audit_outboxes (
+    id bigint NOT NULL,
+    event_uuid uuid NOT NULL,
+    contact_kind character varying NOT NULL,
+    event_name character varying NOT NULL,
+    owner_ref character varying NOT NULL,
+    contact_ref character varying NOT NULL,
+    operation_ref character varying NOT NULL,
+    actor_ref character varying,
+    occurred_at timestamp(6) with time zone NOT NULL,
+    acknowledged_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT visitor_contact_audit_acknowledgment CHECK (((acknowledged_at IS NULL) OR (acknowledged_at >= occurred_at))),
+    CONSTRAINT visitor_contact_audit_event CHECK (((event_name)::text = ANY ((ARRAY['finalized'::character varying, 'released'::character varying])::text[]))),
+    CONSTRAINT visitor_contact_audit_kind CHECK (((contact_kind)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying])::text[]))),
+    CONSTRAINT visitor_contact_audit_references CHECK ((((owner_ref)::text <> ''::text) AND ((contact_ref)::text <> ''::text) AND ((operation_ref)::text <> ''::text)))
+);
+
+
+--
+-- Name: visitor_contact_audit_outboxes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.visitor_contact_audit_outboxes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: visitor_contact_audit_outboxes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.visitor_contact_audit_outboxes_id_seq OWNED BY public.visitor_contact_audit_outboxes.id;
+
+
+--
+-- Name: visitor_email_histories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.visitor_email_histories (
+    id bigint NOT NULL,
+    visitor_id bigint NOT NULL,
+    fingerprint character varying NOT NULL,
+    attached_at timestamp(6) with time zone NOT NULL,
+    detached_at timestamp(6) with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: visitor_email_histories_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.visitor_email_histories_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: visitor_email_histories_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.visitor_email_histories_id_seq OWNED BY public.visitor_email_histories.id;
+
+
+--
 -- Name: visitor_email_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1420,9 +1512,16 @@ CREATE TABLE public.visitor_emails (
     step_up_otp_last_issued_at timestamp(6) with time zone,
     binding_finalized_at timestamp(6) with time zone,
     binding_released_at timestamp(6) with time zone,
+    sign_up_otp_context jsonb,
+    credential_registration_otp_context jsonb,
     CONSTRAINT visitor_email_step_up_failures_nonnegative CHECK ((step_up_otp_failures >= 0)),
+    CONSTRAINT visitor_emails_binding_digest_nonblank CHECK (((binding_finalized_at IS NULL) OR ((address_digest IS NOT NULL) AND ((address_digest)::text ~ '[^[:space:]]'::text)))),
+    CONSTRAINT visitor_emails_binding_digest_unicode_nonblank CHECK (((binding_finalized_at IS NULL) OR ((address_digest IS NOT NULL) AND ((address_digest)::text ~ '[^[:space:]   -     　]'::text)))),
     CONSTRAINT visitor_emails_binding_effective_digest_present CHECK (((binding_finalized_at IS NULL) OR ((address_digest IS NOT NULL) AND ((address_digest)::text <> ''::text)))),
-    CONSTRAINT visitor_emails_binding_release_requires_finalization CHECK (((binding_released_at IS NULL) OR (binding_finalized_at IS NOT NULL)))
+    CONSTRAINT visitor_emails_binding_release_requires_finalization CHECK (((binding_released_at IS NULL) OR (binding_finalized_at IS NOT NULL))),
+    CONSTRAINT visitor_emails_credential_registration_otp_shape CHECK (((credential_registration_otp_context IS NULL) OR (((jsonb_typeof(credential_registration_otp_context) = 'object'::text) AND (credential_registration_otp_context ?& ARRAY['version'::text, 'surface'::text, 'purpose'::text, 'flow_ref'::text, 'browser_digest'::text, 'session_ref'::text, 'owner_ref'::text, 'contact_ref'::text, 'destination_digest'::text, 'counter'::text, 'code_digest'::text, 'issued_at'::text, 'expires_at'::text, 'verified_at'::text, 'result_expires_at'::text]) AND ((credential_registration_otp_context - ARRAY['version'::text, 'surface'::text, 'purpose'::text, 'flow_ref'::text, 'browser_digest'::text, 'session_ref'::text, 'owner_ref'::text, 'contact_ref'::text, 'destination_digest'::text, 'counter'::text, 'code_digest'::text, 'issued_at'::text, 'expires_at'::text, 'verified_at'::text, 'result_expires_at'::text]) = '{}'::jsonb) AND ((credential_registration_otp_context -> 'version'::text) = '1'::jsonb) AND (jsonb_typeof((credential_registration_otp_context -> 'surface'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'purpose'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'flow_ref'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'browser_digest'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'session_ref'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'owner_ref'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'contact_ref'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'destination_digest'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'counter'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'code_digest'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'issued_at'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'expires_at'::text)) = 'string'::text) AND ((credential_registration_otp_context ->> 'surface'::text) = 'com'::text) AND ((credential_registration_otp_context ->> 'purpose'::text) = 'credential_registration'::text) AND ((credential_registration_otp_context ->> 'flow_ref'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) AND ((credential_registration_otp_context ->> 'session_ref'::text) ~ '^[A-Za-z0-9_-]{1,21}$'::text) AND ((credential_registration_otp_context ->> 'owner_ref'::text) ~ '^[A-Za-z0-9_-]{1,21}$'::text) AND ((credential_registration_otp_context ->> 'contact_ref'::text) = (public_id)::text) AND ((credential_registration_otp_context ->> 'browser_digest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((credential_registration_otp_context ->> 'destination_digest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((credential_registration_otp_context ->> 'code_digest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((credential_registration_otp_context ->> 'counter'::text) ~ '^(0|[1-9][0-9]{0,19})$'::text) AND (((credential_registration_otp_context ->> 'counter'::text))::numeric <= '18446744073709551615'::numeric) AND (((credential_registration_otp_context -> 'issued_at'::text) = 'null'::jsonb) OR (((credential_registration_otp_context ->> 'issued_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND isfinite(((credential_registration_otp_context ->> 'issued_at'::text))::timestamp with time zone))) AND (((credential_registration_otp_context -> 'expires_at'::text) = 'null'::jsonb) OR (((credential_registration_otp_context ->> 'expires_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND isfinite(((credential_registration_otp_context ->> 'expires_at'::text))::timestamp with time zone))) AND (((credential_registration_otp_context -> 'verified_at'::text) = 'null'::jsonb) OR (((credential_registration_otp_context ->> 'verified_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND isfinite(((credential_registration_otp_context ->> 'verified_at'::text))::timestamp with time zone))) AND (((credential_registration_otp_context -> 'result_expires_at'::text) = 'null'::jsonb) OR (((credential_registration_otp_context ->> 'result_expires_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND isfinite(((credential_registration_otp_context ->> 'result_expires_at'::text))::timestamp with time zone))) AND (((credential_registration_otp_context ->> 'issued_at'::text))::timestamp with time zone < ((credential_registration_otp_context ->> 'expires_at'::text))::timestamp with time zone) AND ((((credential_registration_otp_context -> 'verified_at'::text) = 'null'::jsonb) AND ((credential_registration_otp_context -> 'result_expires_at'::text) = 'null'::jsonb)) OR ((jsonb_typeof((credential_registration_otp_context -> 'verified_at'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'result_expires_at'::text)) = 'string'::text) AND (((credential_registration_otp_context ->> 'issued_at'::text))::timestamp with time zone <= ((credential_registration_otp_context ->> 'verified_at'::text))::timestamp with time zone) AND (((credential_registration_otp_context ->> 'verified_at'::text))::timestamp with time zone < ((credential_registration_otp_context ->> 'expires_at'::text))::timestamp with time zone) AND (((credential_registration_otp_context ->> 'verified_at'::text))::timestamp with time zone < ((credential_registration_otp_context ->> 'result_expires_at'::text))::timestamp with time zone) AND (((credential_registration_otp_context ->> 'result_expires_at'::text))::timestamp with time zone <= (((credential_registration_otp_context ->> 'verified_at'::text))::timestamp with time zone + '00:01:00'::interval))))) IS TRUE))),
+    CONSTRAINT visitor_emails_sign_up_otp_context_shape CHECK (((sign_up_otp_context IS NULL) OR (((jsonb_typeof(sign_up_otp_context) = 'object'::text) AND (sign_up_otp_context ?& ARRAY['version'::text, 'surface'::text, 'purpose'::text, 'flow_ref'::text, 'nonce_digest'::text, 'owner_ref'::text, 'contact_ref'::text, 'destination_digest'::text, 'counter'::text, 'code_digest'::text, 'issued_at'::text, 'expires_at'::text, 'verified_at'::text, 'result_expires_at'::text]) AND ((sign_up_otp_context - ARRAY['version'::text, 'surface'::text, 'purpose'::text, 'flow_ref'::text, 'nonce_digest'::text, 'owner_ref'::text, 'contact_ref'::text, 'destination_digest'::text, 'counter'::text, 'code_digest'::text, 'issued_at'::text, 'expires_at'::text, 'verified_at'::text, 'result_expires_at'::text]) = '{}'::jsonb) AND ((sign_up_otp_context -> 'version'::text) = '1'::jsonb) AND (jsonb_typeof((sign_up_otp_context -> 'surface'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'purpose'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'flow_ref'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'nonce_digest'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'owner_ref'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'contact_ref'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'destination_digest'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'counter'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'code_digest'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'issued_at'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'expires_at'::text)) = 'string'::text) AND ((sign_up_otp_context ->> 'surface'::text) = 'com'::text) AND ((sign_up_otp_context ->> 'purpose'::text) = 'sign_up'::text) AND ((sign_up_otp_context ->> 'flow_ref'::text) ~ '^[A-Za-z0-9_-]{1,21}$'::text) AND ((sign_up_otp_context ->> 'owner_ref'::text) ~ '^[A-Za-z0-9_-]{1,21}$'::text) AND ((sign_up_otp_context ->> 'contact_ref'::text) = (public_id)::text) AND ((sign_up_otp_context ->> 'nonce_digest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((sign_up_otp_context ->> 'destination_digest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((sign_up_otp_context ->> 'code_digest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((sign_up_otp_context ->> 'counter'::text) ~ '^(0|[1-9][0-9]{0,19})$'::text) AND (((sign_up_otp_context ->> 'counter'::text))::numeric <= '18446744073709551615'::numeric) AND (((sign_up_otp_context ->> 'issued_at'::text))::timestamp with time zone < ((sign_up_otp_context ->> 'expires_at'::text))::timestamp with time zone) AND ((((sign_up_otp_context -> 'verified_at'::text) = 'null'::jsonb) AND ((sign_up_otp_context -> 'result_expires_at'::text) = 'null'::jsonb)) OR ((jsonb_typeof((sign_up_otp_context -> 'verified_at'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'result_expires_at'::text)) = 'string'::text) AND (((sign_up_otp_context ->> 'issued_at'::text))::timestamp with time zone <= ((sign_up_otp_context ->> 'verified_at'::text))::timestamp with time zone) AND (((sign_up_otp_context ->> 'verified_at'::text))::timestamp with time zone < ((sign_up_otp_context ->> 'expires_at'::text))::timestamp with time zone) AND (((sign_up_otp_context ->> 'verified_at'::text))::timestamp with time zone < ((sign_up_otp_context ->> 'result_expires_at'::text))::timestamp with time zone) AND (((sign_up_otp_context ->> 'result_expires_at'::text))::timestamp with time zone <= (((sign_up_otp_context ->> 'verified_at'::text))::timestamp with time zone + '00:01:00'::interval))))) IS TRUE))),
+    CONSTRAINT visitor_emails_sign_up_otp_times_finite CHECK (((sign_up_otp_context IS NULL) OR ((isfinite(((sign_up_otp_context ->> 'issued_at'::text))::timestamp with time zone) AND isfinite(((sign_up_otp_context ->> 'expires_at'::text))::timestamp with time zone) AND ((sign_up_otp_context ->> 'issued_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND ((sign_up_otp_context ->> 'expires_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND (((sign_up_otp_context -> 'verified_at'::text) = 'null'::jsonb) OR (isfinite(((sign_up_otp_context ->> 'verified_at'::text))::timestamp with time zone) AND isfinite(((sign_up_otp_context ->> 'result_expires_at'::text))::timestamp with time zone) AND ((sign_up_otp_context ->> 'verified_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND ((sign_up_otp_context ->> 'result_expires_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text)))) IS TRUE)))
 );
 
 
@@ -1482,6 +1581,41 @@ CREATE SEQUENCE public.visitor_enforcement_recovery_ceremonies_id_seq
 --
 
 ALTER SEQUENCE public.visitor_enforcement_recovery_ceremonies_id_seq OWNED BY public.visitor_enforcement_recovery_ceremonies.id;
+
+
+--
+-- Name: visitor_identifier_rotation_audits; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.visitor_identifier_rotation_audits (
+    id bigint NOT NULL,
+    operation_ref uuid NOT NULL,
+    channel character varying NOT NULL,
+    record_id bigint NOT NULL,
+    actor_role character varying NOT NULL,
+    occurred_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT visitor_rotation_channel CHECK (((channel)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying])::text[]))),
+    CONSTRAINT visitor_rotation_subject CHECK (((record_id > 0) AND ((actor_role)::text <> ''::text)))
+);
+
+
+--
+-- Name: visitor_identifier_rotation_audits_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.visitor_identifier_rotation_audits_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: visitor_identifier_rotation_audits_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.visitor_identifier_rotation_audits_id_seq OWNED BY public.visitor_identifier_rotation_audits.id;
 
 
 --
@@ -2529,7 +2663,7 @@ CREATE TABLE public.visitor_processor_erasure_notification_attempts (
     CONSTRAINT chk_visitor_proc_erase_attempt_generation_positive CHECK ((delivery_generation > 0)),
     CONSTRAINT chk_visitor_proc_erase_attempt_idempotency_digest CHECK (((idempotency_key_digest)::text ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT chk_visitor_proc_erase_attempt_number_positive CHECK ((attempt_number > 0)),
-    CONSTRAINT chk_visitor_proc_erase_attempt_outcome CHECK (((outcome)::text = ANY ((ARRAY['IN_FLIGHT'::character varying, 'ACCEPTED_PENDING'::character varying, 'SUCCEEDED'::character varying, 'RETRYABLE_FAILURE'::character varying, 'PERMANENT_FAILURE'::character varying])::text[])))
+    CONSTRAINT chk_visitor_proc_erase_attempt_outcome CHECK (((outcome)::text = ANY (ARRAY[('IN_FLIGHT'::character varying)::text, ('ACCEPTED_PENDING'::character varying)::text, ('SUCCEEDED'::character varying)::text, ('RETRYABLE_FAILURE'::character varying)::text, ('PERMANENT_FAILURE'::character varying)::text])))
 );
 
 
@@ -2849,6 +2983,39 @@ ALTER SEQUENCE public.visitor_statuses_id_seq OWNED BY public.visitor_statuses.i
 
 
 --
+-- Name: visitor_telephone_histories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.visitor_telephone_histories (
+    id bigint NOT NULL,
+    visitor_id bigint NOT NULL,
+    fingerprint character varying NOT NULL,
+    attached_at timestamp(6) with time zone NOT NULL,
+    detached_at timestamp(6) with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: visitor_telephone_histories_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.visitor_telephone_histories_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: visitor_telephone_histories_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.visitor_telephone_histories_id_seq OWNED BY public.visitor_telephone_histories.id;
+
+
+--
 -- Name: visitor_telephone_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2898,8 +3065,16 @@ CREATE TABLE public.visitor_telephones (
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
     binding_finalized_at timestamp(6) with time zone,
     binding_released_at timestamp(6) with time zone,
+    sign_up_otp_context jsonb,
+    credential_registration_otp_context jsonb,
+    otp_last_sent_at timestamp(6) with time zone,
+    CONSTRAINT visitor_telephones_binding_digest_nonblank CHECK (((binding_finalized_at IS NULL) OR ((number_digest IS NOT NULL) AND ((number_digest)::text ~ '[^[:space:]]'::text)))),
+    CONSTRAINT visitor_telephones_binding_digest_unicode_nonblank CHECK (((binding_finalized_at IS NULL) OR ((number_digest IS NOT NULL) AND ((number_digest)::text ~ '[^[:space:]   -     　]'::text)))),
     CONSTRAINT visitor_telephones_binding_effective_digest_present CHECK (((binding_finalized_at IS NULL) OR ((number_digest IS NOT NULL) AND ((number_digest)::text <> ''::text)))),
-    CONSTRAINT visitor_telephones_binding_release_requires_finalization CHECK (((binding_released_at IS NULL) OR (binding_finalized_at IS NOT NULL)))
+    CONSTRAINT visitor_telephones_binding_release_requires_finalization CHECK (((binding_released_at IS NULL) OR (binding_finalized_at IS NOT NULL))),
+    CONSTRAINT visitor_telephones_credential_registration_otp_shape CHECK (((credential_registration_otp_context IS NULL) OR (((jsonb_typeof(credential_registration_otp_context) = 'object'::text) AND (credential_registration_otp_context ?& ARRAY['version'::text, 'surface'::text, 'purpose'::text, 'flow_ref'::text, 'browser_digest'::text, 'session_ref'::text, 'owner_ref'::text, 'contact_ref'::text, 'destination_digest'::text, 'counter'::text, 'code_digest'::text, 'issued_at'::text, 'expires_at'::text, 'verified_at'::text, 'result_expires_at'::text]) AND ((credential_registration_otp_context - ARRAY['version'::text, 'surface'::text, 'purpose'::text, 'flow_ref'::text, 'browser_digest'::text, 'session_ref'::text, 'owner_ref'::text, 'contact_ref'::text, 'destination_digest'::text, 'counter'::text, 'code_digest'::text, 'issued_at'::text, 'expires_at'::text, 'verified_at'::text, 'result_expires_at'::text]) = '{}'::jsonb) AND ((credential_registration_otp_context -> 'version'::text) = '1'::jsonb) AND (jsonb_typeof((credential_registration_otp_context -> 'surface'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'purpose'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'flow_ref'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'browser_digest'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'session_ref'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'owner_ref'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'contact_ref'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'destination_digest'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'counter'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'code_digest'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'issued_at'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'expires_at'::text)) = 'string'::text) AND ((credential_registration_otp_context ->> 'surface'::text) = 'com'::text) AND ((credential_registration_otp_context ->> 'purpose'::text) = 'credential_registration'::text) AND ((credential_registration_otp_context ->> 'flow_ref'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) AND ((credential_registration_otp_context ->> 'session_ref'::text) ~ '^[A-Za-z0-9_-]{1,21}$'::text) AND ((credential_registration_otp_context ->> 'owner_ref'::text) ~ '^[A-Za-z0-9_-]{1,21}$'::text) AND ((credential_registration_otp_context ->> 'contact_ref'::text) = (public_id)::text) AND ((credential_registration_otp_context ->> 'browser_digest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((credential_registration_otp_context ->> 'destination_digest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((credential_registration_otp_context ->> 'code_digest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((credential_registration_otp_context ->> 'counter'::text) ~ '^(0|[1-9][0-9]{0,19})$'::text) AND (((credential_registration_otp_context ->> 'counter'::text))::numeric <= '18446744073709551615'::numeric) AND (((credential_registration_otp_context -> 'issued_at'::text) = 'null'::jsonb) OR (((credential_registration_otp_context ->> 'issued_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND isfinite(((credential_registration_otp_context ->> 'issued_at'::text))::timestamp with time zone))) AND (((credential_registration_otp_context -> 'expires_at'::text) = 'null'::jsonb) OR (((credential_registration_otp_context ->> 'expires_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND isfinite(((credential_registration_otp_context ->> 'expires_at'::text))::timestamp with time zone))) AND (((credential_registration_otp_context -> 'verified_at'::text) = 'null'::jsonb) OR (((credential_registration_otp_context ->> 'verified_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND isfinite(((credential_registration_otp_context ->> 'verified_at'::text))::timestamp with time zone))) AND (((credential_registration_otp_context -> 'result_expires_at'::text) = 'null'::jsonb) OR (((credential_registration_otp_context ->> 'result_expires_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND isfinite(((credential_registration_otp_context ->> 'result_expires_at'::text))::timestamp with time zone))) AND (((credential_registration_otp_context ->> 'issued_at'::text))::timestamp with time zone < ((credential_registration_otp_context ->> 'expires_at'::text))::timestamp with time zone) AND ((((credential_registration_otp_context -> 'verified_at'::text) = 'null'::jsonb) AND ((credential_registration_otp_context -> 'result_expires_at'::text) = 'null'::jsonb)) OR ((jsonb_typeof((credential_registration_otp_context -> 'verified_at'::text)) = 'string'::text) AND (jsonb_typeof((credential_registration_otp_context -> 'result_expires_at'::text)) = 'string'::text) AND (((credential_registration_otp_context ->> 'issued_at'::text))::timestamp with time zone <= ((credential_registration_otp_context ->> 'verified_at'::text))::timestamp with time zone) AND (((credential_registration_otp_context ->> 'verified_at'::text))::timestamp with time zone < ((credential_registration_otp_context ->> 'expires_at'::text))::timestamp with time zone) AND (((credential_registration_otp_context ->> 'verified_at'::text))::timestamp with time zone < ((credential_registration_otp_context ->> 'result_expires_at'::text))::timestamp with time zone) AND (((credential_registration_otp_context ->> 'result_expires_at'::text))::timestamp with time zone <= (((credential_registration_otp_context ->> 'verified_at'::text))::timestamp with time zone + '00:01:00'::interval))))) IS TRUE))),
+    CONSTRAINT visitor_telephones_sign_up_otp_context_shape CHECK (((sign_up_otp_context IS NULL) OR (((jsonb_typeof(sign_up_otp_context) = 'object'::text) AND (sign_up_otp_context ?& ARRAY['version'::text, 'surface'::text, 'purpose'::text, 'flow_ref'::text, 'nonce_digest'::text, 'owner_ref'::text, 'contact_ref'::text, 'destination_digest'::text, 'counter'::text, 'code_digest'::text, 'issued_at'::text, 'expires_at'::text, 'verified_at'::text, 'result_expires_at'::text]) AND ((sign_up_otp_context - ARRAY['version'::text, 'surface'::text, 'purpose'::text, 'flow_ref'::text, 'nonce_digest'::text, 'owner_ref'::text, 'contact_ref'::text, 'destination_digest'::text, 'counter'::text, 'code_digest'::text, 'issued_at'::text, 'expires_at'::text, 'verified_at'::text, 'result_expires_at'::text]) = '{}'::jsonb) AND ((sign_up_otp_context -> 'version'::text) = '1'::jsonb) AND (jsonb_typeof((sign_up_otp_context -> 'surface'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'purpose'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'flow_ref'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'nonce_digest'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'owner_ref'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'contact_ref'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'destination_digest'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'counter'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'code_digest'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'issued_at'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'expires_at'::text)) = 'string'::text) AND ((sign_up_otp_context ->> 'surface'::text) = 'com'::text) AND ((sign_up_otp_context ->> 'purpose'::text) = 'sign_up'::text) AND ((sign_up_otp_context ->> 'flow_ref'::text) ~ '^[A-Za-z0-9_-]{1,21}$'::text) AND ((sign_up_otp_context ->> 'owner_ref'::text) ~ '^[A-Za-z0-9_-]{1,21}$'::text) AND ((sign_up_otp_context ->> 'contact_ref'::text) = (public_id)::text) AND ((sign_up_otp_context ->> 'nonce_digest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((sign_up_otp_context ->> 'destination_digest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((sign_up_otp_context ->> 'code_digest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((sign_up_otp_context ->> 'counter'::text) ~ '^(0|[1-9][0-9]{0,19})$'::text) AND (((sign_up_otp_context ->> 'counter'::text))::numeric <= '18446744073709551615'::numeric) AND (((sign_up_otp_context ->> 'issued_at'::text))::timestamp with time zone < ((sign_up_otp_context ->> 'expires_at'::text))::timestamp with time zone) AND ((((sign_up_otp_context -> 'verified_at'::text) = 'null'::jsonb) AND ((sign_up_otp_context -> 'result_expires_at'::text) = 'null'::jsonb)) OR ((jsonb_typeof((sign_up_otp_context -> 'verified_at'::text)) = 'string'::text) AND (jsonb_typeof((sign_up_otp_context -> 'result_expires_at'::text)) = 'string'::text) AND (((sign_up_otp_context ->> 'issued_at'::text))::timestamp with time zone <= ((sign_up_otp_context ->> 'verified_at'::text))::timestamp with time zone) AND (((sign_up_otp_context ->> 'verified_at'::text))::timestamp with time zone < ((sign_up_otp_context ->> 'expires_at'::text))::timestamp with time zone) AND (((sign_up_otp_context ->> 'verified_at'::text))::timestamp with time zone < ((sign_up_otp_context ->> 'result_expires_at'::text))::timestamp with time zone) AND (((sign_up_otp_context ->> 'result_expires_at'::text))::timestamp with time zone <= (((sign_up_otp_context ->> 'verified_at'::text))::timestamp with time zone + '00:01:00'::interval))))) IS TRUE))),
+    CONSTRAINT visitor_telephones_sign_up_otp_times_finite CHECK (((sign_up_otp_context IS NULL) OR ((isfinite(((sign_up_otp_context ->> 'issued_at'::text))::timestamp with time zone) AND isfinite(((sign_up_otp_context ->> 'expires_at'::text))::timestamp with time zone) AND ((sign_up_otp_context ->> 'issued_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND ((sign_up_otp_context ->> 'expires_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND (((sign_up_otp_context -> 'verified_at'::text) = 'null'::jsonb) OR (isfinite(((sign_up_otp_context ->> 'verified_at'::text))::timestamp with time zone) AND isfinite(((sign_up_otp_context ->> 'result_expires_at'::text))::timestamp with time zone) AND ((sign_up_otp_context ->> 'verified_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text) AND ((sign_up_otp_context ->> 'result_expires_at'::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$'::text)))) IS TRUE)))
 );
 
 
@@ -3127,8 +3302,8 @@ CREATE TABLE public.visitors (
     reactivated_at timestamp(6) with time zone,
     webauthn_user_handle character varying NOT NULL,
     CONSTRAINT chk_customers_retention_order CHECK ((discard_at <= purge_eligible_at)),
-    CONSTRAINT chk_visitors_access_state CHECK (((access_state)::text = ANY ((ARRAY['enabled'::character varying, 'admin_locked'::character varying])::text[]))),
-    CONSTRAINT chk_visitors_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY ((ARRAY['abuse'::character varying, 'security_incident'::character varying, 'chargeback'::character varying, 'terms_violation'::character varying, 'support_request'::character varying, 'legal_hold'::character varying, 'operator_error_recovery'::character varying, 'other'::character varying])::text[])))),
+    CONSTRAINT chk_visitors_access_state CHECK (((access_state)::text = ANY (ARRAY[('enabled'::character varying)::text, ('admin_locked'::character varying)::text]))),
+    CONSTRAINT chk_visitors_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY (ARRAY[('abuse'::character varying)::text, ('security_incident'::character varying)::text, ('chargeback'::character varying)::text, ('terms_violation'::character varying)::text, ('support_request'::character varying)::text, ('legal_hold'::character varying)::text, ('operator_error_recovery'::character varying)::text, ('other'::character varying)::text])))),
     CONSTRAINT chk_visitors_birthdate_length CHECK (((birthdate IS NULL) OR (char_length(birthdate) <= 1000)))
 );
 
@@ -3398,6 +3573,20 @@ ALTER TABLE ONLY public.visitor_banners ALTER COLUMN id SET DEFAULT nextval('pub
 
 
 --
+-- Name: visitor_contact_audit_outboxes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_contact_audit_outboxes ALTER COLUMN id SET DEFAULT nextval('public.visitor_contact_audit_outboxes_id_seq'::regclass);
+
+
+--
+-- Name: visitor_email_histories id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_email_histories ALTER COLUMN id SET DEFAULT nextval('public.visitor_email_histories_id_seq'::regclass);
+
+
+--
 -- Name: visitor_email_statuses id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -3416,6 +3605,13 @@ ALTER TABLE ONLY public.visitor_emails ALTER COLUMN id SET DEFAULT nextval('publ
 --
 
 ALTER TABLE ONLY public.visitor_enforcement_recovery_ceremonies ALTER COLUMN id SET DEFAULT nextval('public.visitor_enforcement_recovery_ceremonies_id_seq'::regclass);
+
+
+--
+-- Name: visitor_identifier_rotation_audits id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_identifier_rotation_audits ALTER COLUMN id SET DEFAULT nextval('public.visitor_identifier_rotation_audits_id_seq'::regclass);
 
 
 --
@@ -3703,6 +3899,13 @@ ALTER TABLE ONLY public.visitor_secret_credentials ALTER COLUMN id SET DEFAULT n
 --
 
 ALTER TABLE ONLY public.visitor_statuses ALTER COLUMN id SET DEFAULT nextval('public.visitor_statuses_id_seq'::regclass);
+
+
+--
+-- Name: visitor_telephone_histories id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_telephone_histories ALTER COLUMN id SET DEFAULT nextval('public.visitor_telephone_histories_id_seq'::regclass);
 
 
 --
@@ -4106,6 +4309,22 @@ ALTER TABLE ONLY public.visitor_banners
 
 
 --
+-- Name: visitor_contact_audit_outboxes visitor_contact_audit_outboxes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_contact_audit_outboxes
+    ADD CONSTRAINT visitor_contact_audit_outboxes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: visitor_email_histories visitor_email_histories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_email_histories
+    ADD CONSTRAINT visitor_email_histories_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: visitor_email_statuses visitor_email_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4127,6 +4346,14 @@ ALTER TABLE ONLY public.visitor_emails
 
 ALTER TABLE ONLY public.visitor_enforcement_recovery_ceremonies
     ADD CONSTRAINT visitor_enforcement_recovery_ceremonies_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: visitor_identifier_rotation_audits visitor_identifier_rotation_audits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_identifier_rotation_audits
+    ADD CONSTRAINT visitor_identifier_rotation_audits_pkey PRIMARY KEY (id);
 
 
 --
@@ -4455,6 +4682,14 @@ ALTER TABLE ONLY public.visitor_secret_credentials
 
 ALTER TABLE ONLY public.visitor_statuses
     ADD CONSTRAINT visitor_statuses_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: visitor_telephone_histories visitor_telephone_histories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_telephone_histories
+    ADD CONSTRAINT visitor_telephone_histories_pkey PRIMARY KEY (id);
 
 
 --
@@ -5152,6 +5387,20 @@ CREATE INDEX index_visitor_banners_on_visitor_id ON public.visitor_banners USING
 
 
 --
+-- Name: index_visitor_contact_audit_outboxes_on_event_uuid; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_visitor_contact_audit_outboxes_on_event_uuid ON public.visitor_contact_audit_outboxes USING btree (event_uuid);
+
+
+--
+-- Name: index_visitor_email_histories_on_visitor_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_visitor_email_histories_on_visitor_id ON public.visitor_email_histories USING btree (visitor_id);
+
+
+--
 -- Name: index_visitor_emails_on_discard_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5593,6 +5842,13 @@ CREATE INDEX index_visitor_secret_credentials_on_visitor_id ON public.visitor_se
 
 
 --
+-- Name: index_visitor_telephone_histories_on_visitor_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_visitor_telephone_histories_on_visitor_id ON public.visitor_telephone_histories USING btree (visitor_id);
+
+
+--
 -- Name: index_visitor_telephones_on_discard_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5838,6 +6094,13 @@ CREATE INDEX index_visitors_on_withdrawn_at ON public.visitors USING btree (with
 
 
 --
+-- Name: visitor_contact_audit_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX visitor_contact_audit_pending ON public.visitor_contact_audit_outboxes USING btree (id) WHERE (acknowledged_at IS NULL);
+
+
+--
 -- Name: visitor_emails_effective_digest; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5849,6 +6112,13 @@ CREATE UNIQUE INDEX visitor_emails_effective_digest ON public.visitor_emails USI
 --
 
 CREATE UNIQUE INDEX visitor_emails_effective_owner ON public.visitor_emails USING btree (visitor_id) WHERE ((binding_finalized_at IS NOT NULL) AND (binding_released_at IS NULL));
+
+
+--
+-- Name: visitor_rotation_operation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX visitor_rotation_operation ON public.visitor_identifier_rotation_audits USING btree (operation_ref, channel, record_id);
 
 
 --
@@ -5873,10 +6143,45 @@ CREATE TRIGGER visitor_emails_binding_facts_trigger BEFORE UPDATE ON public.visi
 
 
 --
+-- Name: visitor_emails visitor_emails_credential_registration_otp_proof_trigger; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER visitor_emails_credential_registration_otp_proof_trigger BEFORE UPDATE OF credential_registration_otp_context ON public.visitor_emails FOR EACH ROW EXECUTE FUNCTION public.enforce_visitor_credential_registration_otp_proof();
+
+
+--
+-- Name: visitor_emails visitor_emails_sign_up_otp_proof_trigger; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER visitor_emails_sign_up_otp_proof_trigger BEFORE UPDATE OF sign_up_otp_context ON public.visitor_emails FOR EACH ROW EXECUTE FUNCTION public.enforce_visitor_sign_up_otp_proof();
+
+
+--
+-- Name: visitor_identifier_rotation_audits visitor_rotation_audit_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER visitor_rotation_audit_guard BEFORE INSERT OR UPDATE ON public.visitor_identifier_rotation_audits FOR EACH ROW EXECUTE FUNCTION public.enforce_visitor_rotation_audit();
+
+
+--
 -- Name: visitor_telephones visitor_telephones_binding_facts_trigger; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER visitor_telephones_binding_facts_trigger BEFORE UPDATE ON public.visitor_telephones FOR EACH ROW EXECUTE FUNCTION public.enforce_visitor_telephones_binding_facts();
+
+
+--
+-- Name: visitor_telephones visitor_telephones_credential_registration_otp_proof_trigger; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER visitor_telephones_credential_registration_otp_proof_trigger BEFORE UPDATE OF credential_registration_otp_context ON public.visitor_telephones FOR EACH ROW EXECUTE FUNCTION public.enforce_visitor_credential_registration_otp_proof();
+
+
+--
+-- Name: visitor_telephones visitor_telephones_sign_up_otp_proof_trigger; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER visitor_telephones_sign_up_otp_proof_trigger BEFORE UPDATE OF sign_up_otp_context ON public.visitor_telephones FOR EACH ROW EXECUTE FUNCTION public.enforce_visitor_sign_up_otp_proof();
 
 
 --
@@ -5941,6 +6246,14 @@ ALTER TABLE ONLY public.visitor_retention_holds
 
 ALTER TABLE ONLY public.com_enforcement_authentication_method_effects
     ADD CONSTRAINT fk_rails_0e70aae130 FOREIGN KEY (com_enforcement_case_id) REFERENCES public.com_enforcement_cases(id);
+
+
+--
+-- Name: visitor_email_histories fk_rails_0f626c72ea; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_email_histories
+    ADD CONSTRAINT fk_rails_0f626c72ea FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) ON DELETE RESTRICT;
 
 
 --
@@ -6616,6 +6929,14 @@ ALTER TABLE ONLY public.visitors
 
 
 --
+-- Name: visitor_telephone_histories fk_rails_da388440d9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_telephone_histories
+    ADD CONSTRAINT fk_rails_da388440d9 FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: individual_ownerships fk_rails_dc18c4bfb3; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6718,6 +7039,19 @@ ALTER TABLE ONLY public.visitor_processor_erasure_notification_attempts
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261008025005'),
+('20261007224312'),
+('20261007220238'),
+('20261007193041'),
+('20261007193011'),
+('20261007183050'),
+('20261007182157'),
+('20261007182031'),
+('20261007134724'),
+('20261007124608'),
+('20261007122512'),
+('20261007122430'),
+('20261007020002'),
 ('20261007020001'),
 ('20261006180001'),
 ('20261006110001'),

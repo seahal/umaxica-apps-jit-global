@@ -34,6 +34,9 @@
 #
 class VisitorEmailCeremonyTransaction < ComTicketRecord
   include EmailCeremonyTransactionable
+  include EmailCeremonyOtp
+
+  validate :immutable_email_otp_terminal_facts
 
   ceremony_surface "com"
 end

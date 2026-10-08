@@ -46,6 +46,8 @@ module Base
 
           def identity_email_model = ClientEmail
 
+          def recovery_email_ceremony_model = ClientEmailCeremonyTransaction
+
           def recovery_subject_from_email(email) = email&.user
 
           def recovery_surface = :app

@@ -110,7 +110,7 @@ class OtpEmailAdapterTest < ActiveSupport::TestCase
     assert_includes calls, :delivered
   end
 
-  test "deliver ignores unexpected keyword arguments" do
+  test "deliver rejects unexpected keywords before queuing mail" do
     calls = []
     fake_mail = Object.new
     fake_mail.define_singleton_method(:deliver_later) { calls << :delivered }
@@ -124,12 +124,14 @@ class OtpEmailAdapterTest < ActiveSupport::TestCase
     adapter = OtpEmailAdapter.new(fake_mailer)
     record = Object.new
     record.define_singleton_method(:address) { "addr@example.com" }
-    adapter.deliver(
-      record: record,
-      otp_code: "123456",
-      ignored: "value",
-    )
+    assert_raises(ArgumentError) do
+      adapter.deliver(
+        record: record,
+        otp_code: "123456",
+        ignored: "value",
+      )
+    end
 
-    assert_includes calls, :delivered
+    assert_empty calls
   end
 end

@@ -1,63 +1,119 @@
 # Current transition inventory
 
+## Ceremony-owned channel OTP primitives (2026-10-07)
+
+Storage is the six existing realm/channel ceremony tables. New facts are purpose, otp_generation,
+otp_verifier, otp_expires_at, otp_consumed_at, otp_cancelled_at, otp_receipt_verifier and
+otp_result_expires_at. EmailCeremonyOtp and
+TelephoneCeremonyOtp are separate stateful implementations; neither identifier policy includes
+the other. See `idp-email-ceremony-otp-primitive.mmd` and `idp-telephone-ceremony-otp-primitive.mmd`.
+
+| Edge | Guard | Effects | Evidence |
+| --- | --- | --- | --- |
+| Issue/reissue | pending unexpired parent, nonempty candidate, supported fixed purpose, no consumed/cancelled proof | random six-digit code; new UUID; binding-specific HMAC; deadline bounded by parent | ceremony_owned_otp_test and ceremony_owned_otp_lifecycle_test |
+| Telephone explicit resend | original issued live proof under its writing-role row lock; no consumption/cancellation | replace only generation and verifier; retain original OTP and parent deadlines; old generation refuses transport | telephone_ceremony_otp_reissue_test |
+| Verify | writing-role row lock; pending parent; exact purpose/actor/session/operation/candidate; well-formed matching code; unexpired and unconsumed proof | set OTP consumption time, erase challenge verifier and store a deadline-bound keyed receipt atomically | lifecycle and ceremony_owned_otp_concurrency_test |
+| Read verified evidence | writing-role row lock; consumed proof; still-pending parent; exact original binding/code; fixed live result deadline | no mutation, new verification or authority issuance; domain-separated HMAC also authenticates both receipt timestamps | ceremony_otp_verification_receipt_test |
+| Deliver | writing-role row lock; fresh DB clock; current generation; authentic code; pending unexpired, unconsumed and uncancelled proof | invoke transport while locked; no verification consumption or code persistence | ceremony_otp_delivery_test |
+| Cancel | writing-role row lock; unconsumed and uncancelled proof | cancellation timestamp and erased verifier; no reopening | lifecycle tests |
+| Expire | database deadline reached | verification and reissue refused by parent expiry guard | lifecycle tests |
+
+Delivery and verification require finite parent and OTP deadlines. PostgreSQL positive and negative
+infinity are rejected explicitly without transport or consumption; see
+`ceremony_otp_finite_deadline_test`. Terminal ORM guards also protect the original parent deadline;
+equivalent direct-SQL terminal guards are not yet delivered.
+
+Both verification and delivery bind the channel-specific normalized destination digest in the
+keyed verifier. Replacing that digest invalidates an already issued code, even when the candidate
+reference is unchanged; terminal proof guards also prohibit destination replacement. Evidence:
+`ceremony_otp_destination_binding_test`.
+
+APP/COM withdrawal and enforcement-recovery reentry now call `EmailReentryOtpIssuer` and
+`EmailReentryOtpVerificationCommitter`. The issuer changes only the identifier issuance timestamp,
+preserves failures and places keyed proof on its own Email ceremony with operation/purpose
+`withdrawal` or `recovery` and an opaque browser reference. Verification checks both the independent Email
+destination budget and identifier budget before consuming; a second DB clock check after budget
+admission prevents consumption at expiry. New issuance cancels the previous browser-owned proof.
+Each concrete realm Notifier carries encrypted code and transaction/generation references with
+the Source recipient GlobalID, not a plaintext address. Its argument-redacted Noticed Email job
+invokes the concrete Mailer once. The Mailer locks Source and transaction, checks current
+owner/candidate/destination, and rechecks proof after rendering immediately before delivery.
+Signed Email/Telephone registration permissions still accept only registration/replacement;
+the expanded internal OTP operation vocabulary does not expand that protocol.
+Other caller migrations remain pending; this does not certify every worker or route.
+The Source-owned diagrams below describe paths that still exist, not the final contract.
+
 ## idp-credential-registration-otp-challenge
 
-Storage: nullable `credential_registration_otp_context` on the four APP/COM Source Contact models.
-This original-ceremony snapshot is a derived OTP axis, not a new lifecycle status. Diagram:
-`idp-credential-registration-otp-challenge.mmd`; current writers: `ContactRegistrationOtpIssuer`
-and `ContactRegistrationOtpVerificationCommitter`, with `ContactRegistrationOtpResendIssuer`
-for pending generation replacement and `ContactRegistrationOtpFinalizer` for Source binding and
-original Ticket receipt.
+Storage: APP/COM/ORG Email and Telephone ceremony random keyed verifier, generation,
+consumption and fixed receipt, implemented independently by channel.
+The settings Email HTTP callers use `EmailCredentialRegistrationOtpIssuer`,
+`EmailCredentialRegistrationOtpVerificationCommitter`, `EmailCredentialRegistrationOtpResendIssuer`
+and `EmailCredentialRegistrationOtpFinalizer`; Source status changes use the named model writer.
+APP/COM Telephone settings use their independent `TelephoneCredentialRegistrationOtp*` series
+and encrypted version-four SMS generation binding. ORG Telephone binds its numeric candidate ID
+explicitly and uses its own passkey-only finalizer and named status writer. APP/COM/ORG management-create
+callers now enter their own registration ceremonies; shared legacy retirement remains pending. This derived OTP axis does not introduce
+a lifecycle status. Diagram: `idp-credential-registration-otp-challenge.mmd`.
 
 | Transition ID | From | Event | To | Guard and effect |
 | --- | --- | --- | --- | --- |
-| idp-credential-registration-otp-challenge:T001 | absent | issue original challenge | issued | Matching realm/owner/root/device/candidate, original Contact ceremony UUID, Base nonce digest, current HOTP and owning DB clocks |
+| idp-credential-registration-otp-challenge:T001 | absent | issue original challenge | issued | Matching realm/owner/root/device/candidate, original ceremony UUID, Base nonce digest and owning DB clocks; independent random keyed proof for migrated channels and realms |
 | idp-credential-registration-otp-challenge:T002 | issued | deadline or authority lost | unavailable predicate | Original deadline and binding do not slide; no terminal fact is inferred or rewritten |
-| idp-credential-registration-otp-challenge:T003 | issued | verify original code | verified | Original Ticket/browser/root/owner/candidate, shared and candidate budgets, current HOTP; OTP consumption and retained proof are one Source transaction |
+| idp-credential-registration-otp-challenge:T003 | issued | verify original code | verified | Original Ticket/browser/root/owner/candidate and independent channel budgets; each migrated channel consumes proof atomically on Ticket, then reconciles Source failures without distributed-transaction claims |
 | idp-credential-registration-otp-challenge:T004 | verified | exact retry | verified | Same input and original binding; fixed result deadline; proof unchanged |
 | idp-credential-registration-otp-challenge:T005 | verified | result deadline or authority lost | unavailable predicate | No proof replacement or revival |
 | idp-credential-registration-otp-challenge:T006 | verified | finalize original binding | verified proof retained | Current Action Policy and live credential/root/browser binding; replacement and original audit intents commit in Source before original Ticket receipt; exact Source-provenance retry creates no duplicate fact |
-| idp-credential-registration-otp-challenge:T007 | issued | resend original challenge | issued | Original pending flow/browser/root/owner/candidate, existing cooldown and candidate cap; replace counter and keyed code digest under locks without extending deadlines or resetting either failure budget; verified proof refuses reissue |
+| idp-credential-registration-otp-challenge:T007 | issued | resend original challenge | issued | Independent Email and Telephone writers lock original pending flow/browser/root/owner/candidate; Email additionally checks original bootstrap authority and cooldown; candidate caps remain; replace generation and verifier without extending deadlines or resetting budgets; terminal proof refuses reissue |
 | idp-credential-registration-otp-challenge:T008 | verified | finalize first-email bootstrap | verified proof retained | Explicit original parent/Session/admission browser binding under locks; current Contact policy; Source commit before both receipts; exact Source provenance recovery; no Root freshness or completion-time primary-window recheck |
+| idp-credential-registration-otp-challenge:T009 | issued | same-browser candidate new issuance | cancelled superseded proof | Independent channel issuer matches actor/candidate/purpose and derives the prior transaction's original Root/browser tuple under the owning locks; cancellation precedes replacement issuance within Ticket transaction; foreign-browser challenges are not cancelled |
 
-Forward Source checks require the approved exact fifteen-key shape and finite UTC timestamps;
-triggers reject modification of a committed verification proof. All four APP/COM settings HTTP
-callers use their original challenge and retained proof; Source-fault and identical-request retry
-journeys passed with real signed Passkey Step-Up. The verifier preserves the pending Ticket and
-sets the separate result deadline to the earlier of verification plus sixty seconds and original
-Ticket expiry. APP email HTTP resend retains the original flow and refuses verified proof;
-first-email bootstrap is parent-bound and grants no freshness. Bootstrap HTTP receipt-fault
-recovery and settings cancellation remain incomplete. Bound direct email,
-Noticed email and version-two SMS delivery use
-`ContactRegistrationOtpDeliveryIssuer` to recheck the original Source/Ticket bindings under locks.
-The delivery check makes no Source, Ticket or root transition.
-Shared/production legacy queue handling remains unverified.
+Legacy Source checks and immutable-proof triggers remain until remaining callers are retired.
+The Email series uses bounded keyed receipts and an original bootstrap FK bound into proof;
+Source binding/audit commit before Ticket receipts. APP/COM Email HTTP and encrypted Notifier
+journeys passed targeted tests. `EmailCredentialRegistrationOtpDeliveryGuard` checks original
+owner/device/Root/candidate/generation and bootstrap Parent/Session/admission under locks through
+transport without a state transition. Resend and verification reject cancelled or invalid original
+bootstrap authority rather than adopting a later permission. Whole-suite checks, HTTP receipt-fault
+coverage, database terminal-proof guards and complete legacy retirement remain acceptance work.
+No production queue or secret was changed.
 
 ## idp-sign-up-otp-challenge
 
-Storage: nullable `sign_up_otp_context` on APP/COM Source email/telephone candidates. This is a
-derived issued/verified proof axis, not a new flow status. Sources: `SignUpOtpChallengeRecorder`,
-`SignOtpCeremony`, `SignUpOtpDeliveryIssuer` and `SignUpOtpDeliveryGuard`.
+Storage: APP/COM typed Email/Telephone Ticket ceremonies' OTP verifier, generation, expiry,
+consumption and bounded receipt columns. This is a derived issued/verified proof axis, not a new
+signup flow status. Sources are the independently implemented `EmailSignUpOtpIssuer`,
+`EmailSignUpOtpVerificationCommitter`, `EmailSignUpOtpDeliveryGuard` and corresponding Telephone
+operations. The old Source context/HOTP implementation is superseded for these wired signup paths;
+remaining legacy callers and column removal are separately tracked implementation work.
+
+The service requires the original browser nonce from the explicit APP/COM locator session,
+compares its digest with the original Ticket and repeats admission after taking its row lock.
+The public Ticket ID is not a browser credential. Missing, mistyped, malformed, foreign or rotated
+nonces refuse without proof consumption; Rails CSRF and the separate HTTP phase gate remain intact.
 
 | Transition ID | From | Event | To | Guard and effect |
 | --- | --- | --- | --- | --- |
-| idp-sign-up-otp-challenge:T001 | absent | record issued challenge | issued | Original Ticket/nonce, pending owner and candidate, destination, counter and keyed code digest; owning locks and Source clock |
-| idp-sign-up-otp-challenge:T002 | issued | resend | issued | Replace only this unverified context; preserve candidate/shared failure limits |
-| idp-sign-up-otp-challenge:T003 | issued | successful verification | verified | Recheck Ticket after Source locks; consume OTP and commit proof in one Source transaction |
+| idp-sign-up-otp-challenge:T001 | absent | channel issuer | issued | Original Ticket/nonce, pending owner and candidate, destination, operation, generation and keyed verifier; owning locks and fresh DB clocks |
+| idp-sign-up-otp-challenge:T002 | issued | resend | issued | Replace only this unconsumed generation; preserve candidate/shared failure limits |
+| idp-sign-up-otp-challenge:T003 | issued | successful verification | verified | Recheck admission after owning locks and budget wait; atomically consume proof on its typed Ticket ceremony |
 | idp-sign-up-otp-challenge:T004 | verified | exact retry | verified | Same input and binding, eligible owner/candidate, live fixed result deadline and common failure budget; proof unchanged |
 | idp-sign-up-otp-challenge:T005 | issued or verified | deadline or authority lost | unavailable predicate | No proof mutation; parent expiry uses the existing named Ticket termination |
 
-Forward CHECK constraints validate shape and finite UTC timestamps. Verified proof replacement
-or clearing is forbidden by Source triggers. `result_expires_at` is bounded by verification plus
-60 seconds and the original Ticket deadline. It is distinct from the OTP deadline. No Source proof
-is reconstructed for an old flow. Enqueue happens after Ticket binding; final mail/SMS transport
-rechecks the original counter and candidate while holding owning locks. HTTP checkpoint replay
+Forward CHECK constraints validate finite bounded receipt timestamps. Receipt HMAC binds the exact
+verification/result deadlines; model validation protects terminal OTP facts. The fixed result
+expiry is bounded by verification plus 60 seconds and the original Ticket deadline, distinct from
+the OTP deadline. No identifier HOTP reconstructs the new proof. Enqueue happens after Ticket
+binding and encrypts the random code; final mail/SMS transport checks the current transaction,
+generation and candidate while holding owning locks. HTTP checkpoint replay
 and cross-database recovery are separate contracts; this axis does not authorize a completed-step
 POST or imply distributed atomicity. Shared/production legacy queue handling remains unverified.
 
 The post-OTP Ticket transition chain holds one Ticket lock and transaction across verification,
 guardrail entry, checkpoint entry and OTP requirement clearing. An exceptional Ticket write rolls
-back that chain while preserving the independent Source proof for an exact, deadline-bound retry.
+back that chain while preserving the independently consumed ceremony proof for an exact,
+deadline-bound retry. Signup OTP consumption and later Source attempt reset are separate database
+operations; this inventory does not certify their fault acceptance or a distributed transaction.
 
 ## idp-auth-email-otp-challenge
 
@@ -68,7 +124,7 @@ Storage: app/com Ticket `email_otp_context` on each Auth ceremony. Source: `Auth
 | idp-auth-email-otp-challenge:T001 | absent or unverified | issue_email_otp! | issued | Active admitted continuity, pending locked parent, DB time; current effective Contact or dummy; replace only this ceremony generation |
 | idp-auth-email-otp-challenge:T002 | issued | verify_email_otp! | verified | Current surface/purpose/SID/parent and Contact/owner/finalization facts, deadline, candidate cap, shared budget, bound code digest |
 | idp-auth-email-otp-challenge:T003 | issued | wrong code | issued | Atomic shared failure count and real candidate failures; stale scope refuses before comparison |
-| idp-auth-email-otp-challenge:T004 | verified | verification retry | verified | Original result deadline remains live; original proof unchanged |
+| idp-auth-email-otp-challenge:T004 | verified | verification retry | verified | Original result deadline remains live; original proof unchanged; already_verified receipt, not a second successful OTP consumption; controllers explicitly continue from verified evidence |
 | idp-auth-email-otp-challenge:T005 | issued or verified | deadline elapsed | expired predicate | No state write; parent and Auth expiry cap both deadlines |
 
 Verified proof reissue is refused. Source Contact OTP generations and root/RP authority remain unchanged. Forward shape checks and verified-proof immutability triggers are installed. The final transport guard rechecks the pending parent, active continuity, original effective Contact and owner, destination, generation and deadline under their owning locks. Provider transport stays inside those locks to prevent concurrent reissue or cancellation from making an already-checked payload stale; production lock-duration behavior remains unmeasured.
@@ -237,7 +293,12 @@ Email finalization locks the Source owner before its candidate and commits the b
 
 Signup policies compare expiry with the owning Ticket database clock; authorization is refused at and after the deadline. Real app/com Ticket policy tests cover the microsecond before, exact deadline and microsecond after. The controller rebuilds context and revalidates finalization policy after acquiring the Ticket lock, before Source mutation. Email HTTP deadline-crossing tests verify that refusal creates neither binding nor Source intent. Email and telephone Source finalizers additionally require an active owner under its lock; suspended-owner public tests preserve the candidate proof and create no intent. The complete fault/concurrency and exact recovery matrix remains unfinished.
 
-`SignOtpCeremony` locks the signup parent before issuing or consuming its bound contact OTP. It checks terminal state, expiry and logical discard against the owning Ticket DB clock; these failures leave contact OTP evidence unchanged. This adds no signup state or transition. The visitor operation uses the same guard.
+The independent Email and Telephone signup issuers/verifiers lock the signup parent before
+issuing or consuming its ceremony-owned proof. They check terminal state, expiry and logical
+discard against the owning Ticket DB clock and recheck authority after Source locks and budget
+admission. An overdue admitted parent invokes `SignUpTermination` after the proof-operation
+locks are released, preserving the existing EXPIRED/retention/cleanup boundary without changing
+failure counters. This adds no signup state or transition and does not claim distributed atomicity.
 
 Implementation: `SignUpStateMachine + SignFlow / FlowSignUp`. Storage: `client_sign_up_flows` / `status_id`.
 
@@ -292,7 +353,12 @@ Current terminals are COMPLETED=100, EXPIRED=910, CANCELLED=920 and HALTED=930. 
 
 `SignUpTermination` wraps cancel/expire/halt, schedules retention, writes cleanup_status_id and runs compensation; raw state-machine calls skip that orchestration. Checkpoint clearing locks the decision and rejects stale version, wrong order and repeated clearing while preserving state. FlowSignUp's named helpers route through the private FlowBase writer and synchronize status_id/state/step. Tests cover contact/social ordering, stale checkpoints, required accepted finalization, direct completion, expired mutation, halt, cancel-after-finalizing refusal, cancel replay and expiry races. Historical handoff transition IDs are retired, not current edges; no terminal back edge is inferred.
 
-App/com email and telephone `SignOtpCeremony` issuance and verification use the owning Ticket database clock under the parent lock and recheck it after acquiring the Contact lock. An overdue nonterminal invokes the existing `SignUpTermination` expiry boundary before returning an inactive-flow refusal; the refusal does not raise inside the owning transaction. Existing terminals remain absorbing. Candidate OTP expiry is a separate Contact deadline and does not by itself expire the Ticket. Telephone candidate creation no longer physically deletes the artifacts of the previous halted flow; its existing cleanup owner retains them until the purge deadline.
+APP/COM Email and Telephone signup use separate `EmailSignUpOtp*` and `TelephoneSignUpOtp*`
+implementations. An overdue admitted nonterminal invokes the existing `SignUpTermination`
+boundary before returning refusal. Existing terminals remain absorbing: returning to an earlier
+clock cannot reopen the parent. Ceremony code expiry is separate from the parent deadline and
+does not by itself expire signup. Candidate creation preserves artifacts of a previous halted
+flow until its existing cleanup owner reaches the purge boundary.
 
 ## idp-visitor-sign-up
 
@@ -1580,9 +1646,14 @@ Sign-in resend uses version-2 encrypted state bound to server-owned Auth continu
 
 Signup issuance and verification require the bound candidate's owner to equal the locked Ticket principal before use and again under the Source contact lock. A mismatch raises explicitly without dispatch, proof consumption or attempt changes. Released binding facts are refused without OTP mutation, including under the contact lock. Admissible signup comparisons also use the shared destination failure budget described in idp-shared-otp-verification-budget. Candidate limits remain independent; this does not certify all D-87 acceptance.
 
-Implementation: `OtpLockable / Email`. Storage: `client_emails` / `otp_expires_at / otp_attempts_count / locked_at`.
+Implementation: `EmailOtpPolicy`. Storage: `client_emails` / `otp_expires_at / otp_attempts_count / locked_at / otp_last_sent_at`.
 
-Sources: `app/models/concerns/otp_lockable.rb`, `app/models/client_email.rb`, `app/models/concerns/email.rb`, `app/services/sign_otp_ceremony.rb`, `app/controllers/concerns/common_otp.rb`.
+Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window
+expiry; only explicit successful consumption can reset them. The channel policy is independent.
+Both channels use the explicit issuance timestamp; older created-at/window-reset descriptions
+below are superseded by this correction. Ceremony ownership migration remains in progress.
+
+Sources: `app/models/concerns/email_otp_policy.rb`, `app/models/client_email.rb`, `app/models/concerns/email.rb`, `app/services/sign_otp_ceremony.rb`, `app/controllers/concerns/common_otp.rb`.
 
 Tests read: `test/models/concerns/otp_lockable_test.rb`, `test/services/sign_otp_ceremony_test.rb`.
 
@@ -1601,9 +1672,14 @@ This is a derived OTP/lock axis on a contact table; credential status_id is sepa
 
 Signup issuance and verification require the bound candidate's owner to equal the locked Ticket principal before use and again under the Source contact lock. A mismatch raises explicitly without dispatch, proof consumption or attempt changes. Released binding facts are refused without OTP mutation, including under the contact lock. Admissible signup comparisons also use the shared destination failure budget described in idp-shared-otp-verification-budget. Candidate limits remain independent; this does not certify all D-87 acceptance.
 
-Implementation: `OtpLockable / Telephone`. Storage: `client_telephones` / `otp_expires_at / otp_attempts_count / locked_at`.
+Implementation: `TelephoneOtpPolicy`. Storage: `client_telephones` / `otp_expires_at / otp_attempts_count / locked_at / otp_last_sent_at`.
 
-Sources: `app/models/concerns/otp_lockable.rb`, `app/models/client_telephone.rb`, `app/models/concerns/telephone.rb`, `app/services/sign_otp_ceremony.rb`, `app/controllers/concerns/common_otp.rb`.
+Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window
+expiry; only explicit successful consumption can reset them. The channel policy is independent.
+Both channels use the explicit issuance timestamp; older created-at/window-reset descriptions
+below are superseded by this correction. Ceremony ownership migration remains in progress.
+
+Sources: `app/models/concerns/telephone_otp_policy.rb`, `app/models/client_telephone.rb`, `app/models/concerns/telephone.rb`, `app/services/sign_otp_ceremony.rb`, `app/controllers/concerns/common_otp.rb`.
 
 Tests read: `test/models/concerns/otp_lockable_test.rb`, `test/services/sign_otp_ceremony_test.rb`.
 
@@ -1671,9 +1747,14 @@ Sign-in resend uses version-2 encrypted state bound to server-owned Auth continu
 
 Signup issuance and verification require the bound candidate's owner to equal the locked Ticket principal before use and again under the Source contact lock. A mismatch raises explicitly without dispatch, proof consumption or attempt changes. Released binding facts are refused without OTP mutation, including under the contact lock. Admissible signup comparisons also use the shared destination failure budget described in idp-shared-otp-verification-budget. Candidate limits remain independent; this does not certify all D-87 acceptance.
 
-Implementation: `OtpLockable / Email`. Storage: `visitor_emails` / `otp_expires_at / otp_attempts_count / locked_at`.
+Implementation: `EmailOtpPolicy`. Storage: `visitor_emails` / `otp_expires_at / otp_attempts_count / locked_at / otp_last_sent_at`.
 
-Sources: `app/models/concerns/otp_lockable.rb`, `app/models/visitor_email.rb`, `app/models/concerns/email.rb`, `app/services/sign_otp_ceremony.rb`, `app/controllers/concerns/common_otp.rb`.
+Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window
+expiry; only explicit successful consumption can reset them. The channel policy is independent.
+Both channels use the explicit issuance timestamp; older created-at/window-reset descriptions
+below are superseded by this correction. Ceremony ownership migration remains in progress.
+
+Sources: `app/models/concerns/email_otp_policy.rb`, `app/models/visitor_email.rb`, `app/models/concerns/email.rb`, `app/services/sign_otp_ceremony.rb`, `app/controllers/concerns/common_otp.rb`.
 
 Tests read: `test/models/concerns/otp_lockable_test.rb`, `test/services/sign_otp_ceremony_test.rb`.
 
@@ -1692,9 +1773,14 @@ This is a derived OTP/lock axis on a contact table; credential status_id is sepa
 
 Signup issuance and verification require the bound candidate's owner to equal the locked Ticket principal before use and again under the Source contact lock. A mismatch raises explicitly without dispatch, proof consumption or attempt changes. Released binding facts are refused without OTP mutation, including under the contact lock. Admissible signup comparisons also use the shared destination failure budget described in idp-shared-otp-verification-budget. Candidate limits remain independent; this does not certify all D-87 acceptance.
 
-Implementation: `OtpLockable / Telephone`. Storage: `visitor_telephones` / `otp_expires_at / otp_attempts_count / locked_at`.
+Implementation: `TelephoneOtpPolicy`. Storage: `visitor_telephones` / `otp_expires_at / otp_attempts_count / locked_at / otp_last_sent_at`.
 
-Sources: `app/models/concerns/otp_lockable.rb`, `app/models/visitor_telephone.rb`, `app/models/concerns/telephone.rb`, `app/services/sign_otp_ceremony.rb`, `app/controllers/concerns/common_otp.rb`.
+Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window
+expiry; only explicit successful consumption can reset them. The channel policy is independent.
+Both channels use the explicit issuance timestamp; older created-at/window-reset descriptions
+below are superseded by this correction. Ceremony ownership migration remains in progress.
+
+Sources: `app/models/concerns/telephone_otp_policy.rb`, `app/models/visitor_telephone.rb`, `app/models/concerns/telephone.rb`, `app/services/sign_otp_ceremony.rb`, `app/controllers/concerns/common_otp.rb`.
 
 Tests read: `test/models/concerns/otp_lockable_test.rb`, `test/services/sign_otp_ceremony_test.rb`.
 
@@ -1761,9 +1847,14 @@ This outcome is persisted as a separate EVP submachine; it does not consume the 
 Authenticated destination confirmation checks the shared verification budget under the Contact lock.
 It neither replaces candidate limits nor gives org a signup or email sign-in workflow.
 
-Implementation: `OtpLockable / Email`. Storage: `operator_emails` / `otp_expires_at / otp_attempts_count / locked_at`.
+Implementation: `EmailOtpPolicy`. Storage: `operator_emails` / `otp_expires_at / otp_attempts_count / locked_at / otp_last_sent_at`.
 
-Sources: `app/models/concerns/otp_lockable.rb`, `app/models/operator_email.rb`, `app/models/concerns/email.rb`, `app/services/sign_otp_ceremony.rb`, `app/controllers/concerns/common_otp.rb`.
+Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window
+expiry; only explicit successful consumption can reset them. The channel policy is independent.
+Both channels use the explicit issuance timestamp; older created-at/window-reset descriptions
+below are superseded by this correction. Ceremony ownership migration remains in progress.
+
+Sources: `app/models/concerns/email_otp_policy.rb`, `app/models/operator_email.rb`, `app/models/concerns/email.rb`, `app/services/sign_otp_ceremony.rb`, `app/controllers/concerns/common_otp.rb`.
 
 Tests read: `test/models/concerns/otp_lockable_test.rb`, `test/services/sign_otp_ceremony_test.rb`.
 
@@ -1783,9 +1874,14 @@ This is a derived OTP/lock axis on a contact table; credential status_id is sepa
 Authenticated destination confirmation checks the shared verification budget under the Contact lock.
 It neither replaces candidate limits nor gives org a signup or telephone sign-in workflow.
 
-Implementation: `OtpLockable / Telephone`. Storage: `operator_telephones` / `otp_expires_at / otp_attempts_count / locked_at`.
+Implementation: `TelephoneOtpPolicy`. Storage: `operator_telephones` / `otp_expires_at / otp_attempts_count / locked_at / otp_last_sent_at`.
 
-Sources: `app/models/concerns/otp_lockable.rb`, `app/models/operator_telephone.rb`, `app/models/concerns/telephone.rb`, `app/services/sign_otp_ceremony.rb`, `app/controllers/concerns/common_otp.rb`.
+Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window
+expiry; only explicit successful consumption can reset them. The channel policy is independent.
+Both channels use the explicit issuance timestamp; older created-at/window-reset descriptions
+below are superseded by this correction. Ceremony ownership migration remains in progress.
+
+Sources: `app/models/concerns/telephone_otp_policy.rb`, `app/models/operator_telephone.rb`, `app/models/concerns/telephone.rb`, `app/services/sign_otp_ceremony.rb`, `app/controllers/concerns/common_otp.rb`.
 
 Tests read: `test/models/concerns/otp_lockable_test.rb`, `test/services/sign_otp_ceremony_test.rb`.
 
@@ -1965,6 +2061,12 @@ Implementation: `SessionLimitResolutionTransactionable / Base::App::Sign::In::Li
 
 Sources: `app/models/concerns/session_limit_resolution_transactionable.rb`, `app/models/client_session_limit_resolution_transaction.rb`, `app/controllers/base/app/sign/in/limitations_controller.rb`.
 
+The browser gate carries an opaque raw challenge; its lookup uses the model's digest primitive and
+the persisted `challenge_digest`, never a nonexistent raw `challenge` column. Actor, browser
+binding, original parent and expiry checks still precede selection or revocation. APP/COM
+session-limit promotion and APP controller/gate checks passed the 18-test selection recorded in
+`evidence/2026-10-08-email-login-capacity-query-3Q7M.md`.
+
 Tests executed: `test/models/session_limit_resolution_transactionable_test.rb`.
 
 | Transition ID | Mutation kind | From | Event / Trigger | To | Guard | Side effect | Source file | Confidence |
@@ -1976,9 +2078,9 @@ Tests executed: `test/models/session_limit_resolution_transactionable_test.rb`.
 
 ## idp-visitor-session-limit-resolution
 
-Implementation: `SessionLimitResolutionTransactionable / Auth::Com::Sign::In::SessionsController`. Storage: `visitor_session_limit_resolution_transactions` / `state_id`.
+Implementation: `SessionLimitResolutionTransactionable / Base::Com::Sign::In::LimitationsController`. Storage: `visitor_session_limit_resolution_transactions` / `state_id`.
 
-Sources: `app/models/concerns/session_limit_resolution_transactionable.rb`, `app/models/visitor_session_limit_resolution_transaction.rb`, `app/controllers/auth/com/sign/in/sessions_controller.rb`.
+Sources: `app/models/concerns/session_limit_resolution_transactionable.rb`, `app/models/visitor_session_limit_resolution_transaction.rb`, `app/controllers/base/com/sign/in/limitations_controller.rb`, `app/controllers/concerns/base_sign_in_limitations.rb`.
 
 | Transition ID | Mutation kind | From | Event / Trigger | To | Guard | Side effect | Source file | Confidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -2407,7 +2509,7 @@ Challenge deadline10m capped by parent; reissue preserves original live deadline
 
 ## idp-client-email-credential
 
-The named Source writer `ContactBinding#finalize_registration_binding!` moves an original pending
+The named Source writer `EmailContactBinding#finalize_registration_binding!` moves an original pending
 registration candidate to VERIFIED with its binding timestamp under its own row lock and DB clock.
 `ContactRegistrationOtpFinalizer` checks current Action Policy, root, browser, original bounded
 verification proof and current credential under owner/root/Ticket/Contact locks. Replacement and both
@@ -2452,15 +2554,17 @@ Tests read: `test/models/client_email_test.rb`, `test/operations/identity_email_
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | idp-client-email-credential:T001 | DOCUMENTED_TRANSITION | UNVERIFIED | Base ceremony final commit | VERIFIED | Signed result bound to actor/session; pending contact under row lock | Consume ceremony on ticket DB before principal status commit | app/operations/identity_email_ceremony_final_committer.rb | CONFIRMED |
 | idp-client-email-credential:T100 | DOCUMENTED_TRANSITION | UNVERIFIED | finalize_registration_binding! | VERIFIED | Original bounded Source verification proof; candidate lock and own DB clock; current policy/root/credential/browser and original Contact Ticket checked by finalizer | Candidate binding and status, previous binding release and both original-operation audit intents commit in Source before Ticket receipt | app/models/concerns/contact_binding.rb | CONFIRMED |
-| idp-client-email-credential:T002 | OUT_OF_BAND | UNVERIFIED_WITH_SIGN_UP | sign-up contact finalization | VERIFIED_WITH_SIGN_UP | Bound signup candidate/OTP; finalizer/controller guards | Direct contact status and principal verification | app/controllers/concerns/sign_email_registrable.rb | CONFIRMED |
+| idp-client-email-credential:T002 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | finalize_sign_up_binding! | VERIFIED_WITH_SIGN_UP | Original live checkpoint, cleared OTP requirement, exact browser/owner/candidate and historically consumed typed Email proof under locks | Source status and binding timestamp; no failure reset or new receipt | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-client-email-credential:T101 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | mark_sign_up_verified! | VERIFIED_WITH_SIGN_UP | Original live signup Parent/browser/owner/candidate and consumed bounded keyed receipt; Source locks and owning clocks | Verification status only; binding remains unfinalized and failures unchanged | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-client-email-credential:T102 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP | finalize_sign_up_binding! | VERIFIED_WITH_SIGN_UP | Original live checkpoint, cleared OTP, browser/owner/candidate and historically consumed proof under locks | Binding fact only; existing verification status retained | app/models/concerns/email_contact_binding.rb | CONFIRMED |
 | idp-client-email-credential:T003 | DOCUMENTED_TRANSITION | UNVERIFIED | signup Base ceremony final commit | VERIFIED_WITH_SIGN_UP | Actor UNVERIFIED_WITH_SIGN_UP; signed binding and locked contact | Update actor VERIFIED_WITH_SIGN_UP | app/operations/identity_email_ceremony_final_committer.rb | CONFIRMED |
-| idp-client-email-credential:T004 | OUT_OF_BAND | UNVERIFIED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-client-email-credential:T005 | OUT_OF_BAND | VERIFIED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-client-email-credential:T006 | OUT_OF_BAND | SUSPENDED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-client-email-credential:T007 | OUT_OF_BAND | DELETED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-client-email-credential:T008 | OUT_OF_BAND | NOTHING | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-client-email-credential:T009 | OUT_OF_BAND | UNVERIFIED_WITH_SIGN_UP | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-client-email-credential:T010 | OUT_OF_BAND | VERIFIED_WITH_SIGN_UP | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
+| idp-client-email-credential:T004 | DOCUMENTED_TRANSITION | UNVERIFIED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-client-email-credential:T005 | DOCUMENTED_TRANSITION | VERIFIED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-client-email-credential:T006 | DOCUMENTED_TRANSITION | SUSPENDED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-client-email-credential:T007 | DOCUMENTED_TRANSITION | DELETED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-client-email-credential:T008 | DOCUMENTED_TRANSITION | NOTHING | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-client-email-credential:T009 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-client-email-credential:T010 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
 | idp-client-email-credential:T011 | OUT_OF_BAND | UNVERIFIED_WITH_SIGN_UP | SignUpArtifactCleanup dependent retention | DELETED | Selected pending contact; current column exists; deleted reference ID resolves; lock | Schedule discard/purge and direct dynamic status-column update | app/services/sign_up_artifact_cleanup.rb | CONFIRMED |
 | idp-client-email-credential:T012 | DOCUMENTED_TRANSITION | VERIFIED | Base binding release | DELETED | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding | One-way release and Source audit intent; invalidate unfinished Ticket authority | app/operations/identity_credential_removal_committer.rb | CONFIRMED |
 | idp-client-email-credential:T013 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP | Base binding release | DELETED | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding | One-way release and Source audit intent; invalidate unfinished Ticket authority | app/operations/identity_credential_removal_committer.rb | CONFIRMED |
@@ -2470,7 +2574,7 @@ No independent transition map: controllers/operations directly write state FK. F
 
 ## idp-client-telephone-credential
 
-The named Source writer `ContactBinding#finalize_registration_binding!` moves an original pending
+The named Source writer `TelephoneContactBinding#finalize_registration_binding!` moves an original pending
 registration candidate to VERIFIED with its binding timestamp under its own row lock and DB clock.
 `ContactRegistrationOtpFinalizer` checks current Action Policy, root, browser, original bounded
 verification proof and current credential under owner/root/Ticket/Contact locks. Replacement and both
@@ -2488,14 +2592,14 @@ Tests read: `test/models/client_telephone_test.rb`, `test/operations/identity_te
 | idp-client-telephone-credential:T001 | DOCUMENTED_TRANSITION | UNVERIFIED | Base ceremony final commit | VERIFIED | Signed result bound to actor/session; pending contact under row lock | Consume ceremony on ticket DB before principal status commit | app/operations/identity_telephone_ceremony_final_committer.rb | CONFIRMED |
 | idp-client-telephone-credential:T100 | DOCUMENTED_TRANSITION | UNVERIFIED | finalize_registration_binding! | VERIFIED | Original bounded Source verification proof; candidate lock and own DB clock; current policy/root/credential/browser and original Contact Ticket checked by finalizer | Candidate binding and status, previous binding release and both original-operation audit intents commit in Source before Ticket receipt | app/models/concerns/contact_binding.rb | CONFIRMED |
 | idp-client-telephone-credential:T002 | OUT_OF_BAND | UNVERIFIED_WITH_SIGN_UP | sign-up contact finalization | VERIFIED_WITH_SIGN_UP | Bound signup candidate/OTP; owner then contact lock; required passkey; explicit Actor context and flow operation reference | Contact status, binding fact, OTP clearing, principal verification and Source audit intent in one transaction | app/operations/sign_app_up_telephone_registration_finalizer.rb | CONFIRMED |
-| idp-client-telephone-credential:T003 | OUT_OF_BAND | NOTHING | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-client-telephone-credential:T004 | OUT_OF_BAND | VERIFIED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-client-telephone-credential:T005 | OUT_OF_BAND | UNVERIFIED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-client-telephone-credential:T006 | OUT_OF_BAND | SUSPENDED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-client-telephone-credential:T007 | OUT_OF_BAND | DELETED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-client-telephone-credential:T008 | OUT_OF_BAND | LEGACY_NOTHING | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-client-telephone-credential:T009 | OUT_OF_BAND | UNVERIFIED_WITH_SIGN_UP | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-client-telephone-credential:T010 | OUT_OF_BAND | VERIFIED_WITH_SIGN_UP | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
+| idp-client-telephone-credential:T003 | DOCUMENTED_TRANSITION | NOTHING | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
+| idp-client-telephone-credential:T004 | DOCUMENTED_TRANSITION | VERIFIED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
+| idp-client-telephone-credential:T005 | DOCUMENTED_TRANSITION | UNVERIFIED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
+| idp-client-telephone-credential:T006 | DOCUMENTED_TRANSITION | SUSPENDED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
+| idp-client-telephone-credential:T007 | DOCUMENTED_TRANSITION | DELETED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
+| idp-client-telephone-credential:T008 | DOCUMENTED_TRANSITION | LEGACY_NOTHING | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
+| idp-client-telephone-credential:T009 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
+| idp-client-telephone-credential:T010 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
 | idp-client-telephone-credential:T011 | OUT_OF_BAND | UNVERIFIED_WITH_SIGN_UP | SignUpArtifactCleanup dependent retention | DELETED | Selected pending contact; current column exists; deleted reference ID resolves; lock | Schedule discard/purge and direct dynamic status-column update | app/services/sign_up_artifact_cleanup.rb | CONFIRMED |
 | idp-client-telephone-credential:T012 | DOCUMENTED_TRANSITION | VERIFIED | Base binding release | DELETED | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding | One-way release and Source audit intent; invalidate unfinished Ticket authority | app/operations/identity_credential_removal_committer.rb | CONFIRMED |
 | idp-client-telephone-credential:T013 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP | Base binding release | DELETED | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding | One-way release and Source audit intent; invalidate unfinished Ticket authority | app/operations/identity_credential_removal_committer.rb | CONFIRMED |
@@ -2525,7 +2629,7 @@ Derived predicates overlap: withdrawn_at independent; terminated wins over suspe
 
 ## idp-visitor-email-credential
 
-The named Source writer `ContactBinding#finalize_registration_binding!` moves an original pending
+The named Source writer `EmailContactBinding#finalize_registration_binding!` moves an original pending
 registration candidate to VERIFIED with its binding timestamp under its own row lock and DB clock.
 `ContactRegistrationOtpFinalizer` checks current Action Policy, root, browser, original bounded
 verification proof and current credential under owner/root/Ticket/Contact locks. Replacement and both
@@ -2546,14 +2650,16 @@ Tests read: `test/models/visitor_email_test.rb`, `test/operations/identity_email
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | idp-visitor-email-credential:T001 | DOCUMENTED_TRANSITION | UNVERIFIED | Base ceremony final commit | VERIFIED | Signed result bound to actor/session; pending contact under row lock | Consume ceremony on ticket DB before principal status commit | app/operations/identity_email_ceremony_final_committer.rb | CONFIRMED |
 | idp-visitor-email-credential:T100 | DOCUMENTED_TRANSITION | UNVERIFIED | finalize_registration_binding! | VERIFIED | Original bounded Source verification proof; candidate lock and own DB clock; current policy/root/credential/browser and original Contact Ticket checked by finalizer | Candidate binding and status, previous binding release and both original-operation audit intents commit in Source before Ticket receipt | app/models/concerns/contact_binding.rb | CONFIRMED |
-| idp-visitor-email-credential:T002 | OUT_OF_BAND | UNVERIFIED_WITH_SIGN_UP | sign-up contact finalization | VERIFIED_WITH_SIGN_UP | Bound signup candidate/OTP; finalizer/controller guards | Direct contact status and principal verification | app/controllers/auth/com/sign/up/emails_controller.rb | CONFIRMED |
-| idp-visitor-email-credential:T003 | OUT_OF_BAND | UNVERIFIED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-visitor-email-credential:T004 | OUT_OF_BAND | VERIFIED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-visitor-email-credential:T005 | OUT_OF_BAND | SUSPENDED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-visitor-email-credential:T006 | OUT_OF_BAND | DELETED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-visitor-email-credential:T007 | OUT_OF_BAND | NOTHING | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-visitor-email-credential:T008 | OUT_OF_BAND | UNVERIFIED_WITH_SIGN_UP | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-visitor-email-credential:T009 | OUT_OF_BAND | VERIFIED_WITH_SIGN_UP | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
+| idp-visitor-email-credential:T002 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | finalize_sign_up_binding! | VERIFIED_WITH_SIGN_UP | Original live checkpoint, cleared OTP requirement, exact browser/owner/candidate and historically consumed typed Email proof under locks | Source status and binding timestamp; no failure reset or new receipt | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-visitor-email-credential:T101 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | mark_sign_up_verified! | VERIFIED_WITH_SIGN_UP | Original live signup Parent/browser/owner/candidate and consumed bounded keyed receipt; Source locks and owning clocks | Verification status only; binding remains unfinalized and failures unchanged | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-visitor-email-credential:T102 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP | finalize_sign_up_binding! | VERIFIED_WITH_SIGN_UP | Original live checkpoint, cleared OTP, browser/owner/candidate and historically consumed proof under locks | Binding fact only; existing verification status retained | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-visitor-email-credential:T003 | DOCUMENTED_TRANSITION | UNVERIFIED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-visitor-email-credential:T004 | DOCUMENTED_TRANSITION | VERIFIED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-visitor-email-credential:T005 | DOCUMENTED_TRANSITION | SUSPENDED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-visitor-email-credential:T006 | DOCUMENTED_TRANSITION | DELETED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-visitor-email-credential:T007 | DOCUMENTED_TRANSITION | NOTHING | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-visitor-email-credential:T008 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
+| idp-visitor-email-credential:T009 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/email_contact_binding.rb | CONFIRMED |
 | idp-visitor-email-credential:T010 | OUT_OF_BAND | UNVERIFIED_WITH_SIGN_UP | SignUpArtifactCleanup dependent retention | DELETED | Selected pending contact; current column exists; deleted reference ID resolves; lock | Schedule discard/purge and direct dynamic status-column update | app/services/sign_up_artifact_cleanup.rb | CONFIRMED |
 | idp-visitor-email-credential:T011 | DOCUMENTED_TRANSITION | VERIFIED | Base binding release | DELETED | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding | One-way release and Source audit intent; invalidate unfinished Ticket authority | app/operations/identity_credential_removal_committer.rb | CONFIRMED |
 | idp-visitor-email-credential:T012 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP | Base binding release | DELETED | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding | One-way release and Source audit intent; invalidate unfinished Ticket authority | app/operations/identity_credential_removal_committer.rb | CONFIRMED |
@@ -2563,7 +2669,7 @@ No independent transition map: controllers/operations directly write state FK. F
 
 ## idp-visitor-telephone-credential
 
-The named Source writer `ContactBinding#finalize_registration_binding!` moves an original pending
+The named Source writer `TelephoneContactBinding#finalize_registration_binding!` moves an original pending
 registration candidate to VERIFIED with its binding timestamp under its own row lock and DB clock.
 `ContactRegistrationOtpFinalizer` checks current Action Policy, root, browser, original bounded
 verification proof and current credential under owner/root/Ticket/Contact locks. Replacement and both
@@ -2581,13 +2687,13 @@ Tests read: `test/models/visitor_telephone_test.rb`, `test/operations/identity_t
 | idp-visitor-telephone-credential:T001 | DOCUMENTED_TRANSITION | UNVERIFIED | Base ceremony final commit | VERIFIED | Signed result bound to actor/session; pending contact under row lock | Consume ceremony on ticket DB before principal status commit | app/operations/identity_telephone_ceremony_final_committer.rb | CONFIRMED |
 | idp-visitor-telephone-credential:T100 | DOCUMENTED_TRANSITION | UNVERIFIED | finalize_registration_binding! | VERIFIED | Original bounded Source verification proof; candidate lock and own DB clock; current policy/root/credential/browser and original Contact Ticket checked by finalizer | Candidate binding and status, previous binding release and both original-operation audit intents commit in Source before Ticket receipt | app/models/concerns/contact_binding.rb | CONFIRMED |
 | idp-visitor-telephone-credential:T002 | OUT_OF_BAND | UNVERIFIED_WITH_SIGN_UP | sign-up contact finalization | VERIFIED_WITH_SIGN_UP | Bound signup candidate/OTP; owner then contact lock; finalizer/controller guards; explicit Actor context and flow operation reference | Contact status, binding fact, OTP clearing and Source audit intent in one transaction | app/operations/sign_com_up_telephone_registration_finalizer.rb | CONFIRMED |
-| idp-visitor-telephone-credential:T003 | OUT_OF_BAND | UNVERIFIED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-visitor-telephone-credential:T004 | OUT_OF_BAND | VERIFIED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-visitor-telephone-credential:T005 | OUT_OF_BAND | SUSPENDED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-visitor-telephone-credential:T006 | OUT_OF_BAND | DELETED | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-visitor-telephone-credential:T007 | OUT_OF_BAND | NOTHING | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-visitor-telephone-credential:T008 | OUT_OF_BAND | UNVERIFIED_WITH_SIGN_UP | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
-| idp-visitor-telephone-credential:T009 | OUT_OF_BAND | VERIFIED_WITH_SIGN_UP | withdrawal anonymize | SUSPENDED | Withdrawal early termination guard owned by service; no contact source guard | Overwrite contact and clear OTP/digest | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
+| idp-visitor-telephone-credential:T003 | DOCUMENTED_TRANSITION | UNVERIFIED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
+| idp-visitor-telephone-credential:T004 | DOCUMENTED_TRANSITION | VERIFIED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
+| idp-visitor-telephone-credential:T005 | DOCUMENTED_TRANSITION | SUSPENDED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
+| idp-visitor-telephone-credential:T006 | DOCUMENTED_TRANSITION | DELETED | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
+| idp-visitor-telephone-credential:T007 | DOCUMENTED_TRANSITION | NOTHING | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
+| idp-visitor-telephone-credential:T008 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
+| idp-visitor-telephone-credential:T009 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP | retire_for_withdrawal! | SUSPENDED | Fresh terminated owner lock then Source lock; owning DB clock | Preserve encrypted PII/digest and failures; clear legacy proof; suspend and schedule retention without shortening explicit longer deadline | app/models/concerns/telephone_contact_binding.rb | CONFIRMED |
 | idp-visitor-telephone-credential:T010 | OUT_OF_BAND | UNVERIFIED_WITH_SIGN_UP | SignUpArtifactCleanup dependent retention | DELETED | Selected pending contact; current column exists; deleted reference ID resolves; lock | Schedule discard/purge and direct dynamic status-column update | app/services/sign_up_artifact_cleanup.rb | CONFIRMED |
 | idp-visitor-telephone-credential:T011 | DOCUMENTED_TRANSITION | VERIFIED | Base binding release | DELETED | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding | One-way release and Source audit intent; invalidate unfinished Ticket authority | app/operations/identity_credential_removal_committer.rb | CONFIRMED |
 | idp-visitor-telephone-credential:T012 | DOCUMENTED_TRANSITION | VERIFIED_WITH_SIGN_UP | Base binding release | DELETED | Owning Actor context, active owner, usable session and surviving capability under locks; finalized unreleased binding | One-way release and Source audit intent; invalidate unfinished Ticket authority | app/operations/identity_credential_removal_committer.rb | CONFIRMED |
@@ -2617,17 +2723,27 @@ Derived predicates overlap: withdrawn_at independent; terminated wins over suspe
 
 ## idp-operator-email-credential
 
-Implementation: `Identity contact final committer / sign-up controllers / withdrawal anonymizer`. Storage: `operator_emails` / `staff_identity_email_status_id`.
+Implementation: `OperatorEmailRegistrationOtpFinalizer` and the named OperatorEmail registration
+transition. Storage: `operator_emails` / `staff_identity_email_status_id`.
 
-Sources: `app/models/operator_email.rb`, `app/models/operator_email_status.rb`, `app/operations/identity_email_ceremony_final_committer.rb`, `app/operations/withdrawal_personal_data_anonymizer.rb`.
+Sources: `app/models/operator_email.rb`, `app/models/operator_email_status.rb`,
+`app/operations/operator_email_registration_otp_finalizer.rb`,
+`app/controllers/base/org/identity/emails/registrations_controller.rb`.
 
-Tests read: `test/models/operator_email_test.rb`, `test/operations/identity_email_ceremony_final_committer_test.rb`.
+Tests: `test/controllers/base/org/identity/emails/registrations_controller_test.rb`,
+`test/operations/email_credential_registration_otp_issuer_test.rb`,
+`test/operations/email_credential_registration_otp_delivery_guard_test.rb`.
 
 | Transition ID | Mutation kind | From | Event / Trigger | To | Guard | Side effect | Source file | Confidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| idp-operator-email-credential:T001 | DOCUMENTED_TRANSITION | UNVERIFIED | Base ceremony final commit | VERIFIED | Signed result bound to actor/session; pending contact under row lock | Consume ceremony on ticket DB before principal status commit | app/operations/identity_email_ceremony_final_committer.rb | CONFIRMED |
+| idp-operator-email-credential:T001 | NAMED_MODEL_TRANSITION | UNVERIFIED | finalize_email_registration! | VERIFIED | Typed ORG ceremony, original Root/browser/actor/candidate/destination, bounded keyed receipt, current passkey-only requirement and live credential under locks | Commit Source status before original Ticket receipt; exact bounded retry does not rewrite status or reset failures | app/models/operator_email.rb | CONFIRMED |
 
-No independent transition map: controllers/operations directly write state FK. Fixed declarations with no incoming production state writer remain isolated intentionally; DELETED is a reference/uniqueness exclusion, not presumed destroy event. Base contact removal uses physical destroy with ownership/last-method guards rather than assigning DELETED. OTP lock/expiry lives on separate columns and is diagrammed separately. Anonymizer rewrites any client/visitor contact to SUSPENDED with no source guard; no universally absorbing row state is assumed. Operator old ACTIVE/INACTIVE/PENDING labels coexist with UNVERIFIED/VERIFIED. Exact default and model aliases are in topology/model; no status time expiry.
+The named model writer owns this transition; controllers and the finalizer do not write verified
+status directly. Legacy signed-permission writers await complete retirement. Reference declarations
+without an incoming production writer are not invented transitions. Physical irreversible removal
+is the history boundary; a locked registration candidate is retained rather than physically purged.
+OTP consumption/receipt is owned by the Email ceremony. Existing ACTIVE/INACTIVE/PENDING labels
+coexist with UNVERIFIED/VERIFIED; no new status, status-time expiry or ORG bootstrap was introduced.
 
 ## idp-operator-telephone-credential
 
@@ -2640,8 +2756,13 @@ Tests read: `test/models/operator_telephone_test.rb`, `test/operations/identity_
 | Transition ID | Mutation kind | From | Event / Trigger | To | Guard | Side effect | Source file | Confidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | idp-operator-telephone-credential:T001 | DOCUMENTED_TRANSITION | UNVERIFIED | Base ceremony final commit | VERIFIED | Signed result bound to actor/session; pending contact under row lock | Consume ceremony on ticket DB before principal status commit | app/operations/identity_telephone_ceremony_final_committer.rb | CONFIRMED |
+| idp-operator-telephone-credential:T002 | NAMED_MODEL_TRANSITION | UNVERIFIED | Authenticated Telephone OTP registration | VERIFIED | Typed ORG ceremony, numeric candidate/owner/Root/browser/destination binding, original bounded keyed evidence, current passkey-only policy and credential | Source model transition commits before Ticket receipt; exact retry preserves Source facts; no APP/COM audit outbox is invented | app/models/operator_telephone.rb:finalize_telephone_registration! | CONFIRMED |
 
-No independent transition map: controllers/operations directly write state FK. Fixed declarations with no incoming production state writer remain isolated intentionally; DELETED is a reference/uniqueness exclusion, not presumed destroy event. Base contact removal uses physical destroy with ownership/last-method guards rather than assigning DELETED. OTP lock/expiry lives on separate columns and is diagrammed separately. Anonymizer rewrites any client/visitor contact to SUSPENDED with no source guard; no universally absorbing row state is assumed. Operator old ACTIVE/INACTIVE/PENDING labels coexist with UNVERIFIED/VERIFIED. Exact default and model aliases are in topology/model; no status time expiry.
+There is no general transition map. The named OTP writer restricts registration to UNVERIFIED
+to VERIFIED and permits an exact already-VERIFIED retry without a write. The signed-result
+committer remains a separate implementation, not an OTP fallback. Other reference statuses have
+no inferred transition. Physical Contact removal preserves existing ownership/last-method guards;
+OTP proof lifecycle is a separate ceremony axis rather than an identifier status.
 
 ## idp-operator-actor-withdrawal
 
@@ -2683,6 +2804,8 @@ Tests read: `test/models/client_test.rb`, `test/operations/identity_email_ceremo
 | Transition ID | Mutation kind | From | Event / Trigger | To | Guard | Side effect | Source file | Confidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | idp-client-actor-provisioning:T001 | OUT_OF_BAND | UNVERIFIED_WITH_SIGN_UP | contact/signup final commit | VERIFIED_WITH_SIGN_UP | Pending Client signup status; verified bound contact/finalization | Direct status_id write | app/operations/identity_email_ceremony_final_committer.rb | CONFIRMED |
+| idp-client-actor-provisioning:T002 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | finalize_email_sign_up! | VERIFIED_WITH_SIGN_UP | Original live Email checkpoint, cleared OTP and finalized owned signup Email; active accessible Client under owner lock and Source clock | Owner promotion only; no session issuance, failure reset or new proof | app/models/client.rb | CONFIRMED |
+| idp-client-actor-provisioning:T003 | DOCUMENTED_TRANSITION | UNVERIFIED_WITH_SIGN_UP | finalize_telephone_sign_up! | VERIFIED_WITH_SIGN_UP | Original live Telephone checkpoint, cleared OTP, finalized owned signup Telephone and active required passkey; owner lock and Source clock | Owner promotion only; Source audit belongs to original finalizer transaction | app/models/client.rb | CONFIRMED |
 
 All fixed reference IDs are preserved, but only current post-creation production transition 9->10 confirmed. Social signup creates VERIFIED_WITH_SIGN_UP directly, not 9->10. Actor withdrawal now uses timestamp/flow authorities, not legacy WITHDRAWN/DELETED reference transitions; those transitions UNKNOWN. Client default NOTHING and explicit ordinary ACTIVE creation are distinct entry states, no inferred transition. Visitor/Operator ACTIVE/NOTHING/RESERVED are creation classifications with no production existing-row status mutation found, recorded as excluded lookup candidates in discovery.
 
@@ -3025,6 +3148,39 @@ Both established root tokens remain usable. Cursor position conveys no purge aut
 | idp-client-secret-sign-in-receipt:T001 | DOCUMENTED_TRANSITION | absent | canonical root login commit | committed | Matching durable claim, Client, flow, ceremony and root token | Immutable receipt in the same Ticket transaction | app/models/client_secret_sign_in_receipt.rb | CONFIRMED |
 | idp-client-secret-sign-in-receipt:T002 | DOCUMENTED_TRANSITION | committed | lifecycle proof collection | deleted | Explicit proof retention after latest continuation deadline and terminal Chronicle time; no Source credential; consumed and purged audit match; no hold; Source Client then OIDC/flow/receipt locks | Receipt DELETE; root token remains; bounded continuation passes retained receipts | app/operations/client_secret_sign_in_receipt_purger.rb; app/jobs/client_secret_lifecycle_job.rb | CONFIRMED |
 | idp-client-secret-sign-in-receipt:T003 | REJECTED_TRANSITION | committed | generic flow collection | absent | Receipt still references flow | Flow retained; no cascade receipt loss | app/jobs/retention_purge_job.rb | CONFIRMED |
+
+## Independent Email and Telephone destination budget writers
+
+The six `idp-*-email-otp.mmd` / `idp-*-telephone-otp.mmd` axes use independently owned
+destination-budget implementations. EmailOtpVerificationFailureBudget and
+TelephoneOtpVerificationFailureBudget each atomically move their own realm/purpose/destination
+counter from absent to 1, from 1 through 4, then to exhausted 5. Exhausted correct/incorrect
+comparisons preserve the value and original TTL. Native expiry removes the budget; successful
+comparison neither creates nor resets it. Cross-channel input, corrupt counter and unavailable
+infrastructure refuse verification. Caller selection is orchestration, not a shared policy writer.
+
+## idp-email-dead-history / idp-telephone-dead-history
+
+| Transition ID | Classification | From | Trigger | To | Guards | Effects | Source | Confidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| idp-email-dead-history:T001 | DOCUMENTED_TRANSITION | Source or purge-eligible retained Source | ordinary destroy or EmailIdentifierPurger | dead history | Fresh persisted owner/PII under owner then Source locks; no protected email, legal hold or blocking enforcement; scheduled retention matured | Fingerprint INSERT and physical DELETE in one transaction; later callback failure rolls both back | EmailDeadIdentifierHistory / concrete Email models | CONFIRMED |
+| idp-telephone-dead-history:T001 | DOCUMENTED_TRANSITION | Source or purge-eligible retained Source | ordinary destroy or TelephoneIdentifierPurger | dead history | Fresh persisted owner/PII under owner then Source locks; no legal hold or blocking enforcement; scheduled retention matured | Fingerprint INSERT and physical DELETE in one transaction | TelephoneDeadIdentifierHistory / concrete Telephone models | CONFIRMED |
+| idp-email-dead-history:T002 | REJECTED_TRANSITION | retained Source | premature ordinary destruction | dead history | Future discard or purge deadline | Source remains; no history inserted | EmailDeadIdentifierHistory | CONFIRMED |
+| idp-telephone-dead-history:T002 | REJECTED_TRANSITION | retained Source | premature ordinary destruction | dead history | Future discard or purge deadline | Source remains; no history inserted | TelephoneDeadIdentifierHistory | CONFIRMED |
+| idp-email-dead-history:T003 | DOCUMENTED_TRANSITION | ORG dead history | due whole-Operator physical erasure | removed history | Fresh Operator lock, both retention deadlines reached, no blocking enforcement or protected Email | Email purge, identity-scoped history DELETE and Operator DELETE in one Zenith transaction; idempotent cross-DB cleanup precedes local commit | RetentionPurgeJob | CONFIRMED |
+| idp-telephone-dead-history:T003 | DOCUMENTED_TRANSITION | ORG dead history | due whole-Operator physical erasure | removed history | Fresh Operator lock, both retention deadlines reached, no blocking enforcement or protected Email | Telephone purge, identity-scoped history DELETE and Operator DELETE in one Zenith transaction; idempotent cross-DB cleanup precedes local commit | RetentionPurgeJob | CONFIRMED |
+| idp-email-dead-history:T004 | DOCUMENTED_TRANSITION | APP/COM dead history | admitted whole-Identity destroy! | removed history | Fresh owner lock; both retention deadlines reached; no active legal hold or blocking enforcement; every dependent Contact destruction admitted | Existing Email archive/delete and identity-scoped History DELETE precede parent DELETE in one Zenith transaction; remote child cleanup is idempotent and precedes local erasure | Client / Visitor callbacks; identity_dead_history_erasure_test | CONFIRMED |
+| idp-telephone-dead-history:T004 | DOCUMENTED_TRANSITION | APP/COM dead history | admitted whole-Identity destroy! | removed history | Fresh owner lock; both retention deadlines reached; no active legal hold or blocking enforcement; every dependent Contact destruction admitted | Existing Telephone archive/delete and identity-scoped History DELETE precede parent DELETE in one Zenith transaction; remote child cleanup is idempotent and precedes local erasure | Client / Visitor callbacks; identity_dead_history_erasure_test | CONFIRMED |
+
+APP/COM withdrawal retirement preserves original encrypted PII and lookup digests, creates no
+history, and schedules identifier collection without shortening a longer explicit retention
+deadline. The owner remains present when that identifier-only collection archives the original
+PII. Existing Client/Visitor model destruction checks fresh owner retention and legal/enforcement
+holds before dependent children, then removes that owner's histories after Source archive/delete
+callbacks and before parent DELETE in the same local transaction. Cross-database cleanup is
+idempotent and precedes local children; a failure keeps the owner/history for retry. Raw/bulk
+parent deletion is not an admitted erasure interface. This is not completion of all identifier
+lifecycle paths.
 
 ## Canonical delivered reconciliation (2026-10-06)
 

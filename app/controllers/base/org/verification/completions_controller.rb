@@ -24,6 +24,8 @@ module Base
           )
         end
 
+        public :create
+
         private
 
         def finalize_completion_transaction!(actor:, token:, transaction:, result_reference:)

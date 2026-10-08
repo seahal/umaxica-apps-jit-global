@@ -117,7 +117,7 @@ class OperatorTelephoneTest < ActiveSupport::TestCase
       staff: @staff,
     )
 
-    expected = IdentifierBlindIndex.bidx_for_telephone("+15551234567")
+    expected = IdentifierBlindIndex.bidx_for_telephone("+15551234567", realm: :org)
 
     assert_equal expected, staff_telephone.number_digest
   end
@@ -131,8 +131,10 @@ class OperatorTelephoneTest < ActiveSupport::TestCase
     )
 
     assert_equal staff_telephone,
-                 OperatorTelephone.find_by(number_digest: IdentifierBlindIndex.bidx_for_telephone("+15557654321"))
-    assert_nil OperatorTelephone.find_by(number_digest: IdentifierBlindIndex.bidx_for_telephone("12"))
+                 OperatorTelephone.find_by(
+                   number_digest: IdentifierBlindIndex.bidx_for_telephone("+15557654321", realm: :org),
+                 )
+    assert_nil OperatorTelephone.find_by(number_digest: IdentifierBlindIndex.bidx_for_telephone("12", realm: :org))
   end
 
   test "should generate UUID v7 before creation" do

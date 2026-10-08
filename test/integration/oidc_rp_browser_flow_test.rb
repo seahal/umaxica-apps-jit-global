@@ -5,6 +5,8 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   COOKIE_NAME = AuthenticationBase::ACCESS_COOKIE_KEY
 
   SURFACES = [
@@ -131,6 +133,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       user = clients(:one)
       ClientToken.where(user_id: user.id).delete_all
       email = user.client_emails.create!(address: "oidc_email_limit_#{SecureRandom.hex(4)}@example.com")
+      email.finalize_binding!
 
       first_active = ClientToken.create!(
         user: user,
@@ -190,7 +193,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         post(
           sign_app_sign_in_email_path(ri: "jp"),
           params: {
-            :client_email => { address: email.address },
+            :user_email => { address: email.address },
             "cf-turnstile-response" => "test_token",
           },
           headers: browser_headers,
@@ -198,10 +201,37 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
         assert_response :redirect
 
-        pass_code = store_email_otp_and_return_code(email)
+        transaction = ClientOidcAuthorizationTransaction.find_by!(transaction_id: sign_query.fetch("transaction_ref"))
+        binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: transaction.id)
+        ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
+        delivery_job =
+          enqueued_jobs.reverse.find do |job|
+            next false unless job.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+            delivery = ActiveJob::Arguments.deserialize(job.fetch(:args)).last.fetch(:params)
+            delivery.fetch(:auth_ceremony_session_ref) == ceremony.id.to_s
+          end
+
+        assert_not_nil delivery_job
+        delivery = ActiveJob::Arguments.deserialize(delivery_job.fetch(:args)).last.fetch(:params)
+        context = ceremony.email_otp_context
+        pass_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+        correct_contact = context.fetch("contact_ref") == email.public_id
+        correct_owner = context.fetch("owner_ref") == user.public_id
+        correct_generation = context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
+        correct_parent = context.fetch("parent_ref") == transaction.transaction_id
+        plaintext_queued = delivery_job.fetch(:args).to_s.include?(pass_code)
+
+        assert correct_contact, "Delivery must bind the actual Contact"
+        assert correct_owner, "Delivery must bind the actual owner"
+        assert correct_generation, "Delivery must bind the current ceremony generation"
+        assert correct_parent, "Delivery must bind the original OIDC Parent"
+        assert_not plaintext_queued, "Delivery must not queue plaintext code"
+        assert_equal "sign_in", delivery.fetch(:purpose)
+        assert_equal "oidc", context.fetch("parent_kind")
         patch(
           sign_app_sign_in_email_path(ri: "jp"),
-          params: { client_email: { pass_code: pass_code } },
+          params: { :user_email => { pass_code: pass_code }, "cf-turnstile-response" => "test_token" },
           headers: browser_headers,
         )
       ensure
@@ -681,14 +711,6 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     end
   end
 
-  def store_email_otp_and_return_code(email)
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
-    email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
-    pass_code
-  end
-
   def clear_existing_tokens_for(resource)
     case resource
     when Client
@@ -845,10 +867,8 @@ class OidcRpBrowserFlowTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -860,10 +880,8 @@ class OidcRpBrowserFlowTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -1209,10 +1227,8 @@ class OidcRpBrowserFlowTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

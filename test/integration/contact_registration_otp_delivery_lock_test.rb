@@ -1,12 +1,15 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "minitest/mock"
 require "timeout"
 
 # Committed unique fixtures are required for independent PostgreSQL connection visibility.
 # Boolean snapshots prevent disclosure of OTP, proof and root facts.
 # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
 class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+
   self.use_transactional_tests = false
   self.fixture_table_names = %w(
     client_statuses client_visibilities client_mfa_levels client_mfa_statuses
@@ -58,14 +61,54 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
              (channel == :email) ? VisitorEmailCeremonyTransaction : VisitorTelephoneCeremonyTransaction,]
           end
         token.rotate_refresh_token!
-        secret = ROTP::Base32.random_base32
-        contact.store_otp(secret, 1, (contact.class.database_now + 10.minutes).to_i)
-        otp = contact.get_otp
-        code = ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter)).to_s
-        transaction = ContactRegistrationOtpIssuer.call!(
-          actor:, token:, contact:, channel:, browser_nonce: SecureRandom.urlsafe_base64(32), code:,
-        )
+        nonce = SecureRandom.urlsafe_base64(32)
+        issued =
+          case channel
+          when :email
+            EmailCredentialRegistrationOtpIssuer.call(actor:, token:, email: contact, browser_nonce: nonce)
+          when :telephone
+            TelephoneCredentialRegistrationOtpIssuer.call(actor:, token:, telephone: contact, browser_nonce: nonce)
+          end
+
+        assert_predicate issued, :success?
+        transaction = issued.transaction
+        code = issued.code
+        generation = transaction.otp_generation
         destination = (channel == :email) ? contact.address : contact.number
+        clear_enqueued_jobs
+        if channel == :email
+          notifier = (surface == :app) ? Notify::App::OtpNotifier : Notify::Com::OtpNotifier
+          notifier.issue(
+            record: contact, otp_code: code, purpose: "credential_registration", public_id: contact.public_id,
+            contact_ceremony_transaction_ref: transaction.transaction_id, contact_otp_generation: generation,
+          )
+        else
+          OtpTelephoneAdapter.new(surface:).deliver(
+            record: contact, otp_code: code, purpose: "credential_registration", public_id: contact.public_id,
+            contact_ceremony_transaction_ref: transaction.transaction_id, contact_otp_generation: generation,
+          )
+        end
+
+        assert_equal 1, enqueued_jobs.length
+        arguments = enqueued_jobs.first.fetch(:args)
+
+        assert_not arguments.to_s.include?(code), "Delivery queue must not disclose its random code"
+        if channel == :email
+          params = ActiveJob::Arguments.deserialize(arguments).last.fetch(:params).symbolize_keys
+          transported_code = OutboundSensitivePayload.decrypt_email_otp(params.fetch(:encrypted_hotp_token))
+
+          assert params.fetch(:contact_ceremony_transaction_ref) == transaction.transaction_id
+          assert params.fetch(:contact_otp_generation) == generation
+        else
+          payload = OutboundSensitivePayload.decrypt_sms_delivery(arguments.first.fetch("encrypted_payload"))
+          transported_code = payload.fetch(:otp_code)
+
+          assert_equal 4, payload.fetch(:version)
+          assert payload.fetch(:otp_binding) ==
+            [surface.to_s, "credential_registration", transaction.transaction_id, contact.public_id, generation]
+        end
+
+        assert transported_code == code, "Transport must retain the actual issued code"
         device = token.device_session
         protected_rows = [actor, contact, device, token, transaction]
         facts = protected_rows.map { |row| row.reload.attributes }
@@ -86,9 +129,18 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
                 ticket_base.connected_to(role: :writing) do
                   ticket_base.connection_pool.with_connection(prevent_permanent_checkout: true) do |ticket_db|
                     original = flow_model.find(transaction.id)
-                    ContactRegistrationOtpDeliveryIssuer.call(
-                      transaction: original, contact_ref: contact.public_id, counter: "1", destination:, code:,
-                    ) do
+                    guard =
+                      case channel
+                      when :email
+                        EmailCredentialRegistrationOtpDeliveryGuard.new(
+                          transaction: original, email: contact, generation:, destination:, code: transported_code,
+                        )
+                      when :telephone
+                        TelephoneCredentialRegistrationOtpDeliveryGuard.new(
+                          transaction: original, telephone: contact, generation:, destination:, code: transported_code,
+                        )
+                      end
+                    guard.call do
                       ready << [source_db.select_value("SELECT pg_backend_pid()"),
                                 ticket_db.select_value("SELECT pg_backend_pid()"),]
                       Timeout.timeout(20) { release.pop }
@@ -111,7 +163,10 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
             row.class.transaction(requires_new: true) do
               row.class.lock("FOR UPDATE NOWAIT").find(row.id)
               if row.equal?(contact)
-                contact.store_otp(secret, 2, (contact.class.database_now + 10.minutes).to_i)
+                case channel
+                when :email then transaction.reissue_email_otp!
+                when :telephone then transaction.issue_telephone_otp!(purpose: "credential_registration")
+                end
               elsif row.equal?(token)
                 token.revoke!
               end
@@ -136,18 +191,31 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
         end
 
         assert facts == protected_rows.map { |row| row.reload.attributes }, "Delivery must not mutate protected facts"
-        contact.with_lock { contact.store_otp(secret, 2, (contact.class.database_now + 10.minutes).to_i) }
+        contact.with_lock do
+          case channel
+          when :email then transaction.reissue_email_otp!
+          when :telephone then transaction.issue_telephone_otp!(purpose: "credential_registration")
+          end
+        end
 
-        assert_equal "2", contact.reload.otp_counter.to_s
+        assert_not_equal generation, transaction.reload.otp_generation
         token.revoke!
 
         assert_predicate token.reload, :revoked?
         delivered_again = false
 
-        stale_result =
-          ContactRegistrationOtpDeliveryIssuer.call(
-            transaction: transaction.reload, contact_ref: contact.public_id, counter: "1", destination:, code:,
-          ) { delivered_again = true }
+        stale_guard =
+          case channel
+          when :email
+            EmailCredentialRegistrationOtpDeliveryGuard.new(
+              transaction: transaction.reload, email: contact, generation:, destination:, code: transported_code,
+            )
+          when :telephone
+            TelephoneCredentialRegistrationOtpDeliveryGuard.new(
+              transaction: transaction.reload, telephone: contact, generation:, destination:, code: transported_code,
+            )
+          end
+        stale_result = stale_guard.call { delivered_again = true }
 
         assert stale_result == false, "Reissued and revoked evidence must refuse stale delivery"
         assert_not delivered_again, "Released locks must not restore stale queued delivery authority"
@@ -155,7 +223,10 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
         release << true if release
         holder&.wait(25)
         if contact&.persisted?
-          contact.reload.clear_otp
+          case channel
+          when :email then transaction&.reload&.cancel_email_otp!
+          when :telephone then transaction&.reload&.cancel_telephone_otp!
+          end
           contact.discard_now!(purge_after: 1.day)
         end
         if token&.persisted?

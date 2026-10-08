@@ -33,6 +33,8 @@ module Base
         def create
           render_oauth_userinfo(resource_type: "visitor")
         end
+
+        public :create
       end
     end
   end

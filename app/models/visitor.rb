@@ -174,6 +174,9 @@ class Visitor < ComPrincipalRecord
           dependent: :destroy,
           inverse_of: :visitor
 
+  before_destroy :admit_identifier_history_erasure, prepend: true
+  before_destroy :erase_dead_identifier_histories
+
   def staff?
     false
   end
@@ -223,6 +226,25 @@ class Visitor < ComPrincipalRecord
   end
 
   private
+
+  def admit_identifier_history_erasure
+    with_lock do
+      now = self.class.database_now
+      if !lapsed?(now) || !purgeable?(now) || visitor_retention_holds.active_at(now).exists? ||
+          ComEnforcementCase.principal_effect_blocking?(public_id, :withdrawal_purge_blocked) ||
+          ComEnforcementCase.principal_effect_blocking?(public_id, :principal_hard_delete_blocked)
+        errors.add(:base, "Identity is recoverable or legally retained")
+        throw(:abort)
+      end
+
+      RetentionCrossDatabaseChildPurge.call(actor: self)
+    end
+  end
+
+  def erase_dead_identifier_histories
+    VisitorEmailHistory.where(visitor_id: id).delete_all
+    VisitorTelephoneHistory.where(visitor_id: id).delete_all
+  end
 
   def configured_mfa_level_methods
     step_up_methods

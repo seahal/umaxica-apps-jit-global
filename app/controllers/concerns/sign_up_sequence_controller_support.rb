@@ -481,6 +481,7 @@ module SignUpSequenceControllerSupport
 
       SignAppUpTelephoneRegistrationFinalizer.call(
         telephone: telephone, actor_context: current_actor, operation_ref: @sign_up_ticket.public_id,
+        flow: @sign_up_ticket, session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
       )
     when "email", "social_identity"
       # Email and social sign-up only need the actor promoted into the
@@ -493,9 +494,10 @@ module SignUpSequenceControllerSupport
           raise ActiveRecord::RecordNotFound unless email.user_id == actor.id
 
           finalize_sign_up_email_binding!(actor, email)
+          actor.finalize_email_sign_up!(email: email, flow: @sign_up_ticket)
+        elsif actor.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
+          actor.update!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
         end
-        actor.update!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP) if
-          actor.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
       end
     else
       return :failed
@@ -517,6 +519,7 @@ module SignUpSequenceControllerSupport
 
       SignComUpTelephoneRegistrationFinalizer.call(
         telephone: telephone, actor_context: current_actor, operation_ref: @sign_up_ticket.public_id,
+        flow: @sign_up_ticket, session_nonce: session.dig(:com_sign_up_flow_locator, "nonce"),
       )
     when "email"
       # Email sign-up has no additional com-side credential finalizer here.
@@ -544,7 +547,15 @@ module SignUpSequenceControllerSupport
   end
 
   def finalize_sign_up_email_binding!(actor, email)
-    if email.binding_finalized_at.present?
+    retained = email.binding_finalized_at.present?
+    nonce =
+      case email
+      when ClientEmail then session.dig(:app_sign_up_flow_locator, "nonce")
+      when VisitorEmail then session.dig(:com_sign_up_flow_locator, "nonce")
+      else raise ArgumentError, "unsupported signup email owner"
+      end
+    email.finalize_sign_up_binding!(flow: @sign_up_ticket, session_nonce: nonce)
+    if retained
       model, realm, role =
         case email
         when ClientEmail then [ClientContactAuditOutbox, :app, :client]
@@ -570,8 +581,6 @@ module SignUpSequenceControllerSupport
       return
     end
 
-    email.binding_finalized_at = email.class.database_now
-    email.save!
     ContactBindingAuditRecorder.call!(
       actor_context: current_actor, actor: actor, contact: email,
       operation_ref: @sign_up_ticket.public_id, event_name: "finalized",

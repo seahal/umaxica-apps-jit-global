@@ -34,7 +34,7 @@ module Auth
 
                 registration = (session[:user_telephone_registration] || {}).dup
                 registration["public_id"] ||= @user_telephone.public_id
-                registration["expires_at"] = @user_telephone.reload.otp_expires_at.to_i
+                registration["expires_at"] = result.transaction.otp_expires_at.to_i
                 session[:user_telephone_registration] = registration
                 session[:user_telephone_otp_last_sent_at] = Time.current.to_i
                 redirect_to(
@@ -56,7 +56,7 @@ module Auth
 
                 result = verify_otp_ceremony!(submitted_code)
                 return handle_locked_result if result.status == :locked
-                return render_otp_ceremony_result(result) unless result.success?
+                return render_otp_ceremony_result(result) unless result.verified_evidence?
 
                 verify_telephone_ownership!
 
@@ -84,27 +84,16 @@ module Auth
               def sign_up_step = :otp
 
               def issue_otp_ceremony!
-                SignOtpCeremony.issue!(
-                  purpose: :sign_up,
-                  surface: :app,
-                  channel: :telephone,
-                  subject: @sign_up_ticket,
-                  destination: @user_telephone.number,
-                  session_nonce: @sign_up_ticket.public_id,
-                  request_context: request,
+                TelephoneSignUpOtpDeliveryIssuer.call(
+                  flow: @sign_up_ticket, telephone: @user_telephone,
+                  session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
                 )
               end
 
               def verify_otp_ceremony!(submitted_code)
-                SignOtpCeremony.verify!(
-                  purpose: :sign_up,
-                  surface: :app,
-                  channel: :telephone,
-                  subject: @sign_up_ticket,
-                  destination: @user_telephone.number,
-                  code: submitted_code,
-                  session_nonce: @sign_up_ticket.public_id,
-                  request_context: request,
+                TelephoneSignUpOtpVerificationCommitter.call(
+                  flow: @sign_up_ticket, telephone: @user_telephone, code: submitted_code,
+                  session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
                 )
               end
 

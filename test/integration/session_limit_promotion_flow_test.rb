@@ -5,10 +5,20 @@ require "test_helper"
 
 class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
   include AuthCeremonyEntryHelper
+  include ActiveJob::TestHelper
 
   fixtures :clients, :client_statuses, :client_email_statuses
 
   setup do
+    reference_now = ClientSignInFlow.database_now
+    ClientSessionLimitResolutionState::DEFAULTS.each do |id|
+      ClientSessionLimitResolutionState.find_or_create_by!(id: id) do |state|
+        state.created_at = reference_now
+        state.updated_at = reference_now
+      end
+    end
+    ClientSignOutFlowKind.ensure_defaults!
+    ClientSignOutFlowStatus.ensure_defaults!
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
@@ -143,16 +153,24 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
       continuation["action"], params: continuation_params.merge("authenticity_token" => continuation_csrf),
                               headers: auth_headers,
     )
-    auth.post(
-      auth_app_sign_in_email_path(ri: "jp"),
-      params: { :user_email => { address: email.address }, "cf-turnstile-response" => "t" },
-      headers: auth_headers,
-    )
-    key = ROTP::Base32.random_base32
-    email.reload.store_otp(key, 7, 12.minutes.from_now.to_i)
+    clear_enqueued_jobs
+    OtpEmailNotifierRollout.stub(:enabled?, true) do
+      auth.post(
+        auth_app_sign_in_email_path(ri: "jp"),
+        params: { :user_email => { address: email.address }, "cf-turnstile-response" => "t" },
+        headers: auth_headers,
+      )
+    end
+
+    assert_equal 302, auth.response.status
+    job = enqueued_jobs.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    delivery = ActiveJob::Arguments.deserialize(job.fetch(:args)).last.fetch(:params).symbolize_keys
+    code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
     auth.patch(
       auth_app_sign_in_email_path(ri: "jp"),
-      params: { :user_email => { pass_code: ROTP::HOTP.new(key).at(7).to_s },
+      params: { :user_email => { pass_code: code },
                 "cf-turnstile-response" => "t", },
       headers: auth_headers,
     )

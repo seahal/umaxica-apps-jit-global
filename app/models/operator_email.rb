@@ -39,9 +39,19 @@
 #
 
 class OperatorEmail < OrgPrincipalRecord
+  IDENTIFIER_REALM = "org"
+  encrypts :address, downcase: true,
+                     key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
+  encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
+
   alias_attribute :staff_email_status_id, :staff_identity_email_status_id
   include PublicId
   include Email
+  include EmailDeadIdentifierHistory
+
+  after_initialize :initialize_email_otp_state
+  before_destroy :archive_dead_email_identifier, prepend: true
+
   include PromotionalEmailUnsubscribable
 
   self.filter_attributes += %w(address)
@@ -69,6 +79,29 @@ class OperatorEmail < OrgPrincipalRecord
   before_destroy :prevent_destroy_when_undeletable
   before_validation do
     self.staff_id ||= 0
+  end
+
+  public
+
+  def finalize_email_registration!(transaction:, code:, session_ref:)
+    with_lock do
+      unless transaction.is_a?(OperatorEmailCeremonyTransaction) &&
+          transaction.bootstrap_ceremony_transaction_ref.nil? &&
+          transaction.normalized_email_digest == address_digest &&
+          transaction.email_registration_otp_evidence?(
+            code: code, actor_ref: staff.public_id, session_ref: session_ref, candidate_ref: public_id,
+          )
+        raise ArgumentError, "ORG Email registration evidence is unavailable"
+      end
+      return self if staff_email_status_id == OperatorEmailStatus::VERIFIED
+
+      unless staff_email_status_id == OperatorEmailStatus::UNVERIFIED
+        raise ArgumentError, "ORG Email registration candidate is not pending"
+      end
+
+      update!(staff_email_status_id: OperatorEmailStatus::VERIFIED)
+      self
+    end
   end
 
   def to_param

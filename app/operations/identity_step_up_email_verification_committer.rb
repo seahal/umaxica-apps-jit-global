@@ -3,8 +3,8 @@
 # Failed attempts commit on the credential before returning rejection. Resends never reset
 # this counter; only successful authentication does. Base owns the eventual freshness commit.
 class IdentityStepUpEmailVerificationCommitter
-  MAX_FAILURES = OtpLockable::MAX_OTP_ATTEMPTS
-  LOCKOUT_DURATION = OtpLockable::OTP_LOCKOUT_DURATION
+  MAX_FAILURES = 5
+  LOCKOUT_DURATION = 15.minutes
 
   class << self
     public

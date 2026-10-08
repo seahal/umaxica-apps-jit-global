@@ -5,6 +5,8 @@ require "test_helper"
 # Boolean comparisons keep OTP, browser bindings and proof out of failure diagnostics.
 # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
 class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   %w(app com).each do |surface|
     %i(contact_receipt bootstrap_receipt).each do |boundary|
       test "#{surface} email bootstrap recovers #{boundary} through identical HTTP without granting freshness" do
@@ -115,6 +117,7 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         csrf = browser.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
         fields = { raw_address: "receipt-bootstrap-#{SecureRandom.hex(8)}@example.test" }
         fields[:confirm_policy] = "1" if surface == "app"
+        clear_enqueued_jobs
         browser.post(
           "/identity/emails/registration", params: {
             parameter_scope => fields, "cf-turnstile-response" => "test", :ri => "jp",
@@ -123,12 +126,23 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
 
         assert_equal 302, browser.response.status
         contact = contact_model.find_by!(owner_key => actor.id)
-        context = contact.credential_registration_otp_context
+        transaction_key =
+          (surface == "app") ? :email_registration_transaction_ref :
+                   :com_settings_email_registration_transaction_ref
+        transaction = flow_model.find_by!(transaction_id: browser.request.session.fetch(transaction_key))
+        job = enqueued_jobs.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
 
-        assert_not_nil context
-        transaction = flow_model.find_by!(transaction_id: context.fetch("flow_ref"))
-        otp = contact.get_otp
-        code = ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter)).to_s
+        assert_not_nil job
+        delivery = ActiveJob::Arguments.deserialize(job.fetch(:args)).last.fetch(:params).stringify_keys
+        code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch("encrypted_hotp_token"))
+
+        assert delivery.fetch("contact_ceremony_transaction_ref") == transaction.transaction_id,
+               "Delivery must retain the original Email transaction"
+        assert delivery.fetch("contact_otp_generation") == transaction.otp_generation,
+               "Delivery must retain the independent Email generation"
+        assert transaction.bootstrap_ceremony_transaction_ref == parent.transaction_id,
+               "The keyed proof must bind the original Bootstrap parent before issuance"
+        assert_not job.fetch(:args).to_s.include?(code), "Queued delivery must not expose its random code"
         browser.get(URI.parse(browser.response.location).request_uri, params: { ri: "jp" })
 
         assert_equal 200, browser.response.status
@@ -138,9 +152,10 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
 
         assert_not_nil marker
         assert marker.fetch("session_ref") == token.public_id, "Original marker must bind the current Root"
-        assert context.fetch("browser_digest") == AuthAdmissionBinding.browser_digest(
-          surface:, entry_ref: transaction.transaction_id, nonce:,
-        ), "Contact proof must belong to the server-issued original browser"
+        assert transaction.session_ref == CredentialRegistrationOtpSessionValue.for(
+          surface:, channel: :email, transaction_ref: transaction.transaction_id,
+          root_ref: token.public_id, browser_nonce: nonce,
+        ).dump, "Email proof must belong to the server-issued original browser and Root"
         csrf = browser.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
         submission = { parameter_scope => { pass_code: code }, "cf-turnstile-response" => "test", :ri => "jp" }
         confirmation_headers = headers.merge("X-CSRF-Token" => csrf)
@@ -151,7 +166,8 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         failure =
           lambda do |event|
             sql = event.payload.fetch(:sql)
-            next unless sql.start_with?("UPDATE") && sql.include?(failing_table)
+            next unless sql.start_with?("UPDATE") && sql.include?(failing_table) &&
+              sql.match?(/SET.*"status"\s*=/)
 
             failures += 1
             raise ActiveRecord::StatementInvalid, "bootstrap receipt persistence unavailable"
@@ -165,17 +181,30 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
 
         assert_equal 1, failures
         assert_predicate contact.reload, :binding_effective?
-        assert_nil contact.get_otp
-        proof = contact.credential_registration_otp_context.deep_dup
+        assert_nil transaction.reload.otp_verifier
+        proof = transaction.attributes.slice(
+          "otp_consumed_at", "otp_receipt_verifier", "otp_result_expires_at",
+          "otp_generation", "otp_expires_at", "session_ref", "bootstrap_ceremony_transaction_ref",
+        )
         source_facts = contact.attributes
         audits = audit_model.where(operation_ref: transaction.transaction_id)
 
-        assert_not_nil proof.fetch("verified_at")
-        assert_equal [Time.iso8601(proof.fetch("verified_at")) + 60.seconds, transaction.expires_at].min,
-                     Time.iso8601(proof.fetch("result_expires_at"))
-        assert_operator Time.iso8601(proof.fetch("result_expires_at")), :>, contact_model.database_now
-        assert original_ticket == transaction.reload.attributes,
-               "Failed receipt must retain the original Contact Ticket"
+        assert_not_nil proof.fetch("otp_consumed_at")
+        assert_not_nil proof.fetch("otp_receipt_verifier")
+        assert_equal [proof.fetch("otp_consumed_at") + 60.seconds, transaction.expires_at].min,
+                     proof.fetch("otp_result_expires_at")
+        assert_operator proof.fetch("otp_result_expires_at"), :>, flow_model.database_now
+        verification_changes = %w(
+          otp_consumed_at otp_receipt_verifier otp_verifier otp_result_expires_at updated_at lock_version
+        )
+
+        assert original_ticket.except(*verification_changes) ==
+          transaction.reload.attributes.except(*verification_changes),
+               "Failed lifecycle receipt must retain every Ticket fact except committed OTP verification"
+        assert_equal original_ticket.fetch("lock_version") + 1, transaction.lock_version,
+                     "Committed OTP verification must advance the Ticket optimistic lock exactly once"
+        verified_ticket = transaction.attributes
+
         assert original_parent == parent.reload.attributes, "Failed receipt must retain the original Bootstrap parent"
         assert_equal "pending", transaction.status
         assert_equal "pending", parent.status
@@ -190,7 +219,6 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
 
         assert marker == pending_marker, "Persistence failure must retain the original Root/browser marker"
         wrong_code = ((code.to_i + 1) % 1_000_000).to_s.rjust(6, "0")
-        attempt_started_at = contact_model.database_now
         browser.patch(
           "/identity/emails/registration",
           params: submission.merge(parameter_scope => { pass_code: wrong_code }), headers: confirmation_headers,
@@ -199,14 +227,14 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         assert_equal 422, browser.response.status
         assert_equal "pending", transaction.reload.status
         assert_equal "pending", parent.reload.status
-        assert proof == contact.reload.credential_registration_otp_context,
+        assert verified_ticket == transaction.attributes,
                "Receipt-only authorization must still verify the original submitted code"
-        assert_equal source_facts.fetch("otp_attempts_count") + 1, contact.otp_attempts_count
-        assert_operator contact.otp_last_sent_at, :>=, attempt_started_at
-        assert_operator contact.otp_last_sent_at, :<=, contact_model.database_now
-        assert source_facts.except("otp_attempts_count", "otp_last_sent_at", "updated_at") ==
-          contact.attributes.except("otp_attempts_count", "otp_last_sent_at", "updated_at"),
-               "Wrong-code refusal updates only the existing failure counter and attempt-window anchor"
+        assert_equal source_facts.fetch("otp_attempts_count") + 1, contact.reload.otp_attempts_count
+        assert contact.reload.otp_last_sent_at == source_facts.fetch("otp_last_sent_at"),
+               "Wrong-code refusal must not change the Email issuance timestamp"
+        assert source_facts.except("otp_attempts_count", "updated_at") ==
+          contact.attributes.except("otp_attempts_count", "updated_at"),
+               "Wrong-code refusal updates only the Email failure counter and update timestamp"
         source_facts = contact.attributes
         browser.patch("/identity/emails/registration", params: submission, headers: confirmation_headers)
 
@@ -214,8 +242,8 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         assert_equal "/identity/emails", URI.parse(browser.response.location).path,
                      "Receipt recovery must return to the original target, not ordinary verification"
         assert source_facts == contact.reload.attributes, "Receipt-only retry must not rewrite committed Source facts"
-        assert proof == contact.credential_registration_otp_context, "Retry must retain the exact bounded proof"
         assert_predicate transaction.reload, :consumed?
+        assert proof == transaction.attributes.slice(*proof.keys), "Retry must retain the exact bounded Email proof"
         assert_equal "consumed", parent.reload.status
         assert parent.verified_credential_ref == contact.public_id, "Original parent must consume the original Contact"
         assert_equal 1, audits.count
@@ -235,7 +263,7 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         assert_nil token.last_step_up_credential_ref
         assert_predicate token, :currently_usable?
         assert_equal 1, contact_model.effective_binding.where(owner_key => actor.id).count
-        assert_nil contact.get_otp
+        assert_nil transaction.otp_verifier
       ensure
         ActionController::Base.allow_forgery_protection = protection
         TurnstileVerifierStub.enabled, TurnstileVerifierStub.response = previous_turnstile

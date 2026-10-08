@@ -7,6 +7,8 @@ require "test_helper"
 # client: the two-step OTP flow (new -> create -> edit -> update) together with
 # the Turnstile, registration-session, and OTP-failure branches guarding it.
 class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   fixtures :clients, :client_statuses, :client_telephone_statuses,
            :client_token_kinds, :client_token_statuses, :client_token_binding_methods,
            :client_token_dbsc_statuses
@@ -61,6 +63,66 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
   teardown do
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
+  end
+
+  test "create queues a random Telephone ceremony code and update finalizes that exact encrypted proof" do
+    clear_enqueued_jobs
+    post base_app_identity_telephones_registration_url(ri: "jp", host: @host),
+         params: { user_telephone: { raw_number: "+12025550171" } }, headers: @headers
+
+    assert_redirected_to edit_base_app_identity_telephones_registration_path(ri: "jp")
+    pending = ClientTelephone.find(session[:settings_telephone_registration_id])
+    job = enqueued_jobs.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+    payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+
+    assert_equal 4, payload.fetch(:version)
+    assert_nil pending.credential_registration_otp_context
+    transaction = ClientTelephoneCeremonyTransaction.find_by!(transaction_id: payload.fetch(:otp_binding).fetch(2))
+
+    assert_equal pending.public_id, transaction.telephone_candidate_ref
+    assert_equal "credential_registration", transaction.purpose
+    patch base_app_identity_telephones_registration_url(ri: "jp", host: @host),
+          params: { user_telephone: { pass_code: payload.fetch(:otp_code) } }, headers: @headers
+
+    assert_redirected_to base_app_identity_telephones_path(ri: "jp")
+    assert_predicate pending.reload, :binding_effective?
+    assert_predicate transaction.reload, :consumed?
+    assert ClientContactAuditOutbox.exists?(
+      operation_ref: transaction.transaction_id, contact_ref: pending.public_id, event_name: "finalized",
+    )
+  end
+
+  %w(current cancelled expired reissued).each do |state|
+    test "HTTP created Telephone registration SMS checks #{state} proof before transport" do
+      clear_enqueued_jobs
+      post base_app_identity_telephones_registration_url(ri: "jp", host: @host),
+           params: { user_telephone: { raw_number: "+12025550173" } }, headers: @headers
+
+      assert_redirected_to edit_base_app_identity_telephones_registration_path(ri: "jp")
+      transaction = ClientTelephoneCeremonyTransaction.find_by!(
+        transaction_id: session[:settings_telephone_registration_transaction_ref],
+      )
+      job = enqueued_jobs.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+      envelope = job.fetch(:args).fetch(0).fetch("encrypted_payload")
+      payload = OutboundSensitivePayload.decrypt_sms_delivery(envelope)
+
+      assert_equal 4, payload.fetch(:version)
+      assert_not JSON.generate(job.fetch(:args)).include?(payload.fetch(:otp_code))
+      transaction.cancel_telephone_otp! if state == "cancelled"
+      transaction.issue_telephone_otp!(purpose: "credential_registration") if state == "reissued"
+      now = (state == "expired") ? transaction.otp_expires_at : transaction.class.database_now
+      transported = []
+      transaction.class.stub(:database_now, now) do
+        OutboundSms.stub(:deliver_now, ->(**message) { transported << message }) do
+          perform_enqueued_jobs(only: Outbound::SmsDeliveryJob)
+        end
+      end
+
+      assert_equal (state == "current") ? 1 : 0, transported.length
+      if state == "current"
+        assert_includes transported.fetch(0).fetch(:body), payload.fetch(:otp_code)
+      end
+    end
   end
 
   test "new renders the registration form and leaves no pending registration in the session" do
@@ -136,8 +198,9 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     post base_app_identity_telephones_registration_url(ri: "jp", host: @host),
          params: { user_telephone: { raw_number: "+15558675315" } }, headers: @headers
     pending = ClientTelephone.find(session[:settings_telephone_registration_id])
-    otp = pending.get_otp
-    wrong_code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter] + 1).to_s
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+    payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+    wrong_code = (payload.fetch(:otp_code) == "000000") ? "000001" : "000000"
 
     patch base_app_identity_telephones_registration_url(ri: "jp", host: @host),
           params: { user_telephone: { pass_code: wrong_code } }, headers: @headers
@@ -146,11 +209,14 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     assert_equal ClientTelephoneStatus::UNVERIFIED, pending.reload.user_telephone_status_id
   end
 
-  test "separate settings starts for the same telephone retain independent candidates and OTP counters" do
+  test "separate settings starts for the same telephone retain independent candidates and ceremony generations" do
     post base_app_identity_telephones_registration_url(ri: "jp", host: @host),
          params: { user_telephone: { raw_number: "+15558675365" } }, headers: @headers
     first = ClientTelephone.find(session[:settings_telephone_registration_id])
-    counter = first.otp_counter
+    first_transaction = ClientTelephoneCeremonyTransaction.find_by!(
+      transaction_id: session[:settings_telephone_registration_transaction_ref],
+    )
+    generation = first_transaction.otp_generation
     post base_app_identity_telephones_registration_url(ri: "jp", host: @host),
          params: { user_telephone: { raw_number: "+15558675365" } }, headers: @headers
     second = ClientTelephone.find(session[:settings_telephone_registration_id])
@@ -158,7 +224,8 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     assert_response :found
     assert_not_equal first.id, second.id
     assert_equal first.number_digest, second.number_digest
-    assert_equal counter, first.reload.otp_counter
+    assert_equal generation, first_transaction.reload.otp_generation
+    assert_not_equal first_transaction.transaction_id, session[:settings_telephone_registration_transaction_ref]
     assert_not first.binding_effective?
     assert_not second.binding_effective?
   end
@@ -168,30 +235,32 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
       number: "+15558675361", user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED, confirm_policy: "1",
     )
     previous.finalize_binding!
-    previous.store_otp("old-phone-evidence", 1, (ClientTelephone.database_now + 5.minutes).to_i)
+    previous.update!(otp_attempts_count: 2)
     post base_app_identity_telephones_registration_url(ri: "jp", host: @host),
          params: { user_telephone: { raw_number: "+15558675362" } }, headers: @headers
     pending = ClientTelephone.find(session[:settings_telephone_registration_id])
-    otp = pending.get_otp
-    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+    operation_ref = session[:settings_telephone_registration_transaction_ref]
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+    payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+    code = payload.fetch(:otp_code)
     wrong = (code == "000000") ? "000001" : "000000"
     patch base_app_identity_telephones_registration_url(ri: "jp", host: @host),
           params: { user_telephone: { pass_code: wrong } }, headers: @headers
 
     assert_response :unprocessable_content
     assert_predicate previous.reload, :binding_effective?
-    assert_predicate previous, :otp_active?
-    assert_not ClientContactAuditOutbox.exists?(operation_ref: pending.public_id)
+    assert_equal 2, previous.otp_attempts_count
+    assert_not ClientContactAuditOutbox.exists?(operation_ref: operation_ref)
     patch base_app_identity_telephones_registration_url(ri: "jp", host: @host),
           params: { user_telephone: { pass_code: code } }, headers: @headers
 
     assert_response :see_other
     assert_predicate previous.reload, :binding_released?
-    assert_not previous.otp_active?
+    assert_equal 2, previous.otp_attempts_count
     assert_predicate pending.reload, :binding_effective?
     assert_equal [pending.id], @user.client_telephones.effective_binding.pluck(:id)
     assert_equal [[previous.public_id, "released"], [pending.public_id, "finalized"]],
-                 ClientContactAuditOutbox.where(operation_ref: pending.public_id).order(:id)
+                 ClientContactAuditOutbox.where(operation_ref: operation_ref).order(:id)
                    .pluck(:contact_ref, :event_name)
   end
 
@@ -199,8 +268,10 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     post base_app_identity_telephones_registration_url(ri: "jp", host: @host),
          params: { user_telephone: { raw_number: "+15558675316" } }, headers: @headers
     pending = ClientTelephone.find(session[:settings_telephone_registration_id])
-    otp = pending.get_otp
-    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+    operation_ref = session[:settings_telephone_registration_transaction_ref]
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
+    payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+    code = payload.fetch(:otp_code)
 
     patch base_app_identity_telephones_registration_url(ri: "jp", host: @host),
           params: { user_telephone: { pass_code: code } }, headers: @headers
@@ -211,7 +282,7 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
 
     assert_equal @user.public_id, intent.owner_ref
     assert_equal @user.public_id, intent.actor_ref
-    assert_equal pending.public_id, intent.operation_ref
+    assert_equal operation_ref, intent.operation_ref
     assert_nil intent.acknowledged_at
     assert_nil session[:settings_telephone_registration_id]
   end
@@ -219,7 +290,10 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
   test "update treats an expired one-time passcode as an expired registration session" do
     post base_app_identity_telephones_registration_url(ri: "jp", host: @host),
          params: { user_telephone: { raw_number: "+15558675317" } }, headers: @headers
-    ClientTelephone.find(session[:settings_telephone_registration_id]).update!(otp_expires_at: 1.minute.ago)
+    transaction = ClientTelephoneCeremonyTransaction.find_by!(
+      transaction_id: session[:settings_telephone_registration_transaction_ref],
+    )
+    transaction.update!(otp_expires_at: transaction.class.database_now - 1.minute)
 
     patch base_app_identity_telephones_registration_url(ri: "jp", host: @host),
           params: { user_telephone: { pass_code: "123456" } }, headers: @headers

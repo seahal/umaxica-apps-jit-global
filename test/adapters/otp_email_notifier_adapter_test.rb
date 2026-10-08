@@ -4,6 +4,38 @@
 require "test_helper"
 
 class OtpEmailNotifierAdapterTest < ActiveSupport::TestCase
+  %w(app com).each do |surface|
+    %w(sign_up credential_registration recovery withdrawal).each do |purpose|
+      test "#{surface} notifier adapter retains #{purpose} transaction and generation binding" do
+        notifier = (surface == "app") ? Notify::App::OtpNotifier : Notify::Com::OtpNotifier
+        references =
+          case purpose
+          when "sign_up"
+            {
+              sign_up_flow_ref: "original_signup_flow",
+              sign_up_email_transaction_ref: SecureRandom.uuid,
+              sign_up_email_otp_generation: SecureRandom.uuid,
+            }
+          when "credential_registration"
+            { contact_ceremony_transaction_ref: SecureRandom.uuid, contact_otp_generation: SecureRandom.uuid }
+          else
+            { email_ceremony_transaction_ref: SecureRandom.uuid, email_otp_generation: SecureRandom.uuid }
+          end
+        calls = []
+        notifier.stub(:issue, ->(**parameters) { calls << parameters }) do
+          OtpEmailNotifierAdapter.new(notifier, surface: surface).deliver(
+            record: Object.new, otp_code: "123456", purpose: purpose, **references,
+          )
+        end
+
+        assert_equal 1, calls.length
+        references.each { |name, reference| assert_equal reference, calls.first.fetch(name) }
+        assert_not calls.first.key?(:sign_up_otp_counter)
+        assert_not calls.first.key?(:contact_otp_counter)
+      end
+    end
+  end
+
   test "deliver forwards the record and otp to the injected notifier" do
     calls = []
     record = Object.new
@@ -42,21 +74,20 @@ class OtpEmailNotifierAdapterTest < ActiveSupport::TestCase
     )
   end
 
-  # Parity with OtpEmailAdapter, whose `**` sink lets call sites pass channel
-  # specific options such as message_style without knowing which adapter they got.
-  test "deliver ignores unexpected keyword arguments" do
+  test "deliver rejects unexpected channel keywords before notifier issue" do
     calls = []
     fake_notifier = Object.new
     fake_notifier.define_singleton_method(:issue) { |**kwargs| calls << kwargs }
 
-    OtpEmailNotifierAdapter.new(fake_notifier).deliver(
-      record: Object.new,
-      otp_code: "123456",
-      message_style: :localized_verification,
-    )
+    assert_raises(ArgumentError) do
+      OtpEmailNotifierAdapter.new(fake_notifier).deliver(
+        record: Object.new,
+        otp_code: "123456",
+        message_style: :localized_verification,
+      )
+    end
 
-    assert_equal 1, calls.length
-    assert_not calls.first.key?(:message_style)
+    assert_empty calls
   end
 
   test "records enqueue failure and re-raises the notifier exception" do

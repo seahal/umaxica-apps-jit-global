@@ -3,7 +3,7 @@
 
 module WithdrawalCeremonyReentry
   extend ActiveSupport::Concern
-  include CommonOtp
+  include EmailOtpResponseTiming
   include EmailValidation
   include WithdrawalCeremonyAuthentication
 
@@ -14,6 +14,8 @@ module WithdrawalCeremonyReentry
   included do
     helper_method :withdrawal_reentry_generic_message
   end
+
+  public
 
   def new
     @email_record = identity_email_model.new
@@ -33,20 +35,26 @@ module WithdrawalCeremonyReentry
     normalized_address = validate_and_normalize_email(withdrawal_reentry_address)
     email = normalized_address.present? ? find_email_with_timing_protection(normalized_address) : nil
     subject = withdrawal_subject_from_email(email)
+    cancel_previous_withdrawal_reentry_otp
 
     if withdrawal_reentry_subject_eligible?(subject) && !email.locked? && !otp_request_rate_limited?(email)
-      otp_code = generate_otp_for(email)
-      OtpAdapter.for(surface: withdrawal_reentry_surface, channel: :email).deliver(record: email, otp_code: otp_code)
+      browser_ref = SecureRandom.uuid
+      transaction = EmailReentryOtpIssuer.call(email: email, operation: "withdrawal", session_ref: browser_ref)
+    end
+
+    if transaction
       session[REENTRY_SESSION_KEY] = {
         "email_public_id" => email.public_id,
+        "otp_transaction_ref" => transaction.transaction_id,
+        "session_ref" => browser_ref,
         "dummy" => false,
-        "expires_at" => CommonOtp::OTP_EXPIRATION_MINUTES.minutes.from_now.to_i,
+        "expires_at" => transaction.otp_expires_at.to_i,
       }
     else
       perform_dummy_otp_generation
       session[REENTRY_SESSION_KEY] = {
         "dummy" => true,
-        "expires_at" => CommonOtp::OTP_EXPIRATION_MINUTES.minutes.from_now.to_i,
+        "expires_at" => EmailCeremonyOtp::OTP_TTL.from_now.to_i,
       }
     end
 
@@ -77,13 +85,11 @@ module WithdrawalCeremonyReentry
       return render_withdrawal_reentry_invalid_code(start_time)
     end
 
-    result = verify_otp_code_and_consume(
-      email, params[:pass_code],
-      verification_scope: { surface: withdrawal_reentry_surface,
-                            purpose: :withdrawal_reentry,
-                            channel: :email, },
+    verified = EmailReentryOtpVerificationCommitter.call(
+      email: email, code: params[:pass_code], operation: "withdrawal",
+      transaction_ref: state["otp_transaction_ref"], session_ref: state["session_ref"],
     )
-    unless result[:success]
+    unless verified
       return render_withdrawal_reentry_invalid_code(start_time)
     end
 
@@ -105,7 +111,11 @@ module WithdrawalCeremonyReentry
   def withdrawal_reentry_state
     data = session[REENTRY_SESSION_KEY]
     return nil unless data.is_a?(Hash)
-    return session.delete(REENTRY_SESSION_KEY) if data["expires_at"].to_i <= Time.current.to_i
+
+    if data["expires_at"].to_i <= Time.current.to_i
+      session.delete(REENTRY_SESSION_KEY)
+      return nil
+    end
 
     data
   end
@@ -119,7 +129,18 @@ module WithdrawalCeremonyReentry
   end
 
   def otp_request_rate_limited?(email)
-    email.respond_to?(:otp_cooldown_active?) && email.otp_cooldown_active?
+    email.otp_cooldown_active?
+  end
+
+  def cancel_previous_withdrawal_reentry_otp
+    state = session[REENTRY_SESSION_KEY]
+    return unless state.is_a?(Hash) && !state["dummy"]
+
+    transaction = withdrawal_email_ceremony_model.find_by(transaction_id: state["otp_transaction_ref"])
+    return unless transaction && transaction.session_ref == state["session_ref"] &&
+      transaction.email_candidate_ref == state["email_public_id"] && transaction.operation == "withdrawal"
+
+    transaction.cancel_email_otp!
   end
 
   def withdrawal_reentry_subject_eligible?(subject)

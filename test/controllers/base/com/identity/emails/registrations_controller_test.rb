@@ -91,10 +91,19 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
          params: { visitor_email: { raw_address: "shared-settings-#{SecureRandom.hex(8)}@example.test" } },
          headers: @headers
     pending = @visitor.visitor_emails.find_by!(public_id: session[:com_settings_email_registration_public_id])
-    otp = pending.get_otp
-    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == pending.public_id
+    end.last
+    code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
+    flow = VisitorEmailCeremonyTransaction.find_by!(
+      transaction_id: session[:com_settings_email_registration_transaction_ref],
+    )
+    verifier = flow.otp_verifier
     5.times do
-      OtpVerificationFailureBudget.new.verify!(
+      EmailOtpVerificationFailureBudget.new.verify!(
         surface: :com, purpose: :credential_registration, channel: :email,
         destination_digest: pending.address_digest, valid: false,
       )
@@ -103,7 +112,10 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
           params: { visitor_email: { pass_code: code } }, headers: @headers
 
     assert_response :unprocessable_content
-    assert_equal otp, pending.reload.get_otp
+    assert_equal verifier, flow.reload.otp_verifier
+    assert_nil flow.otp_consumed_at
+    pending.reload
+
     assert_nil pending.binding_finalized_at
     assert_nil pending.binding_released_at
     assert_not pending.locked?
@@ -175,8 +187,14 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     post base_com_identity_emails_registration_url(ri: "jp", host: @host),
          params: { visitor_email: { raw_address: "com_reg_wrong_code@example.com" } }, headers: @headers
     pending = VisitorEmail.find_by!(public_id: session[:com_settings_email_registration_public_id])
-    otp = pending.get_otp
-    wrong_code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter] + 1).to_s
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == pending.public_id
+    end.last
+    issued_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
+    wrong_code = (issued_code == "000000") ? "000001" : "000000"
     freshness_before = @token.reload.last_step_up_at
 
     patch base_com_identity_emails_registration_url(ri: "jp", host: @host),
@@ -192,10 +210,16 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
          params: { visitor_email: { raw_address: "com_reg_locked@example.com" } }, headers: @headers
     pending_public_id = session[:com_settings_email_registration_public_id]
     pending = VisitorEmail.find_by!(public_id: pending_public_id)
-    otp = pending.get_otp
-    wrong_code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter] + 1).to_s
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
 
-    OtpLockable::MAX_OTP_ATTEMPTS.times do
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == pending.public_id
+    end.last
+    issued_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
+    wrong_code = (issued_code == "000000") ? "000001" : "000000"
+
+    EmailOtpPolicy::MAX_OTP_ATTEMPTS.times do
       patch base_com_identity_emails_registration_url(ri: "jp", host: @host),
             params: { visitor_email: { pass_code: wrong_code } }, headers: @headers
     end
@@ -203,24 +227,27 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     assert_response :unprocessable_content
     assert_equal pending_public_id, session[:com_settings_email_registration_public_id]
     assert_equal VisitorEmailStatus::UNVERIFIED, pending.reload.visitor_email_status_id
-    assert_equal OtpLockable::MAX_OTP_ATTEMPTS, pending.otp_attempts_count
+    assert_equal EmailOtpPolicy::MAX_OTP_ATTEMPTS, pending.otp_attempts_count
     assert_not pending.binding_effective?
     assert_predicate pending, :locked?
     flow = VisitorEmailCeremonyTransaction.find_by!(
-      transaction_id: pending.credential_registration_otp_context.fetch("flow_ref"),
+      transaction_id: session[:com_settings_email_registration_transaction_ref],
     )
 
     assert_equal "pending", flow.status
     assert_nil flow.consumed_at
-    assert_nil pending.credential_registration_otp_context.fetch("verified_at")
+    assert_nil flow.otp_consumed_at
     assert_not VisitorContactAuditOutbox.exists?(operation_ref: flow.transaction_id)
   end
 
-  test "separate settings starts for the same email preserve the earlier candidate and OTP counter" do
+  test "separate settings starts for the same email preserve the earlier candidate and ceremony generation" do
     post base_com_identity_emails_registration_url(ri: "jp", host: @host),
          params: { visitor_email: { raw_address: "independent-com-candidates@example.test" } }, headers: @headers
     first = VisitorEmail.find_by!(public_id: session[:com_settings_email_registration_public_id])
-    counter = first.otp_counter
+    first_flow = VisitorEmailCeremonyTransaction.find_by!(
+      transaction_id: session[:com_settings_email_registration_transaction_ref],
+    )
+    generation = first_flow.otp_generation
     post base_com_identity_emails_registration_url(ri: "jp", host: @host),
          params: { visitor_email: { raw_address: "independent-com-candidates@example.test" } }, headers: @headers
     second = VisitorEmail.find_by!(public_id: session[:com_settings_email_registration_public_id])
@@ -229,7 +256,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     assert_not_equal first.id, second.id
     assert VisitorEmail.exists?(first.id)
     assert_equal first.address_digest, second.address_digest
-    assert_equal counter, first.reload.otp_counter
+    assert_equal generation, first_flow.reload.otp_generation
     assert_not first.binding_effective?
     assert_not second.binding_effective?
   end
@@ -243,12 +270,20 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     post base_com_identity_emails_registration_url(ri: "jp", host: @host),
          params: { visitor_email: { raw_address: "replacement-com-binding@example.test" } }, headers: @headers
     pending = VisitorEmail.find_by!(public_id: session[:com_settings_email_registration_public_id])
-    otp = pending.get_otp
-    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == pending.public_id
+    end.last
+    code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     assert_predicate previous.reload, :binding_effective?
     assert_not pending.reload.binding_effective?
-    operation_ref = pending.credential_registration_otp_context.fetch("flow_ref")
+    operation_ref = session[:com_settings_email_registration_transaction_ref]
+
+    assert_nil pending.credential_registration_otp_context
+    assert_equal(-Float::INFINITY, pending.otp_expires_at)
 
     assert_not VisitorContactAuditOutbox.exists?(operation_ref: operation_ref)
     patch base_com_identity_emails_registration_url(ri: "jp", host: @host),
@@ -284,8 +319,13 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     post base_com_identity_emails_registration_url(ri: "jp", host: @host),
          params: { visitor_email: { raw_address: "com_reg_verified@example.com" } }, headers: @headers
     pending = VisitorEmail.find_by!(public_id: session[:com_settings_email_registration_public_id])
-    otp = pending.get_otp
-    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == pending.public_id
+    end.last
+    code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     patch base_com_identity_emails_registration_url(ri: "jp", host: @host),
           params: { visitor_email: { pass_code: code } }, headers: @headers
@@ -296,9 +336,10 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
 
     assert_equal @visitor.public_id, intent.owner_ref
     assert_equal @visitor.public_id, intent.actor_ref
-    assert_equal pending.credential_registration_otp_context.fetch("flow_ref"), intent.operation_ref
+    assert_equal notification.fetch(:params).fetch(:contact_ceremony_transaction_ref), intent.operation_ref
     assert_nil intent.acknowledged_at
     assert_nil session[:com_settings_email_registration_public_id]
+    assert_nil session[:com_settings_email_registration_transaction_ref]
     assert_nil @token.reload.last_step_up_at
     assert_equal "revoked", pending_transaction.reload.status
     assert_not_nil pending_ceremony.reload.revoked_at
@@ -390,8 +431,13 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
 
     assert_response :redirect
     pending = visitor.visitor_emails.find_by!(public_id: session[:com_settings_email_registration_public_id])
-    otp = pending.get_otp
-    code = ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s
+    notification = enqueued_jobs.filter_map do |entry|
+      next unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+      value = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+      value if value.fetch(:params)[:public_id] == pending.public_id
+    end.last
+    code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
     patch base_com_identity_emails_registration_path(ri: "jp"),
           params: { visitor_email: { pass_code: code } }, headers: headers
 
@@ -416,7 +462,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
   test "update treats an expired one-time passcode as an expired registration session" do
     post base_com_identity_emails_registration_url(ri: "jp", host: @host),
          params: { visitor_email: { raw_address: "com_reg_expired@example.com" } }, headers: @headers
-    VisitorEmail.find_by!(public_id: session[:com_settings_email_registration_public_id])
+    VisitorEmailCeremonyTransaction.find_by!(transaction_id: session[:com_settings_email_registration_transaction_ref])
       .update!(otp_expires_at: 1.minute.ago)
 
     patch base_com_identity_emails_registration_url(ri: "jp", host: @host),

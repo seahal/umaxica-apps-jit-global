@@ -12,12 +12,12 @@ class ClientSecretIdentityResolverQuery
       return nil unless identifier.is_a?(String) && identifier.valid_encoding? && identifier.exclude?("\0")
 
       clients = []
-      email_digest = IdentifierBlindIndex.bidx_for_email(identifier)
+      email_digest = IdentifierBlindIndex.bidx_for_email(identifier, realm: :app)
       if email_digest
         clients << ClientEmail.effective_binding.find_by(address_digest: email_digest)&.user
       end
 
-      telephone_digest = IdentifierBlindIndex.bidx_for_telephone(identifier)
+      telephone_digest = IdentifierBlindIndex.bidx_for_telephone(identifier, realm: :app)
       if telephone_digest
         clients << ClientTelephone.effective_binding.find_by(number_digest: telephone_digest)&.user
       end

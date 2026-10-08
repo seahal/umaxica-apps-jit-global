@@ -3,6 +3,11 @@
 require "test_helper"
 
 class AuthEmailOtpLockDeadlineTest < ActiveSupport::TestCase
+  setup do
+    ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
+    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
+  end
+
   %w(app com).each do |surface|
     test "#{surface} an overdue local parent commits its named expiry before OTP refusal" do
       model = (surface == "app") ? ClientAuthCeremonySession : VisitorAuthCeremonySession

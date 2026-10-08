@@ -6,7 +6,6 @@ module Base
     module Identity
       class TelephonesController < ::Base::Com::ApplicationController
         include ::SurfaceInertiaPage
-        include CommonOtp
         include ::SignSettingsAuthorityRedirect
 
         include ::VerificationVisitor
@@ -24,6 +23,8 @@ module Base
         # authorize the owned record (find_by! is owner-scoped, so a non-owner gets 404 first).
         # Verification/rate-limit guards remain in place.
         before_action :authorize_telephone_registration!, only: %i(new create)
+
+        public
 
         def index
           authorize!(VisitorTelephone, to: :index?)
@@ -168,24 +169,32 @@ module Base
           check_telephone_verification_rate_limit!
 
           @user_telephone = visitor.visitor_telephones.build(raw_number: number)
-          @user_telephone.visitor_telephone_status_id = VisitorTelephoneStatus::UNVERIFIED
           if auto_accept_confirmations
             @user_telephone.confirm_policy = true
             @user_telephone.confirm_using_mfa = true
           end
 
-          otp_number = generate_otp_attributes(@user_telephone)
           return false unless @user_telephone.valid?
 
           @user_telephone.save!
-          send_telephone_verification_sms(@user_telephone, otp_number)
+          issued = TelephoneCredentialRegistrationOtpIssuer.call(
+            actor: visitor, token: current_session_token, telephone: @user_telephone,
+            browser_nonce: ensure_base_admission_browser_nonce!,
+          )
+          return false unless issued.success?
+
+          session[:settings_telephone_registration_id] = @user_telephone.id
+          session[:settings_telephone_registration_transaction_ref] = issued.transaction.transaction_id
+          send_telephone_verification_sms(@user_telephone, issued)
           true
         end
 
-        def send_telephone_verification_sms(visitor_telephone, otp_number)
+        def send_telephone_verification_sms(visitor_telephone, issued)
           OtpAdapter.for(surface: :com, channel: :telephone).deliver(
             record: visitor_telephone,
-            otp_code: otp_number,
+            otp_code: issued.code, purpose: "credential_registration", public_id: visitor_telephone.public_id,
+            contact_ceremony_transaction_ref: issued.transaction.transaction_id,
+            contact_otp_generation: issued.transaction.otp_generation,
             message_style: :localized_verification,
           )
         end

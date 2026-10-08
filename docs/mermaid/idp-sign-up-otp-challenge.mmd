@@ -1,24 +1,29 @@
 stateDiagram-v2
-    %% CURRENT implementation; derived Source proof timestamps, not a flow status column.
+    %% CURRENT implementation; typed Email/Telephone Ticket proof, not a signup flow status column.
     [*] --> Absent
-    Absent --> Issued: SignUpOtpChallengeRecorder.call / original bound candidate
-    Issued --> Issued: same-flow resend / replace only unverified context
-    Issued --> Verified: SignOtpCeremony.verify! / Source OTP consumption and proof commit
+    Absent --> Issued: channel SignUpOtpIssuer / original bound candidate
+    Issued --> Issued: same-flow resend / replace unconsumed generation
+    Issued --> Verified: channel SignUpOtpVerificationCommitter / atomic Ticket proof consumption
     Verified --> Verified: exact retry / same binding and fixed live result deadline
     Issued --> Unavailable: OTP deadline or parent terminal / refusal predicate
     Verified --> Unavailable: result deadline, release or lost live authority / refusal predicate
     note right of Issued
-        APP/COM email and telephone store the original flow and nonce digest.
-        Owner, candidate, destination, counter and keyed code digest bind the challenge.
+        APP/COM use independently implemented Email and Telephone operations.
+        Session binding derives from the original flow reference and nonce digest.
+        Admission requires the initiating browser's raw nonce, not the public flow ID.
+        Nonce admission is repeated after the owning Ticket row lock refreshes its facts.
+        Owner, candidate, destination, operation, generation and expiry bind the keyed verifier.
         Owning Ticket, Source owner and Contact locks precede decisions.
         Both candidate and shared destination failure limits remain authoritative.
-        Enqueue follows Ticket binding; transport checks the original counter under locks.
+        Enqueue encrypts the random code; transport checks the current transaction/generation.
     end note
     note right of Verified
-        Source transaction consumes OTP and establishes immutable verified_at.
+        Typed Ticket transaction erases its verifier and retains a bounded keyed receipt.
+        Candidate attempt reset follows proof consumption; there is no distributed commit.
         Subsequent four Ticket progression writes share one Ticket transaction.
         Result expiry is min(verification plus 60 seconds, original Ticket deadline).
         Retry compares the same input and respects shared/candidate failure limits.
-        No proof reissue, TTL extension, binding finalization or root issuance occurs here.
+        Retry is evidence, not another verification success or candidate attempt reset.
+        No proof reissue, TTL extension, binding finalization or Root issuance occurs here.
         HTTP phase progression and its replay rules remain separate.
     end note

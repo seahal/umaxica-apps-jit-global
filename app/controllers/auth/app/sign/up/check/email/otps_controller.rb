@@ -52,9 +52,12 @@ module Auth
 
                 result = verify_otp_ceremony!(submitted_code)
                 return handle_locked_result if result.status == :locked
-                return render_otp_ceremony_result(result) unless result.success?
+                return render_otp_ceremony_result(result) unless result.verified_evidence?
 
-                @user_email.update!(user_email_status_id: ClientEmailStatus::VERIFIED_WITH_SIGN_UP)
+                @user_email.mark_sign_up_verified!(
+                  flow: @sign_up_ticket, session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
+                  code: submitted_code,
+                )
                 progress_email_flow!(:update)
 
                 flow_result = advance_sign_up_after_contact_otp!
@@ -92,27 +95,19 @@ module Auth
               end
 
               def issue_otp_ceremony!
-                SignOtpCeremony.issue!(
-                  purpose: :sign_up,
-                  surface: :app,
-                  channel: :email,
-                  subject: @sign_up_ticket,
-                  destination: @user_email.address,
-                  session_nonce: @sign_up_ticket.public_id,
-                  request_context: request,
+                EmailSignUpOtpDeliveryIssuer.call(
+                  flow: @sign_up_ticket,
+                  email: @user_email,
+                  session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
                 )
               end
 
               def verify_otp_ceremony!(submitted_code)
-                SignOtpCeremony.verify!(
-                  purpose: :sign_up,
-                  surface: :app,
-                  channel: :email,
-                  subject: @sign_up_ticket,
-                  destination: @user_email.address,
+                EmailSignUpOtpVerificationCommitter.call(
+                  flow: @sign_up_ticket,
+                  email: @user_email,
                   code: submitted_code,
-                  session_nonce: @sign_up_ticket.public_id,
-                  request_context: request,
+                  session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
                 )
               end
 

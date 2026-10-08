@@ -1,0 +1,39 @@
+# frozen_string_literal: true
+
+TelephoneCredentialRegistrationOtpDeliveryBindingValue =
+  Data.define(:surface, :purpose, :transaction_ref, :candidate_ref, :generation) do
+    class << self
+      public
+
+      def for_sms(otp_binding:)
+        unless otp_binding.is_a?(Array) && otp_binding.length == 5
+          raise ArgumentError, "Telephone registration requires a five-field delivery binding"
+        end
+
+        surface, purpose, transaction_ref, candidate_ref, generation = otp_binding
+        unless %w(app com org).include?(surface) && purpose == "credential_registration" &&
+            candidate_ref.is_a?(String) && candidate_ref.encoding.ascii_compatible? && candidate_ref.valid_encoding? &&
+            candidate_ref.match?(/\A[A-Za-z0-9_-]{1,21}\z/)
+          raise ArgumentError, "invalid Telephone registration delivery binding"
+        end
+        if surface == "org" && !candidate_ref.match?(/\A[1-9][0-9]{0,18}\z/)
+          raise ArgumentError, "ORG Telephone registration requires a positive numeric candidate ID"
+        end
+
+        [transaction_ref, generation].each do |reference|
+          unless reference.is_a?(String) && reference.encoding.ascii_compatible? && reference.valid_encoding? &&
+              reference.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/)
+            raise ArgumentError, "Telephone registration delivery UUID references required"
+          end
+        end
+        new(
+          surface: surface.dup.freeze, purpose: purpose.dup.freeze, transaction_ref: transaction_ref.dup.freeze,
+          candidate_ref: candidate_ref.dup.freeze, generation: generation.dup.freeze,
+        )
+      end
+    end
+
+    public
+
+    def to_a = [surface, purpose, transaction_ref, candidate_ref, generation]
+  end

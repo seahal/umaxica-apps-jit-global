@@ -10,10 +10,14 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
   # opts into a deterministic MemoryStore.
   rate_limit_counters!
 
+  include ActiveJob::TestHelper
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
-    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! @host
     cookies["csrf_token"] = csrf_token_value
     Rails.configuration.x.rate_limit.fetch(:store).clear
@@ -63,8 +67,11 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
   test "show redirects expired otp sessions to the start" do
     user_telephone = start_telephone_signup!("+12345678905")
 
-    expiry = user_telephone.reload.otp_expires_at
-    ClientTelephone.stub(:database_now, expiry + 1.second) do
+    expiry =
+      ClientTelephoneCeremonyTransaction.find_by!(
+        telephone_candidate_ref: user_telephone.public_id,
+      ).otp_expires_at
+    ClientTelephoneCeremonyTransaction.stub(:database_now, expiry + 1.second) do
       travel_to(expiry + 1.second) do
         get auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
       end
@@ -94,8 +101,11 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
   test "patch with an expired otp redirects to the start" do
     user_telephone = start_telephone_signup!("+1234567896")
 
-    expiry = user_telephone.reload.otp_expires_at
-    ClientTelephone.stub(:database_now, expiry + 1.second) do
+    expiry =
+      ClientTelephoneCeremonyTransaction.find_by!(
+        telephone_candidate_ref: user_telephone.public_id,
+      ).otp_expires_at
+    ClientTelephoneCeremonyTransaction.stub(:database_now, expiry + 1.second) do
       travel_to(expiry + 1.second) do
         patch auth_app_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
               params: { client_telephone: { pass_code: "000000" } },
@@ -174,8 +184,16 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
   end
 
   def otp_code_for(user_telephone)
-    otp_data = user_telephone.get_otp
-    ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    job =
+      enqueued_jobs.reverse.find do |entry|
+        next false unless entry.fetch(:job) == Outbound::SmsDeliveryJob
+
+        payload = OutboundSensitivePayload.decrypt_sms_delivery(entry.fetch(:args).fetch(0).fetch("encrypted_payload"))
+        payload.fetch(:to) == user_telephone.number
+      end
+    OutboundSensitivePayload.decrypt_sms_delivery(
+      job.fetch(:args).fetch(0).fetch("encrypted_payload"),
+    ).fetch(:otp_code)
   end
 
   def default_headers
@@ -284,7 +302,7 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",
@@ -299,7 +317,7 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
           otp_private_key: SecureRandom.base64(24),
           otp_counter: "",
@@ -619,7 +637,7 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

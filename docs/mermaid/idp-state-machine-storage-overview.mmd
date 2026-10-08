@@ -116,10 +116,10 @@ flowchart LR
         M75 -.->|"owns or evaluates state; not FK"| T75
         R75_0["app_preference_dbsc_statuses.id"]
         T75 -->|"dbsc_status_id FK; NOT VALID; DELETE NO ACTION"| R75_0
-        M76["idp-client-email-otp: OtpLockable; Email"]
+        M76["idp-client-email-otp: EmailOtpPolicy; Email"]
         T76["client_emails: otp_expires_at / otp_attempts_count / locked_at"]
         M76 -.->|"owns or evaluates state; not FK"| T76
-        M77["idp-client-telephone-otp: OtpLockable; Telephone"]
+        M77["idp-client-telephone-otp: TelephoneOtpPolicy; Telephone"]
         T77["client_telephones: otp_expires_at / otp_attempts_count / locked_at"]
         M77 -.->|"owns or evaluates state; not FK"| T77
         M92["idp-client-withdrawal: FlowWithdrawal; WithdrawalLifecycle"]
@@ -255,10 +255,10 @@ flowchart LR
         M82 -.->|"owns or evaluates state; not FK"| T82
         R82_0["com_preference_dbsc_statuses.id"]
         T82 -->|"dbsc_status_id FK; NOT VALID; DELETE NO ACTION"| R82_0
-        M83["idp-visitor-email-otp: OtpLockable; Email"]
+        M83["idp-visitor-email-otp: EmailOtpPolicy; Email"]
         T83["visitor_emails: otp_expires_at / otp_attempts_count / locked_at"]
         M83 -.->|"owns or evaluates state; not FK"| T83
-        M84["idp-visitor-telephone-otp: OtpLockable; Telephone"]
+        M84["idp-visitor-telephone-otp: TelephoneOtpPolicy; Telephone"]
         T84["visitor_telephones: otp_expires_at / otp_attempts_count / locked_at"]
         M84 -.->|"owns or evaluates state; not FK"| T84
         M93["idp-visitor-withdrawal: FlowWithdrawal; WithdrawalLifecycle"]
@@ -387,10 +387,10 @@ flowchart LR
         M89 -.->|"owns or evaluates state; not FK"| T89
         R89_0["org_preference_dbsc_statuses.id"]
         T89 -->|"dbsc_status_id FK; NOT VALID; DELETE NO ACTION"| R89_0
-        M90["idp-operator-email-otp: OtpLockable; Email"]
+        M90["idp-operator-email-otp: EmailOtpPolicy; Email"]
         T90["operator_emails: otp_expires_at / otp_attempts_count / locked_at"]
         M90 -.->|"owns or evaluates state; not FK"| T90
-        M91["idp-operator-telephone-otp: OtpLockable; Telephone"]
+        M91["idp-operator-telephone-otp: TelephoneOtpPolicy; Telephone"]
         T91["operator_telephones: otp_expires_at / otp_attempts_count / locked_at"]
         M91 -.->|"owns or evaluates state; not FK"| T91
         M95["idp-operator-entra-identity: OperatorEntraIdentityProvisioner; Activation; OrgOperatorLifecycleExecute"]

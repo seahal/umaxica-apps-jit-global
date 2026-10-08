@@ -72,16 +72,15 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
           owner_key => actor.id, :raw_address => "bootstrap-#{SecureRandom.hex(8)}@example.test",
           :confirm_policy => "1",
         )
-        contact.store_otp(ROTP::Base32.random_base32, 1, (contact_model.database_now + 10.minutes).to_i)
-        otp = contact.get_otp
-        code = ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter)).to_s
-        transaction = ContactRegistrationOtpIssuer.call!(
-          actor:, token:, contact:, channel: :email, browser_nonce: nonce, code:,
+        issued = EmailCredentialRegistrationOtpIssuer.call(
+          actor:, token:, email: contact, browser_nonce: nonce, bootstrap_transaction: parent,
         )
+        transaction = issued.transaction
+        code = issued.code
 
-        assert_equal :verified, ContactRegistrationOtpVerificationCommitter.call!(
-          actor:, token:, contact:, transaction:, channel: :email, browser_nonce: nonce, code:,
-        )
+        assert_predicate EmailCredentialRegistrationOtpVerificationCommitter.call(
+          actor:, token:, email: contact, transaction:, browser_nonce: nonce, code:,
+        ), :success?
         requirement = policy_model.new(contact, user: actor).credential_registration_requirement(token:)
         actor_context = ActorValuesContext.empty.with(
           subject: actor, actor_type: (surface == :app) ? :client : :visitor, tld: surface, surface: :base,
@@ -92,9 +91,9 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
           actor:,
           actor_context:,
           token:,
-          contact:,
+          email: contact,
           transaction:,
-          channel: :email,
+          code:,
           browser_nonce: nonce,
           requirement:,
           bootstrap_transaction: parent,
@@ -148,8 +147,8 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
           arguments[:bootstrap_transaction] = restarted.transaction
 
           assert_equal "canceled", parent.reload.status
-          assert restarted.transaction.transaction_id != parent.transaction_id,
-                 "A new permission must not adopt proof issued for the canceled bootstrap"
+          assert_not_equal parent.transaction_id, restarted.transaction.transaction_id,
+                           "A new permission must not adopt proof issued for the canceled bootstrap"
         when :revoked_root
           token.revoke!
         when :changed_policy
@@ -164,7 +163,7 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
           parent.update_columns(required_scope: "unknown_operation")
         end
         source_facts = contact.reload.attributes
-        proof = contact.credential_registration_otp_context.deep_dup
+        proof = transaction.attributes.slice("otp_consumed_at", "otp_receipt_verifier", "otp_result_expires_at")
         ticket_facts = transaction.reload.attributes
         parent_facts = parent.reload.attributes
         root_facts = token.reload.attributes
@@ -174,7 +173,7 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
         audits = audit_model.where(operation_ref: transaction.transaction_id)
 
         assert_equal 0, audits.count
-        assert_not ContactRegistrationOtpFinalizer.bootstrap_receipt_pending?(**arguments),
+        assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(**arguments),
                    "Unfinalized Source proof must not authorize receipt-only recovery"
 
         if %i(source_fault contact_receipt_fault bootstrap_receipt_fault).include?(scenario)
@@ -200,28 +199,29 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
             end
 
           ActiveSupport::Notifications.subscribed(fault, "sql.active_record") do
-            assert_raises(ActiveRecord::StatementInvalid) { ContactRegistrationOtpFinalizer.call!(**arguments) }
+            assert_raises(ActiveRecord::StatementInvalid) { EmailCredentialRegistrationOtpFinalizer.call!(**arguments) }
           end
           assert fired, "The real persistence boundary must be reached"
           assert ticket_facts == transaction.reload.attributes, "Contact receipt must remain pending after failure"
           assert parent_facts == parent.reload.attributes, "Bootstrap receipt must remain pending after failure"
-          assert proof == contact.reload.credential_registration_otp_context, "Verified proof must survive failure"
-          assert_nil contact.get_otp
+          assert proof == transaction.reload.attributes.slice(*proof.keys), "Verified proof must survive failure"
+          assert_nil transaction.reload.otp_verifier
+          assert_not_nil transaction.otp_consumed_at
           if scenario == :source_fault
-            assert source_facts == contact.attributes, "Source failure must preserve the original candidate"
+            assert source_facts == contact.reload.attributes, "Source failure must preserve the original candidate"
             assert_equal 0, audits.count
           else
             assert_predicate contact, :binding_effective?
             assert_equal 1, audits.where(event_name: "finalized", contact_ref: contact.public_id).count
-            assert ContactRegistrationOtpFinalizer.bootstrap_receipt_pending?(**arguments),
+            assert EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(**arguments),
                    "Original committed Source facts must permit only their pending receipt"
-            assert_not ContactRegistrationOtpFinalizer.bootstrap_receipt_pending?(
+            assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(
               **arguments.merge(browser_nonce: SecureRandom.urlsafe_base64(32)),
             ), "A different browser cannot recover the committed Source receipt"
-            assert_not ContactRegistrationOtpFinalizer.bootstrap_receipt_pending?(
+            assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(
               **arguments.merge(bootstrap_transaction: nil),
             ), "Committed Source is not a replacement for the original bootstrap permission"
-            assert_not ContactRegistrationOtpFinalizer.bootstrap_receipt_pending?(
+            assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(
               **arguments.merge(
                 requirement: StepUpRequirement.new(**requirement.to_h.merge(allowed_methods: [:email_otp])),
               ),
@@ -241,22 +241,22 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
                          "Primary freshness is an issuance prerequisite, not a finalization prerequisite"
                 end
 
-                assert_equal :finalized, ContactRegistrationOtpFinalizer.call!(**arguments)
+                assert_equal :finalized, EmailCredentialRegistrationOtpFinalizer.call!(**arguments)
                 assert_predicate contact.reload, :binding_effective?
                 assert_equal "consumed", transaction.reload.status
                 assert_equal "consumed", parent.reload.status
-                assert_not ContactRegistrationOtpFinalizer.bootstrap_receipt_pending?(**arguments),
+                assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(**arguments),
                            "Consumed receipts cannot authorize another operation"
                 assert_equal "email_otp", parent[:method]
                 assert parent.verified_credential_ref == contact.public_id, "Parent must name the original candidate"
-                assert proof == contact.credential_registration_otp_context,
+                assert proof == transaction.attributes.slice(*proof.keys),
                        "Finalization must retain the exact verified proof"
                 assert_equal 1, audits.where(event_name: "finalized", contact_ref: contact.public_id).count
                 committed_source = contact.attributes
                 committed_ticket = transaction.attributes
                 committed_parent = parent.attributes
 
-                assert_equal :finalized, ContactRegistrationOtpFinalizer.call!(**arguments)
+                assert_equal :finalized, EmailCredentialRegistrationOtpFinalizer.call!(**arguments)
                 assert committed_source == contact.reload.attributes, "Exact retry must not rewrite Source facts"
                 assert committed_ticket == transaction.reload.attributes, "Exact retry must not replace Contact receipt"
                 assert committed_parent == parent.reload.attributes, "Exact retry must not replace Bootstrap receipt"
@@ -265,7 +265,7 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
             end
           end
         else
-          assert_equal :unavailable, ContactRegistrationOtpFinalizer.call!(**arguments)
+          assert_equal :unavailable, EmailCredentialRegistrationOtpFinalizer.call!(**arguments)
           assert source_facts == contact.reload.attributes, "Refusal must preserve the candidate and verified proof"
           assert ticket_facts == transaction.reload.attributes, "Refusal must preserve the original Contact Ticket"
           assert parent_facts == parent.reload.attributes, "Refusal must preserve the original Bootstrap parent"
@@ -276,7 +276,8 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
         assert root_facts == token.reload.attributes, "Bootstrap must never issue freshness or replace Root authority"
         assert binding_facts == binding.reload.attributes, "Finalization must not replace original admission binding"
         assert_nil token.last_step_up_at
-        assert_nil contact.get_otp
+        assert_nil transaction.reload.otp_verifier
+        assert_not_nil transaction.otp_consumed_at
       end
     end
   end

@@ -4,7 +4,7 @@
 require "test_helper"
 # require "helpers/global_test_support"
 
-# Boolean snapshot comparisons keep Source OTP secrets out of failure output.
+# Boolean snapshot comparisons keep identifier attributes out of failure output.
 # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 module Sign
   module In
@@ -32,7 +32,6 @@ module Sign
             2.times.map do
               owner = owner_class.create!
               contact = model.create!(owner_key => owner.id, :address => address, :confirm_policy => "1")
-              contact.store_otp(ROTP::Base32.random_base32, 1, (model.database_now + 10.minutes).to_i)
               contact
             end
           snapshots = candidates.map { |contact| contact.reload.attributes }
@@ -42,10 +41,7 @@ module Sign
           ceremony = @ceremonies.fetch(surface)
           ceremony.issue_email_otp!(contact: effective, destination: address)
           generation = ceremony.reload.email_otp_context.fetch("generation")
-          source_generation = effective.reload.attributes.slice(
-            "otp_private_key", "otp_counter", "otp_expires_at",
-            "otp_last_sent_at",
-          )
+          source_generation = effective.reload.attributes
           state = SignInOtpResendState.issue(
             kind: :email, target: address, surface: surface,
             browser_binding: ceremony.sid_digest, contact: effective,
@@ -215,7 +211,7 @@ module Sign
         assert unchanged == email.reload.attributes
       end
 
-      test "known email resend refreshes Ticket challenge, preserves Source OTP and uses the email adapter" do
+      test "known email resend refreshes Ticket challenge, preserves identifier state and uses the email adapter" do
         email = ClientEmail.create!(
           user: clients(:one),
           address: "known-resend@example.test",
@@ -225,10 +221,7 @@ module Sign
         ceremony = @ceremonies.fetch(:app)
         ceremony.issue_email_otp!(contact: email, destination: email.address)
         generation = ceremony.reload.email_otp_context.fetch("generation")
-        source_generation = email.reload.attributes.slice(
-          "otp_private_key", "otp_counter", "otp_expires_at",
-          "otp_last_sent_at",
-        )
+        source_generation = email.reload.attributes
         state = SignInOtpResendState.issue(
           kind: :email, target: email.address, surface: :app,
           browser_binding: ceremony.sid_digest, contact: email,
@@ -272,17 +265,13 @@ module Sign
           confirm_policy: "1",
           user_email_status_id: ClientEmailStatus::VERIFIED,
         ).tap(&:finalize_binding!)
-        email.store_otp(SecureRandom.base64(20), 123, 10.minutes.from_now.to_i)
         email.increment_attempts!
 
         assert_equal 1, email.reload.otp_attempts_count
 
         ceremony = @ceremonies.fetch(:app)
         ceremony.issue_email_otp!(contact: email, destination: email.address)
-        source_generation = email.reload.attributes.slice(
-          "otp_private_key", "otp_counter", "otp_expires_at",
-          "otp_last_sent_at",
-        )
+        source_generation = email.reload.attributes
         state = SignInOtpResendState.issue(
           kind: :email, target: email.address, surface: :app,
           browser_binding: ceremony.sid_digest, contact: email,
@@ -314,10 +303,7 @@ module Sign
         ).tap(&:finalize_binding!)
         ceremony = @ceremonies.fetch(:app)
         ceremony.issue_email_otp!(contact: email, destination: address)
-        source_generation = email.reload.attributes.slice(
-          "otp_private_key", "otp_counter", "otp_expires_at",
-          "otp_last_sent_at",
-        )
+        source_generation = email.reload.attributes
         state = SignInOtpResendState.issue(
           kind: :email, target: address, surface: :app, browser_binding: ceremony.sid_digest,
           contact: email,
@@ -368,19 +354,14 @@ module Sign
         email = VisitorEmail.create!(
           visitor: Visitor.create!(status_id: VisitorStatus::ACTIVE),
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
         ).tap(&:finalize_binding!)
         ceremony = @ceremonies.fetch(:com)
         ceremony.issue_email_otp!(contact: email, destination: email.address)
-        source_generation = email.reload.attributes.slice(
-          "otp_private_key", "otp_counter", "otp_expires_at",
-          "otp_last_sent_at",
-        )
+        source_generation = email.reload.attributes
         state = SignInOtpResendState.issue(
           kind: :email, target: email.address, surface: :com,
           browser_binding: ceremony.sid_digest, contact: email,

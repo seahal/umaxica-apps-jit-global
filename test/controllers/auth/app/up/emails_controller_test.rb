@@ -16,6 +16,9 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
+    ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     reset_cookie_jar!
     cookies["csrf_token"] = csrf_token_value
@@ -259,7 +262,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     # Second registration attempt after the independent overwrite window expires (case-variant)
     # This should delete the previous unverified record and create a new one
-    travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
+    travel EmailOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -346,7 +349,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_difference("Client.count", 1) do
       assert_difference("ClientEmail.count", 1) do
-        assert_enqueued_emails 1 do
+        assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
           post auth_app_sign_up_email_url(ri: "jp"),
                params: {
                  user_email: {
@@ -399,7 +402,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_difference("Client.count", 1) do
       assert_difference("ClientEmail.count", 1) do
-        assert_enqueued_emails 1 do
+        assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
           post auth_app_sign_up_email_url(ri: "jp"),
                params: {
                  user_email: {
@@ -431,7 +434,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   test "create enqueues exactly one email" do
     email = "enqueue_test@example.com"
 
-    assert_enqueued_emails 1 do
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -481,7 +484,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     before_otp_counter = existing_email.otp_counter
     before_otp_attempts_count = existing_email.otp_attempts_count
 
-    assert_enqueued_emails 1 do
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -579,8 +582,17 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal 409, browsers.last.response.status
     assert(own_candidate_facts == candidates.last.reload.attributes, "protected record facts remain unchanged")
     assert(foreign_candidate_facts == candidates.first.reload.attributes, "protected record facts remain unchanged")
-    foreign_otp = candidates.first.get_otp
-    foreign_code = ROTP::HOTP.new(foreign_otp.fetch(:otp_private_key)).at(foreign_otp.fetch(:otp_counter)).to_s
+    foreign_delivery =
+      (enqueued_jobs + performed_jobs).find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == candidates.first.public_id
+      end
+    foreign_notification = ActiveJob::Arguments.deserialize(foreign_delivery.fetch(:args)).last
+    foreign_code = OutboundSensitivePayload.decrypt_email_otp(
+      foreign_notification.fetch(:params).fetch(:encrypted_hotp_token),
+    )
     assert_no_difference("ClientToken.count") do
       browsers.last.patch(
         targets.first.request_uri,
@@ -600,7 +612,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   test "create with validation failure enqueues no emails and returns 422" do
     email = "invalid_email"
 
-    assert_enqueued_emails 0 do
+    assert_enqueued_jobs 0, only: OtpNotifierEmailDeliveryJob do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -621,7 +633,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   test "create without policy confirmation shows localized validation summary" do
     logs = []
 
-    assert_enqueued_emails 0 do
+    assert_enqueued_jobs 0, only: OtpNotifierEmailDeliveryJob do
       Rails.logger.stub(:info, ->(*args, &block) { logs << (args.first || block&.call).to_s }) do
         post auth_app_sign_up_email_url(ri: "jp"),
              params: {
@@ -648,7 +660,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     email = "turnstile_fail@example.com"
 
-    assert_enqueued_emails 0 do
+    assert_enqueued_jobs 0, only: OtpNotifierEmailDeliveryJob do
       post(
         auth_app_sign_up_email_url(ri: "jp"),
         params: {
@@ -767,7 +779,11 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     cycle = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
     cycle_facts = cycle.reload.attributes
     contact_facts = user_email.reload.attributes
-    ClientEmail.stub(:database_now, user_email.otp_expires_at) do
+    transaction = ClientEmailCeremonyTransaction.where(
+      operation: "sign_up",
+      email_candidate_ref: user_email.public_id,
+    ).sole
+    ClientEmailCeremonyTransaction.stub(:database_now, transaction.otp_expires_at) do
       patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
             params: {
               "cf-turnstile-response" => "test",
@@ -925,9 +941,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     email_id = ClientEmail.order(:created_at).last.public_id
     user_email = ClientEmail.find_by(public_id: email_id)
 
-    otp_data = user_email.get_otp
-    hotp = ROTP::HOTP.new(otp_data[:otp_private_key])
-    correct_code = hotp.at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    correct_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     # Submit correct OTP with pt parameter
     patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
@@ -969,9 +991,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :redirect, "Expected redirect but got #{response.status}: #{response.body[0..500]}"
     email_id = ClientEmail.order(:created_at).last.public_id
     user_email = ClientEmail.find_by(public_id: email_id)
-    otp_data = user_email.get_otp
-    hotp = ROTP::HOTP.new(otp_data[:otp_private_key])
-    correct_code = hotp.at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    correct_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     initial_user_count = Client.count
 
@@ -1027,9 +1055,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :redirect, "Expected redirect but got #{response.status}: #{response.body[0..500]}"
     email_id = ClientEmail.order(:created_at).last.public_id
     user_email = ClientEmail.find_by(public_id: email_id)
-    otp_data = user_email.get_otp
-    hotp = ROTP::HOTP.new(otp_data[:otp_private_key])
-    correct_code = hotp.at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    correct_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     initial_audit_count = ClientChronicle.count
 
@@ -1070,9 +1104,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :redirect, "Expected redirect but got #{response.status}: #{response.body[0..500]}"
     email_id = ClientEmail.order(:created_at).last.public_id
     user_email = ClientEmail.find_by(public_id: email_id)
-    otp_data = user_email.get_otp
-    hotp = ROTP::HOTP.new(otp_data[:otp_private_key])
-    correct_code = hotp.at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    correct_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
@@ -1110,9 +1150,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :redirect, "Expected redirect but got #{response.status}: #{response.body[0..500]}"
     email_id = ClientEmail.order(:created_at).last.public_id
     user_email = ClientEmail.find_by(public_id: email_id)
-    otp_data = user_email.get_otp
-    hotp = ROTP::HOTP.new(otp_data[:otp_private_key])
-    correct_code = hotp.at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    correct_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     # Submit correct OTP
     patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
@@ -1151,8 +1197,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     email_id = ClientEmail.order(:created_at).last.public_id
     user_email = ClientEmail.find_by!(public_id: email_id)
-    otp_data = user_email.get_otp
-    pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
@@ -1185,8 +1238,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :redirect
     user_email = ClientEmail.order(:created_at).last
-    otp_data = user_email.get_otp
-    pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: { user_email: { pass_code: pass_code } },
@@ -1294,12 +1354,24 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :redirect, "Expected redirect but got #{response.status}: #{response.body[0..500]}"
     email_id = ClientEmail.order(:created_at).last.public_id
     user_email = ClientEmail.find_by(public_id: email_id)
-    otp_data = user_email.get_otp
-    hotp = ROTP::HOTP.new(otp_data[:otp_private_key])
-    correct_code = hotp.at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    correct_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     # Verify OTP data exists before verification
-    assert_not_nil user_email.get_otp
+    transaction = ClientEmailCeremonyTransaction.where(
+      operation: "sign_up",
+      email_candidate_ref: user_email.public_id,
+    ).sole
+
+    assert_predicate transaction.otp_verifier, :present?
+    assert_nil transaction.otp_consumed_at
 
     # Submit correct OTP
     patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
@@ -1316,6 +1388,8 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     user_email.reload
 
     assert_nil user_email.get_otp
+    assert_nil transaction.reload.otp_verifier
+    assert transaction.otp_consumed_at
   end
 
   test "does not reset session ID before checkpoint finalization" do
@@ -1338,9 +1412,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     email_id = ClientEmail.order(:created_at).last.public_id
     user_email = ClientEmail.find_by(public_id: email_id)
-    otp_data = user_email.get_otp
-    hotp = ROTP::HOTP.new(otp_data[:otp_private_key])
-    correct_code = hotp.at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    correct_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     old_session_id = session.id.to_s
 
@@ -1411,8 +1491,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal user_email.user_id, cycle.principal_id
     assert_equal "contact", cycle.step
 
-    otp_data = user_email.get_otp
-    pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
@@ -1443,8 +1530,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     user_email = ClientEmail.order(:created_at).last
     cycle = current_sign_up_flow(user_email)
-    otp_data = user_email.get_otp
-    pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: {
@@ -1549,8 +1643,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     user_email = ClientEmail.order(:created_at).last
     cycle = current_sign_up_flow(user_email)
-    otp_data = user_email.get_otp
-    pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: { user_email: { pass_code: pass_code } },
@@ -1588,8 +1689,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     user_email = ClientEmail.order(:created_at).last
     cycle = current_sign_up_flow(user_email)
-    otp_data = user_email.get_otp
-    pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: { user_email: { pass_code: pass_code } },
@@ -1635,8 +1743,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :redirect
     user_email = ClientEmail.order(:created_at).last
     cycle = current_sign_up_flow(user_email)
-    otp_data = user_email.get_otp
-    pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
 
     patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: { :user_email => { pass_code: pass_code }, "cf-turnstile-response" => "test" },
@@ -1732,9 +1847,9 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     user_count_before_second = Client.count
 
     # Second registration attempt after cooldown (should delete first pending user)
-    decision_time = first_email.otp_last_sent_at + CommonOtpPolicy::SEND_COOLDOWN + 1.second
+    decision_time = first_email.otp_last_sent_at + EmailOtpPolicy::SEND_COOLDOWN + 1.second
     ClientEmail.stub(:database_now, decision_time) do
-      travel CommonOtpPolicy::SEND_COOLDOWN + 1.second do
+      travel EmailOtpPolicy::SEND_COOLDOWN + 1.second do
         post auth_app_sign_up_email_url(ri: "jp"),
              params: {
                user_email: {
@@ -1832,7 +1947,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     email = "cooldown_test@example.com"
 
     # First registration attempt
-    assert_enqueued_emails 1 do
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -1849,7 +1964,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     first_flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
     first_candidate = ClientEmail.find(first_flow.pending_contact_id)
 
-    assert_enqueued_emails 1 do
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -1879,7 +1994,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     email = "cooldown_expire_test@example.com"
 
     # First registration attempt
-    assert_enqueued_emails 1 do
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -1895,10 +2010,10 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     # After the overwrite window expires, even though OTP resend cooldown is longer.
     first_email = ClientEmail.order(:created_at).last
-    decision_time = first_email.otp_last_sent_at + CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second
+    decision_time = first_email.otp_last_sent_at + EmailOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second
     ClientEmail.stub(:database_now, decision_time) do
-      travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
-        assert_enqueued_emails 1 do
+      travel EmailOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
+        assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
           post auth_app_sign_up_email_url(ri: "jp"),
                params: {
                  user_email: {
@@ -1927,7 +2042,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     original_contact_facts = existing_email.reload.attributes
     original_owner_facts = user.reload.attributes
 
-    assert_enqueued_emails 1 do
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -1944,7 +2059,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp", fb: first_binding)
 
-    assert_enqueued_emails 1 do
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -1990,7 +2105,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       actor_operator_public_id: the_case.applied_by_operator_public_id,
     )
 
-    assert_enqueued_emails 0 do
+    assert_enqueued_jobs 0, only: OtpNotifierEmailDeliveryJob do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -2005,7 +2120,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :unprocessable_content
     assert_includes inertia_props.fetch("errors"), I18n.t("sign.app.registration.email.create.address_required")
     assert_not ClientEmail.exists?(
-      address_digest: IdentifierBlindIndex.bidx_for_email("enforcement_blocked@example.com"),
+      address_digest: IdentifierBlindIndex.bidx_for_email("enforcement_blocked@example.com", realm: :app),
     )
   end
 
@@ -2043,8 +2158,15 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   def otp_code_for(user_email)
-    otp_data = user_email.get_otp
-    ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    delivery =
+      (enqueued_jobs + performed_jobs).reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+        notification.fetch(:params).fetch(:public_id) == user_email.public_id
+      end
+    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+    OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
   end
 
   def host
@@ -2144,7 +2266,7 @@ class Auth::App::Sign::Up::EmailsControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",
@@ -2159,7 +2281,7 @@ class Auth::App::Sign::Up::EmailsControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
           otp_private_key: SecureRandom.base64(24),
           otp_counter: "",
@@ -2479,7 +2601,7 @@ class Auth::App::Sign::Up::EmailsControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

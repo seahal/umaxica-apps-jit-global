@@ -40,6 +40,10 @@ class IdentityStepUpCeremonyGrant
     new(payload, kid: header["kid"], now: now)
   end
 
+  public_class_method :issue, :decode
+
+  public
+
   def [](key) = payload[key.to_s]
 
   def required_aal
@@ -91,6 +95,8 @@ class IdentityStepUpCeremonyGrant
       "iat" => now.to_i,
     }
   end
+
+  public_class_method :default_claims
 
   private
 

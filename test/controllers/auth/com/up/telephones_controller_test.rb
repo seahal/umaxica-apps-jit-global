@@ -17,6 +17,9 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
+    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     cookies["csrf_token"] = csrf_token_value
     TurnstileVerifierStub.challenge_enabled = true
@@ -425,8 +428,21 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_equal 409, browsers.last.response.status
     assert(own_candidate_facts == candidates.last.reload.attributes, "protected record facts remain unchanged")
     assert(foreign_candidate_facts == candidates.first.reload.attributes, "protected record facts remain unchanged")
-    foreign_otp = candidates.first.get_otp
-    foreign_code = ROTP::HOTP.new(foreign_otp.fetch(:otp_private_key)).at(foreign_otp.fetch(:otp_counter)).to_s
+    transaction_ref =
+      VisitorTelephoneCeremonyTransaction.find_by!(
+        telephone_candidate_ref: candidates.first.public_id,
+      ).transaction_id
+    queued =
+      enqueued_jobs.reverse.find do |job|
+        next false unless job.fetch(:job) == Outbound::SmsDeliveryJob
+
+        payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+        payload.fetch(:otp_binding)[3] == transaction_ref
+      end
+    foreign_code =
+      OutboundSensitivePayload.decrypt_sms_delivery(
+        queued.fetch(:args).fetch(0).fetch("encrypted_payload"),
+      ).fetch(:otp_code)
     assert_no_difference("VisitorToken.count") do
       browsers.last.patch(
         targets.first.request_uri,
@@ -458,7 +474,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
       "binding_finalized_at", "binding_released_at",
     )
 
-    travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
+    travel TelephoneOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
       assert_difference("VisitorTelephone.count", 1) do
         assert_difference("Visitor.count", 1) do
           post auth_com_sign_up_telephone_url(ri: "jp"),
@@ -569,11 +585,11 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
   end
 
   test "create is refused when the creator reports the number rate limited under its own lock" do
-    rate_limited = SignComUpTelephoneSignupCreator::Result.new(
+    rate_limited = TelephoneSignUpCandidateResult.new(
       status: :rate_limited, telephone: VisitorTelephone.new, session_payload: nil,
     )
 
-    SignComUpTelephoneSignupCreator.stub(:call, rate_limited) do
+    TelephoneSignUpCandidateCreator.stub(:call, rate_limited) do
       post auth_com_sign_up_telephone_url(ri: "jp"),
            params: {
              visitor_telephone: { raw_number: "+819012377903", confirm_policy: "1", confirm_using_mfa: "1" },
@@ -590,7 +606,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
         raise ActiveRecord::RecordInvalid, VisitorTelephone.new
       end
 
-    SignComUpTelephoneSignupCreator.stub(:call, raiser) do
+    TelephoneSignUpCandidateCreator.stub(:call, raiser) do
       post auth_com_sign_up_telephone_url(ri: "jp"),
            params: {
              visitor_telephone: { raw_number: "+819012377904", confirm_policy: "1", confirm_using_mfa: "1" },
@@ -661,9 +677,15 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_response :redirect
     target = URI.parse(response.location)
 
-    travel CommonOtpPolicy::SEND_COOLDOWN + 1.second
-    assert_no_difference("VisitorTelephone.count") do
-      post target.request_uri, headers: default_headers
+    flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    candidate = VisitorTelephone.find(flow.pending_contact_id)
+    decision_time = candidate.otp_last_sent_at + TelephoneOtpPolicy::SEND_COOLDOWN + 1.second
+    travel_to decision_time do
+      VisitorTelephone.stub(:database_now, decision_time) do
+        assert_no_difference("VisitorTelephone.count") do
+          post target.request_uri, headers: default_headers
+        end
+      end
     end
 
     assert_response :redirect
@@ -702,8 +724,11 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     candidate = VisitorTelephone.find(flow.pending_contact_id)
     original_facts = candidate.attributes
     original_existing_facts = existing.attributes
-    travel CommonOtp::OTP_EXPIRATION_MINUTES.minutes + 1.minute do
-      VisitorTelephone.stub(:database_now, candidate.otp_expires_at) do
+    travel TelephoneOtpPolicy::AUTHENTICATION_TTL + 1.minute do
+      VisitorTelephoneCeremonyTransaction.stub(
+        :database_now,
+        VisitorTelephoneCeremonyTransaction.find_by!(telephone_candidate_ref: candidate.public_id).otp_expires_at,
+      ) do
         get target.request_uri, headers: default_headers
       end
     end
@@ -766,8 +791,20 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
   end
 
   def otp_code_for(telephone)
-    otp_data = telephone.get_otp
-    ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter])
+    transaction_ref =
+      VisitorTelephoneCeremonyTransaction.find_by!(
+        telephone_candidate_ref: telephone.public_id,
+      ).transaction_id
+    queued =
+      enqueued_jobs.reverse.find do |job|
+        next false unless job.fetch(:job) == Outbound::SmsDeliveryJob
+
+        payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+        payload.fetch(:otp_binding)[3] == transaction_ref
+      end
+    OutboundSensitivePayload.decrypt_sms_delivery(
+      queued.fetch(:args).fetch(0).fetch("encrypted_payload"),
+    ).fetch(:otp_code)
   end
   private
 end
@@ -874,7 +911,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",
@@ -889,7 +926,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
           otp_private_key: SecureRandom.base64(24),
           otp_counter: "",
@@ -1201,7 +1238,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

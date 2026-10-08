@@ -161,8 +161,10 @@ class ClientTelephoneTest < ActiveSupport::TestCase
     )
 
     assert_equal user_telephone,
-                 ClientTelephone.find_by(number_digest: IdentifierBlindIndex.bidx_for_telephone("+15557654321"))
-    assert_nil ClientTelephone.find_by(number_digest: IdentifierBlindIndex.bidx_for_telephone(""))
+                 ClientTelephone.find_by(
+                   number_digest: IdentifierBlindIndex.bidx_for_telephone("+15557654321", realm: :app),
+                 )
+    assert_nil ClientTelephone.find_by(number_digest: IdentifierBlindIndex.bidx_for_telephone("", realm: :app))
   end
 
   test "deleted sign-up telephone does not reserve number forever" do
@@ -226,7 +228,9 @@ class ClientTelephoneTest < ActiveSupport::TestCase
 
   test "association deletion: cleanup when user is destroyed" do
     phone = ClientTelephone.create!(@valid_attributes)
-    @user.destroy
+    @user.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
+    @user.destroy!
+
     assert_raise(ActiveRecord::RecordNotFound) { phone.reload }
   end
 
@@ -361,27 +365,27 @@ class ClientTelephoneTest < ActiveSupport::TestCase
       user: @user,
     )
 
-    expected = IdentifierBlindIndex.bidx_for_telephone("+819012345678")
+    expected = IdentifierBlindIndex.bidx_for_telephone("+819012345678", realm: :app)
 
     assert_equal expected, user_telephone.number_digest
   end
 
-  test "otp is active just before expiry and expired exactly at expiry" do
+  test "ceremony OTP is deliverable immediately below but not at or above its finite expiry" do
     user_telephone = ClientTelephone.create!(@valid_attributes.merge(raw_number: "+819012345600"))
-    now = Time.zone.parse("2026-05-25 12:00:00")
-
-    ClientTelephone.stub(:database_now, now) do
-      user_telephone.store_otp("SECRET", "2", (now + 30.seconds).to_i)
+    now = ClientTelephoneCeremonyTransaction.database_now
+    ceremony = ClientTelephoneCeremonyTransaction.create_transaction!(
+      actor_ref: @user.public_id, session_ref: "client-telephone-model-browser", operation: "registration",
+      telephone_candidate_ref: user_telephone.public_id, normalized_number_digest: user_telephone.number_digest,
+      now: now, expires_at: now + 30.seconds,
+    )
+    ClientTelephoneCeremonyTransaction.stub(:database_now, now) do
+      ceremony.issue_telephone_otp!(purpose: "credential_registration")
     end
 
-    ClientTelephone.stub(:database_now, now + 29.seconds) do
-      assert_predicate user_telephone.reload, :otp_active?
-      assert_not user_telephone.otp_expired?
-    end
-
-    ClientTelephone.stub(:database_now, now + 30.seconds) do
-      assert_predicate user_telephone.reload, :otp_expired?
-      assert_not user_telephone.otp_active?
+    [-Rational(1, 1_000_000), 0, Rational(1, 1_000_000)].each do |offset|
+      assert_equal offset.negative?, ceremony.reload.telephone_otp_deliverable?(
+        generation: ceremony.otp_generation, at: now + 30.seconds + offset,
+      )
     end
   end
 
@@ -390,7 +394,7 @@ class ClientTelephoneTest < ActiveSupport::TestCase
     now = Time.zone.parse("2026-05-25 12:00:00")
 
     ClientTelephone.stub(:database_now, now) do
-      user_telephone.update_columns(otp_attempts_count: 3, created_at: now)
+      user_telephone.update!(otp_attempts_count: 3, otp_last_sent_at: now)
       user_telephone.increment_attempts!
 
       assert_equal 4, user_telephone.otp_attempts_count
@@ -404,16 +408,21 @@ class ClientTelephoneTest < ActiveSupport::TestCase
     end
   end
 
-  test "otp attempt window resets just after fifteen minutes" do
-    user_telephone = ClientTelephone.create!(@valid_attributes.merge(raw_number: "+819012345602"))
-    now = Time.zone.parse("2026-05-25 12:00:00")
+  [-1, 0, 1].each do |microseconds|
+    test "telephone failures survive fifteen minute issuance age boundary #{microseconds} microseconds" do
+      user_telephone = ClientTelephone.create!(@valid_attributes.merge(raw_number: "+819012345602"))
+      now = Time.zone.parse("2026-05-25 12:00:00")
 
-    ClientTelephone.stub(:database_now, now) do
-      user_telephone.update_columns(otp_attempts_count: 4, created_at: now - 15.minutes - 1.second)
-      user_telephone.increment_attempts!
+      ClientTelephone.stub(:database_now, now) do
+        user_telephone.update!(
+          otp_attempts_count: TelephoneOtpPolicy::MAX_OTP_ATTEMPTS - 1,
+          otp_last_sent_at: now - TelephoneOtpPolicy::OTP_ATTEMPT_WINDOW - Rational(microseconds, 1_000_000),
+        )
+        user_telephone.increment_attempts!
 
-      assert_equal 1, user_telephone.otp_attempts_count
-      assert_not user_telephone.locked?
+        assert_equal TelephoneOtpPolicy::MAX_OTP_ATTEMPTS, user_telephone.otp_attempts_count
+        assert_predicate user_telephone, :locked?
+      end
     end
   end
 
@@ -421,7 +430,7 @@ class ClientTelephoneTest < ActiveSupport::TestCase
     number = "+1555#{SecureRandom.random_number(10_000_000).to_s.rjust(7, "0")}"
     results = create_telephones_concurrently(number, number)
 
-    assert_pending_candidates_are_independent(results, IdentifierBlindIndex.bidx_for_telephone(number))
+    assert_pending_candidates_are_independent(results, IdentifierBlindIndex.bidx_for_telephone(number, realm: :app))
   end
 
   test "concurrent creates for equivalent formatted number commit at most one active telephone" do
@@ -430,7 +439,7 @@ class ClientTelephoneTest < ActiveSupport::TestCase
     normalized = "+1555777#{suffix}"
     results = create_telephones_concurrently(formatted, normalized)
 
-    assert_pending_candidates_are_independent(results, IdentifierBlindIndex.bidx_for_telephone(normalized))
+    assert_pending_candidates_are_independent(results, IdentifierBlindIndex.bidx_for_telephone(normalized, realm: :app))
   end
 
   test "concurrent finalization for one destination leaves one effective telephone binding" do
@@ -530,7 +539,7 @@ class ClientTelephoneTest < ActiveSupport::TestCase
 
   test "rolled back concurrent telephone conflict leaves one active telephone" do
     number = "+1555999#{SecureRandom.random_number(10_000).to_s.rjust(4, "0")}"
-    digest = IdentifierBlindIndex.bidx_for_telephone(number)
+    digest = IdentifierBlindIndex.bidx_for_telephone(number, realm: :app)
     track_telephone_race_number(number)
 
     ClientTelephone.transaction do
@@ -554,7 +563,7 @@ class ClientTelephoneTest < ActiveSupport::TestCase
 
   test "concurrent telephone create while competing insert rolls back does not commit duplicates" do
     number = "+1555666#{SecureRandom.random_number(10_000).to_s.rjust(4, "0")}"
-    digest = IdentifierBlindIndex.bidx_for_telephone(number)
+    digest = IdentifierBlindIndex.bidx_for_telephone(number, realm: :app)
     track_telephone_race_number(number)
     ready = Queue.new
     release = Queue.new
@@ -646,7 +655,7 @@ class ClientTelephoneTest < ActiveSupport::TestCase
   end
 
   def track_telephone_race_number(number)
-    @identifier_race_digests << IdentifierBlindIndex.bidx_for_telephone(number)
+    @identifier_race_digests << IdentifierBlindIndex.bidx_for_telephone(number, realm: :app)
     @identifier_race_digests.uniq!
   end
 
@@ -693,6 +702,8 @@ class ClientTelephoneTest < ActiveSupport::TestCase
   end
 
   def active_telephone_digest_count(number)
-    ClientTelephone.effective_binding.where(number_digest: IdentifierBlindIndex.bidx_for_telephone(number)).count
+    ClientTelephone.effective_binding.where(
+      number_digest: IdentifierBlindIndex.bidx_for_telephone(number, realm: :app),
+    ).count
   end
 end

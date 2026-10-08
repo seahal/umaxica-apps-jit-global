@@ -51,4 +51,6 @@ class VisitorEmailPolicy < ApplicationPolicy
       tenant_ref: nil,
     )
   end
+
+  public :credential_registration_requirement
 end

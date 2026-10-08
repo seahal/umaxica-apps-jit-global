@@ -4,8 +4,6 @@
 class SignOtpCeremony
   Result = Struct.new(:success?, :status, :record, :code, :error, keyword_init: true)
 
-  OTP_EXPIRATION = CommonOtpPolicy::SIGN_UP_CONFIRMATION_TTL
-
   def self.issue!(...)
     new(...).issue!
   end
@@ -31,6 +29,7 @@ class SignOtpCeremony
     return session_mismatch_result unless session_nonce_matches_subject?
 
     subject.with_lock do
+      return session_mismatch_result unless session_nonce_matches_subject?
       return result(false, :inactive_flow, error: :inactive_flow) unless active_flow?
 
       with_candidate_owner_lock { issue_for_active_flow! }
@@ -42,6 +41,7 @@ class SignOtpCeremony
     return session_mismatch_result unless session_nonce_matches_subject?
 
     subject.with_lock do
+      return session_mismatch_result unless session_nonce_matches_subject?
       return result(false, :inactive_flow, error: :inactive_flow) unless active_flow?
 
       with_candidate_owner_lock { verify_for_active_flow! }
@@ -106,6 +106,9 @@ class SignOtpCeremony
     unless destination_matches?(record)
       return result(false, :destination_mismatch, record: record, error: :destination_mismatch)
     end
+    if code.is_a?(String) && (!code.encoding.ascii_compatible? || !code.valid_encoding?)
+      return result(false, :invalid_code, record: record, error: :invalid_code)
+    end
     return result(false, :blank_code, record: record, error: :blank_code) if code.blank?
 
     record.with_lock do
@@ -122,7 +125,7 @@ class SignOtpCeremony
       return result(
         false, :invalid_code, record: record,
                               error: :invalid_code,
-      ) unless code.is_a?(String) && code.match?(/\A[0-9]{6}\z/)
+      ) unless code.is_a?(String) && code.valid_encoding? && code.match?(/\A[0-9]{6}\z/)
 
       now = record.class.database_now
       return verify_committed_signup_proof(record, context, now) if context.fetch("verified_at")
@@ -137,7 +140,7 @@ class SignOtpCeremony
     end
 
     valid_retry = signup_context_code_matches?(context)
-    retry_budget = OtpVerificationFailureBudget.new.verify!(
+    retry_budget = verification_failure_budget.verify!(
       surface: surface, purpose: purpose, channel: channel,
       destination_digest: destination_digest(record), valid: valid_retry,
     )
@@ -147,6 +150,14 @@ class SignOtpCeremony
     result(valid_retry, valid_retry ? :verified : :invalid_code, record: record)
   end
 
+  def verification_failure_budget
+    case channel
+    when :email then EmailOtpVerificationFailureBudget.new
+    when :telephone then TelephoneOtpVerificationFailureBudget.new
+    else raise ArgumentError, "unsupported OTP channel"
+    end
+  end
+
   def verify_issued_signup_challenge(record, context, now)
     otp_data = record.get_otp
     return result(false, :missing_otp, record: record, error: :missing_otp) unless otp_data
@@ -154,12 +165,12 @@ class SignOtpCeremony
     hotp = ROTP::HOTP.new(otp_data[:otp_private_key])
     expected_code = hotp.at(otp_data[:otp_counter]).to_s
     valid = otp_code_matches?(expected_code, code) && signup_context_code_matches?(context)
-    budget_status = OtpVerificationFailureBudget.new.verify!(
+    budget_status = verification_failure_budget.verify!(
       surface: surface, purpose: purpose, channel: channel,
       destination_digest: destination_digest(record), valid: valid,
     )
     if budget_status == :verified
-      record.clear_otp
+      record.clear_otp(reset_attempts: true)
       record.update!(
         sign_up_otp_context: context.merge(
           "verified_at" => now.utc.iso8601(6),
@@ -275,20 +286,27 @@ class SignOtpCeremony
 
   def normalized_digest(value)
     case channel
-    when :email then IdentifierBlindIndex.bidx_for_email(value)
-    when :telephone then IdentifierBlindIndex.bidx_for_telephone(value)
+    when :email then IdentifierBlindIndex.bidx_for_email(value, realm: surface)
+    when :telephone then IdentifierBlindIndex.bidx_for_telephone(value, realm: surface)
     end
   end
 
   def cooldown_active?(record)
-    return record.otp_cooldown_active? if record.respond_to?(:otp_cooldown_active?)
+    return record.otp_cooldown_active? if channel == :email
 
     decision_time = record.class.database_now
-    return false unless record.respond_to?(:otp_last_sent_at)
     return false if record.otp_last_sent_at.blank?
     return false if record.otp_last_sent_at == -Float::INFINITY
 
-    record.otp_last_sent_at > decision_time - CommonOtpPolicy::SEND_COOLDOWN
+    record.otp_last_sent_at > decision_time - TelephoneOtpPolicy::SEND_COOLDOWN
+  end
+
+  def otp_expiration
+    case channel
+    when :email then EmailOtpPolicy::SIGN_UP_CONFIRMATION_TTL
+    when :telephone then TelephoneOtpPolicy::SIGN_UP_CONFIRMATION_TTL
+    else raise ArgumentError, "unsupported OTP channel"
+    end
   end
 
   def generate_and_store_otp!(record)
@@ -299,7 +317,7 @@ class SignOtpCeremony
     record.store_otp(
       otp_private_key,
       otp_counter,
-      (decision_time + OTP_EXPIRATION).to_i,
+      (decision_time + otp_expiration).to_i,
       now: decision_time,
     )
     otp_code
@@ -331,12 +349,7 @@ class SignOtpCeremony
   end
 
   def session_nonce_matches_subject?
-    return false unless subject.respond_to?(:public_id)
-
-    expected = subject.public_id.to_s
-    supplied = session_nonce.to_s
-    return false if expected.blank? || supplied.blank? || expected.bytesize != supplied.bytesize
-
-    ActiveSupport::SecurityUtils.secure_compare(expected, supplied)
+    session_nonce.is_a?(String) && session_nonce.valid_encoding? && session_nonce.present? &&
+      subject.nonce_matches?(session_nonce)
   end
 end

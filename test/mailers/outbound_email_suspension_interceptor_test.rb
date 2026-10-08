@@ -58,7 +58,7 @@ class OutboundEmailSuspensionInterceptorTest < ActionMailer::TestCase
       encrypted_hotp_token: encrypted_otp("123456"),
       email_address: "user@example.com",
       public_id: "email-public-id",
-      verification_token: "verification-token",
+      encrypted_verification_token: OutboundSensitivePayload.encrypt_email_verification_token("verification-token"),
     ).create
   end
 

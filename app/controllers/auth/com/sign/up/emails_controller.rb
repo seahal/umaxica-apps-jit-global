@@ -16,8 +16,6 @@ module Auth
 
           include CommonRedirect
 
-          include CommonOtp
-
           include EnforcementIdentifierGate
 
           include SignUpSuspensionGuard
@@ -295,20 +293,10 @@ module Auth
           end
 
           def valid_email_session?
-            return false unless @user_email
-
-            context = @user_email.sign_up_otp_context
-            if context&.fetch("verified_at") && @sign_up_ticket
-              return context.fetch("surface") == "com" && context.fetch("purpose") == "sign_up" &&
-                  context.fetch("flow_ref") == @sign_up_ticket.public_id &&
-                  context.fetch("nonce_digest") == @sign_up_ticket.nonce_digest &&
-                  context.fetch("contact_ref") == @user_email.public_id &&
-                  !@user_email.binding_finalized_at && !@user_email.binding_released? &&
-                  Time.iso8601(context.fetch("result_expires_at")) > @user_email.class.database_now
-            end
-            return false if @user_email.otp_expired?
-
-            @user_email.visitor_email_status_id == VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP
+            EmailSignUpOtpFormQuery.call(
+              flow: @sign_up_ticket, email: @user_email,
+              session_nonce: session.dig(:com_sign_up_flow_locator, "nonce"),
+            )
           end
 
           def initiate_visitor_email_verification!(email_address, confirm_policy: "1", email_preferences: {})
@@ -327,18 +315,12 @@ module Auth
               cleanup_pending_visitor_signup!
               next false if @user_email.errors.details.except(:visitor, :visitor_id).any?
 
-              pending_visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-              @user_email.visitor = pending_visitor
-              generate_otp_attributes(@user_email)
-              @user_email.otp_last_sent_at = Time.current
-              @user_email.save!
+              EmailSignUpCandidateCreator.call(email: @user_email)
               bind_sign_up_flow_to_email!(@user_email)
-              SignUpOtpDeliveryIssuer.call(
-                flow: current_sign_up_flow, record: @user_email, channel: :email,
-                verification_token: @user_email.generate_verification_token,
-              )
-
-              true
+              EmailSignUpOtpDeliveryIssuer.call(
+                flow: current_sign_up_flow, email: @user_email,
+                session_nonce: session.dig(:com_sign_up_flow_locator, "nonce"),
+              ).success?
             end
           rescue ActiveRecord::RecordInvalid => e
             @user_email = e.record if e.record.is_a?(VisitorEmail)

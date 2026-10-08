@@ -5,6 +5,13 @@ require "test_helper"
 class SignupOtpDelayedTransportTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
+  setup do
+    [ClientSignUpFlowStatus, VisitorSignUpFlowStatus,
+     ClientSignUpFlowCleanupStatus, VisitorSignUpFlowCleanupStatus,].each do |model|
+      model::DEFAULTS.each { |id| model.find_or_create_by!(id: id) }
+    end
+  end
+
   [
     [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
     [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
@@ -32,20 +39,45 @@ class SignupOtpDelayedTransportTest < ActiveSupport::TestCase
             ((channel == :email) ? :address : :number) => destination,
           )
           now = flow_model.database_now
-          private_key = ROTP::Base32.random_base32
-          contact.store_otp(private_key, 1, (now + 10.minutes).to_i)
-          code = ROTP::HOTP.new(private_key).at(1).to_s
+          nonce = SecureRandom.urlsafe_base64(32)
           flow = flow_model.create!(
             principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
-            nonce_digest: flow_model.digest_nonce(SecureRandom.hex(32)), issued_at: now,
+            nonce_digest: flow_model.digest_nonce(nonce), issued_at: now,
             expires_at: now + 15.minutes, entry_method: channel.to_s,
             pending_contact_type: channel.to_s, pending_contact_id: contact.id,
           )
-          binding = SignUpOtpDeliveryBindingValue.for_sms(
-            otp_binding: [surface.to_s, "sign_up", flow.public_id, contact.public_id, "1"],
-          )
-          contact.store_otp(private_key, 2, (now + 10.minutes).to_i) if state == "reissued"
-          contact.clear_otp if state == "consumed"
+          issued =
+            if channel == :email
+              EmailSignUpOtpIssuer.call(flow: flow, email: contact, session_nonce: nonce)
+            else
+              TelephoneSignUpOtpIssuer.call(flow: flow, telephone: contact, session_nonce: nonce)
+            end
+
+          assert_predicate issued, :success?
+          code = issued.code
+          generation = issued.transaction.otp_generation
+          if state == "reissued"
+            contact.update!(otp_last_sent_at: contact.class.database_now - 1.minute)
+            replacement =
+              if channel == :email
+                EmailSignUpOtpIssuer.call(flow: flow, email: contact, session_nonce: nonce)
+              else
+                TelephoneSignUpOtpIssuer.call(flow: flow, telephone: contact, session_nonce: nonce)
+              end
+
+            assert_predicate replacement, :success?
+          elsif state == "consumed"
+            verification =
+              if channel == :email
+                EmailSignUpOtpVerificationCommitter.call(flow: flow, email: contact, session_nonce: nonce, code: code)
+              else
+                TelephoneSignUpOtpVerificationCommitter.call(
+                  flow: flow, telephone: contact, session_nonce: nonce, code: code,
+                )
+              end
+
+            assert_predicate verification, :verified_evidence?
+          end
           deadline = (state == "expired") ? flow.expires_at : now
           sent = 0
           flow_model.stub(:database_now, deadline) do
@@ -55,7 +87,9 @@ class SignupOtpDelayedTransportTest < ActiveSupport::TestCase
                 perform_enqueued_jobs do
                   OtpAdapter.for(surface: surface, channel: channel).deliver(
                     record: contact, otp_code: code, public_id: contact.public_id, purpose: "sign_up",
-                    **binding.email_params,
+                    sign_up_flow_ref: flow.public_id,
+                    sign_up_email_transaction_ref: issued.transaction.transaction_id,
+                    sign_up_email_otp_generation: generation,
                   )
                 end
               end
@@ -63,7 +97,8 @@ class SignupOtpDelayedTransportTest < ActiveSupport::TestCase
             else
               encrypted = OutboundSensitivePayload.encrypt_sms_delivery(
                 to: destination, title: "Verification code", body: "Your verification code: #{code}",
-                otp_binding: binding.to_a,
+                otp_binding: [surface.to_s, "sign_up", flow.public_id, issued.transaction.transaction_id, generation],
+                otp_code: code,
               )
               OutboundSms.stub(:deliver_now, ->(**) { sent += 1 }) do
                 Outbound::SmsDeliveryJob.perform_now(encrypted_payload: encrypted)

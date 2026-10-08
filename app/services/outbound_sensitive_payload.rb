@@ -2,7 +2,6 @@
 # frozen_string_literal: true
 
 module OutboundSensitivePayload
-  SMS_BODY_PURPOSE = "outbound.sms.body"
   EMAIL_OTP_PURPOSE = "outbound.email.otp"
   EMAIL_VERIFICATION_TOKEN_PURPOSE = "outbound.email.verification_token"
   SMS_DELIVERY_PURPOSE = "outbound.sms.delivery.v1"
@@ -12,20 +11,32 @@ module OutboundSensitivePayload
 
   module_function
 
-  def encrypt_sms_body(body)
-    encrypt(body, purpose: SMS_BODY_PURPOSE)
-  end
-
-  def decrypt_sms_body(token)
-    decrypt(token, purpose: SMS_BODY_PURPOSE)
-  end
-
-  def encrypt_sms_delivery(to:, title:, body:, otp_binding: nil)
-    unless otp_binding.nil?
-      payload = { "version" => 2, "to" => to, "title" => title, "body" => body, "otp_binding" => otp_binding }
-      validate_bound_sms_envelope!(payload)
+  def encrypt_sms_delivery(to:, title:, body:, otp_binding: nil, otp_code: nil)
+    if otp_binding.is_a?(Array) && otp_binding[1] == "sign_up"
+      payload = {
+        "version" => 3,
+        "to" => to,
+        "title" => title,
+        "body" => body,
+        "otp_binding" => otp_binding,
+        "otp_code" => otp_code,
+      }
+      validate_signup_sms_envelope!(payload)
       return encrypt(JSON.generate(payload), purpose: SMS_DELIVERY_PURPOSE)
     end
+    unless otp_binding.nil?
+      payload = {
+        "version" => 4,
+        "to" => to,
+        "title" => title,
+        "body" => body,
+        "otp_binding" => otp_binding,
+        "otp_code" => otp_code,
+      }
+      validate_registration_sms_envelope!(payload)
+      return encrypt(JSON.generate(payload), purpose: SMS_DELIVERY_PURPOSE)
+    end
+    raise ArgumentError, "SMS code requires a typed Telephone binding" unless otp_code.nil?
 
     encrypt_envelope(
       { "version" => ENVELOPE_VERSION, "to" => to, "title" => title, "body" => body },
@@ -36,8 +47,10 @@ module OutboundSensitivePayload
 
   def decrypt_sms_delivery(token)
     payload = JSON.parse(decrypt(token, purpose: SMS_DELIVERY_PURPOSE))
-    if payload.is_a?(Hash) && payload["version"] == 2
-      validate_bound_sms_envelope!(payload)
+    if payload.is_a?(Hash) && payload["version"] == 3
+      validate_signup_sms_envelope!(payload)
+    elsif payload.is_a?(Hash) && payload["version"] == 4
+      validate_registration_sms_envelope!(payload)
     else
       validate_envelope!(payload, required_keys: %w(version to title body))
     end
@@ -46,25 +59,57 @@ module OutboundSensitivePayload
     raise ArgumentError, "Invalid encrypted sensitive payload"
   end
 
-  def validate_bound_sms_envelope!(payload)
-    unless payload.is_a?(Hash) && payload.keys.sort == %w(version to title body
-                                                          otp_binding).sort && payload["version"] == 2
-      raise ArgumentError, "Invalid bound SMS payload schema"
+  def validate_signup_sms_envelope!(payload)
+    unless payload.is_a?(Hash) && payload.keys.sort == %w(version to title body otp_binding otp_code).sort &&
+        payload["version"] == 3
+      raise ArgumentError, "Invalid Telephone signup SMS payload schema"
     end
 
     %w(to title body).each do |key|
-      unless payload[key].is_a?(String) && payload[key].present?
-        raise ArgumentError, "Invalid bound SMS payload field #{key}"
+      unless payload[key].is_a?(String) && payload[key].valid_encoding? && payload[key].present?
+        raise ArgumentError, "Invalid Telephone signup SMS payload field #{key}"
       end
     end
-    binding = payload.fetch("otp_binding")
-    raise ArgumentError, "Invalid bound SMS tuple" unless binding.is_a?(Array) && binding.length == 5
-
-    case binding[1]
-    when "sign_up" then SignUpOtpDeliveryBindingValue.for_sms(otp_binding: binding)
-    when "credential_registration" then ContactRegistrationOtpDeliveryBindingValue.for_sms(otp_binding: binding)
-    else raise ArgumentError, "Unsupported bound SMS purpose"
+    TelephoneSignUpOtpDeliveryBindingValue.for_sms(otp_binding: payload.fetch("otp_binding"))
+    code = payload.fetch("otp_code")
+    unless code.is_a?(String) && code.encoding.ascii_compatible? && code.valid_encoding? &&
+        code.match?(/\A[0-9]{6}\z/)
+      raise ArgumentError, "Invalid Telephone signup SMS code"
     end
+
+    allowed_bodies = ["Your verification code: #{code}", I18n.t("sign.telephone_verification.sms_message", code: code)]
+    return if payload.fetch("title") == "Verification code" && allowed_bodies.include?(payload.fetch("body"))
+
+    raise ArgumentError, "Telephone signup SMS message mismatch"
+
+  end
+
+  def validate_registration_sms_envelope!(payload)
+    unless payload.is_a?(Hash) && payload.keys.sort == %w(version to title body otp_binding otp_code).sort &&
+        payload["version"] == 4
+      raise ArgumentError, "Invalid Telephone registration SMS payload schema"
+    end
+
+    %w(to title body).each do |key|
+      unless payload[key].is_a?(String) && payload[key].valid_encoding? && payload[key].present?
+        raise ArgumentError, "Invalid Telephone registration SMS payload field #{key}"
+      end
+    end
+    TelephoneCredentialRegistrationOtpDeliveryBindingValue.for_sms(otp_binding: payload.fetch("otp_binding"))
+    code = payload.fetch("otp_code")
+    unless code.is_a?(String) && code.encoding.ascii_compatible? && code.valid_encoding? &&
+        code.match?(/\A[0-9]{6}\z/)
+      raise ArgumentError, "Invalid Telephone registration SMS code"
+    end
+
+    messages =
+      I18n.available_locales.map do |locale|
+        I18n.t("sign.telephone_verification.sms_message", code: code, locale: locale)
+      end
+    messages << "Your verification code: #{code}"
+    return if payload.fetch("title") == "Verification code" && messages.include?(payload.fetch("body"))
+
+    raise ArgumentError, "Telephone registration SMS message mismatch"
   end
 
   def encrypt_oidc_backchannel_logout(uri:, client_id:, resource_type:, subject:, sid:)

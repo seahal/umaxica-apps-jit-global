@@ -3,6 +3,13 @@
 require "test_helper"
 
 class SignUpOtpDeliveryGuardTest < ActiveSupport::TestCase
+  setup do
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+  end
+
   [
     [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
     [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
@@ -13,10 +20,6 @@ class SignUpOtpDeliveryGuardTest < ActiveSupport::TestCase
       test "#{surface} #{channel} signup delivery checks its original #{state} generation under owning locks" do
         owner = owner_model.create!(
           status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
-          **((state == "owner_locked") ? {
-            access_state: "admin_locked", admin_locked_at: owner_model.database_now,
-            admin_locked_by_operator_id: operators(:one).id, admin_locked_reason_code: "security_incident",
-          } : {}),
         )
         destination =
           if channel == :email
@@ -36,25 +39,44 @@ class SignUpOtpDeliveryGuardTest < ActiveSupport::TestCase
           ((channel == :email) ? :address : :number) => destination,
         )
         now = flow_model.database_now
-        private_key = ROTP::Base32.random_base32
-        contact.store_otp(private_key, 1, (now + 10.minutes).to_i)
-        code = ROTP::HOTP.new(private_key).at(1).to_s
+        nonce = SecureRandom.hex(32)
         flow = flow_model.create!(
           principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
-          nonce_digest: flow_model.digest_nonce(SecureRandom.hex(32)), issued_at: now,
+          nonce_digest: flow_model.digest_nonce(nonce), issued_at: now,
           expires_at: now + 15.minutes, entry_method: channel.to_s,
           pending_contact_type: channel.to_s, pending_contact_id: contact.id,
         )
-        contact.store_otp(private_key, 2, (now + 10.minutes).to_i) if state == "reissued"
-        contact.clear_otp if state == "consumed"
+        issuer = (channel == :email) ? EmailSignUpOtpIssuer : TelephoneSignUpOtpIssuer
+        guard = (channel == :email) ? EmailSignUpOtpDeliveryGuard : TelephoneSignUpOtpDeliveryGuard
+        issued = issuer.call(:flow => flow, channel => contact, :session_nonce => nonce)
+
+        assert_predicate issued, :success?
+        generation = issued.transaction.otp_generation
+        if state == "reissued"
+          if channel == :email
+            issued.transaction.issue_email_otp!(purpose: "sign_up")
+          else
+            issued.transaction.issue_telephone_otp!(purpose: "sign_up")
+          end
+        elsif state == "consumed"
+          verifier = (channel == :email) ? EmailSignUpOtpVerificationCommitter : TelephoneSignUpOtpVerificationCommitter
+          verified = verifier.call(:flow => flow, channel => contact, :session_nonce => nonce, :code => issued.code)
+
+          assert_predicate verified, :success?
+        elsif state == "owner_locked"
+          owner.update!(
+            access_state: "admin_locked", admin_locked_at: owner_model.database_now,
+            admin_locked_by_operator_id: operators(:one).id, admin_locked_reason_code: "security_incident",
+          )
+        end
         deadline = (state == "expired") ? flow.expires_at : now
         sent = 0
         outcome = nil
         flow_model.stub(:database_now, deadline) do
           outcome =
-            SignUpOtpDeliveryGuard.call(
-              flow: flow, channel: channel, contact_ref: contact.public_id,
-              counter: "1", destination: destination, code: code,
+            guard.call(
+              :flow => flow, channel => contact, :transaction => issued.transaction,
+              :generation => generation, :destination => destination, :code => issued.code,
             ) { sent += 1 }
         end
 
@@ -64,7 +86,7 @@ class SignUpOtpDeliveryGuardTest < ActiveSupport::TestCase
 
         assert_equal state == "expired", expired
         assert_nil contact.reload.binding_finalized_at
-        assert_equal owner.id, contact.public_send(owner_key)
+        assert_equal owner.id, contact[owner_key]
       end
     end
   end

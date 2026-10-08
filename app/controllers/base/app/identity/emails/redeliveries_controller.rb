@@ -8,10 +8,8 @@ module Base
         class RedeliveriesController < BaseController
           include CloudflareTurnstile
           include CommonRedirect
-          include CommonOtp
           include SignEmailRegistrable
           include SignEmailRegistrationFlow
-          include SignSettingsEmailRegistration
           include VerificationClient
 
           AUTHENTICATION_MODE = :private

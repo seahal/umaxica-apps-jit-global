@@ -4,6 +4,8 @@
 module SignEmailRegistrationFlow
   extend ActiveSupport::Concern
 
+  public
+
   # The return-target helpers (`preserve_pt`, `retrieve_pt`, `path_from_signed_pt`) are a direct
   # dependency of this flow. Base controllers authenticate through BrowserRpAuthentication, which
   # does not bring them in.
@@ -53,12 +55,6 @@ module SignEmailRegistrationFlow
     end
 
     session[registration_email_session_key] = @user_email.public_id
-    start_email_ceremony!(
-      surface: "app",
-      actor: email_registration_target_user,
-      session_ref: current_session_public_id,
-      candidate: @user_email,
-    )
 
     redirect_params = build_notice_params(
       t("sign.app.registration.email.create.verification_code_sent"),
@@ -100,8 +96,9 @@ module SignEmailRegistrationFlow
       actor: email_registration_target_user,
       session_ref: current_session_public_id,
       candidate: @user_email,
+      code: submitted_code,
     )
-    session.delete(registration_email_session_key)
+    reset_email_registration_flow!
     redirect_to_surface_url(
       after_email_registration_verified_path,
       notice: t("sign.app.registration.email.update.success"),
@@ -117,15 +114,15 @@ module SignEmailRegistrationFlow
       return
     end
 
-    result = ContactRegistrationOtpResendIssuer.call!(
+    result = EmailCredentialRegistrationOtpResendIssuer.call(
       actor: email_registration_target_user, token: current_session_token,
-      contact: @user_email, transaction: registration_email_otp_transaction,
-      channel: :email, browser_nonce: base_admission_browser_nonce,
+      email: @user_email, transaction: registration_email_otp_transaction,
+      browser_nonce: base_admission_browser_nonce,
     )
-    case result
-    when ContactRegistrationOtpResendIssuer::Issuance
+    case result.status
+    when :issued
       deliver_registration_email_otp!(code: result.code, transaction: result.transaction)
-    when :cooldown, :locked, :unavailable
+    when :rate_limited, :locked, :unavailable
       # A retained proof must remain available to the original verification retry.
     else
       raise IdentityEmailCeremonyContract::Error, "unsupported registration resend result"
@@ -136,11 +133,11 @@ module SignEmailRegistrationFlow
   private
 
   def deliver_registration_email_otp!(code:, transaction:)
-    OtpAdapter.for(surface: :app, channel: :email).deliver(
+    Notify::App::OtpNotifier.issue(
       record: @user_email, otp_code: code, purpose: "credential_registration",
       public_id: @user_email.public_id, verification_token: nil,
       contact_ceremony_transaction_ref: transaction.transaction_id,
-      contact_otp_counter: @user_email.credential_registration_otp_context.fetch("counter"),
+      contact_otp_generation: transaction.otp_generation,
     )
   end
 
@@ -188,24 +185,14 @@ module SignEmailRegistrationFlow
   end
 
   def valid_registration_email_session?
-    return false unless @user_email && @user_email.user_id == email_registration_target_user.id
-
-    proof = @user_email.credential_registration_otp_context
-    flow = registration_email_otp_transaction
-    nonce = base_admission_browser_nonce
-    return false unless proof && flow && nonce && flow.expires_at > flow.class.database_now &&
-      proof.fetch("session_ref") == current_session_token.public_id &&
-      proof.fetch("browser_digest") == AuthAdmissionBinding.browser_digest(
-        surface: "app", entry_ref: flow.transaction_id, nonce: nonce,
-      )
-
-    deadline = proof.fetch(proof.fetch("verified_at") ? "result_expires_at" : "expires_at")
-    now = @user_email.class.database_now
-    Time.iso8601(deadline) > now && (proof.fetch("verified_at") || @user_email.otp_expires_at > now)
+    EmailCredentialRegistrationOtpFormQuery.call(
+      actor: email_registration_target_user, token: current_session_token, email: @user_email,
+      transaction: registration_email_otp_transaction, browser_nonce: base_admission_browser_nonce,
+    )
   end
 
   def registration_email_otp_transaction
-    reference = @user_email&.credential_registration_otp_context&.fetch("flow_ref")
+    reference = session[:email_registration_transaction_ref]
     return unless reference
 
     ClientEmailCeremonyTransaction.find_by(transaction_id: reference)
@@ -218,18 +205,18 @@ module SignEmailRegistrationFlow
   end
 
   def complete_registration_verification!(submitted_code)
-    result = ContactRegistrationOtpVerificationCommitter.call!(
-      actor: email_registration_target_user, token: current_session_token, contact: @user_email,
-      transaction: registration_email_otp_transaction, channel: :email,
+    result = EmailCredentialRegistrationOtpVerificationCommitter.call(
+      actor: email_registration_target_user, token: current_session_token, email: @user_email,
+      transaction: registration_email_otp_transaction,
       browser_nonce: base_admission_browser_nonce, code: submitted_code,
     )
 
-    if result == :locked
+    if result.status == :locked
       reset_email_registration_flow!
       flash[:alert] = t("sign.app.registration.email.update.attempts_exceeded")
       redirect_to(new_email_registration_path)
       return false
-    elsif result != :verified
+    elsif !result.verified_evidence?
       @user_email.errors.add(:pass_code, t("sign.app.registration.email.update.invalid_code"))
       render_email_registration_edit(status: :unprocessable_content)
       return false
@@ -244,7 +231,7 @@ module SignEmailRegistrationFlow
 
   def reset_email_registration_flow!
     session.delete(registration_email_session_key)
-    reset_email_ceremony_session! if respond_to?(:reset_email_ceremony_session!, true)
+    session.delete(:email_registration_transaction_ref)
     reset_email_flow!
   end
 

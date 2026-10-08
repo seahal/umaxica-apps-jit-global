@@ -11,9 +11,10 @@ class Base::Org::Identity::Telephones::RegistrationRateLimitTest < ActionDispatc
 
   fixtures :operators, :operator_statuses, :operator_telephone_statuses,
            :operator_token_kinds, :operator_token_statuses, :operator_token_binding_methods,
-           :operator_token_dbsc_statuses
+           :operator_token_dbsc_statuses, :operator_passkeys
 
   setup do
+    https!
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! @host
     @operator = operators(:one)
@@ -25,6 +26,31 @@ class Base::Org::Identity::Telephones::RegistrationRateLimitTest < ActionDispatc
     )
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
+    client = OidcClientRegistry.find!("base-org-ww")
+    @token.rotate_refresh_token!
+    now = Time.current
+    rp_session = OperatorRpSession.create!(
+      operator_token: @token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: now,
+      refresh_token_expires_at: now + 10.minutes,
+    )
+    rp_access = AuthenticationTokenService.encode(
+      @operator, host: @host, resource_type: "operator", session_public_id: @token.public_id,
+                 base_session_public_id: @token.public_id, oidc_sid: rp_session.public_id,
+                 oidc_jti: rp_session.oidc_jti, expires_at: now + 10.minutes, scopes: %w(openid profile),
+                 issuer: OidcIssuer.for_client(client), audiences: [client.aud],
+                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
+                 subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: client.client_id,
+    )
+    # Rack::Test's cookie jar merge mutates the jar; Hash#merge would not.
+    cookies.merge( # rubocop:disable Lint/Void
+      [
+        "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+        "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_session.issue_refresh_token!)}",
+      ], URI.parse("https://#{@host}/"),
+    )
+    passkey = @operator.operator_passkeys.first!
+    passkey.update!(uv_verified_at: now)
     _verification, raw_verification = OperatorVerification.issue_for_token!(token: @token)
     cookies[OperatorVerification.cookie_name] = raw_verification
     @token.update!(
@@ -35,6 +61,10 @@ class Base::Org::Identity::Telephones::RegistrationRateLimitTest < ActionDispatc
       last_step_up_session_public_id: @token.public_id,
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:org",
+      last_step_up_credential_ref: passkey.external_id,
+      last_step_up_phishing_resistant: true,
+      last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
     )
     access_token = AuthenticationToken.encode(
       @operator, host: @host, session_public_id: @token.public_id,
@@ -67,7 +97,13 @@ class Base::Org::Identity::Telephones::RegistrationRateLimitTest < ActionDispatc
         params: { staff_telephone: { raw_number: "+1555867#{format("%04d", 5400 + index)}" } }, headers: @headers,
       )
 
-      assert_not_equal 429, response.status, "start #{index + 1} of #{limit} was refused"
+      if response.status == 422
+        assert_response :unprocessable_content
+        assert_includes response.body, "maximum telephones"
+        assert_operator @operator.staff_telephones.count, :<=, OperatorTelephone::MAX_TELEPHONES_PER_STAFF
+      else
+        assert_redirected_to edit_base_org_identity_telephones_registration_path(ri: "jp")
+      end
     end
 
     assert_no_difference("OperatorTelephone.count") do

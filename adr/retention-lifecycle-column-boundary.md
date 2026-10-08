@@ -2,6 +2,14 @@
 
 ## Status
 
+The 2026-10-08 [realm identifier/dead-history contract](realm-separated-identifiers-and-dead-history.md)
+supersedes synthetic identifier anonymization and the identifier-specific interpretation of the
+worker-only collection statement below. Separate named channel purgers and explicitly admitted
+Identity model erasure preserve the same retention/hold protections and local transaction boundary.
+Routine APP/COM collection keeps Identity tombstones. `terminated_at` is a lifecycle marker, not
+a receipt that all PII or legally retained identifiers have been erased; early termination may
+precede physical identifier collection. No anonymous-data claim is implied.
+
 Accepted (2026-05-25)
 
 ## Context

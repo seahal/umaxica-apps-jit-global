@@ -2,6 +2,12 @@
 
 Status: `ALREADY_SATISFIED` (verified 2026-09-22)
 
+> Superseded contract (2026-10-07): the shared stateful Email/Telephone OTP policy and record-backed
+> HOTP ownership described below are historical. The accepted current contract is
+> `adr/realm-separated-identifiers-and-dead-history.md`: independent channel policies and
+> ceremony-owned keyed random-code verifiers. Historical verification is not verification of the
+> current implementation. Step-Up remains independently session-bound.
+
 ## Requirement
 
 Authentication one-time passwords and SMS signup confirmation codes MUST have a
@@ -13,7 +19,7 @@ The product's accepted deviation for email transport in sign-in and Step-Up is
 recorded in `docs/security/otp-audit.md`; it does not relax expiry, replay,
 rate-limit, purpose-binding, or session-binding requirements.
 
-## Current implementation
+## Historical implementation (2026-09-22)
 
 `CommonOtpPolicy::MAX_OOB_TTL` is the single upper-bound source and is set to
 ten minutes. Purpose-specific policy names remain available so callers retain

@@ -184,18 +184,23 @@ class ContactRegistrationOtpHttpResendTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 302, browser.response.status
-      original_job = enqueued_jobs.find { |job| job.fetch(:job) == OtpMailDeliveryJob }
+      original_job = enqueued_jobs.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
 
       assert_not_nil original_job
-      original_params = original_job.fetch(:args).last.fetch("params").symbolize_keys
+      original_params = ActiveJob::Arguments.deserialize(original_job.fetch(:args)).last.fetch(:params).symbolize_keys
       candidate = actor.client_emails.where.not(id: previous.id).order(:id).last
 
       assert_not_nil candidate
-      otp = candidate.get_otp
-      code = ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter)).to_s
+      code = OutboundSensitivePayload.decrypt_email_otp(original_params.fetch(:encrypted_hotp_token))
       flow = ClientEmailCeremonyTransaction.find_by!(
-        transaction_id: candidate.credential_registration_otp_context.fetch("flow_ref"),
+        transaction_id: browser.request.session.fetch(:email_registration_transaction_ref),
       )
+
+      assert original_params.fetch(:contact_ceremony_transaction_ref) == flow.transaction_id,
+             "Queued delivery must retain the original registration transaction"
+      assert original_params.fetch(:contact_otp_generation) == flow.otp_generation,
+             "Queued delivery must retain the independent Email generation"
+      assert_not original_job.fetch(:args).to_s.include?(code), "Original queue must not expose the random code"
       browser.get(URI.parse(browser.response.location).request_uri, params: { ri: "jp" })
 
       assert_equal 200, browser.response.status
@@ -233,11 +238,12 @@ class ContactRegistrationOtpHttpResendTest < ActionDispatch::IntegrationTest
           end
         end
 
-        assert_nil candidate.reload.get_otp
-        assert_not_nil candidate.credential_registration_otp_context.fetch("verified_at")
+        assert_nil flow.reload.otp_verifier
+        assert_not_nil flow.otp_consumed_at
+        assert_not_nil flow.otp_receipt_verifier
       end
       candidate_facts = candidate.reload.attributes
-      context = candidate.credential_registration_otp_context.deep_dup
+      context = flow.reload.attributes
       previous_facts = previous.reload.attributes
       root_facts = token.reload.attributes
       ticket_facts = flow.reload.attributes
@@ -257,32 +263,40 @@ class ContactRegistrationOtpHttpResendTest < ActionDispatch::IntegrationTest
           assert_equal 302, browser.response.status
           if %i(cooldown_at cooldown_after).include?(scenario)
             candidate.reload
-            updated = candidate.credential_registration_otp_context
-            new_otp = candidate.get_otp
-            new_code = ROTP::HOTP.new(new_otp.fetch(:otp_private_key)).at(new_otp.fetch(:otp_counter)).to_s
-            new_job = enqueued_jobs.find { |job| job.fetch(:job) == OtpMailDeliveryJob }
+            updated = flow.reload.attributes
+            new_job = enqueued_jobs.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
 
             assert_not_nil new_job
-            new_params = new_job.fetch(:args).last.fetch("params").symbolize_keys
+            new_params = ActiveJob::Arguments.deserialize(new_job.fetch(:args)).last.fetch(:params).symbolize_keys
+            new_code = OutboundSensitivePayload.decrypt_email_otp(new_params.fetch(:encrypted_hotp_token))
 
-            assert_equal 1, enqueued_jobs.count { |job| job.fetch(:job) == OtpMailDeliveryJob }
-            assert context.except("counter", "issued_at", "code_digest") ==
-              updated.except("counter", "issued_at", "code_digest"),
+            assert_equal 1, enqueued_jobs.count { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+            assert context.except("otp_generation", "otp_verifier", "updated_at", "lock_version") ==
+              updated.except("otp_generation", "otp_verifier", "updated_at", "lock_version"),
                    "HTTP resend must preserve original flow, browser, owner, root, destination and deadlines"
-            assert_equal (context.fetch("counter").to_i + 1).to_s, updated.fetch("counter")
+            assert_equal context.fetch("lock_version") + 1, updated.fetch("lock_version"),
+                         "Reissuance must advance the Ticket optimistic lock exactly once"
+            assert_not_equal context.fetch("otp_generation"), updated.fetch("otp_generation"),
+                             "Resend must supersede the original Email generation"
+            assert_not_equal context.fetch("otp_verifier"), updated.fetch("otp_verifier"),
+                             "Resend must bind its verifier to the new generation"
             assert_equal 3, candidate.otp_attempts_count
+            assert candidate_facts.except("otp_last_sent_at", "updated_at") ==
+              candidate.attributes.except("otp_last_sent_at", "updated_at"),
+                   "Resend must preserve every Source fact except the issuance timestamp"
+            assert_equal decision_time, candidate.otp_last_sent_at
             assert new_params.fetch(:contact_ceremony_transaction_ref) == flow.transaction_id,
                    "Queued resend must retain the original Ticket UUID"
-            assert new_params.fetch(:contact_otp_counter) == updated.fetch("counter"),
-                   "Queued counter must match Source"
+            assert new_params.fetch(:contact_otp_generation) == updated.fetch("otp_generation"),
+                   "Queued generation must match the independent Email transaction"
             assert OutboundSensitivePayload.decrypt_email_otp(new_params.fetch(:encrypted_hotp_token)) == new_code,
-                   "Queued ciphertext must contain the real reissued HOTP"
-            assert_not new_job.fetch(:args).to_s.include?(new_code), "Resend queue must not expose the plaintext HOTP"
+                   "Queued ciphertext must contain the real reissued random code"
+            assert_not new_job.fetch(:args).to_s.include?(new_code), "Resend queue must not expose the plaintext code"
             before = ActionMailer::Base.deliveries.length
-            Email::App::OtpMailer.with(original_params).create.deliver_now
+            Email::App::OtpMailer.with(original_params.merge(email_address: candidate.address)).create.deliver_now
 
             assert_equal before, ActionMailer::Base.deliveries.length
-            Email::App::OtpMailer.with(new_params).create.deliver_now
+            Email::App::OtpMailer.with(new_params.merge(email_address: candidate.address)).create.deliver_now
 
             assert_equal before + 1, ActionMailer::Base.deliveries.length
             mail = ActionMailer::Base.deliveries.last
@@ -291,15 +305,15 @@ class ContactRegistrationOtpHttpResendTest < ActionDispatch::IntegrationTest
             assert mail.text_part.body.decoded.include?(new_code),
                    "The accepted generation must deliver its actual code"
           else
-            assert_equal 0, enqueued_jobs.count { |job| job.fetch(:job) == OtpMailDeliveryJob }
+            assert_equal 0, enqueued_jobs.count { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
             assert candidate_facts == candidate.reload.attributes,
                    "Refused resend must preserve Source issuance or proof"
             if scenario == :verified_source_fault
               before = ActionMailer::Base.deliveries.length
-              Email::App::OtpMailer.with(original_params).create.deliver_now
+              Email::App::OtpMailer.with(original_params.merge(email_address: candidate.address)).create.deliver_now
 
               assert_equal before, ActionMailer::Base.deliveries.length
-              assert context == candidate.reload.credential_registration_otp_context,
+              assert context == flow.reload.attributes,
                      "Queued original mail must refuse consumed proof without rewriting retained evidence"
             end
           end
@@ -307,13 +321,21 @@ class ContactRegistrationOtpHttpResendTest < ActionDispatch::IntegrationTest
       end
 
       assert previous_facts == previous.reload.attributes, "Resend must preserve the previous effective binding"
-      assert ticket_facts == flow.reload.attributes, "Resend must preserve the original pending Ticket"
+      if %i(cooldown_at cooldown_after).include?(scenario)
+        assert ticket_facts.except("otp_generation", "otp_verifier", "updated_at", "lock_version") ==
+          flow.reload.attributes.except("otp_generation", "otp_verifier", "updated_at", "lock_version"),
+               "Resend may change only the Email generation and its verifier on the original pending Ticket"
+        assert_equal ticket_facts.fetch("lock_version") + 1, flow.lock_version
+      else
+        assert ticket_facts == flow.reload.attributes, "Refused resend must preserve the complete original Ticket"
+      end
+
       assert root_facts == token.reload.attributes, "Resend must preserve the original Root authority"
-      assert_equal :invalid_code, OtpVerificationFailureBudget.new.verify!(
+      assert_equal :invalid_code, EmailOtpVerificationFailureBudget.new.verify!(
         surface: :app, purpose: :credential_registration, channel: :email,
         destination_digest: candidate.address_digest, valid: false,
       )
-      assert_equal :locked, OtpVerificationFailureBudget.new.verify!(
+      assert_equal :locked, EmailOtpVerificationFailureBudget.new.verify!(
         surface: :app, purpose: :credential_registration, channel: :email,
         destination_digest: candidate.address_digest, valid: false,
       )

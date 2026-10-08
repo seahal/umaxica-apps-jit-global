@@ -34,7 +34,7 @@ module Auth
 
                 registration = (session[:visitor_telephone_registration] || {}).dup
                 registration["public_id"] ||= @visitor_telephone.public_id
-                registration["expires_at"] = @visitor_telephone.reload.otp_expires_at.to_i
+                registration["expires_at"] = result.transaction.otp_expires_at.to_i
                 session[:visitor_telephone_registration] = registration
                 session[:visitor_telephone_otp_last_sent_at] = Time.current.to_i
                 redirect_to(
@@ -56,7 +56,7 @@ module Auth
 
                 result = verify_otp_ceremony!(submitted_code)
                 return handle_locked_result if result.status == :locked
-                return render_otp_ceremony_result(result) unless result.success?
+                return render_otp_ceremony_result(result) unless result.verified_evidence?
 
                 verify_telephone_ownership!
 
@@ -84,27 +84,16 @@ module Auth
               def sign_up_step = :otp
 
               def issue_otp_ceremony!
-                SignOtpCeremony.issue!(
-                  purpose: :sign_up,
-                  surface: :com,
-                  channel: :telephone,
-                  subject: @sign_up_ticket,
-                  destination: @visitor_telephone.number,
-                  session_nonce: @sign_up_ticket.public_id,
-                  request_context: request,
+                TelephoneSignUpOtpDeliveryIssuer.call(
+                  flow: @sign_up_ticket, telephone: @visitor_telephone,
+                  session_nonce: session.dig(:com_sign_up_flow_locator, "nonce"),
                 )
               end
 
               def verify_otp_ceremony!(submitted_code)
-                SignOtpCeremony.verify!(
-                  purpose: :sign_up,
-                  surface: :com,
-                  channel: :telephone,
-                  subject: @sign_up_ticket,
-                  destination: @visitor_telephone.number,
-                  code: submitted_code,
-                  session_nonce: @sign_up_ticket.public_id,
-                  request_context: request,
+                TelephoneSignUpOtpVerificationCommitter.call(
+                  flow: @sign_up_ticket, telephone: @visitor_telephone, code: submitted_code,
+                  session_nonce: session.dig(:com_sign_up_flow_locator, "nonce"),
                 )
               end
 
@@ -169,7 +158,7 @@ module Auth
                 last_sent_at = session[:visitor_telephone_otp_last_sent_at]
                 return false if last_sent_at.blank?
 
-                last_sent_at.to_i > CommonOtpPolicy::SEND_COOLDOWN.ago.to_i
+                last_sent_at.to_i > TelephoneOtpPolicy::SEND_COOLDOWN.ago.to_i
               end
             end
           end

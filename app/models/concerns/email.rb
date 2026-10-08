@@ -3,7 +3,7 @@
 
 module Email
   extend ActiveSupport::Concern
-  include OtpLockable
+  include EmailOtpPolicy
 
   # Requires:
   # - address
@@ -16,7 +16,7 @@ module Email
   # Optional:
   # - address_bidx
   #
-  # Registers (in addition to OtpLockable):
+  # Registers:
   # - before_validation :normalize_address_from_raw
   # - before_validation :set_address_digests
   # - scope :with_address
@@ -25,16 +25,11 @@ module Email
   # - validates :confirm_policy
   # - validates :pass_code
   #
-  # OTP attempt/lock/expiry mechanics live in OtpLockable. Cooldown
-  # (otp_cooldown_active?/otp_cooldown_remaining) is email-specific because it
-  # depends on otp_last_sent_at, which telephone tables do not carry.
+  MAX_OTP_ATTEMPTS = EmailOtpPolicy::MAX_OTP_ATTEMPTS
+  OTP_ATTEMPT_WINDOW = EmailOtpPolicy::OTP_ATTEMPT_WINDOW
+  OTP_LOCKOUT_DURATION = EmailOtpPolicy::OTP_LOCKOUT_DURATION
 
-  # Re-published from OtpLockable so existing Email::CONST references keep working.
-  MAX_OTP_ATTEMPTS = OtpLockable::MAX_OTP_ATTEMPTS
-  OTP_ATTEMPT_WINDOW = OtpLockable::OTP_ATTEMPT_WINDOW
-  OTP_LOCKOUT_DURATION = OtpLockable::OTP_LOCKOUT_DURATION
-
-  OTP_COOLDOWN_PERIOD = CommonOtpPolicy::SEND_COOLDOWN
+  OTP_COOLDOWN_PERIOD = EmailOtpPolicy::SEND_COOLDOWN
 
   attr_accessor :confirm_policy, :pass_code
   attr_writer :raw_address
@@ -44,12 +39,9 @@ module Email
     before_validation :normalize_address_from_raw
     before_validation :set_address_digests
     scope :with_address, ->(value) do
-      digest = IdentifierBlindIndex.bidx_for_email(value)
+      digest = IdentifierBlindIndex.bidx_for_email(value, realm: identifier_hmac_realm)
       digest.present? ? where(address_digest: digest) : none
     end
-
-    encrypts :address, downcase: true
-    encrypts :otp_private_key
 
     validate :validate_email_address
     validates :confirm_policy, acceptance: true, on: :create,
@@ -61,15 +53,21 @@ module Email
   end
 
   class_methods do
+    public
+
+    def identifier_hmac_realm
+      self::IDENTIFIER_REALM
+    end
+
     def find_by_address(value)
-      digest = IdentifierBlindIndex.bidx_for_email(value)
+      digest = IdentifierBlindIndex.bidx_for_email(value, realm: identifier_hmac_realm)
       return nil if digest.blank?
 
       find_by(address_digest: digest)
     end
   end
 
-  # Cooldown gates how often an OTP may be re-sent. Email-only: see OtpLockable.
+  # Telephone issuance does not select this email-specific cooldown policy.
   def otp_cooldown_active?(now: nil)
     return false if otp_last_sent_at.blank?
     return false if otp_last_sent_at == -Float::INFINITY
@@ -99,7 +97,7 @@ module Email
   end
 
   def set_address_digests
-    digest = IdentifierBlindIndex.bidx_for_email(raw_address)
+    digest = IdentifierBlindIndex.bidx_for_email(raw_address, realm: self.class.identifier_hmac_realm)
     self.address_bidx = digest if respond_to?(:address_bidx=)
     self.address_digest = digest if respond_to?(:address_digest=)
   end

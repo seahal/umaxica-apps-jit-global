@@ -3,44 +3,69 @@
 
 require "test_helper"
 
-# OtpLockable centralizes the OTP attempt/lock/expiry mechanics shared by the
-# Email and Telephone concerns. The Email and Telephone concern tests already
-# exercise the mechanics in depth through their real models; these tests pin the
-# cross-channel invariants and the asymmetries that were normalized when the
-# logic was unified:
-#   - the unlocked sentinel is "-infinity" for both channels
-#   - increment_attempts! never runs model validations (save!(validate: false))
-#   - cooldown stays email-only (telephone lacks otp_last_sent_at), which the
-#     OTP resend ceremony relies on via respond_to?(:otp_cooldown_active?)
+# Channel policies retain independent failure and lockout behavior.
 class OtpLockableTest < ActiveSupport::TestCase
   fixtures :clients, :client_statuses, :operators, :operator_statuses
 
-  test "both Email and Telephone include OtpLockable" do
-    assert_includes ClientEmail.included_modules, OtpLockable
-    assert_includes OperatorTelephone.included_modules, OtpLockable
+  test "Email and Telephone activate independent OTP policies" do
+    assert_includes ClientEmail.included_modules, EmailOtpPolicy
+    assert_not_includes ClientEmail.included_modules, TelephoneOtpPolicy
+    assert_includes OperatorTelephone.included_modules, TelephoneOtpPolicy
+    assert_not_includes OperatorTelephone.included_modules, EmailOtpPolicy
   end
 
-  test "clear_otp leaves an email unlocked through the shared sentinel" do
+  test "successful email consumption clears lockout only after its finite deadline" do
+    owner = Client.create!(status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(user: owner)
+    root.rotate_refresh_token!
     email = ClientEmail.create!(
-      user: clients(:none_user),
+      user: owner,
       address: "lockable@example.com",
       confirm_policy: true,
     )
-    email.update!(locked_at: 1.minute.from_now, otp_attempts_count: OtpLockable::MAX_OTP_ATTEMPTS)
+    email.update!(locked_at: email.class.database_now + 1.minute, otp_attempts_count: EmailOtpPolicy::MAX_OTP_ATTEMPTS)
+    binding = { actor: owner, token: root, email: email, browser_nonce: SecureRandom.urlsafe_base64(32) }
+    denied = EmailCredentialRegistrationOtpIssuer.call(**binding)
 
-    email.clear_otp
+    assert_equal :locked, denied.status
+    assert_nil denied.transaction
+    assert_equal EmailOtpPolicy::MAX_OTP_ATTEMPTS, email.reload.otp_attempts_count
+    email.update!(locked_at: email.class.database_now - Rational(1, 1_000_000))
+    issued = EmailCredentialRegistrationOtpIssuer.call(**binding)
+    verified = EmailCredentialRegistrationOtpVerificationCommitter.call(
+      **binding, transaction: issued.transaction, code: issued.code,
+    )
 
+    assert_predicate verified, :success?
+    assert_equal 0, email.reload.otp_attempts_count
     assert_not email.locked?
     assert_nil email.lockout_expires_at
   end
 
-  test "clear_otp leaves a telephone unlocked through the shared sentinel" do
-    telephone = OperatorTelephone.new(number: "+819012345678", staff: operators(:none_staff))
-    telephone.save!(validate: false)
-    telephone.update!(locked_at: 1.minute.from_now, otp_attempts_count: OtpLockable::MAX_OTP_ATTEMPTS)
+  test "successful telephone consumption clears lockout only after its finite deadline" do
+    owner = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    root = OperatorToken.create!(staff: owner)
+    root.rotate_refresh_token!
+    telephone = OperatorTelephone.create!(
+      number: "+819012345678", staff: owner, confirm_policy: true, confirm_using_mfa: true,
+    )
+    telephone.update!(
+      locked_at: telephone.class.database_now + 1.minute, otp_attempts_count: TelephoneOtpPolicy::MAX_OTP_ATTEMPTS,
+    )
+    binding = { actor: owner, token: root, telephone: telephone, browser_nonce: SecureRandom.urlsafe_base64(32) }
+    denied = TelephoneCredentialRegistrationOtpIssuer.call(**binding)
 
-    telephone.clear_otp
+    assert_equal :locked, denied.status
+    assert_nil denied.transaction
+    assert_equal TelephoneOtpPolicy::MAX_OTP_ATTEMPTS, telephone.reload.otp_attempts_count
+    telephone.update!(locked_at: telephone.class.database_now - Rational(1, 1_000_000))
+    issued = TelephoneCredentialRegistrationOtpIssuer.call(**binding)
+    verified = TelephoneCredentialRegistrationOtpVerificationCommitter.call(
+      **binding, transaction: issued.transaction, code: issued.code,
+    )
 
+    assert_predicate verified, :success?
+    assert_equal 0, telephone.reload.otp_attempts_count
     assert_not telephone.locked?
     assert_nil telephone.lockout_expires_at
   end
@@ -71,46 +96,38 @@ class OtpLockableTest < ActiveSupport::TestCase
   end
 
   test "a positive infinity expiry cannot make an OTP usable" do
-    email = ClientEmail.create!(
-      user: clients(:none_user),
-      address: "otp-positive-infinity@example.com",
-      confirm_policy: true,
+    transaction = ClientEmailCeremonyTransaction.create_transaction!(
+      actor_ref: "actor", session_ref: "browser", operation: "sign_in", email_candidate_ref: "candidate",
     )
-    email.update_columns(
-      otp_private_key: ROTP::Base32.random_base32,
-      otp_counter: "1",
-      otp_expires_at: Float::INFINITY,
-      locked_at: -Float::INFINITY,
+    code = transaction.issue_email_otp!(purpose: "sign_in")
+    transaction.update_columns(otp_expires_at: Float::INFINITY)
+
+    assert_not transaction.email_otp_deliverable?(
+      generation: transaction.otp_generation, at: transaction.class.database_now,
+    ), "a positive infinity timestamp is invalid for an authentication OTP"
+    assert_not transaction.verify_email_otp!(
+      code: code, purpose: "sign_in", actor_ref: "actor", session_ref: "browser",
+      operation: "sign_in", candidate_ref: "candidate",
     )
-
-    email.reload
-
-    assert_predicate email, :otp_expired?,
-                     "a positive infinity timestamp is invalid for an authentication OTP"
-    assert_not_predicate email, :otp_active?
-    assert_nil email.get_otp
+    assert_nil transaction.reload.otp_consumed_at
   end
 
   test "otp expiry predicates use the owning writer database clock" do
     application_now = Time.current
     database_now = application_now - 1.hour
-    expiry = application_now - 30.minutes
-    email = ClientEmail.create!(
-      user: clients(:none_user),
-      address: "otp-database-clock@example.com",
-      confirm_policy: true,
-    )
-    email.update_columns(
-      otp_private_key: ROTP::Base32.random_base32,
-      otp_counter: "1",
-      otp_expires_at: expiry,
-      locked_at: -Float::INFINITY,
-    )
+    transaction = nil
+    ClientEmailCeremonyTransaction.stub(:database_now, database_now) do
+      transaction = ClientEmailCeremonyTransaction.create_transaction!(
+        actor_ref: "actor", session_ref: "browser", operation: "sign_in", email_candidate_ref: "candidate",
+        now: database_now, expires_at: application_now + 5.minutes,
+      )
+      code = transaction.issue_email_otp!(purpose: "sign_in")
 
-    ClientEmail.stub(:database_now, database_now) do
-      assert_not_predicate email, :otp_expired?
-      assert_predicate email, :otp_active?
+      assert transaction.email_otp_deliverable?(generation: transaction.otp_generation, at: database_now)
+      assert transaction.deliver_email_otp!(generation: transaction.otp_generation, code: code) { true }
     end
+
+    assert_not transaction.email_otp_deliverable?(generation: transaction.otp_generation, at: application_now)
   end
 
   test "the lockout timestamp uses the same writer database clock as the failure increment" do
@@ -121,7 +138,7 @@ class OtpLockableTest < ActiveSupport::TestCase
       confirm_policy: true,
     )
     email.update_columns(
-      otp_attempts_count: OtpLockable::MAX_OTP_ATTEMPTS - 1,
+      otp_attempts_count: EmailOtpPolicy::MAX_OTP_ATTEMPTS - 1,
       otp_last_sent_at: database_now,
       locked_at: -Float::INFINITY,
     )
@@ -130,6 +147,6 @@ class OtpLockableTest < ActiveSupport::TestCase
       email.increment_attempts!
     end
 
-    assert_equal database_now + OtpLockable::OTP_LOCKOUT_DURATION, email.reload.locked_at
+    assert_equal database_now + EmailOtpPolicy::OTP_LOCKOUT_DURATION, email.reload.locked_at
   end
 end

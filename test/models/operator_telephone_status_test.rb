@@ -42,8 +42,6 @@ class OperatorTelephoneStatusTest < ActiveSupport::TestCase
       number: "+81901234567",
       staff_id: staff.id,
       staff_telephone_status_id: status.id,
-      otp_counter: "1",
-      otp_private_key: "secret_credential",
     )
 
     assert_raises(ActiveRecord::RecordNotDestroyed) do

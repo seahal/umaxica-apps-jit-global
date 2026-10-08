@@ -2,6 +2,8 @@
 
 require "test_helper"
 
+# Boolean assertions prevent disclosure of code and binding material.
+# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
 class ContactRegistrationOtpIssuerTest < ActiveSupport::TestCase
   %w(app com).each do |surface|
     %i(email telephone).each do |channel|
@@ -42,36 +44,70 @@ class ContactRegistrationOtpIssuerTest < ActiveSupport::TestCase
               VisitorTelephoneCeremonyTransaction,]
           end
         token.rotate_refresh_token!
-        secret = ROTP::Base32.random_base32
-        contact.store_otp(secret, 1, (contact.class.database_now + 10.minutes).to_i)
-        code = ROTP::HOTP.new(secret).at(1).to_s
         nonce = SecureRandom.urlsafe_base64(32)
-        transaction = ContactRegistrationOtpIssuer.call!(
-          actor: actor, token: token, contact: contact, channel: channel,
-          browser_nonce: nonce, code: code,
-        )
-        context = contact.reload.credential_registration_otp_context
+        issued =
+          case channel
+          when :email
+            EmailCredentialRegistrationOtpIssuer.call(actor:, token:, email: contact, browser_nonce: nonce)
+          when :telephone
+            TelephoneCredentialRegistrationOtpIssuer.call(actor:, token:, telephone: contact, browser_nonce: nonce)
+          end
+
+        assert_predicate issued, :success?
+        transaction = issued.transaction
+        source = contact.reload.attributes
+        expected_session = CredentialRegistrationOtpSessionValue.for(
+          surface:, channel:, transaction_ref: transaction.transaction_id, root_ref: token.public_id,
+          browser_nonce: nonce,
+        ).dump
 
         assert_instance_of flow_model, transaction
-        assert_equal surface, context.fetch("surface")
-        assert_equal "credential_registration", context.fetch("purpose")
-        assert_equal transaction.transaction_id, context.fetch("flow_ref")
-        assert_equal AuthAdmissionBinding.browser_digest(
-          surface: surface, entry_ref: transaction.transaction_id,
-          nonce: nonce,
-        ), context.fetch("browser_digest")
-        assert_equal token.public_id, context.fetch("session_ref")
-        assert_equal actor.public_id, context.fetch("owner_ref")
-        assert_equal contact.public_id, context.fetch("contact_ref")
-        assert_equal "1", context.fetch("counter")
-        assert_nil context.fetch("verified_at")
-        assert_nil context.fetch("result_expires_at")
-        assert_predicate contact, :otp_active?
-        assert_not contact.binding_effective?
-        assert_equal CredentialRegistrationOtpCodeDigest.for(context: context, channel: channel, code: code),
-                     context.fetch("code_digest")
-        assert_operator Time.iso8601(context.fetch("expires_at")), :<=, transaction.expires_at
+        assert_equal surface, transaction.surface
+        assert_equal "credential_registration", transaction.purpose
+        assert_equal "registration", transaction.operation
+        assert transaction.session_ref == expected_session, "Issuance must bind the original browser and Root"
+        assert transaction.actor_ref == actor.public_id
+        candidate_ref = (channel == :email) ? transaction.email_candidate_ref : transaction.telephone_candidate_ref
+        candidate_digest =
+          (channel == :email) ? transaction.normalized_email_digest : transaction.normalized_number_digest
+        source_digest = (channel == :email) ? contact.address_digest : contact.number_digest
+
+        assert candidate_ref == contact.public_id
+        assert candidate_digest == source_digest
+        assert_match(
+          /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/,
+          transaction.otp_generation,
+        )
+        assert_match(/\A[0-9]{6}\z/, issued.code)
+        assert_match(/\A[0-9a-f]{64}\z/, transaction.otp_verifier)
+        assert_nil transaction.otp_consumed_at
+        assert_nil transaction.otp_receipt_verifier
+        assert_nil transaction.otp_result_expires_at
+        assert_nil transaction.otp_cancelled_at
+        assert_not_predicate contact, :binding_effective?
+        assert_operator transaction.otp_expires_at, :<=, transaction.expires_at
+        destination = (channel == :email) ? contact.address : contact.number
+        guard, arguments =
+          case channel
+          when :email
+            [EmailCredentialRegistrationOtpDeliveryGuard, { email: contact }]
+          when :telephone
+            [TelephoneCredentialRegistrationOtpDeliveryGuard, { telephone: contact }]
+          end
+        delivered = false
+
+        assert guard.call(
+          transaction:, generation: transaction.otp_generation, destination:, code: issued.code, **arguments,
+        ) { delivered = true }
+        assert delivered
+        wrong_code = (issued.code == "000000") ? "000001" : "000000"
+
+        assert_not guard.call(
+          transaction:, generation: transaction.otp_generation, destination:, code: wrong_code, **arguments,
+        ) { flunk("Wrong code must not reach transport") }
+        assert source == contact.reload.attributes
       end
     end
   end
 end
+# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions

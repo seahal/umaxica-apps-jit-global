@@ -4,6 +4,11 @@
 require "test_helper"
 
 class SignUpStepGateTest < ActiveSupport::TestCase
+  setup do
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+  end
+
   ControllerBoundary = Struct.new(:session, :params, :current_sign_up_flow_ticket, :sign_up_ticket_public_id)
 
   test "for_show falls back to the session sequence id with its signed flow binding" do

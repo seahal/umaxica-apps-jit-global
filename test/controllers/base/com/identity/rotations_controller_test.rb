@@ -59,7 +59,7 @@ class Base::Com::Identity::RotationsControllerTest < ActionDispatch::Integration
     VisitorEmail.create!(
       visitor_id: visitor.id,
       address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

@@ -6,6 +6,17 @@ require "test_helper"
 # Each journey keeps admission, signup, and exact proof replay in the same real browser context.
 # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertPredicate, Minitest/MultipleAssertions
 class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
+  setup do
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    VisitorSecretCredentialKind::DEFAULTS.each { |id| VisitorSecretCredentialKind.find_or_create_by!(id: id) }
+    VisitorSecretCredentialStatus::DEFAULTS.each { |id| VisitorSecretCredentialStatus.find_or_create_by!(id: id) }
+  end
+
   %w(app com).each do |surface|
     test "#{surface} email signup binds its original OIDC browser and Base commits exactly one root" do
       previous_protection = ActionController::Base.allow_forgery_protection
@@ -130,8 +141,25 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       actor = actor_model.find(contact[owner_key])
 
       assert_equal 0, token_model.where(owner_key => actor.id).count
-      otp = contact.get_otp
-      code = ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter))
+      transaction_model = (surface == "app") ? ClientEmailCeremonyTransaction : VisitorEmailCeremonyTransaction
+      transaction = transaction_model.find_by!(email_candidate_ref: contact.public_id)
+      delivery =
+        (enqueued_jobs + performed_jobs).reverse.find do |entry|
+          next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+          notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
+          notification.fetch(:params).fetch(:sign_up_email_transaction_ref) == transaction.transaction_id
+        end
+      notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
+      delivery_params = notification.fetch(:params)
+      code = OutboundSensitivePayload.decrypt_email_otp(delivery_params.fetch(:encrypted_hotp_token))
+
+      assert delivery_params.fetch(:sign_up_flow_ref) == signup.public_id, "Delivery must name the original signup"
+      assert delivery_params.fetch(:sign_up_email_otp_generation) == transaction.otp_generation,
+             "Delivery must name the current typed ceremony generation"
+      queued_contains_code = JSON.generate(delivery.fetch(:args)).include?(code)
+
+      assert_not queued_contains_code, "Queued delivery must not contain plaintext code"
       auth.get(otp_uri.request_uri)
 
       assert_equal 200, auth.response.status
@@ -143,6 +171,10 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 302, auth.response.status
+      assert transaction.reload.otp_consumed_at.present?, "The actual browser must consume its typed Email proof"
+      active_verifier_cleared = transaction.otp_verifier.nil?
+
+      assert active_verifier_cleared, "Fresh consumption must remove the active verifier"
       birthdate_uri = URI.parse(auth.response.location)
 
       assert SignFlowBindingCodec.decode(Rack::Utils.parse_query(birthdate_uri.query).fetch("fb")) == decoded,
@@ -151,6 +183,21 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
 
       assert_equal 200, auth.response.status
       csrf = auth.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
+      if surface == "com"
+        session_flow_ref = auth.request.session[:auth_com_up_sequence_id]
+
+        assert session_flow_ref == decoded.flow_public_id, "The browser session must retain the signed signup Parent"
+        stored_signup = signup_model.find_by(public_id: session_flow_ref)
+
+        assert stored_signup.present?, "The original signed signup Parent must still exist"
+        assert Visitor.exists?(id: stored_signup.principal_id), "The signup principal Visitor must exist"
+        assert Visitor.exists?(id: contact.reload.visitor_id), "The Contact owner Visitor must exist"
+        assert stored_signup.principal_id == contact.visitor_id,
+               "The original signup principal must match the Contact owner"
+        assert stored_signup.principal_id == actor.id, "The birthdate checkpoint must retain the original Visitor"
+        assert binding.reload.authorization_transaction.id == original_parent_id,
+               "Admission must retain the original OIDC Parent"
+      end
       auth.patch(
         birthdate_uri.request_uri, params: {
           requirement: "birthdate",

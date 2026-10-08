@@ -8,9 +8,6 @@ module Base
         class RegistrationsController < ::Base::Org::ApplicationController
           include ::CloudflareTurnstile
 
-          include ::CommonOtp
-          include SignSettingsEmailRegistration
-
           include EnforcementIdentifierGate
 
           include ::VerificationOperator
@@ -71,26 +68,17 @@ module Base
               return
             end
 
-            otp_code = generate_otp_attributes(@staff_email)
             unless @staff_email.save
               render_new_failure
               return
             end
 
-            OtpAdapter.for(surface: :org, channel: :email).deliver(
-              record: @staff_email,
-              otp_code: otp_code,
-              verification_token: nil,
-              public_id: @staff_email.public_id,
-            )
+            unless issue_registration_email_otp!
+              render_new_failure
+              return
+            end
 
             session[registration_session_key] = @staff_email.public_id
-            start_email_ceremony!(
-              surface: "org",
-              actor: current_operator,
-              session_ref: current_session_public_id,
-              candidate: @staff_email,
-            )
             redirect_to(
               edit_base_org_identity_emails_registration_path,
             )
@@ -104,18 +92,41 @@ module Base
             submitted_code = params.dig(:staff_email, :pass_code)
             return fail_code_required if submitted_code.blank?
 
-            result = verify_otp_code_and_consume(
-              @staff_email, submitted_code,
-              verification_scope: { surface: :org,
-                                    purpose: :credential_registration,
-                                    channel: :email, },
+            result = EmailCredentialRegistrationOtpVerificationCommitter.call(
+              actor: current_operator, token: current_session_token, email: @staff_email,
+              transaction: registration_email_otp_transaction, browser_nonce: base_admission_browser_nonce,
+              code: submitted_code,
             )
-            return fail_otp_invalid unless result[:success]
+            return fail_otp_invalid unless result.verified_evidence?
 
-            complete_registration!
+            complete_registration!(submitted_code)
           end
 
           private
+
+          def issue_registration_email_otp!
+            issued = EmailCredentialRegistrationOtpIssuer.call(
+              actor: current_operator, token: current_session_token, email: @staff_email,
+              browser_nonce: ensure_base_admission_browser_nonce!,
+            )
+            unless issued.success?
+              @staff_email.errors.add(:base, :invalid)
+              return false
+            end
+
+            Notify::Org::OtpNotifier.issue(
+              record: @staff_email,
+              otp_code: issued.code,
+              verification_token: nil,
+              public_id: @staff_email.public_id,
+              purpose: "credential_registration",
+              contact_ceremony_transaction_ref: issued.transaction.transaction_id,
+              contact_otp_generation: issued.transaction.otp_generation,
+            )
+
+            session[:staff_email_registration_transaction_ref] = issued.transaction.transaction_id
+            true
+          end
 
           def render_new_failure
             render inertia: "base/org/identity/emails/registrations/new",
@@ -180,9 +191,17 @@ module Base
           end
 
           def valid_registration_session?
-            @staff_email.present? &&
-              !@staff_email.otp_expired? &&
-              @staff_email.staff_email_status_id == OperatorEmailStatus::UNVERIFIED
+            EmailCredentialRegistrationOtpFormQuery.call(
+              actor: current_operator, token: current_session_token, email: @staff_email,
+              transaction: registration_email_otp_transaction, browser_nonce: base_admission_browser_nonce,
+            )
+          end
+
+          def registration_email_otp_transaction
+            reference = session[:staff_email_registration_transaction_ref]
+            return unless reference
+
+            OperatorEmailCeremonyTransaction.find_by(transaction_id: reference)
           end
 
           def registration_session_key
@@ -191,7 +210,7 @@ module Base
 
           def reset_registration_session!
             session.delete(registration_session_key)
-            reset_email_ceremony_session!
+            session.delete(:staff_email_registration_transaction_ref)
           end
 
           def fail_registration_session
@@ -213,7 +232,6 @@ module Base
 
           def fail_otp_invalid
             if @staff_email.locked?
-              @staff_email.destroy!
               reset_registration_session!
               redirect_to(
                 new_base_org_identity_emails_registration_path,
@@ -224,13 +242,15 @@ module Base
             end
           end
 
-          def complete_registration!
-            finish_email_ceremony!(
-              surface: "org",
-              actor: current_operator,
-              session_ref: current_session_public_id,
-              candidate: @staff_email,
+          def complete_registration!(code)
+            status = OperatorEmailRegistrationOtpFinalizer.call!(
+              actor: current_operator, actor_context: current_actor.with(surface: :base),
+              token: current_session_token, email: @staff_email, transaction: registration_email_otp_transaction,
+              browser_nonce: base_admission_browser_nonce, code: code,
+              requirement: step_up_requirement(scope: "settings_email"),
             )
+            return fail_registration_session unless status == :finalized
+
             reset_registration_session!
             redirect_to_surface_url(
               bootstrap_return_path(
@@ -244,6 +264,13 @@ module Base
 
           def verification_required_action?
             true
+          end
+
+          def step_up_requirement(scope:)
+            raise StepUpRequirement::Invalid, "ORG Email registration scope mismatch" unless scope == "settings_email"
+
+            OperatorEmailPolicy.new(@staff_email || OperatorEmail.new(staff: current_operator), user: current_operator)
+              .credential_registration_requirement(token: current_session_token)
           end
 
           def verification_scope

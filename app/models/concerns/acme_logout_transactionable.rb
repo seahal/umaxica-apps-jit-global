@@ -76,6 +76,8 @@ module AcmeLogoutTransactionable
     end
   end
 
+  public
+
   def initiated?
     status == STATUS_INITIATED
   end

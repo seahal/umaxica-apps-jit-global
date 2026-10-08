@@ -29,6 +29,10 @@ class StepUpRequirement
     end
   end
 
+  public_class_method :build
+
+  public
+
   def initialize(step_up_required: UNSET, required_aal: UNSET,
                  phishing_resistant_required: UNSET, user_verification_required: UNSET,
                  full_reauthentication_required: UNSET, allowed_methods: UNSET, scope: UNSET,

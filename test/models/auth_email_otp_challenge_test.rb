@@ -3,6 +3,11 @@
 require "test_helper"
 
 class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
+  setup do
+    ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
+    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
+  end
+
   %w(app com).each do |surface|
     test "#{surface} resending one admitted email challenge preserves another flow's code and proof" do
       address = "flow-otp-#{SecureRandom.hex(8)}@example.test"
@@ -59,7 +64,8 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
       verified_at = first.reload.email_otp_context.fetch("verified_at")
       retry_result = first.verify_email_otp!(code: first_code)
 
-      assert_predicate retry_result, :success?
+      assert_not retry_result.success?, "a retained verification receipt is not a second OTP consumption"
+      assert_equal :already_verified, retry_result.status
       assert_equal verified_at, first.reload.email_otp_context.fetch("verified_at")
       assert_raises(AuthCeremonySession::InvalidTransition) do
         first.issue_email_otp!(contact: contact, destination: contact.address)
@@ -238,20 +244,21 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
       )
 
       assert_nil ceremony.issue_email_otp!(contact: nil, destination: destination)
-      [nil, "", 0, false, [], {}, "12345", "1234567", "abcdef"].each do |input|
+      [nil, "", 0, false, [], {}, "12345", "1234567", "abcdef", "123\0\x00\x00",
+       "１２３４５６", "\xFF".dup.force_encoding(Encoding::UTF_8),].each do |input|
         assert_not ceremony.verify_email_otp!(code: input).success?
       end
-      assert_equal :verified, OtpVerificationFailureBudget.new.verify!(
+      assert_equal :verified, EmailOtpVerificationFailureBudget.new.verify!(
         surface: surface.to_sym, purpose: :authentication, channel: :email,
-        destination_digest: IdentifierBlindIndex.bidx_for_email(destination), valid: true,
+        destination_digest: IdentifierBlindIndex.bidx_for_email(destination, realm: surface.to_sym), valid: true,
       )
       assert_no_difference ["Client.count", "Visitor.count", "ClientEmail.count", "VisitorEmail.count"] do
         5.times { assert_not ceremony.verify_email_otp!(code: "000000").success? }
       end
 
-      assert_equal :locked, OtpVerificationFailureBudget.new.verify!(
+      assert_equal :locked, EmailOtpVerificationFailureBudget.new.verify!(
         surface: surface.to_sym, purpose: :authentication, channel: :email,
-        destination_digest: IdentifierBlindIndex.bidx_for_email(destination), valid: true,
+        destination_digest: IdentifierBlindIndex.bidx_for_email(destination, realm: surface.to_sym), valid: true,
       )
       assert_nil ceremony.reload.email_otp_context.fetch("verified_at")
     end
@@ -324,7 +331,8 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
         ceremony.class.stub(:database_now, result_expiry + Rational(microseconds, 1_000_000)) do
           result = ceremony.verify_email_otp!(code: code)
 
-          assert_equal microseconds.negative?, result.success?
+          assert_not result.success?, "an already consumed code cannot succeed again before or after receipt expiry"
+          assert_equal microseconds.negative?, result.verified_evidence?
           assert_equal context, ceremony.reload.email_otp_context
         end
       end
@@ -366,7 +374,7 @@ class AuthEmailOtpChallengeTest < ActiveSupport::TestCase
 
       assert_not result.success?
       assert_equal unchanged, ceremony.reload.attributes
-      assert_equal :verified, OtpVerificationFailureBudget.new.verify!(
+      assert_equal :verified, EmailOtpVerificationFailureBudget.new.verify!(
         surface: surface.to_sym, purpose: :authentication, channel: :email,
         destination_digest: contact.address_digest, valid: true,
       )

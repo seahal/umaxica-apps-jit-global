@@ -231,11 +231,6 @@ module AuthenticationBase
     record = defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
     return nil if record.blank?
 
-    # Check OTP expiry if requested
-    if validations[:check_otp_expiry] && record.respond_to?(:otp_expired?)
-      return nil if record.otp_expired?
-    end
-
     # Check status_id if provided
     if validations[:status_id] && record.respond_to?(:user_email_status_id)
       return nil if record.user_email_status_id != validations[:status_id]
@@ -259,6 +254,8 @@ module AuthenticationBase
 
     @current_session_public_id ||= current_session_public_id_from_access_token
   end
+
+  public :current_session_public_id
 
   # Returns only an explicitly issued authentication-event timestamp.  A token
   # or session's persistence timestamps are not equivalent to the credential

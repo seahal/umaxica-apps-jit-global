@@ -79,9 +79,10 @@ CREATE TABLE public.operator_auth_admission_bindings (
     CONSTRAINT operator_admission_bindings_auth_proof_pair CHECK ((((auth_ceremony_session_id IS NULL) AND (confirmation_ref IS NULL)) OR ((auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL)))),
     CONSTRAINT operator_admission_bindings_confirmation_requires_auth CHECK (((base_confirmed_at IS NULL) OR ((auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL)))),
     CONSTRAINT operator_admission_bindings_one_parent CHECK ((num_nonnulls(sign_in_flow_id, authorization_transaction_id, step_up_ceremony_transaction_id) = 1)),
-    CONSTRAINT operator_admission_bindings_parent_purpose CHECK ((((sign_in_flow_id IS NULL) OR ((purpose)::text = ANY ((ARRAY['local_sign_in'::character varying, 'local_sign_up'::character varying])::text[]))) AND ((authorization_transaction_id IS NULL) OR ((purpose)::text = ANY ((ARRAY['authentication_handoff'::character varying, 'invitation_handoff'::character varying])::text[]))) AND ((step_up_ceremony_transaction_id IS NULL) OR ((purpose)::text = ANY ((ARRAY['step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[]))))),
+    CONSTRAINT operator_admission_bindings_parent_purpose CHECK ((((sign_in_flow_id IS NULL) OR ((purpose)::text = ANY (ARRAY[('local_sign_in'::character varying)::text, ('local_sign_up'::character varying)::text]))) AND ((authorization_transaction_id IS NULL) OR ((purpose)::text = ANY (ARRAY[('authentication_handoff'::character varying)::text, ('invitation_handoff'::character varying)::text]))) AND ((step_up_ceremony_transaction_id IS NULL) OR ((purpose)::text = ANY (ARRAY[('step_up_handoff'::character varying)::text, ('reauthentication_handoff'::character varying)::text, ('bootstrap_handoff'::character varying)::text, ('credential_registration_handoff'::character varying)::text, ('credential_change_handoff'::character varying)::text]))))),
     CONSTRAINT operator_admission_bindings_redemption_pair CHECK ((((redeemed_at IS NULL) AND (admitted_auth_ceremony_session_id IS NULL)) OR ((redeemed_at IS NOT NULL) AND (admitted_auth_ceremony_session_id IS NOT NULL)))),
-    CONSTRAINT operator_admission_bindings_step_up_token CHECK ((((purpose)::text <> ALL ((ARRAY['step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])) OR (base_token_id IS NOT NULL))),
+    CONSTRAINT operator_admission_bindings_redemption_requires_confirmation CHECK (((redeemed_at IS NULL) OR (base_confirmed_at IS NOT NULL))),
+    CONSTRAINT operator_admission_bindings_step_up_token CHECK ((((purpose)::text <> ALL (ARRAY[('step_up_handoff'::character varying)::text, ('reauthentication_handoff'::character varying)::text, ('bootstrap_handoff'::character varying)::text, ('credential_registration_handoff'::character varying)::text, ('credential_change_handoff'::character varying)::text])) OR (base_token_id IS NOT NULL))),
     CONSTRAINT operator_admission_bindings_terminal_exclusive CHECK ((NOT ((redeemed_at IS NOT NULL) AND (retired_at IS NOT NULL))))
 );
 
@@ -128,11 +129,11 @@ CREATE TABLE public.operator_auth_ceremony_sessions (
     local_sign_up_flow_ref character varying,
     admission_purpose character varying,
     step_up_ceremony_transaction_ref character varying,
-    CONSTRAINT operator_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['local_sign_in'::character varying, 'local_sign_up'::character varying, 'authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])))),
+    CONSTRAINT operator_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY (ARRAY[('local_sign_in'::character varying)::text, ('local_sign_up'::character varying)::text, ('authentication_handoff'::character varying)::text, ('invitation_handoff'::character varying)::text, ('step_up_handoff'::character varying)::text, ('reauthentication_handoff'::character varying)::text, ('bootstrap_handoff'::character varying)::text, ('credential_registration_handoff'::character varying)::text, ('credential_change_handoff'::character varying)::text])))),
     CONSTRAINT operator_auth_ceremony_purpose_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref) <= 1)),
     CONSTRAINT operator_auth_ceremony_sessions_admission_binding CHECK (((authorization_transaction_ref IS NULL) OR (admitted_at IS NOT NULL))),
     CONSTRAINT operator_auth_ceremony_sessions_authentication_evidence_pair CHECK (((authentication_method IS NULL) = (authentication_event_at IS NULL))),
-    CONSTRAINT operator_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])))),
+    CONSTRAINT operator_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])))),
     CONSTRAINT operator_auth_ceremony_sessions_one_terminal_timestamp CHECK ((num_nonnulls(revoked_at, completed_at, cancelled_at) <= 1)),
     CONSTRAINT operator_auth_ceremony_transaction_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref, step_up_ceremony_transaction_ref) <= 1))
 );
@@ -267,7 +268,18 @@ CREATE TABLE public.operator_email_ceremony_transactions (
     evp_issued_at timestamp(6) with time zone,
     evp_verified_at timestamp(6) with time zone,
     evp_consumed_at timestamp(6) with time zone,
-    evp_attempt_count integer DEFAULT 0 NOT NULL
+    evp_attempt_count integer DEFAULT 0 NOT NULL,
+    purpose character varying,
+    otp_generation uuid,
+    otp_verifier character varying,
+    otp_expires_at timestamp(6) with time zone,
+    otp_consumed_at timestamp(6) with time zone,
+    otp_cancelled_at timestamp(6) with time zone,
+    otp_receipt_verifier character varying,
+    otp_result_expires_at timestamp(6) with time zone,
+    CONSTRAINT operator_email_ceremony_transactions_otp_material CHECK (((otp_verifier IS NULL) OR ((purpose IS NOT NULL) AND (otp_generation IS NOT NULL) AND (otp_expires_at IS NOT NULL)))),
+    CONSTRAINT operator_email_ceremony_transactions_otp_purpose CHECK (((purpose IS NULL) OR ((purpose)::text = ANY ((ARRAY['sign_up'::character varying, 'sign_in'::character varying, 'recovery'::character varying, 'withdrawal'::character varying, 'credential_registration'::character varying])::text[])))),
+    CONSTRAINT operator_email_otp_receipt_bounds CHECK ((((otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)) OR ((otp_receipt_verifier IS NOT NULL) AND ((otp_receipt_verifier)::text ~ '^[0-9a-f]{64}$'::text) AND (otp_consumed_at IS NOT NULL) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NULL) AND (otp_result_expires_at IS NOT NULL) AND isfinite(otp_result_expires_at) AND (otp_result_expires_at > otp_consumed_at) AND (otp_result_expires_at <= (otp_consumed_at + '00:01:00'::interval)) AND (otp_result_expires_at <= expires_at))))
 );
 
 
@@ -753,8 +765,8 @@ CREATE TABLE public.operator_sign_in_flows (
     CONSTRAINT chk_operator_sign_in_flows_state_completed_at CHECK (((state_id = 100) = (completed_at IS NOT NULL))),
     CONSTRAINT chk_org_sign_in_sequence_tickets_lifetime_order CHECK ((issued_at < expires_at)),
     CONSTRAINT chk_org_sign_in_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at)),
-    CONSTRAINT operator_local_authentication_context_valid CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'emergency'::character varying])::text[])))),
-    CONSTRAINT operator_sign_in_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
+    CONSTRAINT operator_local_authentication_context_valid CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY (ARRAY[('normal'::character varying)::text, ('emergency'::character varying)::text])))),
+    CONSTRAINT operator_sign_in_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
     CONSTRAINT operator_sign_in_flows_base_finalization_valid CHECK (((base_finalized_at IS NULL) OR ((token_id IS NOT NULL) AND (result_digest IS NOT NULL)))),
     CONSTRAINT operator_sign_in_flows_evidence_complete CHECK (((authentication_event_at IS NULL) OR (authentication_method IS NOT NULL))),
     CONSTRAINT operator_sign_in_flows_result_complete CHECK (((result_generation = 0) OR ((result_digest IS NOT NULL) AND (result_expires_at IS NOT NULL) AND (authentication_event_at IS NOT NULL)))),
@@ -944,7 +956,7 @@ CREATE TABLE public.operator_sign_up_flows (
     authentication_event_at timestamp(6) with time zone,
     CONSTRAINT chk_org_sign_up_sequence_tickets_lifetime_order CHECK ((issued_at < expires_at)),
     CONSTRAINT chk_org_sign_up_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at)),
-    CONSTRAINT operator_sign_up_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
+    CONSTRAINT operator_sign_up_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
     CONSTRAINT operator_sign_up_flows_base_finalization_valid CHECK (((base_finalized_at IS NULL) OR ((token_id IS NOT NULL) AND (result_digest IS NOT NULL)))),
     CONSTRAINT operator_sign_up_flows_evidence_complete CHECK (((authentication_event_at IS NULL) OR (authentication_method IS NOT NULL))),
     CONSTRAINT operator_sign_up_flows_result_complete CHECK (((result_generation = 0) OR ((result_digest IS NOT NULL) AND (result_expires_at IS NOT NULL) AND (authentication_event_at IS NOT NULL)))),
@@ -1020,11 +1032,11 @@ CREATE TABLE public.operator_step_up_ceremony_transactions (
     cancellation_handoff_ciphertext text,
     CONSTRAINT operator_step_up_cancellation_handoff_pair CHECK ((((cancellation_handoff_ref IS NULL) AND (cancellation_handoff_ciphertext IS NULL)) OR ((cancellation_handoff_ref IS NOT NULL) AND (cancellation_handoff_ciphertext IS NOT NULL)))),
     CONSTRAINT operator_step_up_cancellation_handoff_valid CHECK (((cancellation_handoff_digest IS NULL) OR ((cancellation_handoff_digest)::text ~ '^[0-9a-f]{64}$'::text))),
-    CONSTRAINT operator_step_up_purpose_valid CHECK (((purpose)::text = ANY ((ARRAY['step_up'::character varying, 'reauthentication'::character varying, 'bootstrap'::character varying, 'credential_registration'::character varying, 'credential_change'::character varying])::text[]))),
+    CONSTRAINT operator_step_up_purpose_valid CHECK (((purpose)::text = ANY (ARRAY[('step_up'::character varying)::text, ('reauthentication'::character varying)::text, ('bootstrap'::character varying)::text, ('credential_registration'::character varying)::text, ('credential_change'::character varying)::text]))),
     CONSTRAINT operator_step_up_result_valid CHECK (((result_generation >= 0) AND (((result_digest IS NULL) AND (result_expires_at IS NULL) AND (result_generation = 0)) OR ((result_digest IS NOT NULL) AND ((result_digest)::text ~ '^[0-9a-f]{64}$'::text) AND (result_expires_at IS NOT NULL) AND (result_generation > 0) AND (verified_at IS NOT NULL))))),
-    CONSTRAINT operator_step_up_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'verified'::character varying, 'consumed'::character varying, 'canceled'::character varying, 'expired'::character varying, 'revoked'::character varying])::text[]))),
+    CONSTRAINT operator_step_up_status_valid CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('verified'::character varying)::text, ('consumed'::character varying)::text, ('canceled'::character varying)::text, ('expired'::character varying)::text, ('revoked'::character varying)::text]))),
     CONSTRAINT operator_step_up_terminal_valid CHECK ((((canceled_at IS NULL) OR ((status)::text = 'canceled'::text)) AND ((revoked_at IS NULL) OR ((status)::text = 'revoked'::text)) AND (((status)::text <> 'revoked'::text) OR (revoked_at IS NOT NULL)) AND (((status)::text <> 'verified'::text) OR ((verified_at IS NOT NULL) AND (method IS NOT NULL) AND (aal IS NOT NULL))))),
-    CONSTRAINT operator_step_up_verified_credential_present CHECK ((((status)::text <> 'verified'::text) OR (((purpose)::text = ANY ((ARRAY['bootstrap'::character varying, 'credential_registration'::character varying])::text[])) AND (verified_credential_ref IS NULL) AND ((aal)::text = 'none'::text) AND ((required_aal)::text = 'none'::text) AND (phishing_resistant IS FALSE) AND (phishing_resistant_required IS FALSE) AND ((method)::text = ANY ((ARRAY['passkey'::character varying, 'totp'::character varying])::text[]))) OR (((purpose)::text <> ALL ((ARRAY['bootstrap'::character varying, 'credential_registration'::character varying])::text[])) AND (verified_credential_ref IS NOT NULL) AND (length((verified_credential_ref)::text) > 0))))
+    CONSTRAINT operator_step_up_verified_credential_present CHECK ((((status)::text <> 'verified'::text) OR (((purpose)::text = ANY (ARRAY[('bootstrap'::character varying)::text, ('credential_registration'::character varying)::text])) AND (verified_credential_ref IS NULL) AND ((aal)::text = 'none'::text) AND ((required_aal)::text = 'none'::text) AND (phishing_resistant IS FALSE) AND (phishing_resistant_required IS FALSE) AND ((method)::text = ANY (ARRAY[('passkey'::character varying)::text, ('totp'::character varying)::text]))) OR (((purpose)::text <> ALL (ARRAY[('bootstrap'::character varying)::text, ('credential_registration'::character varying)::text])) AND (verified_credential_ref IS NOT NULL) AND (length((verified_credential_ref)::text) > 0))))
 );
 
 
@@ -1114,7 +1126,18 @@ CREATE TABLE public.operator_telephone_ceremony_transactions (
     consumed_at timestamp(6) with time zone,
     lock_version bigint DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    purpose character varying,
+    otp_generation uuid,
+    otp_verifier character varying,
+    otp_expires_at timestamp(6) with time zone,
+    otp_consumed_at timestamp(6) with time zone,
+    otp_cancelled_at timestamp(6) with time zone,
+    otp_receipt_verifier character varying,
+    otp_result_expires_at timestamp(6) with time zone,
+    CONSTRAINT operator_telephone_ceremony_transactions_otp_material CHECK (((otp_verifier IS NULL) OR ((purpose IS NOT NULL) AND (otp_generation IS NOT NULL) AND (otp_expires_at IS NOT NULL)))),
+    CONSTRAINT operator_telephone_ceremony_transactions_otp_purpose CHECK (((purpose IS NULL) OR ((purpose)::text = ANY ((ARRAY['sign_up'::character varying, 'sign_in'::character varying, 'recovery'::character varying, 'withdrawal'::character varying, 'credential_registration'::character varying])::text[])))),
+    CONSTRAINT operator_telephone_otp_receipt_bounds CHECK ((((otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)) OR ((otp_receipt_verifier IS NOT NULL) AND ((otp_receipt_verifier)::text ~ '^[0-9a-f]{64}$'::text) AND (otp_consumed_at IS NOT NULL) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NULL) AND (otp_result_expires_at IS NOT NULL) AND isfinite(otp_result_expires_at) AND (otp_result_expires_at > otp_consumed_at) AND (otp_result_expires_at <= (otp_consumed_at + '00:01:00'::interval)) AND (otp_result_expires_at <= expires_at))))
 );
 
 
@@ -1303,8 +1326,8 @@ CREATE TABLE public.operator_tokens (
     last_step_up_full_reauthentication boolean,
     last_step_up_resource_ref character varying,
     last_step_up_tenant_ref character varying,
-    CONSTRAINT chk_operator_tokens_authentication_context CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'emergency'::character varying])::text[])))),
-    CONSTRAINT chk_operator_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'entra'::character varying])::text[])))),
+    CONSTRAINT chk_operator_tokens_authentication_context CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY (ARRAY[('normal'::character varying)::text, ('emergency'::character varying)::text])))),
+    CONSTRAINT chk_operator_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('entra'::character varying)::text])))),
     CONSTRAINT chk_staff_tokens_kind_id_positive CHECK ((staff_token_kind_id >= 0)),
     CONSTRAINT chk_staff_tokens_status_id_positive CHECK ((staff_token_status_id >= 0))
 );
@@ -1977,13 +2000,6 @@ CREATE INDEX idx_on_actor_ref_session_ref_dce233ec55 ON public.operator_secret_c
 
 
 --
--- Name: idx_on_auth_ceremony_session_id_207296f643; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_on_auth_ceremony_session_id_207296f643 ON public.operator_auth_admission_bindings USING btree (auth_ceremony_session_id) WHERE (auth_ceremony_session_id IS NOT NULL);
-
-
---
 -- Name: idx_on_cancellation_handoff_digest_dc759b9c45; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2079,6 +2095,13 @@ CREATE UNIQUE INDEX idx_on_transaction_id_578b62ae6d ON public.operator_telephon
 --
 
 CREATE UNIQUE INDEX idx_on_transaction_id_c4257bc798 ON public.operator_secret_credential_ceremony_transactions USING btree (transaction_id);
+
+
+--
+-- Name: idx_operator_admission_bindings_auth_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_operator_admission_bindings_auth_session ON public.operator_auth_admission_bindings USING btree (auth_ceremony_session_id) WHERE (auth_ceremony_session_id IS NOT NULL);
 
 
 --
@@ -3114,6 +3137,13 @@ ALTER TABLE ONLY public.operator_tokens
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261008062955'),
+('20261008062848'),
+('20261007223858'),
+('20261007223751'),
+('20261007010004'),
+('20261007010003'),
+('20261007010002'),
 ('20261007010001'),
 ('20261006230002'),
 ('20261006220002'),

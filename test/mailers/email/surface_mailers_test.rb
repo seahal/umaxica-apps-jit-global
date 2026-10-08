@@ -14,7 +14,7 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
       encrypted_hotp_token: encrypted_otp("123456"),
       email_address: "user@example.com",
       public_id: "email-public-id",
-      verification_token: "verification-token",
+      encrypted_verification_token: OutboundSensitivePayload.encrypt_email_verification_token("verification-token"),
     ).create
 
     assert_equal I18n.t("mail.email.app.otp_mailer.create.subject"), mail.subject
@@ -89,12 +89,12 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
   test "otp mailers build verification links for their own surface" do
     [
       [Email::App::OtpMailer, "mail-app-public-id", "app-token",
-       ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.umaxica.app"),
+       ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
        "/identity/emails/registration/edit",],
       [Email::Com::OtpMailer, "mail-com-public-id", "com-token",
-       ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "www.umaxica.com"),
+       ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
        "/identity",],
-      [Email::Org::OtpMailer, "mail-org-public-id", "org-token", ENV.fetch("PUBLIC_BASE_STAFF_URL", "www.umaxica.org"),
+      [Email::Org::OtpMailer, "mail-org-public-id", "org-token", ENV.fetch("PUBLIC_BASE_STAFF_URL"),
        "/identity",],
     ].each do |mailer, public_id, token, host, path|
       mail = mailer.with(

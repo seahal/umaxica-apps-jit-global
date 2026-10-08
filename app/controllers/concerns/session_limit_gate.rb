@@ -126,7 +126,8 @@ module SessionLimitGate
     challenge = gate["resolution_challenge"].presence
     return unless challenge
 
-    resolution_model_for_gate(gate).find_by(challenge: challenge)
+    model = resolution_model_for_gate(gate)
+    model.find_by(challenge_digest: model.digest_challenge(challenge))
   end
 
   def session_limit_resolution_binding

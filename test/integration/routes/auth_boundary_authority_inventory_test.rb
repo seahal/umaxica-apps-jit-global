@@ -9,11 +9,14 @@ require "test_helper"
 class AuthBoundaryAuthorityInventoryTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
-  BASE_APP_HOST = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-  AUTH_APP_HOST = ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")
+  BASE_APP_HOST = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+  AUTH_APP_HOST = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
 
-  test "authority map lists seven unique RPs and retired paths" do
-    assert_equal 7, AuthBoundaryAuthorityMap.first_party_rp_client_ids.size
+  test "authority map lists seven independent RPs and three separate Base self RPs without retired clients" do
+    assert_equal %w(base-app-ww base-com-ww base-org-ww), AuthBoundaryAuthorityMap.base_self_rp_client_ids
+    assert_equal %w(core-app core-com core-org warp-app warp-com warp-org edit-org),
+                 AuthBoundaryAuthorityMap.first_party_rp_client_ids - AuthBoundaryAuthorityMap.base_self_rp_client_ids
+    assert_equal 10, AuthBoundaryAuthorityMap.first_party_rp_client_ids.size
     assert_predicate AuthBoundaryAuthorityMap, :unique_client_ids?
     assert_predicate AuthBoundaryAuthorityMap, :no_overlap_with_deprecated_ids?
     AuthBoundaryAuthorityMap.retired_browser_paths.each do |path|

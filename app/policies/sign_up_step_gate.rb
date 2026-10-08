@@ -67,6 +67,8 @@ class SignUpStepGate
   CREATE_STEPS = %i(otp passkey).freeze
 
   class << self
+    public
+
     def for_show(controller:, surface:, family:, step:)
       new(controller: controller, surface: surface, family: family, step: step, mode: :show).call
     end
@@ -108,6 +110,8 @@ class SignUpStepGate
     @step = step.to_sym
     @mode = mode.to_sym
   end
+
+  public
 
   def call
     return failure("unsupported sign-up route") unless route_known?

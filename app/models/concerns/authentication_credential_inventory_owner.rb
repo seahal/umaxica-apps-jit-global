@@ -6,6 +6,8 @@ module AuthenticationCredentialInventoryOwner
 
   include AuthenticationContactabilityOwner
 
+  public
+
   def authentication_credential_inventory(excluding: nil, reload: false)
     AuthenticationCredentialInventory.call(self, excluding: excluding, reload: reload)
   end

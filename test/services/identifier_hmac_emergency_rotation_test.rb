@@ -8,9 +8,7 @@ class IdentifierHmacEmergencyRotationTest < ActiveSupport::TestCase
   setup do
     @user = clients(:one)
     @staff = operators(:one)
-    @visitor = create_verified_visitor_with_email(
-      email_address: "hmac-rotation-seed-visitor-#{SecureRandom.hex(4)}@example.com",
-    )
+    @visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
   end
 
   test "overwrites stale identifier digests across user staff and visitor records" do
@@ -62,21 +60,52 @@ class IdentifierHmacEmergencyRotationTest < ActiveSupport::TestCase
       record.update_columns(digest_column => "stale-#{SecureRandom.hex(24)}")
     end
 
-    result = IdentifierHmacEmergencyRotation.new.call
+    app_connection = AppZenithRecord.lease_connection.raw_connection
+    com_connection = ComZenithRecord.lease_connection.raw_connection
+    org_connection = OrgZenithRecord.lease_connection.raw_connection
+    app_email = IdentifierHmacEmergencyRotation.new(
+      realm: "app", channel: "email", maintenance_connection: app_connection,
+    ).call
+    app_telephone = IdentifierHmacEmergencyRotation.new(
+      realm: "app", channel: "telephone", maintenance_connection: app_connection,
+    ).call
+    org_email = IdentifierHmacEmergencyRotation.new(
+      realm: "org", channel: "email", maintenance_connection: org_connection,
+    ).call
+    org_telephone = IdentifierHmacEmergencyRotation.new(
+      realm: "org", channel: "telephone", maintenance_connection: org_connection,
+    ).call
+    com_email = IdentifierHmacEmergencyRotation.new(
+      realm: "com", channel: "email", maintenance_connection: com_connection,
+    ).call
+    com_telephone = IdentifierHmacEmergencyRotation.new(
+      realm: "com", channel: "telephone", maintenance_connection: com_connection,
+    ).call
 
-    assert_operator result.user_emails_updated, :>=, 1
-    assert_operator result.user_telephones_updated, :>=, 1
-    assert_operator result.staff_emails_updated, :>=, 1
-    assert_operator result.staff_telephones_updated, :>=, 1
-    assert_operator result.visitor_emails_updated, :>=, 1
-    assert_operator result.visitor_telephones_updated, :>=, 1
-    assert_equal 0, result.records_failed
+    assert_operator app_email.user_emails_updated, :>=, 1
+    assert_operator app_telephone.user_telephones_updated, :>=, 1
+    assert_operator org_email.staff_emails_updated, :>=, 1
+    assert_operator org_telephone.staff_telephones_updated, :>=, 1
+    assert_operator com_email.visitor_emails_updated, :>=, 1
+    assert_operator com_telephone.visitor_telephones_updated, :>=, 1
+    [app_email, app_telephone, org_email, org_telephone, com_email, com_telephone].each do |result|
+      assert_equal 0, result.records_failed
+    end
 
-    records.each do |record, identifier_column, digest_column, digest_method|
-      identifier = record.reload.public_send(identifier_column)
-      expected = IdentifierBlindIndex.public_send(digest_method, identifier)
+    records.each do |record, _identifier_column, digest_column, _digest_method|
+      record.reload
+      expected =
+        case record
+        when ClientEmail, VisitorEmail, OperatorEmail
+          IdentifierBlindIndex.bidx_for_email(record.address, realm: record.class.identifier_hmac_realm)
+        when ClientTelephone, VisitorTelephone, OperatorTelephone
+          IdentifierBlindIndex.bidx_for_telephone(record.number, realm: record.class.identifier_hmac_realm)
+        end
 
-      assert_equal expected, record.public_send(digest_column)
+      # A failed comparison must not expose identifier lookup HMACs in test output.
+      # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
+      assert expected == record[digest_column], "The selected normalized identifier must match its current realm key"
+      # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
     end
   end
 end
@@ -182,7 +211,7 @@ class IdentifierHmacEmergencyRotationTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",
@@ -197,7 +226,7 @@ class IdentifierHmacEmergencyRotationTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
           otp_private_key: SecureRandom.base64(24),
           otp_counter: "",
@@ -493,7 +522,7 @@ class IdentifierHmacEmergencyRotationTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

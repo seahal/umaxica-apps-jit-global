@@ -54,6 +54,7 @@ if Rails.env.development?
 end
 
 require_relative "../lib/jit_security_active_record_encryption_key_provider"
+require_relative "../lib/realm_identifier_encryption_key_provider"
 require_relative "../lib/app_config_loader"
 require_relative "../lib/request_body_size_limit"
 require_relative "../lib/credential_deletion_finalizer"
@@ -150,8 +151,8 @@ module Jit
     # Active Record Encryption Configuration
     if %w(test production development).include?(Rails.env)
       encryption_keys = JitSecurityActiveRecordEncryptionKeyProvider.fetch
-      config.active_record.encryption.primary_key = encryption_keys.fetch(:current)
-      config.active_record.encryption.previous = encryption_keys[:previous].map { |previous_key| { key: previous_key } }
+      config.active_record.encryption.primary_key = encryption_keys.fetch(:previous) + [encryption_keys.fetch(:current)]
+      config.active_record.encryption.previous = []
       config.active_record.encryption.deterministic_key = encryption_keys.fetch(:deterministic)
       config.active_record.encryption.key_derivation_salt = encryption_keys.fetch(:key_derivation_salt)
     end

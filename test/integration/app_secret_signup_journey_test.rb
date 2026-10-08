@@ -4,6 +4,8 @@ require "test_helper"
 require "webauthn/fake_client"
 
 class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   SECRET_LIFETIME_VALUES = {
     "APP_SECRET_ISSUANCE_TTL_SECONDS" => "600",
     "APP_SECRET_PURGE_DELAY_SECONDS" => "86400",
@@ -12,6 +14,8 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
   }.freeze
 
   setup do
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
     @previous_lifetimes = ENV.to_h.slice(*SECRET_LIFETIME_VALUES.keys)
@@ -86,13 +90,32 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       telephone = ClientTelephone.find_by!(public_id: registration.fetch("public_id"))
       flow = ClientSignUpFlow.find_by!(public_id: session[:auth_app_up_sequence_id])
       flow_binding = SignFlowBindingCodec.encode(flow: flow, surface: :app)
-      otp = telephone.get_otp
+      transaction = ClientTelephoneCeremonyTransaction.find_by!(telephone_candidate_ref: telephone.public_id)
+      delivery =
+        (enqueued_jobs + performed_jobs).reverse.find do |entry|
+          next false unless entry.fetch(:job) == Outbound::SmsDeliveryJob
+
+          encrypted = entry.fetch(:args).fetch(0).fetch("encrypted_payload")
+          OutboundSensitivePayload.decrypt_sms_delivery(encrypted).fetch(:otp_binding)[3] == transaction.transaction_id
+        end
+      delivery_params = OutboundSensitivePayload.decrypt_sms_delivery(
+        delivery.fetch(:args).fetch(0).fetch("encrypted_payload"),
+      )
+      code = delivery_params.fetch(:otp_code)
+
+      assert_equal ["app", "sign_up", flow.public_id, transaction.transaction_id,
+                    transaction.otp_generation,], delivery_params.fetch(:otp_binding)
+      queued_contains_code = JSON.generate(delivery.fetch(:args)).include?(code)
+
+      assert_not queued_contains_code, "Queued SMS must not contain the plaintext signup code"
       patch auth_app_sign_up_check_telephone_otp_path(ri: "jp", fb: flow_binding),
             headers: headers.merge("X-CSRF-Token" => csrf), params: {
-              user_telephone: { pass_code: ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter)) },
+              user_telephone: { pass_code: code },
             }
 
       assert_response :redirect
+      assert_predicate transaction.reload.otp_consumed_at, :present?
+      assert_nil transaction.otp_verifier
       flow.reload
       get auth_app_sign_up_guard_telephone_path(ri: "jp", fb: flow_binding)
       actor = telephone.user

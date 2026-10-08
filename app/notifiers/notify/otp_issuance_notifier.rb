@@ -19,9 +19,15 @@ module Notify
 
     def issue(record:, otp_code:, verification_token: nil, public_id: nil, purpose: nil,
               auth_ceremony_session_ref: nil, auth_email_otp_generation: nil,
-              sign_up_flow_ref: nil, sign_up_otp_counter: nil,
-              contact_ceremony_transaction_ref: nil, contact_otp_counter: nil)
+              sign_up_flow_ref: nil, sign_up_email_transaction_ref: nil, sign_up_email_otp_generation: nil,
+              contact_ceremony_transaction_ref: nil, contact_otp_generation: nil,
+              email_ceremony_transaction_ref: nil, email_otp_generation: nil)
       raise ArgumentError, "record is required to issue an otp email" if record.nil?
+
+      reentry_binding = EmailReentryOtpDeliveryBindingValue.for(
+        purpose: purpose, email_ceremony_transaction_ref: email_ceremony_transaction_ref,
+        email_otp_generation: email_otp_generation,
+      )
 
       binding = AuthEmailOtpDeliveryBindingValue.for(
         purpose: purpose, auth_ceremony_session_ref: auth_ceremony_session_ref,
@@ -35,20 +41,23 @@ module Notify
       }
       notifier_params[:purpose] = purpose.to_s if purpose.present?
       notifier_params.merge!(binding.to_h) if binding
-      if purpose.to_s == "sign_up" || !sign_up_flow_ref.nil? || !sign_up_otp_counter.nil?
-        signup_binding = SignUpOtpDeliveryBindingValue.for_email(
-          purpose: purpose, surface: otp_delivery_surface,
-          sign_up_flow_ref: sign_up_flow_ref, public_id: public_id,
-          sign_up_otp_counter: sign_up_otp_counter,
-        )
-        notifier_params.merge!(signup_binding.email_params) if signup_binding
+      notifier_params.merge!(reentry_binding.to_h) if reentry_binding
+      if purpose.to_s == "sign_up" && %w(app com).exclude?(otp_delivery_surface)
+        raise ArgumentError, "unsupported Email signup delivery realm"
       end
-      registration_binding = ContactRegistrationOtpDeliveryBindingValue.for_email(
-        purpose: purpose.to_s, surface: otp_delivery_surface,
-        contact_ceremony_transaction_ref: contact_ceremony_transaction_ref,
-        public_id: public_id, contact_otp_counter: contact_otp_counter,
+
+      signup_binding = EmailSignUpOtpDeliveryBindingValue.for(
+        purpose: purpose, sign_up_flow_ref: sign_up_flow_ref,
+        sign_up_email_transaction_ref: sign_up_email_transaction_ref,
+        sign_up_email_otp_generation: sign_up_email_otp_generation,
       )
-      notifier_params.merge!(registration_binding.email_params) if registration_binding
+      notifier_params.merge!(signup_binding.to_h) if signup_binding
+      registration_binding = EmailCredentialRegistrationOtpDeliveryBindingValue.for(
+        purpose: purpose,
+        contact_ceremony_transaction_ref: contact_ceremony_transaction_ref,
+        contact_otp_generation: contact_otp_generation,
+      )
+      notifier_params.merge!(registration_binding.to_h) if registration_binding
       with(notifier_params).deliver(record)
     end
 

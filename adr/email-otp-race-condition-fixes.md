@@ -2,6 +2,10 @@
 
 **Status:** Accepted
 
+The attempt-window-reset and shared-channel policy decisions are superseded by
+[Realm-separated identifiers and dead history](realm-separated-identifiers-and-dead-history.md).
+Row-lock atomicity remains required; issuance, expiry and cancellation do not erase failed attempts.
+
 ## Context
 
 Two race conditions were identified in the `Email` concern (`app/models/concerns/email.rb`) and the
@@ -192,7 +196,10 @@ an allowlisted operational event without references or code; it is not an author
 
 ### Shared verification failure budget
 
-The approved destination counter is owned by `OtpVerificationFailureBudget`. Its Valkey key is
+The destination counter is shared across candidates, not across channel policy implementations.
+The former `OtpVerificationFailureBudget` class is superseded by independent
+`EmailOtpVerificationFailureBudget` and `TelephoneOtpVerificationFailureBudget` classes under the
+2026-10-07 current contract. Their existing Valkey key is
 `otp-verification:<surface>:<purpose>:<channel>:<existing destination digest>`. Candidate, flow,
 browser and owner are deliberately absent so recreating those objects cannot reset the shared
 budget. Existing candidate attempt limits remain independent. Atomic verification counts five

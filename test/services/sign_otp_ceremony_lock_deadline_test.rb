@@ -3,6 +3,13 @@
 require "test_helper"
 
 class SignOtpCeremonyLockDeadlineTest < ActiveSupport::TestCase
+  setup do
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+  end
+
   [
     [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
     [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
@@ -25,17 +32,22 @@ class SignOtpCeremonyLockDeadlineTest < ActiveSupport::TestCase
             owner_key => owner.id, :confirm_policy => "1",
             ((channel == :email) ? :address : :number) => destination,
           )
-          private_key = ROTP::Base32.random_base32
           now = flow_model.database_now
-          contact.store_otp(private_key, 1, (now + 10.minutes).to_i)
-          contact.update!(otp_last_sent_at: now - 2.minutes) if operation == :issue! && channel == :email
-          code = ROTP::HOTP.new(private_key).at(1).to_s
           flow = flow_model.create!(
             principal_id: owner.id, status_id: flow_model::STATUS_MODEL::STARTED, step: "start",
-            nonce_digest: flow_model.digest_nonce(SecureRandom.hex(32)), issued_at: now,
+            nonce_digest: flow_model.digest_nonce("deadline-otp-browser"), issued_at: now,
             expires_at: now + 5.minutes, entry_method: channel.to_s,
             pending_contact_type: channel.to_s, pending_contact_id: contact.id,
           )
+          issued =
+            if channel == :email
+              EmailSignUpOtpIssuer.call(flow: flow, email: contact, session_nonce: "deadline-otp-browser")
+            else
+              TelephoneSignUpOtpIssuer.call(flow: flow, telephone: contact, session_nonce: "deadline-otp-browser")
+            end
+
+          assert_predicate issued, :success?
+          contact.update!(otp_last_sent_at: now - 2.minutes) if operation == :issue!
           calls = 0
           clock =
             lambda do
@@ -44,16 +56,24 @@ class SignOtpCeremonyLockDeadlineTest < ActiveSupport::TestCase
             end
           result = nil
           flow_model.stub(:database_now, clock) do
-            arguments = {
-              purpose: :sign_up,
-              surface: surface,
-              channel: channel,
-              subject: flow,
-              destination: destination,
-              code: code,
-              session_nonce: flow.public_id,
-            }
-            result = (operation == :issue!) ? SignOtpCeremony.issue!(**arguments) : SignOtpCeremony.verify!(**arguments)
+            arguments = { flow: flow, session_nonce: "deadline-otp-browser" }
+            if channel == :email
+              arguments[:email] = contact
+              result =
+                if operation == :issue!
+                  EmailSignUpOtpIssuer.call(**arguments)
+                else
+                  EmailSignUpOtpVerificationCommitter.call(**arguments, code: issued.code)
+                end
+            else
+              arguments[:telephone] = contact
+              result =
+                if operation == :issue!
+                  TelephoneSignUpOtpIssuer.call(**arguments)
+                else
+                  TelephoneSignUpOtpVerificationCommitter.call(**arguments, code: issued.code)
+                end
+            end
           end
 
           assert_not result.success?, "a correct code cannot authorize an overdue Ticket"
@@ -61,7 +81,7 @@ class SignOtpCeremonyLockDeadlineTest < ActiveSupport::TestCase
 
           assert expired, "overdue Ticket must durably enter EXPIRED before refusal"
           assert_nil contact.reload.binding_finalized_at
-          assert_equal owner.id, contact.public_send(owner_key)
+          assert_equal owner.id, contact[owner_key]
         end
       end
     end

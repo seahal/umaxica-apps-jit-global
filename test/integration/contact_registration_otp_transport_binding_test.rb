@@ -38,30 +38,42 @@ class ContactRegistrationOtpTransportBindingTest < ActiveSupport::TestCase
             ((channel == :email) ? :raw_address : :raw_number) => destination,
             **((channel == :telephone) ? { confirm_using_mfa: "1" } : {}),
           )
-          secret = ROTP::Base32.random_base32
-          contact.store_otp(secret, 1, (contact.class.database_now + 10.minutes).to_i)
-          otp = contact.get_otp
-          code = ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter)).to_s
           nonce = SecureRandom.urlsafe_base64(32)
-          transaction = ContactRegistrationOtpIssuer.call!(
-            actor:, token:, contact:, channel:, browser_nonce: nonce, code:,
-          )
+          issued =
+            case channel
+            when :email
+              EmailCredentialRegistrationOtpIssuer.call(actor:, token:, email: contact, browser_nonce: nonce)
+            when :telephone
+              TelephoneCredentialRegistrationOtpIssuer.call(actor:, token:, telephone: contact, browser_nonce: nonce)
+            end
+
+          assert_predicate issued, :success?
+          transaction = issued.transaction
+          code = issued.code
+          generation = transaction.otp_generation
           provider = Minitest::Mock.new
           message_style = (state == :current_localized) ? :localized_verification : :default
           expected_body =
             (state == :current_localized) ? I18n.t("sign.telephone_verification.sms_message", code:) :
                               "Your verification code: #{code}"
           clear_enqueued_jobs
-          adapter = OtpAdapter.for(surface:, channel:)
-
-          assert_instance_of((channel == :email) ? OtpEmailAdapter : OtpTelephoneAdapter, adapter)
-
-          OutboundSms.stub(:provider, provider) do
-            adapter.deliver(
+          if channel == :email
+            notifier = (surface == :app) ? Notify::App::OtpNotifier : Notify::Com::OtpNotifier
+            notifier.issue(
               record: contact, otp_code: code, purpose: "credential_registration", public_id: contact.public_id,
-              contact_ceremony_transaction_ref: transaction.transaction_id, contact_otp_counter: "1",
-              message_style:,
+              contact_ceremony_transaction_ref: transaction.transaction_id, contact_otp_generation: generation,
             )
+          else
+            adapter = OtpTelephoneAdapter.new(surface:)
+
+            assert_instance_of OtpTelephoneAdapter, adapter
+            OutboundSms.stub(:provider, provider) do
+              adapter.deliver(
+                record: contact, otp_code: code, purpose: "credential_registration", public_id: contact.public_id,
+                contact_ceremony_transaction_ref: transaction.transaction_id, contact_otp_generation: generation,
+                message_style:,
+              )
+            end
           end
 
           assert_equal 1, enqueued_jobs.length
@@ -69,33 +81,54 @@ class ContactRegistrationOtpTransportBindingTest < ActiveSupport::TestCase
 
           assert_not arguments.to_s.include?(code), "Queued transport must not expose the plaintext OTP"
           if channel == :email
-            params = arguments.last.fetch("params").symbolize_keys
+            assert_equal OtpNotifierEmailDeliveryJob, enqueued_jobs.first.fetch(:job)
+            params = ActiveJob::Arguments.deserialize(arguments).last.fetch(:params).symbolize_keys
+            params[:email_address] = destination
 
             assert params.fetch(:contact_ceremony_transaction_ref) == transaction.transaction_id,
                    "Email must retain the original ceremony UUID"
             assert params.fetch(:public_id) == contact.public_id, "Email must retain the original Contact"
             assert_equal "credential_registration", params.fetch(:purpose)
-            assert_equal "1", params.fetch(:contact_otp_counter)
+            assert params.fetch(:contact_otp_generation) == generation, "Email must retain the original generation"
             assert OutboundSensitivePayload.decrypt_email_otp(params.fetch(:encrypted_hotp_token)) == code,
-                   "Email ciphertext must contain the issued HOTP"
+                   "Email ciphertext must contain the issued random code"
           else
             payload = OutboundSensitivePayload.decrypt_sms_delivery(arguments.first.fetch("encrypted_payload"))
 
-            assert_equal 2, payload.fetch(:version)
+            assert_equal 4, payload.fetch(:version)
             assert payload.fetch(:otp_binding) ==
-              [surface.to_s, "credential_registration", transaction.transaction_id, contact.public_id, "1"],
+              [surface.to_s, "credential_registration", transaction.transaction_id, contact.public_id, generation],
                    "SMS envelope must retain the complete original five-tuple"
             assert payload.fetch(:to) == destination, "SMS must retain the original destination"
-            assert payload.fetch(:body) == expected_body, "SMS must encrypt the issued HOTP in the selected template"
+            assert payload.fetch(:otp_code) == code, "SMS must encrypt the issued random code"
+            assert payload.fetch(:body) == expected_body, "SMS must encrypt the issued code in the selected template"
           end
           case state
           when :verified
-            assert_equal :verified, ContactRegistrationOtpVerificationCommitter.call!(
-              actor:, token:, contact:, transaction:, channel:, browser_nonce: nonce, code:,
-            )
-            assert_nil contact.reload.get_otp
+            verified =
+              case channel
+              when :email
+                EmailCredentialRegistrationOtpVerificationCommitter.call(
+                  actor:, token:, email: contact, transaction:, browser_nonce: nonce, code:,
+                )
+              when :telephone
+                TelephoneCredentialRegistrationOtpVerificationCommitter.call(
+                  actor:, token:, telephone: contact, transaction:, browser_nonce: nonce, code:,
+                )
+              end
+
+            assert_predicate verified, :success?
+            assert_predicate verified, :verified_evidence?
+            assert_nil transaction.reload.otp_verifier
+            assert_not_nil transaction.otp_consumed_at
+            assert_not_nil transaction.otp_receipt_verifier
           when :reissued
-            contact.store_otp(secret, 2, (contact.class.database_now + 10.minutes).to_i)
+            case channel
+            when :email then transaction.reissue_email_otp!
+            when :telephone then transaction.issue_telephone_otp!(purpose: "credential_registration")
+            end
+
+            assert_not_equal generation, transaction.reload.otp_generation
           when :revoked
             token.revoke!
           when :expired
@@ -109,7 +142,7 @@ class ContactRegistrationOtpTransportBindingTest < ActiveSupport::TestCase
                   { email_candidate_ref: contact.public_id, normalized_email_digest: contact.address_digest } :
                   { telephone_candidate_ref: contact.public_id, normalized_number_digest: contact.number_digest }
               other_transaction = flow_model.create_transaction!(
-                surface:, actor_ref: actor.public_id, session_ref: token.public_id, operation: "registration",
+                surface:, actor_ref: actor.public_id, session_ref: transaction.session_ref, operation: "registration",
                 **candidate_fields,
               )
               replacement_ref = other_transaction.transaction_id
@@ -132,6 +165,7 @@ class ContactRegistrationOtpTransportBindingTest < ActiveSupport::TestCase
             if channel == :email
               params[:encrypted_hotp_token] = OutboundSensitivePayload.encrypt_email_otp(wrong_code)
             else
+              payload[:otp_code] = wrong_code
               payload[:body] = "Your verification code: #{wrong_code}"
             end
           end
@@ -160,7 +194,9 @@ class ContactRegistrationOtpTransportBindingTest < ActiveSupport::TestCase
                 fields == { to: destination, title: "Verification code", body: expected_body }
               end
             end
-            encrypted = OutboundSensitivePayload.encrypt_sms_delivery(**payload.slice(:to, :title, :body, :otp_binding))
+            encrypted = OutboundSensitivePayload.encrypt_sms_delivery(
+              **payload.slice(:to, :title, :body, :otp_binding, :otp_code),
+            )
             OutboundSms.stub(:provider, provider) do
               Outbound::SmsDeliveryJob.perform_now(encrypted_payload: encrypted)
             end

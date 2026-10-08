@@ -88,6 +88,8 @@ module Warp
         "visitor"
       end
 
+      public :browser_rp_client_id, :browser_rp_resource_type
+
       def oidc_sign_host
         ENV.fetch("PRIVATE_AUTH_CORPORATE_URL")
       end

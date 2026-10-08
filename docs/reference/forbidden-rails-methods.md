@@ -214,6 +214,10 @@ purge needs.
 
 Sanctioned call sites (do not "fix" these into row-by-row `destroy`):
 
+Email/Telephone Contact collection is the explicit exception to that set-based prescription:
+`adr/realm-separated-identifiers-and-dead-history.md` requires separate history-aware locked purgers.
+The exception does not extend to Avatar, generic retained records or cross-database child purging.
+
 - `app/jobs/retention_purge_job.rb`, `app/jobs/dpop_proof_state_purge_job.rb`
 - `app/services/retention_cross_database_child_purge.rb`
 - `app/services/identity_*_ceremony_transaction_purger.rb`

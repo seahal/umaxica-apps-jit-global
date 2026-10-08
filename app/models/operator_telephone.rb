@@ -32,8 +32,17 @@
 #
 
 class OperatorTelephone < OrgPrincipalRecord
+  IDENTIFIER_REALM = "org"
+  encrypts :number, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
+  encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
+
   alias_attribute :staff_telephone_status_id, :staff_identity_telephone_status_id
   include Telephone
+  include TelephoneDeadIdentifierHistory
+
+  after_initialize :initialize_telephone_otp_state
+
+  before_destroy :archive_dead_telephone_identifier, prepend: true
 
   self.filter_attributes += %w(number)
 
@@ -66,6 +75,28 @@ class OperatorTelephone < OrgPrincipalRecord
   end
 
   # Note: :number encryption is handled by Telephone concern
+
+  public
+
+  def finalize_telephone_registration!(transaction:, code:, session_ref:)
+    with_lock do
+      unless transaction.is_a?(OperatorTelephoneCeremonyTransaction) &&
+          transaction.surface == "org" && transaction.normalized_number_digest == number_digest &&
+          transaction.telephone_registration_otp_evidence?(
+            code: code, actor_ref: staff.public_id, session_ref: session_ref, candidate_ref: id.to_s,
+          )
+        raise ArgumentError, "ORG Telephone registration evidence is unavailable"
+      end
+      return self if staff_telephone_status_id == OperatorTelephoneStatus::VERIFIED
+
+      unless staff_telephone_status_id == OperatorTelephoneStatus::UNVERIFIED
+        raise ArgumentError, "ORG Telephone registration candidate is not pending"
+      end
+
+      update!(staff_telephone_status_id: OperatorTelephoneStatus::VERIFIED)
+      self
+    end
+  end
 
   private
 end

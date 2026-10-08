@@ -4,6 +4,27 @@
 
 Accepted on 2026-05-18.
 
+Amended on 2026-10-07 by [realm-separated identifiers](realm-separated-identifiers-and-dead-history.md):
+rotation requires an explicit realm and channel and visits only that one identifier model.
+The six dedicated HMAC KEY names replace the two global SALT names. The maintenance freeze is
+scoped to the selected realm/channel; no cross-realm write or global rotation is implied.
+
+Amended on 2026-10-08 under the owner's explicit limited-DDL and maintenance authorization:
+recalculation uses a separate explicit PostgreSQL maintenance connection and channel-scoped
+SECURITY DEFINER functions, not ordinary model updates. The normal binding writer remains
+immutable. Each function can mutate only its digest column, checks the previous digest while
+holding the Source lock, and inserts an atomic internal audit fact. The scoped definer and caller
+roles are NOLOGIN; the migration creates no login memberships. Definer membership, general
+trigger disabling, owner/PII/binding changes and exception flags are excluded.
+
+The internal ledger contains only `id`, `operation_ref`, `channel`, `record_id`, `actor_role` and
+`occurred_at`. It is append-only during normal operation and stores the authenticated session
+role, not PII, digests or keys. Failed audit insertion rolls back the update; unchanged digests
+produce no event. Nonempty audit tables prevent destructive migration rollback until the separate
+retention procedure is resolved. Production role provisioning and secret changes remain outside
+this local implementation authorization. The updated operational runbook describes the dedicated
+command and restricted connection requirements.
+
 ## Context
 
 Email and telephone records store two forms of the same identifier:
@@ -27,13 +48,13 @@ rotate the HMAC keys used for the digest columns.
 If an identifier HMAC key is exposed or suspected to be exposed, rotation is handled as an emergency
 outage procedure.
 
-The application will stop writes to email and telephone identifier records, replace the exposed HMAC
+The application will stop writes to the affected realm/channel identifier records, replace the exposed HMAC
 key, and overwrite the existing digest columns in place from the encrypted source values.
 
 The current design does not add `address_digest_v2`, `number_digest_v2`, or equivalent parallel
 columns for emergency rotation.
 
-The affected model set is:
+The explicitly selectable model set is:
 
 - `ClientEmail`, `OperatorEmail`, `VisitorEmail`
 - `ClientTelephone`, `OperatorTelephone`, `VisitorTelephone`

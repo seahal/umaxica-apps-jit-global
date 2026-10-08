@@ -102,9 +102,9 @@ class SignUpOtpDeliveryGuard
     expected_digest = (channel == :email) ? contact.address_digest : contact.number_digest
     delivered_digest =
       if channel == :email
-        IdentifierBlindIndex.bidx_for_email(destination)
+        IdentifierBlindIndex.bidx_for_email(destination, realm: contact.class.identifier_hmac_realm)
       else
-        IdentifierBlindIndex.bidx_for_telephone(destination)
+        IdentifierBlindIndex.bidx_for_telephone(destination, realm: contact.class.identifier_hmac_realm)
       end
     return false unless delivered_digest == expected_digest
 

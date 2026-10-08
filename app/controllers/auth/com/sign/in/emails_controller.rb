@@ -12,7 +12,7 @@ module Auth
 
           include CommonRedirect
 
-          include CommonOtp
+          include EmailOtpResponseTiming
 
           include SessionLimitGate
           include ::SurfaceInertiaPage
@@ -49,7 +49,7 @@ module Auth
           )
           rate_limit(
             to: 1,
-            within: CommonOtpPolicy::SEND_COOLDOWN,
+            within: EmailOtpPolicy::SEND_COOLDOWN,
             by: -> { sign_in_identifier_rate_limit_key },
             scope: "auth_com_sign_in",
             name: "email_create_identifier_cooldown",
@@ -136,7 +136,7 @@ module Auth
 
             verification = admitted_auth_ceremony_session.verify_email_otp!(code: @user_email.pass_code)
             visitor = verification.contact&.visitor
-            unless verification.success?
+            unless verification.verified_evidence?
               @user_email.errors.add(:pass_code, t("sign.app.authentication.email.update.invalid_code"))
               return render inertia: "auth/com/sign/in/emails/edit", props: sign_in_email_edit_props,
                             status: :unprocessable_content
@@ -186,7 +186,7 @@ module Auth
             normalized_address = validate_and_normalize_email(raw_address)
             return "invalid:#{request.remote_ip}" if normalized_address.blank?
 
-            "email:#{IdentifierBlindIndex.bidx_for_email(normalized_address)}"
+            "email:#{IdentifierBlindIndex.bidx_for_email(normalized_address, realm: :com)}"
           end
 
           def verify_email_otp_turnstile
@@ -266,7 +266,6 @@ module Auth
               @user_email = load_session_record(
                 :user_email_authentication_id,
                 VisitorEmail,
-                check_otp_expiry: false,
                 custom: lambda { |email|
                   email.present? && admitted_auth_ceremony_session.email_otp_challenge_current?(contact: email)
                 },
@@ -351,7 +350,7 @@ module Auth
 
             :ok
           ensure
-            ensure_min_elapsed(started, CommonOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
+            ensure_min_elapsed(started, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
           end
 
           def otp_request_rate_limited?(user_email)
@@ -364,7 +363,7 @@ module Auth
             last_sent_at = session[:sign_in_email_cooldown_at]
             return false if last_sent_at.blank?
 
-            last_sent_at.to_i > CommonOtpPolicy::SEND_COOLDOWN.ago.to_i
+            last_sent_at.to_i > EmailOtpPolicy::SEND_COOLDOWN.ago.to_i
           end
 
           def record_sign_in_email_cooldown!(normalized_address)

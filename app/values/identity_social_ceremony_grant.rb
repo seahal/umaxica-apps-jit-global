@@ -41,6 +41,10 @@ class IdentitySocialCeremonyGrant
     new(payload, kid: header["kid"], now: now)
   end
 
+  public_class_method :issue, :decode
+
+  public
+
   def [](key) = payload[key.to_s]
 
   def fetch(key, *, &) = payload.fetch(key.to_s, *, &)
@@ -69,4 +73,6 @@ class IdentitySocialCeremonyGrant
       "iat" => now.to_i,
     }
   end
+
+  public_class_method :default_claims
 end

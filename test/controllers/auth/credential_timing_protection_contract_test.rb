@@ -20,6 +20,13 @@ class AuthCredentialTimingProtectionContractTest < ActiveSupport::TestCase
     Auth::App::Sign::In::EmailsController,
   ].freeze
 
+  test "Email authentication timing does not expose identifier-backed shared OTP policy" do
+    [Auth::App::Sign::In::EmailsController, Auth::Com::Sign::In::EmailsController,
+     SignInOtpResender, EnforcementRecoveryCeremonyFlow, WithdrawalCeremonyReentry,].each do |boundary|
+      assert_not_includes boundary.included_modules.map(&:name), "CommonOtp", boundary.name
+    end
+  end
+
   test "credential controllers that include MinimumResponseBudget register start and enforce callbacks" do
     MINIMUM_RESPONSE_BUDGET_CONTROLLERS.each do |controller_class|
       filters = controller_class._process_action_callbacks.map(&:filter)

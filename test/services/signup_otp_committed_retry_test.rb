@@ -2,9 +2,14 @@
 
 require "test_helper"
 
-# rubocop:disable Minitest/AssertEqual -- Proof snapshots must not disclose references or keyed digests on failure.
-
 class SignupOtpCommittedRetryTest < ActiveSupport::TestCase
+  setup do
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+  end
+
   [
     [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
     [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
@@ -30,61 +35,64 @@ class SignupOtpCommittedRetryTest < ActiveSupport::TestCase
             end,
         )
         now = flow_model.database_now
-        private_key = ROTP::Base32.random_base32
-        contact.store_otp(private_key, 1, (now + 10.minutes).to_i)
-        code = ROTP::HOTP.new(private_key).at(1).to_s
+        nonce = SecureRandom.hex(32)
         flow = flow_model.create!(
           principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
-          nonce_digest: flow_model.digest_nonce(SecureRandom.hex(32)), issued_at: now,
+          nonce_digest: flow_model.digest_nonce(nonce), issued_at: now,
           expires_at: now + 15.minutes, entry_method: channel.to_s,
           pending_contact_type: channel.to_s, pending_contact_id: contact.id,
         )
-        arguments = {
-          purpose: :sign_up,
-          surface: surface,
-          channel: channel,
-          subject: flow,
-          destination: destination,
-          code: code,
-          session_nonce: flow.public_id,
-        }
-        recorded = SignUpOtpChallengeRecorder.call(flow: flow, record: contact, channel: channel, code: code)
+        issuer = (channel == :email) ? EmailSignUpOtpIssuer : TelephoneSignUpOtpIssuer
+        verifier = (channel == :email) ? EmailSignUpOtpVerificationCommitter : TelephoneSignUpOtpVerificationCommitter
+        arguments = { :flow => flow, channel => contact, :session_nonce => nonce }
+        issued = issuer.call(**arguments)
 
-        assert recorded, "newly issued signup challenge must retain its original authority"
-        first = SignOtpCeremony.verify!(**arguments)
+        assert_predicate issued, :success?, "newly issued signup challenge must retain its original authority"
+        code = issued.code
+        arguments[:code] = code
+        first = verifier.call(**arguments)
 
         assert_predicate first, :success?, "the initial valid comparison must commit verification"
         assert_equal :verified, first.status
-        proof = contact.reload.sign_up_otp_context.deep_dup
-        clock = contact.class.database_now
+        proof = issued.transaction.reload.attributes.slice(
+          "purpose", "otp_generation", "otp_verifier", "otp_consumed_at", "otp_cancelled_at",
+          "otp_receipt_verifier", "otp_result_expires_at",
+        )
+        clock = issued.transaction.class.database_now
         case scenario
-        when "result_before" then clock = Time.iso8601(proof.fetch("result_expires_at")) - Rational(1, 1_000_000)
-        when "result_at" then clock = Time.iso8601(proof.fetch("result_expires_at"))
-        when "result_after" then clock = Time.iso8601(proof.fetch("result_expires_at")) + Rational(1, 1_000_000)
+        when "result_before" then clock = proof.fetch("otp_result_expires_at") - Rational(1, 1_000_000)
+        when "result_at" then clock = proof.fetch("otp_result_expires_at")
+        when "result_after" then clock = proof.fetch("otp_result_expires_at") + Rational(1, 1_000_000)
         when "wrong_code" then arguments[:code] = (code == "000000") ? "000001" : "000000"
         when "other_flow"
+          sibling_nonce = SecureRandom.hex(32)
           sibling = flow_model.create!(
             principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
-            nonce_digest: flow_model.digest_nonce(SecureRandom.hex(32)), issued_at: now, expires_at: now + 15.minutes,
+            nonce_digest: flow_model.digest_nonce(sibling_nonce), issued_at: now, expires_at: now + 15.minutes,
             entry_method: channel.to_s, pending_contact_type: channel.to_s, pending_contact_id: contact.id,
           )
-          arguments.merge!(subject: sibling, session_nonce: sibling.public_id)
+          arguments.merge!(flow: sibling, session_nonce: sibling_nonce)
         when "released"
           contact.finalize_binding!
           contact.release_binding!
         when "cancelled" then SignUpTermination.call(cycle: flow, event: :cancel)
         end
         second = nil
-        contact.class.stub(:database_now, clock) { second = SignOtpCeremony.verify!(**arguments) }
+        issued.transaction.class.stub(:database_now, clock) { second = verifier.call(**arguments) }
         eligible = %w(exact result_before).include?(scenario)
 
-        assert_equal eligible, second.success?, "retry authority must follow binding and the fixed result deadline"
-        assert_equal :verified, second.status if eligible
+        assert_equal eligible, second.verified_evidence?,
+                     "retry authority must follow binding and the fixed result deadline"
+        assert_not second.success?, "Retained proof never creates fresh verification authority"
+        assert_equal :already_verified, second.status if eligible
 
-        assert_nil contact.reload.get_otp
+        assert_nil issued.transaction.reload.otp_verifier
+        contact.reload
         assert_nil contact.binding_finalized_at unless scenario == "released"
 
-        assert_operator proof, :==, contact.sign_up_otp_context, "refusal and retry must preserve the committed proof"
+        proof_unchanged = proof == issued.transaction.attributes.slice(*proof.keys)
+
+        assert proof_unchanged, "Refusal and retry must preserve the committed proof"
         snapshot_keys = proof.keys
 
         assert_not snapshot_keys.include?("otp_private_key")
@@ -93,4 +101,3 @@ class SignupOtpCommittedRetryTest < ActiveSupport::TestCase
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual

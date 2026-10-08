@@ -11,13 +11,46 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
   # opts into a deterministic MemoryStore.
   rate_limit_counters!
 
+  include ActiveJob::TestHelper
+
   setup do
-    @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+    @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! @host
     cookies["csrf_token"] = csrf_token_value
     Rails.configuration.x.rate_limit.fetch(:store).clear
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
+
+    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    https!
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    binding = VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+
+    assert_response :success
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    admission_headers = { "Origin" => "https://#{request.host}", "Sec-Fetch-Site" => "same-origin" }
+    post(
+      "/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf },
+                            headers: admission_headers,
+    )
+
+    assert_response :see_other
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+
+    assert_response :success
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf },
+                                       headers: admission_headers,
+    )
+
+    assert_response :see_other
 
     Prosopite.pause do
       [VisitorStatus::NOTHING, VisitorStatus::ACTIVE].each { |id| VisitorStatus.find_or_create_by!(id: id) }
@@ -44,7 +77,7 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     verify_telephone_via_otp!("+819022220001")
     cycle = current_sign_up_flow
 
-    get auth_com_sign_up_check_telephone_passkey_url(ri: "jp"), headers: default_headers
+    get auth_com_sign_up_check_telephone_passkey_url(ri: "jp", fb: @flow_binding), headers: default_headers
 
     assert_response :success
 
@@ -71,6 +104,7 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     )
 
     assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     VisitorTelephone.order(:created_at).last
   end
 
@@ -78,14 +112,14 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     telephone = start_telephone_signup!(raw_number)
 
     patch(
-      auth_com_sign_up_check_telephone_otp_url(ri: "jp"),
+      auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
       params: { visitor_telephone: { pass_code: otp_code_for(telephone) } },
       headers: default_headers,
     )
 
-    assert_redirected_to auth_com_sign_up_guard_telephone_url(ri: "jp")
+    assert_redirected_to auth_com_sign_up_guard_telephone_url(ri: "jp", fb: @flow_binding)
 
-    get(auth_com_sign_up_guard_telephone_url(ri: "jp"), headers: default_headers)
+    get(auth_com_sign_up_guard_telephone_url(ri: "jp", fb: @flow_binding), headers: default_headers)
 
     telephone.reload
   end
@@ -93,7 +127,7 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
   # The WebAuthn verifier and the credential object are the third-party seam here; everything the
   # controller and the sequence do around them stays real.
   def register_passkey!(cycle, webauthn_suffix)
-    post(auth_com_sign_up_check_telephone_passkey_url(ri: "jp"), headers: default_headers)
+    post(auth_com_sign_up_check_telephone_passkey_url(ri: "jp", fb: @flow_binding), headers: default_headers)
 
     assert_response :ok
     challenge_id = response.parsed_body["challenge_id"]
@@ -114,7 +148,7 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     Webauthn::RegistrationVerifier.stub(:verify!, registration_context) do
       WebAuthn::Credential.stub(:from_create, mock_credential) do
         patch(
-          auth_com_sign_up_check_telephone_passkey_url(ri: "jp"),
+          auth_com_sign_up_check_telephone_passkey_url(ri: "jp", fb: @flow_binding),
           params: {
             challenge_id: challenge_id,
             checkpoint_version: cycle.reload.checkpoint_version,
@@ -130,7 +164,7 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     end
 
     assert_response :created
-    assert_equal auth_com_sign_up_check_telephone_birthdate_path(ri: "jp"),
+    assert_equal auth_com_sign_up_check_telephone_birthdate_path(ri: "jp", fb: @flow_binding),
                  response.parsed_body.fetch("redirect_url")
   end
 
@@ -142,8 +176,20 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
   end
 
   def otp_code_for(telephone)
-    otp_data = telephone.get_otp
-    ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    transaction_ref =
+      VisitorTelephoneCeremonyTransaction.find_by!(
+        telephone_candidate_ref: telephone.public_id,
+      ).transaction_id
+    queued =
+      enqueued_jobs.reverse.find do |job|
+        next false unless job.fetch(:job) == Outbound::SmsDeliveryJob
+
+        payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+        payload.fetch(:otp_binding)[3] == transaction_ref
+      end
+    OutboundSensitivePayload.decrypt_sms_delivery(
+      queued.fetch(:args).fetch(0).fetch("encrypted_payload"),
+    ).fetch(:otp_code)
   end
 
   def default_headers

@@ -88,6 +88,8 @@ module Base
 
           def identity_email_model = VisitorEmail
 
+          def withdrawal_email_ceremony_model = VisitorEmailCeremonyTransaction
+
           def withdrawal_subject_from_email(email) = email&.visitor
 
           def withdrawal_reentry_surface = :com

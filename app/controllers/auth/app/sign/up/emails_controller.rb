@@ -10,7 +10,6 @@ module Auth
           include ::TurnstilePageProps
           include ::CloudflareTurnstile
           include CommonRedirect
-          include CommonOtp
           include SignEmailRegistrable
           include EnforcementIdentifierGate
 
@@ -120,12 +119,24 @@ module Auth
 
           def email_otp_purpose = :sign_up
 
+          def process_email_registration_under_lock
+            has_errors = @user_email.errors.details.except(:user, :user_id).any?
+            cleanup_pending_signup!
+            return { status: false } if has_errors
+
+            @pending_user = EmailSignUpCandidateCreator.call(email: @user_email)
+            { status: :ok, otp_number: nil }
+          end
+
           def send_verification_email(_otp_number)
             bind_sign_up_flow_to_email!(@user_email)
-            SignUpOtpDeliveryIssuer.call(
-              flow: current_sign_up_flow, record: @user_email, channel: :email,
-              verification_token: @user_email.generate_verification_token,
+            issued = EmailSignUpOtpDeliveryIssuer.call(
+              flow: current_sign_up_flow, email: @user_email,
+              session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
             )
+            raise ArgumentError, "initial Email signup challenge was refused" unless issued.success?
+
+            true
           end
 
           # The registration form. `pt` travels in the generated action URL rather than as a prop,
@@ -300,20 +311,10 @@ module Auth
           end
 
           def valid_email_session?
-            return false unless @user_email
-
-            context = @user_email.sign_up_otp_context
-            if context&.fetch("verified_at") && @sign_up_ticket
-              return context.fetch("surface") == "app" && context.fetch("purpose") == "sign_up" &&
-                  context.fetch("flow_ref") == @sign_up_ticket.public_id &&
-                  context.fetch("nonce_digest") == @sign_up_ticket.nonce_digest &&
-                  context.fetch("contact_ref") == @user_email.public_id &&
-                  !@user_email.binding_finalized_at && !@user_email.binding_released? &&
-                  Time.iso8601(context.fetch("result_expires_at")) > @user_email.class.database_now
-            end
-            return false if @user_email.otp_expired?
-
-            @user_email.user_email_status_id == ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP
+            EmailSignUpOtpFormQuery.call(
+              flow: @sign_up_ticket, email: @user_email,
+              session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
+            )
           end
 
           def log_signup_email_errors

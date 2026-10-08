@@ -8,6 +8,7 @@ module TelephoneCeremonyTransactionable
   STATUS_CONSUMED = "consumed"
   STATUSES = [STATUS_PENDING, STATUS_CONSUMED].freeze
   RETENTION_PERIOD = 7.days
+  OPERATIONS = %w(registration replacement sign_up sign_in recovery withdrawal credential_registration).freeze
 
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
@@ -33,7 +34,7 @@ module TelephoneCeremonyTransactionable
     validates :grant_jti, uniqueness: true
     validates :result_jti, uniqueness: true, allow_nil: true
     validates :surface, inclusion: { in: IdentityTelephoneCeremonyContract::SURFACES }
-    validates :operation, inclusion: { in: IdentityTelephoneCeremonyContract::OPERATIONS }
+    validates :operation, inclusion: { in: OPERATIONS }
     validates :status, inclusion: { in: STATUSES }
     validate :surface_matches_transaction_class
     validate :consumed_transaction_has_result
@@ -77,6 +78,8 @@ module TelephoneCeremonyTransactionable
       end
     end
   end
+
+  public
 
   def grant_claims(now: Time.current)
     {

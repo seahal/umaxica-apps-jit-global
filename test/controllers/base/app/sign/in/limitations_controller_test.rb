@@ -10,6 +10,15 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
   tests Base::App::Sign::In::LimitationsController
 
   setup do
+    reference_now = ClientSignInFlow.database_now
+    ClientSessionLimitResolutionState::DEFAULTS.each do |id|
+      ClientSessionLimitResolutionState.find_or_create_by!(id: id) do |state|
+        state.created_at = reference_now
+        state.updated_at = reference_now
+      end
+    end
+    ClientSignOutFlowKind.ensure_defaults!
+    ClientSignOutFlowStatus.ensure_defaults!
     @request.host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     @actor = Client.create!(status_id: ClientStatus::NOTHING, birthdate: "2000-01-01")
     @existing = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(user: @actor) }

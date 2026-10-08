@@ -143,7 +143,13 @@ class ContactRegistrationOtpVerificationCommitter
       expected = ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter)).to_s
       valid &&= ActiveSupport::SecurityUtils.secure_compare(expected, code)
     end
-    budget = OtpVerificationFailureBudget.new.verify!(
+    verifier_budget =
+      case channel
+      when :email then EmailOtpVerificationFailureBudget.new
+      when :telephone then TelephoneOtpVerificationFailureBudget.new
+      else raise ArgumentError, "unsupported OTP channel"
+      end
+    budget = verifier_budget.verify!(
       surface: surface.to_sym, purpose: :credential_registration, channel: channel,
       destination_digest: destination_digest, valid: valid,
     )
@@ -152,7 +158,7 @@ class ContactRegistrationOtpVerificationCommitter
     return :invalid_code unless valid
     return :verified if retained
 
-    contact.clear_otp
+    contact.clear_otp(reset_attempts: true)
     contact.update!(
       credential_registration_otp_context: context.merge(
         "verified_at" => now.utc.iso8601(6),

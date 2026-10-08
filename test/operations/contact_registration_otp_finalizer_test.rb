@@ -31,7 +31,10 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
                (channel == :email) ? VisitorEmailStatus::VERIFIED : VisitorTelephoneStatus::VERIFIED,
                ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),]
             end
-          actor = owner_model.create!(status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE)
+          actor = owner_model.create!(
+            id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
+            status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+          )
           token =
             (surface == :app) ? ClientToken.create!(user: actor, discard_at: 1.day.from_now) :
                         VisitorToken.create!(visitor: actor, discard_at: 1.day.from_now)
@@ -111,20 +114,36 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
           assert_predicate StepUpResolver.call(token: token.reload, requirement:, now: token.class.database_now),
                            :satisfied?
 
-          secret = ROTP::Base32.random_base32
-          contact.store_otp(secret, 1, (contact.class.database_now + 10.minutes).to_i)
-          otp = contact.get_otp
-          code = ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter)).to_s
           nonce = SecureRandom.urlsafe_base64(32)
-          transaction = ContactRegistrationOtpIssuer.call!(
-            actor:, token:, contact:, channel:, browser_nonce: nonce,
-            code:,
-          )
+          if channel == :email
+            issued = EmailCredentialRegistrationOtpIssuer.call(
+              actor:, token:, email: contact, browser_nonce: nonce,
+            )
+            transaction = issued.transaction
+            code = issued.code
 
-          assert_equal :verified, ContactRegistrationOtpVerificationCommitter.call!(
-            actor:, token:, contact:, transaction:, channel:, browser_nonce: nonce, code:,
-          )
-          proof = contact.reload.credential_registration_otp_context.deep_dup
+            assert_predicate EmailCredentialRegistrationOtpVerificationCommitter.call(
+              actor:, token:, email: contact, transaction:, browser_nonce: nonce, code:,
+            ), :success?
+            proof = transaction.reload.attributes.slice(
+              "otp_consumed_at", "otp_receipt_verifier", "otp_result_expires_at",
+            )
+            finalizer = EmailCredentialRegistrationOtpFinalizer
+          else
+            issued = TelephoneCredentialRegistrationOtpIssuer.call(
+              actor:, token:, telephone: contact, browser_nonce: nonce,
+            )
+            transaction = issued.transaction
+            code = issued.code
+
+            assert_predicate TelephoneCredentialRegistrationOtpVerificationCommitter.call(
+              actor:, token:, telephone: contact, transaction:, browser_nonce: nonce, code:,
+            ), :success?
+            proof = transaction.reload.attributes.slice(
+              "otp_consumed_at", "otp_receipt_verifier", "otp_result_expires_at",
+            )
+            finalizer = TelephoneCredentialRegistrationOtpFinalizer
+          end
           actor_context = ActorValuesContext.empty.with(
             subject: actor, actor_type: (surface == :app) ? :client : :visitor, tld: surface, surface: :base,
           )
@@ -136,6 +155,8 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
                         channel:,
                         browser_nonce: nonce,
                         requirement:, }
+          arguments = arguments.except(:contact, :channel).merge(email: contact, code:) if channel == :email
+          arguments = arguments.except(:contact, :channel).merge(telephone: contact, code:) if channel == :telephone
           case scenario
           when :foreign_browser
             arguments[:browser_nonce] = SecureRandom.urlsafe_base64(32)
@@ -198,15 +219,16 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
               end
 
             ActiveSupport::Notifications.subscribed(fault, "sql.active_record") do
-              assert_raises(ActiveRecord::StatementInvalid) { ContactRegistrationOtpFinalizer.call!(**arguments) }
+              assert_raises(ActiveRecord::StatementInvalid) { finalizer.call!(**arguments) }
             end
 
             assert fired, "The actual persistence boundary must be reached"
             assert ticket_facts == transaction.reload.attributes,
                    "A failed receipt must leave the original Ticket pending"
-            assert proof == contact.reload.credential_registration_otp_context,
-                   "Fault must retain verified Source proof"
-            assert_nil contact.get_otp
+            retained_proof = transaction.reload.attributes.slice(*proof.keys)
+
+            assert proof == retained_proof, "Fault must retain the original verified proof"
+            assert_nil transaction.otp_verifier
             if scenario == :source_fault
               assert original_contact == contact.reload.attributes, "Source failure must roll back candidate binding"
               assert original_previous == previous.reload.attributes, "Source failure must preserve the old binding"
@@ -225,18 +247,18 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
                          root_after: Rational(1, 1_000_000), }.fetch(scenario)
               reads = 0
               clock = -> { reads += 1; (reads == 1) ? root_deadline - 1.second : root_deadline + offset }
-              flow_model.stub(:database_now, clock) { ContactRegistrationOtpFinalizer.call!(**arguments) }
+              flow_model.stub(:database_now, clock) { finalizer.call!(**arguments) }
             elsif %i(proof_before proof_at proof_after).include?(scenario)
               # PostgreSQL timestamptz(6) represents both nearest neighbors of the strict proof deadline.
-              boundary = Time.iso8601(proof.fetch("result_expires_at"))
+              boundary = proof.fetch("otp_result_expires_at")
               offset = { proof_before: -Rational(1, 1_000_000),
                          proof_at: 0,
                          proof_after: Rational(1, 1_000_000), }.fetch(scenario)
-              contact_model.stub(:database_now, boundary + offset) do
-                ContactRegistrationOtpFinalizer.call!(**arguments)
+              flow_model.stub(:database_now, boundary + offset) do
+                finalizer.call!(**arguments)
               end
             else
-              ContactRegistrationOtpFinalizer.call!(**arguments)
+              finalizer.call!(**arguments)
             end
           if %i(success proof_before source_fault receipt_fault root_before).include?(scenario)
             assert_equal :finalized, status
@@ -249,13 +271,23 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
               owner_ref: actor.public_id, actor_ref: actor.public_id, contact_kind: channel.to_s,
             ).count
             assert_predicate transaction.reload, :consumed?
-            assert proof == contact.credential_registration_otp_context, "Finalization must not replace OTP proof"
+            final_proof = transaction.attributes.slice(*proof.keys)
+
+            assert proof == final_proof, "Finalization must not replace OTP proof"
             completed_contact = contact.attributes
             completed_previous = previous.attributes
             completed_ticket = transaction.attributes
             audit_facts = audits.order(:id).map(&:attributes)
 
-            assert_equal :finalized, ContactRegistrationOtpFinalizer.call!(**arguments)
+            retried =
+              if %i(proof_before root_before).include?(scenario)
+                # Returning to the real clock would move before the receipt created by the boundary clock.
+                flow_model.stub(:database_now, transaction.consumed_at) { finalizer.call!(**arguments) }
+              else
+                finalizer.call!(**arguments)
+              end
+
+            assert_equal :finalized, retried
             assert completed_contact == contact.reload.attributes, "Exact retry must not mutate finalized Source"
             assert completed_previous == previous.reload.attributes, "Exact retry must not re-release previous binding"
             assert completed_ticket == transaction.reload.attributes, "Exact retry must retain the original receipt"

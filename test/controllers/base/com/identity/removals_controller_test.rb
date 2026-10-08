@@ -117,7 +117,7 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     VisitorEmail.create!(
       visitor_id: visitor.id,
       address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       binding_finalized_at: VisitorEmail.database_now,
       otp_private_key: SecureRandom.base64(24),

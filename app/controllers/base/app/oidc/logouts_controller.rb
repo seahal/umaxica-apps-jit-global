@@ -32,6 +32,8 @@ module Base
           handle_oidc_end_session_request
         end
 
+        public :create
+
         private
 
         def reject_oidc_logout_challenge!(reason)

@@ -44,9 +44,9 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
             params: { visitor_email: { pass_code: code } }, headers: { "Host" => @host }
 
       assert_response :unprocessable_content
-      assert_equal :verified, OtpVerificationFailureBudget.new.verify!(
+      assert_equal :verified, EmailOtpVerificationFailureBudget.new.verify!(
         surface: :com, purpose: :authentication, channel: :email,
-        destination_digest: IdentifierBlindIndex.bidx_for_email(address), valid: true,
+        destination_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com), valid: true,
       )
     end
     assert_no_difference ["Visitor.count", "VisitorEmail.count", "VisitorToken.count"] do
@@ -57,9 +57,9 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
         assert_response :unprocessable_content
       end
     end
-    assert_equal :locked, OtpVerificationFailureBudget.new.verify!(
+    assert_equal :locked, EmailOtpVerificationFailureBudget.new.verify!(
       surface: :com, purpose: :authentication, channel: :email,
-      destination_digest: IdentifierBlindIndex.bidx_for_email(address), valid: true,
+      destination_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com), valid: true,
     )
   end
 
@@ -98,7 +98,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     retained = ceremony.reload.email_otp_context
     source = contact.reload.attributes
     5.times do
-      OtpVerificationFailureBudget.new.verify!(
+      EmailOtpVerificationFailureBudget.new.verify!(
         surface: :com, purpose: :authentication, channel: :email,
         destination_digest: contact.address_digest, valid: false,
       )
@@ -115,8 +115,9 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
-    @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
+    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+    @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     ActionMailer::Base.deliveries.clear
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
@@ -268,7 +269,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     email = visitor.visitor_emails.last
     email.update!(locked_at: 5.minutes.from_now, otp_attempts_count: Email::MAX_OTP_ATTEMPTS)
 
-    travel CommonOtpPolicy::SEND_COOLDOWN + 1.second do
+    travel EmailOtpPolicy::SEND_COOLDOWN + 1.second do
       assert_no_difference -> { ActionMailer::Base.deliveries.count } do
         post auth_com_sign_in_email_url(ri: "jp"),
              params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
@@ -490,7 +491,6 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   private
-
 end
 
 # DAMP local helper copy for former shared test support.
@@ -594,7 +594,7 @@ class Auth::Com::Sign::In::EmailsControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",
@@ -609,7 +609,7 @@ class Auth::Com::Sign::In::EmailsControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
           otp_private_key: SecureRandom.base64(24),
           otp_counter: "",
@@ -917,7 +917,7 @@ class Auth::Com::Sign::In::EmailsControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

@@ -30,9 +30,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
             headers: { "Host" => @host, "REMOTE_ADDR" => "198.51.100.#{index + 1}" }
 
       assert_response :unprocessable_content
-      assert_equal :verified, OtpVerificationFailureBudget.new.verify!(
+      assert_equal :verified, EmailOtpVerificationFailureBudget.new.verify!(
         surface: :app, purpose: :authentication, channel: :email,
-        destination_digest: IdentifierBlindIndex.bidx_for_email(address), valid: true,
+        destination_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app), valid: true,
       )
     end
     assert_no_difference ["Client.count", "ClientEmail.count", "ClientToken.count"] do
@@ -44,9 +44,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
         assert_response :unprocessable_content
       end
     end
-    assert_equal :locked, OtpVerificationFailureBudget.new.verify!(
+    assert_equal :locked, EmailOtpVerificationFailureBudget.new.verify!(
       surface: :app, purpose: :authentication, channel: :email,
-      destination_digest: IdentifierBlindIndex.bidx_for_email(address), valid: true,
+      destination_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app), valid: true,
     )
   end
 
@@ -65,7 +65,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
       "otp_private_key", "otp_counter", "otp_expires_at", "otp_last_sent_at",
     )
     5.times do
-      OtpVerificationFailureBudget.new.verify!(
+      EmailOtpVerificationFailureBudget.new.verify!(
         surface: :app, purpose: :authentication, channel: :email,
         destination_digest: contact.address_digest, valid: false,
       )
@@ -119,6 +119,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     # assert_equal I18n.t("sign.app.authentication.email.new.you_have_already_logged_in"), response.body
   end
   setup do
+    ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     @original_queue_adapter = ActiveJob::Base.queue_adapter
@@ -344,7 +345,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     )
 
     assert_equal 303, refused_browser.response.status
-    travel CommonOtpPolicy::SEND_COOLDOWN + 1.second do
+    travel EmailOtpPolicy::SEND_COOLDOWN + 1.second do
       refused_browser.post(
         auth_app_sign_in_email_url(ri: "jp"),
         params: { :user_email => { address: contact.address },
@@ -374,8 +375,8 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
       assert_operator time_difference, :<=, max_allowed_difference,
                       "Response times differ too much: valid=#{valid_time.round(4)}s, invalid=#{invalid_time.round(4)}s"
-      assert_operator valid_time, :>=, CommonOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS
-      assert_operator invalid_time, :>=, CommonOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS
+      assert_operator valid_time, :>=, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS
+      assert_operator invalid_time, :>=, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS
     end
   end
 
@@ -874,7 +875,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
       otp_attempts_count: Email::MAX_OTP_ATTEMPTS,
     ).tap(&:finalize_binding!)
 
-    travel CommonOtpPolicy::SEND_COOLDOWN + 1.second do
+    travel EmailOtpPolicy::SEND_COOLDOWN + 1.second do
       assert_no_difference -> { ActionMailer::Base.deliveries.count } do
         post auth_app_sign_in_email_url(ri: "jp"),
              params: {
@@ -1260,7 +1261,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_includes @response.body, I18n.t("sign.app.authentication.email.create.cooldown")
 
     # After cooldown -- allowed again
-    travel CommonOtpPolicy::SEND_COOLDOWN + 1.second do
+    travel EmailOtpPolicy::SEND_COOLDOWN + 1.second do
       post auth_app_sign_in_email_url(ri: "jp"),
            params: {
              :user_email => { address: non_existing },
@@ -1434,7 +1435,7 @@ class Auth::App::Sign::In::EmailsControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",
@@ -1449,7 +1450,7 @@ class Auth::App::Sign::In::EmailsControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
           otp_private_key: SecureRandom.base64(24),
           otp_counter: "",
@@ -1780,7 +1781,7 @@ class Auth::App::Sign::In::EmailsControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

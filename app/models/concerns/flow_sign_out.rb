@@ -7,6 +7,8 @@ module FlowSignOut
   include FlowBase
   include SignFlowStatusBacked
 
+  public
+
   def sign_out_nothing?
     cycle_status?(status_id_for("NOTHING"))
   end

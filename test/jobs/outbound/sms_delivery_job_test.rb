@@ -27,18 +27,25 @@ module Outbound
       assert called
     end
 
-    test "a legacy encrypted-body payload is still delivered during rollout" do
+    test "a legacy encrypted-body payload is refused without delivery or plaintext disclosure" do
       delivered = []
+      reported = []
 
       OutboundSms.stub(:deliver_now, ->(**payload) { delivered << payload }) do
-        SmsDeliveryJob.perform_now(
-          to: "+819012345678",
-          title: "Verification",
-          encrypted_body: OutboundSensitivePayload.encrypt_sms_body("Your code is 123456"),
-        )
+        ActiveSupport.error_reporter.stub(:report, ->(error, **) { reported << error }) do
+          SmsDeliveryJob.perform_now(
+            to: "+819012345678",
+            title: "Verification",
+            encrypted_body: OutboundSensitivePayload.encrypt("Your code is 123456", purpose: "outbound.sms.body"),
+          )
+        end
       end
 
-      assert_equal [{ to: "+819012345678", title: "Verification", body: "Your code is 123456" }], delivered
+      assert_empty delivered
+      assert_equal 1, reported.length
+      assert_instance_of ArgumentError, reported.fetch(0)
+      assert_not_includes reported.fetch(0).message, "123456"
+      assert_not_includes reported.fetch(0).message, "+819012345678"
     end
 
     test "a legacy encrypted-body payload without a recipient is discarded and reported" do
@@ -49,12 +56,13 @@ module Outbound
           SmsDeliveryJob.perform_now(
             to: "",
             title: "Verification",
-            encrypted_body: OutboundSensitivePayload.encrypt_sms_body("Your code is 123456"),
+            encrypted_body: OutboundSensitivePayload.encrypt("Your code is 123456", purpose: "outbound.sms.body"),
           )
         end
       end
 
-      assert_equal ["Incomplete legacy SMS job payload"], reported.map(&:message)
+      assert_equal 1, reported.length
+      assert_match(/unknown keywords?/, reported.fetch(0).message)
     end
 
     test "an envelope mixed with legacy fields is discarded and reported" do
@@ -71,7 +79,8 @@ module Outbound
         end
       end
 
-      assert_equal ["Mixed SMS job payload formats are not accepted"], reported.map(&:message)
+      assert_equal 1, reported.length
+      assert_match(/unknown keywords?/, reported.fetch(0).message)
     end
 
     test "queue name is default" do
@@ -102,7 +111,7 @@ module Outbound
 
       assert_instance_of ArgumentError, error
       assert_equal "application.active_job", context.fetch(:source)
-      assert_match(/Plaintext SMS job payload is no longer accepted/, error.message)
+      assert_match(/unknown keywords?/, error.message)
       assert_not_includes error.message, "123456"
     end
   end

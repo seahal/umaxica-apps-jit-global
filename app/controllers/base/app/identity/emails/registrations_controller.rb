@@ -10,10 +10,8 @@ module Base
           include ::TurnstilePageProps
           include CloudflareTurnstile
           include CommonRedirect
-          include CommonOtp
           include SignEmailRegistrable
           include SignEmailRegistrationFlow
-          include SignSettingsEmailRegistration
           include EnforcementIdentifierGate
           include VerificationClient
           include StepUpCeremonyLogging
@@ -39,25 +37,43 @@ module Base
 
           private
 
-          def send_verification_email(code)
-            flow = ContactRegistrationOtpIssuer.call!(
-              actor: current_client, token: current_session_token, contact: @user_email, channel: :email,
-              browser_nonce: ensure_base_admission_browser_nonce!, code:,
+          def initiate_email_verification!(email_address, confirm_policy: "1", email_preferences: {})
+            return false unless ensure_turnstile!(email_address, confirm_policy)
+
+            @user_email = current_client.client_emails.build(
+              { raw_address: email_address,
+                confirm_policy: confirm_policy,
+                user_email_status_id: ClientEmailStatus::UNVERIFIED, }.merge(email_preferences),
             )
-            deliver_registration_email_otp!(code:, transaction: flow)
+            return false unless @user_email.valid?
+
+            @user_email.save!
+            issued = EmailCredentialRegistrationOtpIssuer.call(
+              actor: current_client, token: current_session_token, email: @user_email,
+              browser_nonce: ensure_base_admission_browser_nonce!,
+              bootstrap_transaction: open_email_bootstrap_transaction,
+            )
+            return false unless issued.success?
+
+            session[:email_registration_transaction_ref] = issued.transaction.transaction_id
+            deliver_registration_email_otp!(code: issued.code, transaction: issued.transaction)
+            true
+          rescue ActiveRecord::RecordInvalid => e
+            @user_email = e.record if e.record.is_a?(ClientEmail)
+            false
           end
 
-          def finish_email_ceremony!(surface:, actor:, session_ref:, candidate:)
+          def finish_email_ceremony!(surface:, actor:, session_ref:, candidate:, code:)
             unless surface == "app" && actor == current_client && session_ref == current_session_token.public_id
               raise IdentityEmailCeremonyContract::Error, "registration controller binding mismatch"
             end
 
-            bootstrap = open_email_bootstrap_transaction
-            status = ContactRegistrationOtpFinalizer.call!(
+            bootstrap = registration_email_bootstrap_transaction
+            status = EmailCredentialRegistrationOtpFinalizer.call!(
               actor:, actor_context: current_actor.with(surface: :base),
-              token: current_session_token, contact: candidate,
-              transaction: registration_email_otp_transaction, channel: :email,
-              browser_nonce: base_admission_browser_nonce,
+              token: current_session_token, email: candidate,
+              transaction: registration_email_otp_transaction,
+              browser_nonce: base_admission_browser_nonce, code: code,
               requirement: step_up_requirement(scope: verification_scope),
               bootstrap_transaction: bootstrap,
             )
@@ -86,16 +102,24 @@ module Base
             return false unless action_name == "update"
 
             @user_email = current_registration_email
-            bootstrap = open_email_bootstrap_transaction
+            bootstrap = registration_email_bootstrap_transaction
             flow = registration_email_otp_transaction
             return false unless @user_email && bootstrap && flow
 
-            ContactRegistrationOtpFinalizer.bootstrap_receipt_pending?(
+            EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(
               actor: current_client, actor_context: current_actor.with(surface: :base),
-              token: current_session_token, contact: @user_email, transaction: flow, channel: :email,
+              token: current_session_token, email: @user_email, transaction: flow,
               browser_nonce: base_admission_browser_nonce,
+              code: params.dig(:user_email, :pass_code) || params.dig(:client_email, :pass_code),
               requirement: step_up_requirement(scope: "settings_email"), bootstrap_transaction: bootstrap,
             )
+          end
+
+          def registration_email_bootstrap_transaction
+            reference = registration_email_otp_transaction&.bootstrap_ceremony_transaction_ref
+            return unless reference
+
+            ClientStepUpCeremonyTransaction.find_by(transaction_id: reference)
           end
 
           def step_up_requirement(scope:)

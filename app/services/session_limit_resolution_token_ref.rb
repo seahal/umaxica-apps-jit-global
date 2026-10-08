@@ -46,4 +46,6 @@ class SessionLimitResolutionTokenRef
   rescue ActiveSupport::MessageVerifier::InvalidSignature
     nil
   end
+
+  public_class_method :issue, :find_client_token, :find_visitor_token, :find_operator_token
 end

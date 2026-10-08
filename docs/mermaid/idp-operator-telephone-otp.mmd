@@ -11,8 +11,11 @@ stateDiagram-v2
     active --> inactive: OTP deadline elapsed / clear_otp
     locked --> inactive: clear_otp reset_attempts true
     note right of inactive
+        The channel policy is independent of the other channel.
+        Issuance and window expiry preserve failure counts.
+        Issuance timing uses otp_last_sent_at, never created_at.
         Labels are overlapping predicates, not an enum.
         store_otp preserves an active lock.
         clear_otp(false) can leave a locked expired OTP.
-        Authenticated confirmation also checks the shared destination verification budget.
+        Authenticated confirmation also checks the TelephoneOtpVerificationFailureBudget destination counter.
     end note

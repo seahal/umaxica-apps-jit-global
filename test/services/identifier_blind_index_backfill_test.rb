@@ -13,7 +13,7 @@ class IdentifierBlindIndexBackfillTest < ActiveSupport::TestCase
     )
   end
 
-  test "backfills missing digests without saving the records" do
+  test "backfills missing digests with the owning realm keys" do
     user_email = ClientEmail.create!(
       raw_address: "backfill-user-email@example.com",
       confirm_policy: true,
@@ -49,24 +49,27 @@ class IdentifierBlindIndexBackfillTest < ActiveSupport::TestCase
       otp_private_key: "secret_credential",
     )
 
-    user_email.update_columns(columns_to_clear(ClientEmail, address_bidx: nil, address_digest: nil))
-    user_telephone.update_columns(columns_to_clear(ClientTelephone, number_bidx: nil, number_digest: nil))
-    staff_email.update_columns(columns_to_clear(OperatorEmail, address_bidx: nil, address_digest: nil))
-    staff_telephone.update_columns(columns_to_clear(OperatorTelephone, number_bidx: nil, number_digest: nil))
-    visitor_email.update_columns(columns_to_clear(VisitorEmail, address_bidx: nil, address_digest: nil))
-    visitor_telephone.update_columns(columns_to_clear(VisitorTelephone, number_bidx: nil, number_digest: nil))
+    user_email.update_columns(address_digest: nil)
+    user_telephone.update_columns(number_digest: nil)
+    staff_email.update_columns(address_digest: nil)
+    staff_telephone.update_columns(number_digest: nil)
+    visitor_email.update_columns(address_digest: nil)
+    visitor_telephone.update_columns(number_digest: nil)
 
     result = IdentifierBlindIndexBackfill.new.call
 
-    assert_equal IdentifierBlindIndex.bidx_for_email("backfill-user-email@example.com"),
+    assert_equal IdentifierBlindIndex.bidx_for_email("backfill-user-email@example.com", realm: :app),
                  user_email.reload.address_digest
-    assert_equal IdentifierBlindIndex.bidx_for_telephone("+15552223333"), user_telephone.reload.number_digest
-    assert_equal IdentifierBlindIndex.bidx_for_email("backfill-staff-email@example.com"),
+    assert_equal IdentifierBlindIndex.bidx_for_telephone("+15552223333", realm: :app),
+                 user_telephone.reload.number_digest
+    assert_equal IdentifierBlindIndex.bidx_for_email("backfill-staff-email@example.com", realm: :org),
                  staff_email.reload.address_digest
-    assert_equal IdentifierBlindIndex.bidx_for_telephone("+15554445555"), staff_telephone.reload.number_digest
-    assert_equal IdentifierBlindIndex.bidx_for_email("backfill-visitor-email@example.com"),
+    assert_equal IdentifierBlindIndex.bidx_for_telephone("+15554445555", realm: :org),
+                 staff_telephone.reload.number_digest
+    assert_equal IdentifierBlindIndex.bidx_for_email("backfill-visitor-email@example.com", realm: :com),
                  visitor_email.reload.address_digest
-    assert_equal IdentifierBlindIndex.bidx_for_telephone("+15556667777"), visitor_telephone.reload.number_digest
+    assert_equal IdentifierBlindIndex.bidx_for_telephone("+15556667777", realm: :com),
+                 visitor_telephone.reload.number_digest
 
     assert_operator result.user_emails_updated, :>=, 1
     assert_operator result.user_telephones_updated, :>=, 1
@@ -85,13 +88,28 @@ class IdentifierBlindIndexBackfillTest < ActiveSupport::TestCase
 
     IdentifierBlindIndexBackfill.new.call
 
-    assert_equal IdentifierBlindIndex.bidx_for_email("idempotent-staff@example.com"), staff_email.reload.address_digest
+    assert_equal IdentifierBlindIndex.bidx_for_email("idempotent-staff@example.com", realm: :org),
+                 staff_email.reload.address_digest
   end
 
-  private
+  test "malformed persisted identifier aborts backfill instead of reporting silent partial success" do
+    record = OperatorEmail.create!(
+      staff: @staff, raw_address: "invalid-backfill@example.com", confirm_policy: true,
+    )
+    record.update_columns(address: "not-an-email")
 
-  def columns_to_clear(model, columns)
-    columns.slice(*model.column_names.map(&:to_sym))
+    assert_raises(ArgumentError) { IdentifierBlindIndexBackfill.new.call }
+    assert_equal "not-an-email", record.reload.address
+  end
+
+  test "malformed persisted telephone aborts backfill instead of reporting silent partial success" do
+    record = OperatorTelephone.create!(
+      staff: @staff, raw_number: "+819012399905", confirm_policy: true, confirm_using_mfa: true,
+    )
+    record.update_columns(number: "not-a-number")
+
+    assert_raises(ArgumentError) { IdentifierBlindIndexBackfill.new.call }
+    assert_equal "not-a-number", record.reload.number
   end
 end
 
@@ -196,7 +214,7 @@ class IdentifierBlindIndexBackfillTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",
@@ -211,7 +229,7 @@ class IdentifierBlindIndexBackfillTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
           otp_private_key: SecureRandom.base64(24),
           otp_counter: "",
@@ -507,7 +525,7 @@ class IdentifierBlindIndexBackfillTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",

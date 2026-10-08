@@ -3,46 +3,156 @@
 require "test_helper"
 # require "helpers/global_test_support"
 
+# Failed comparisons must not expose retained PII or identifier lookup digests.
+# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  AnonymizedRecord =
-    Struct.new(:id, :updated_attrs, :discard_at, :model_class, :destroyed) do
-      def update!(attrs)
-        self.updated_attrs = attrs
+  %w(app com).each do |realm|
+    test "#{realm} withdrawal preserves original finalized identifiers until irreversible retention purge" do
+      actor, email_model, telephone_model, owner_key, email_history, telephone_history =
+        case realm
+        when "app"
+          [Client.create!(status_id: ClientStatus::ACTIVE), ClientEmail, ClientTelephone, :user_id,
+           ClientEmailHistory, ClientTelephoneHistory,]
+        when "com"
+          [Visitor.create!(status_id: VisitorStatus::ACTIVE), VisitorEmail, VisitorTelephone, :visitor_id,
+           VisitorEmailHistory, VisitorTelephoneHistory,]
+        end
+      now = actor.class.database_now
+      original_address = "withdrawal-original-#{SecureRandom.hex(8)}@example.test"
+      original_number = "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}"
+      email = email_model.create!(owner_key => actor.id, :raw_address => original_address, :confirm_policy => true)
+      telephone = telephone_model.create!(
+        owner_key => actor.id, :raw_number => original_number, :confirm_policy => true, :confirm_using_mfa => true,
+      )
+      email.finalize_binding!
+      telephone.finalize_binding!
+      email_digest = email.address_digest
+      telephone_digest = telephone.number_digest
+      actor.update!(withdrawn_at: now, terminated_at: now, discard_at: now, purge_eligible_at: now + 1.day)
+
+      WithdrawalPersonalDataAnonymizer.call(actor: actor)
+
+      assert email.reload.address == original_address, "Retention must preserve original encrypted email"
+      assert telephone.reload.number == original_number, "Retention must preserve original encrypted telephone"
+      assert email.address_digest == email_digest, "Withdrawal must not replace an immutable binding digest"
+      assert telephone.number_digest == telephone_digest, "Withdrawal must not replace an immutable binding digest"
+      assert_empty email_history.where(owner_key => actor.id)
+      assert_empty telephone_history.where(owner_key => actor.id)
+      assert_equal actor.purge_eligible_at, email.purge_eligible_at
+      assert_equal actor.purge_eligible_at, telephone.purge_eligible_at
+
+      after_retention = actor.purge_eligible_at + 1.second
+      email_model.stub(:database_now, after_retention) do
+        EmailIdentifierPurger.call(record: email)
+      end
+      telephone_model.stub(:database_now, after_retention) do
+        TelephoneIdentifierPurger.call(record: telephone)
       end
 
-      def class
-        model_class
-      end
+      assert actor.class.exists?(actor.id)
+      assert_not email_model.exists?(email.id)
+      assert_not telephone_model.exists?(telephone.id)
+      assert email_history.where(owner_key => actor.id).sole.matches_identifier?(original_address)
+      assert telephone_history.where(owner_key => actor.id).sole.matches_identifier?(original_number)
+    end
 
-      def is_a?(klass)
-        klass == model_class || super
-      end
+    test "#{realm} withdrawal preserves a longer explicit identifier retention deadline" do
+      actor, email_model, telephone_model, owner_key =
+        case realm
+        when "app"
+          [Client.create!(status_id: ClientStatus::ACTIVE), ClientEmail, ClientTelephone, :user_id]
+        when "com"
+          [Visitor.create!(status_id: VisitorStatus::ACTIVE), VisitorEmail, VisitorTelephone, :visitor_id]
+        end
+      now = actor.class.database_now
+      actor.update!(withdrawn_at: now, terminated_at: now, discard_at: now, purge_eligible_at: now + 1.day)
+      longer_deadline = now + 2.days
+      email = email_model.create!(
+        owner_key => actor.id, :raw_address => "longer-retention-#{SecureRandom.hex(8)}@example.test",
+        :confirm_policy => true, :discard_at => now + 1.hour, :purge_eligible_at => longer_deadline,
+      )
+      telephone = telephone_model.create!(
+        owner_key => actor.id, :raw_number => "+819012399927", :confirm_policy => true,
+        :confirm_using_mfa => true, :discard_at => now + 1.hour, :purge_eligible_at => longer_deadline,
+      )
 
-      def destroy!
-        self.destroyed = true
+      WithdrawalPersonalDataAnonymizer.call(actor: actor)
+
+      assert_equal longer_deadline, email.reload.purge_eligible_at
+      assert_equal longer_deadline, telephone.reload.purge_eligible_at
+    end
+
+    test "#{realm} overdue owner retirement creates an ordered immediately purgeable identifier window" do
+      actor, email_model, telephone_model, owner_key =
+        case realm
+        when "app"
+          [Client.create!(created_at: 4.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.ago),
+           ClientEmail, ClientTelephone, :user_id,]
+        when "com"
+          [Visitor.create!(created_at: 4.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.ago),
+           VisitorEmail, VisitorTelephone, :visitor_id,]
+        end
+      email = email_model.create!(
+        owner_key => actor.id, :raw_address => "overdue-retirement-#{SecureRandom.hex(8)}@example.test",
+        :confirm_policy => true, :created_at => 3.days.ago,
+      )
+      telephone = telephone_model.create!(
+        owner_key => actor.id, :raw_number => "+819012399929", :confirm_policy => true,
+        :confirm_using_mfa => true, :created_at => 3.days.ago,
+      )
+
+      WithdrawalPersonalDataAnonymizer.call(actor: actor)
+
+      [email.reload, telephone.reload].each do |record|
+        assert_operator record.purge_eligible_at, :>=, record.discard_at
+        assert record.purgeable?(record.class.database_now)
+        assert record.lapsed?(record.class.database_now)
       end
     end
 
-  Scope =
-    Struct.new(:records) do
-      def find_each(&)
-        records.each(&)
-      end
-    end
+    test "#{realm} withdrawal cleanup preserves identifier failure counts and finite lockout deadlines" do
+      actor, email_model, telephone_model, owner_key =
+        case realm
+        when "app"
+          [Client.create!(status_id: ClientStatus::ACTIVE), ClientEmail, ClientTelephone, :user_id]
+        when "com"
+          [Visitor.create!(status_id: VisitorStatus::ACTIVE), VisitorEmail, VisitorTelephone, :visitor_id]
+        end
+      now = actor.class.database_now
+      deadline = now + 5.minutes
+      email = email_model.create!(
+        owner_key => actor.id, :raw_address => "withdrawal-failures-#{SecureRandom.hex(8)}@example.test",
+        :confirm_policy => true, :otp_attempts_count => 2, :locked_at => deadline,
+      )
+      telephone = telephone_model.create!(
+        owner_key => actor.id, :raw_number => "+819012399925", :confirm_policy => true,
+        :confirm_using_mfa => true, :otp_attempts_count => 2, :locked_at => deadline,
+      )
+      actor.update!(withdrawn_at: now, terminated_at: now)
+      WithdrawalPersonalDataAnonymizer.call(actor: actor)
 
-  test "anonymizes persisted client credentials while retaining Secret terminal audit" do
+      assert_equal 2, email.reload.otp_attempts_count
+      assert_equal 2, telephone.reload.otp_attempts_count
+      assert_equal deadline, email.lockout_expires_at
+      assert_equal deadline, telephone.lockout_expires_at
+    end
+  end
+
+  test "retires persisted client credentials while retaining original identifiers and Secret terminal audit" do
     now = Client.database_now
     client = Client.create!(status_id: ClientStatus::ACTIVE)
     email = ClientEmail.create!(
       user: client, address: "withdrawal-#{SecureRandom.hex(8)}@example.com",
       otp_counter: "0", otp_private_key: "withdrawal-test",
     )
+    original_address = email.address
     original_address_digest = email.address_digest
     telephone = ClientTelephone.create!(
       user: client, number: "+14155552671", otp_counter: "0", otp_private_key: "withdrawal-test",
     )
+    original_number = telephone.number
     original_number_digest = telephone.number_digest
     external_identity = ClientExternalIdentity.create!(
       client: client, provider: "google", issuer: "https://accounts.google.com",
@@ -65,19 +175,18 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
     secret = ClientSecretCredential.create!(
       client: client, issuance: issuance, name: "Pending withdrawal", password: raw,
     )
-    client.update!(withdrawn_at: now, terminated_at: now)
+    client.reload.update!(withdrawn_at: now, terminated_at: now)
     previous_delay = ENV["APP_SECRET_PURGE_DELAY_SECONDS"]
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
 
     assert_same client, WithdrawalPersonalDataAnonymizer.call(actor: client)
-    assert_equal "withdrawn-client-email-#{email.id}@anonymous.invalid", email.reload.address
-    assert_not_equal original_address_digest, email.address_digest
-    assert_equal IdentifierBlindIndex.bidx_for_email(email.address), email.address_digest
+    assert email.reload.address == original_address, "Original identifier must survive the retention boundary"
+    assert original_address_digest == email.address_digest, "Immutable identifier digest must be preserved"
     assert_equal "withdrawn", email.otp_private_key
     assert_equal "0", email.otp_counter
     assert_equal ClientEmailStatus::SUSPENDED, email.user_email_status_id
-    assert_equal "+100000#{telephone.id.to_s.rjust(9, "0")}", telephone.reload.number
-    assert_not_equal original_number_digest, telephone.number_digest
+    assert telephone.reload.number == original_number, "Original identifier must survive the retention boundary"
+    assert original_number_digest == telephone.number_digest, "Immutable identifier digest must be preserved"
     assert_equal "withdrawn", telephone.otp_private_key
     assert_equal "0", telephone.otp_counter
     assert_equal ClientTelephoneStatus::SUSPENDED, telephone.user_identity_telephone_status_id
@@ -95,54 +204,38 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = previous_delay
   end
 
-  test "anonymizes a visitor actor" do
-    visitor = Visitor.allocate
-    purge_calls = []
-
-    visitor_email = AnonymizedRecord.new(21, nil, nil, VisitorEmail)
-    visitor_telephone = AnonymizedRecord.new(22, nil, nil, VisitorTelephone)
-    visitor_passkey = AnonymizedRecord.new(23, nil, nil, VisitorPasskey)
-    visitor_secret = AnonymizedRecord.new(24, nil, nil, VisitorSecretCredential)
-
-    define_visitor_actor(
-      visitor,
-      emails: [visitor_email],
-      telephones: [visitor_telephone],
-      passkeys: [visitor_passkey],
-      secrets: [visitor_secret],
+  test "retires persisted visitor credentials without fabricating dead identifier history" do
+    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+    now = Visitor.database_now
+    email = VisitorEmail.create!(
+      visitor: visitor, raw_address: "retired-visitor-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
     )
-
-    RetentionCrossDatabaseChildPurge.stub(:call, ->(actor:) { purge_calls << actor }) do
-      result = WithdrawalPersonalDataAnonymizer.call(actor: visitor)
-
-      assert_same visitor, result
+    telephone = VisitorTelephone.create!(
+      visitor: visitor, raw_number: "+819012399926", confirm_policy: true, confirm_using_mfa: true,
+    )
+    email.finalize_binding!
+    email.update!(visitor_email_status_id: VisitorEmailStatus::VERIFIED)
+    [VisitorSecretCredentialStatus::ACTIVE, VisitorSecretCredentialStatus::REVOKED].each do |status|
+      VisitorSecretCredentialStatus.find_or_create_by!(id: status)
     end
+    VisitorSecretCredentialKind.find_or_create_by!(id: VisitorSecretCredentialKind::LOGIN)
+    passkey = visitor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "withdrawal-test-key")
+    secret = visitor.visitor_secret_credentials.create!(name: "Withdrawal", password: SecureRandom.base58(32))
+    visitor.update!(withdrawn_at: now, terminated_at: now, discard_at: now, purge_eligible_at: now + 1.day)
 
-    assert_equal [visitor], purge_calls
-    assert_equal "withdrawn-visitor-email-21@anonymous.invalid", visitor_email.updated_attrs.fetch(:address)
-    assert_equal "withdrawn", visitor_email.updated_attrs.fetch(:otp_private_key)
-    assert_equal "0", visitor_email.updated_attrs.fetch(:otp_counter)
-    assert_equal VisitorEmailStatus::SUSPENDED, visitor_email.updated_attrs.fetch(:visitor_email_status_id)
-
-    assert_equal "+100000000000022", visitor_telephone.updated_attrs.fetch(:number)
-    assert_equal "withdrawn", visitor_telephone.updated_attrs.fetch(:otp_private_key)
-    assert_equal "0", visitor_telephone.updated_attrs.fetch(:otp_counter)
-    assert_equal VisitorTelephoneStatus::SUSPENDED, visitor_telephone.updated_attrs.fetch(:visitor_telephone_status_id)
-
-    assert_equal VisitorPasskeyStatus::REVOKED, visitor_passkey.updated_attrs.fetch(:status_id)
-    assert_in_delta Time.current.to_f, Float(visitor_passkey.updated_attrs.fetch(:discard_at)), 1
-
-    assert_equal VisitorSecretCredentialStatus::REVOKED,
-                 visitor_secret.updated_attrs.fetch(:visitor_secret_credential_status_id)
-    assert_in_delta Time.current.to_f, Float(visitor_secret.updated_attrs.fetch(:discard_at)), 1
-  end
-
-  private
-
-  def define_visitor_actor(actor, emails:, telephones:, passkeys:, secrets:)
-    actor.define_singleton_method(:visitor_emails) { Scope.new(emails) }
-    actor.define_singleton_method(:visitor_telephones) { Scope.new(telephones) }
-    actor.define_singleton_method(:visitor_passkeys) { Scope.new(passkeys) }
-    actor.define_singleton_method(:visitor_secret_credentials) { Scope.new(secrets) }
+    assert_same visitor, WithdrawalPersonalDataAnonymizer.call(actor: visitor)
+    assert_equal "withdrawn", email.reload.otp_private_key
+    assert_equal "0", email.otp_counter
+    assert_equal VisitorEmailStatus::SUSPENDED, email.visitor_email_status_id
+    assert_equal "withdrawn", telephone.reload.otp_private_key
+    assert_equal "0", telephone.otp_counter
+    assert_equal VisitorTelephoneStatus::SUSPENDED, telephone.visitor_telephone_status_id
+    assert_equal VisitorPasskeyStatus::REVOKED, passkey.reload.status_id
+    assert_kind_of Time, passkey.discard_at
+    assert_equal VisitorSecretCredentialStatus::REVOKED, secret.reload.visitor_secret_credential_status_id
+    assert_kind_of Time, secret.discard_at
+    assert_empty VisitorEmailHistory.where(visitor_id: visitor.id)
+    assert_empty VisitorTelephoneHistory.where(visitor_id: visitor.id)
   end
 end
+# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator

@@ -89,6 +89,8 @@ module Warp
         "client"
       end
 
+      public :browser_rp_client_id, :browser_rp_resource_type
+
       def oidc_sign_host
         ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       end

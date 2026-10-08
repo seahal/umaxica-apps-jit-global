@@ -44,18 +44,23 @@ module Notify
               auth_email_otp_generation: params[:auth_email_otp_generation],
             )
             delivery_params.merge!(binding.to_h) if binding
-            signup_binding = SignUpOtpDeliveryBindingValue.for_email(
-              purpose: params[:purpose], surface: SIGN_UP_SURFACE,
-              sign_up_flow_ref: params[:sign_up_flow_ref], public_id: params[:public_id],
-              sign_up_otp_counter: params[:sign_up_otp_counter],
+            reentry_binding = EmailReentryOtpDeliveryBindingValue.for(
+              purpose: params[:purpose], email_ceremony_transaction_ref: params[:email_ceremony_transaction_ref],
+              email_otp_generation: params[:email_otp_generation],
             )
-            delivery_params.merge!(signup_binding.email_params) if signup_binding
-            registration_binding = ContactRegistrationOtpDeliveryBindingValue.for_email(
-              purpose: params[:purpose].to_s, surface: "app",
+            delivery_params.merge!(reentry_binding.to_h) if reentry_binding
+            signup_binding = EmailSignUpOtpDeliveryBindingValue.for(
+              purpose: params[:purpose], sign_up_flow_ref: params[:sign_up_flow_ref],
+              sign_up_email_transaction_ref: params[:sign_up_email_transaction_ref],
+              sign_up_email_otp_generation: params[:sign_up_email_otp_generation],
+            )
+            delivery_params.merge!(signup_binding.to_h) if signup_binding
+            registration_binding = EmailCredentialRegistrationOtpDeliveryBindingValue.for(
+              purpose: params[:purpose],
               contact_ceremony_transaction_ref: params[:contact_ceremony_transaction_ref],
-              public_id: params[:public_id], contact_otp_counter: params[:contact_otp_counter],
+              contact_otp_generation: params[:contact_otp_generation],
             )
-            delivery_params.merge!(registration_binding.email_params) if registration_binding
+            delivery_params.merge!(registration_binding.to_h) if registration_binding
             delivery_params
           }
       end

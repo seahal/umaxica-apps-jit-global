@@ -4,8 +4,17 @@ require "test_helper"
 
 # Retained proof and browser references must not appear in assertion failure output.
 # Each case observes the two-database failure and HTTP retry as one transaction journey.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
+# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
+  setup do
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+  end
+
   [
     [:app, "PUBLIC_BASE_SERVICE_URL", "PUBLIC_AUTH_SERVICE_URL", "BASE_APP", ClientSignUpFlow,
      ClientTelephone, ClientToken, ClientContactAuditOutbox, :client_telephone, :user_id,],
@@ -14,7 +23,9 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
   ].each do |surface, base_host_key, auth_host_key, issuer_name, flow_class, contact_class, token_class,
     outbox, scope, owner_key|
     %i(verify_contact enter_guardrail enter_checkpoint clear_requirement).each_with_index do |failed_event, index|
-      test "#{surface} telephone signup Source proof survives Ticket #{failed_event} failure and HTTP retry" do
+      # Splitting fault and retry would lose the same committed proof, browser, and rolled-back Ticket under test.
+      # rubocop:disable Minitest/MultipleAssertions
+      test "#{surface} telephone signup ceremony proof survives Ticket #{failed_event} failure and HTTP retry" do
         previous_protection = ActionController::Base.allow_forgery_protection
         previous_turnstile = [TurnstileVerifierStub.enabled, TurnstileVerifierStub.response]
         previous_challenge = [TurnstileVerifierStub.challenge_enabled, TurnstileVerifierStub.challenge_response]
@@ -92,6 +103,7 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
         csrf = browser.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
         headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf }
         number = "+8190#{SecureRandom.random_number(100_000_000).to_s.rjust(8, "0")}"
+        clear_enqueued_jobs
         browser.post(
           "/sign/up/telephone", params: {
             scope => { raw_number: number, confirm_policy: "1" }, "cf-turnstile-response" => "test", :ri => "jp",
@@ -111,8 +123,21 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
         assert_equal 0, token_class.where(owner_key => owner_id).count
         before_requirements = flow.completed_requirements.deep_dup
         before_version = flow.checkpoint_version
-        otp = contact.get_otp
-        code = ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter)).to_s
+
+        source_state = contact.reload.attributes.slice("otp_attempts_count", "otp_last_sent_at")
+
+        assert_equal 0, source_state.fetch("otp_attempts_count")
+        transaction_model = (surface == :app) ? ClientTelephoneCeremonyTransaction : VisitorTelephoneCeremonyTransaction
+        transaction = transaction_model.find_by!(telephone_candidate_ref: contact.public_id)
+        job_arguments = enqueued_jobs.find { |job| job.fetch(:job) == Outbound::SmsDeliveryJob }.fetch(:args)
+        encrypted = job_arguments.fetch(0).fetch("encrypted_payload")
+        payload = OutboundSensitivePayload.decrypt_sms_delivery(encrypted)
+        code = payload.fetch(:otp_code)
+
+        assert_not JSON.generate(job_arguments).include?(code)
+        assert_not JSON.generate(job_arguments).include?(contact.number)
+        assert_equal [surface.to_s, "sign_up", flow.public_id, transaction.transaction_id,
+                      transaction.otp_generation,], payload.fetch(:otp_binding)
         browser.get(otp_uri.request_uri, params: { ri: "jp" })
 
         assert_equal 200, browser.response.status
@@ -120,8 +145,8 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
         headers["X-CSRF-Token"] = csrf
         ticket_writes = 0
         failure =
-          lambda do |_name, _started, _finished, _identity, payload|
-            if payload[:name] == "#{flow_class} Update" && contact.reload.sign_up_otp_context.fetch("verified_at")
+          lambda do |_name, _started, _finished, _identity, sql_event|
+            if sql_event[:name] == "#{flow_class} Update" && transaction.reload.otp_consumed_at
               ticket_writes += 1
               if ticket_writes == index + 1
                 raise ActiveRecord::StatementInvalid, "telephone signup OTP Ticket update unavailable"
@@ -138,11 +163,13 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
             )
           end
         end
-        proof = contact.reload.sign_up_otp_context.deep_dup
+        proof = transaction.reload.attributes.slice(
+          "otp_consumed_at", "otp_result_expires_at", "otp_receipt_verifier", "otp_generation",
+        )
 
         assert_equal index + 1, ticket_writes
-        assert_not_nil proof.fetch("verified_at")
-        assert_nil contact.get_otp
+        assert_not_nil proof.fetch("otp_consumed_at")
+        assert_equal source_state, contact.reload.attributes.slice(*source_state.keys)
         assert_equal flow_class::STATUS_MODEL::CONTACT_PENDING, flow.reload.status_id
         assert before_requirements == flow.completed_requirements, "Failed progression must roll back all requirements"
         assert_equal before_version, flow.checkpoint_version
@@ -164,8 +191,9 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
                "Retry must retain its original signed signup flow"
         assert_equal flow_class::STATUS_MODEL::CHECKPOINT_PENDING, flow.reload.status_id
         assert flow.requirement_cleared?(:otp), "Retry must clear the OTP checkpoint requirement"
-        assert proof == contact.reload.sign_up_otp_context, "Retry must preserve the committed Source proof exactly"
-        assert_nil contact.get_otp
+        assert proof == transaction.reload.attributes.slice(*proof.keys),
+               "Retry must preserve the committed ceremony proof exactly"
+        assert_equal source_state, contact.reload.attributes.slice(*source_state.keys)
         assert_equal owner_id, contact[owner_key]
         assert_nil contact.binding_finalized_at
         assert_not contact.binding_effective?
@@ -176,7 +204,8 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
         TurnstileVerifierStub.enabled, TurnstileVerifierStub.response = previous_turnstile
         TurnstileVerifierStub.challenge_enabled, TurnstileVerifierStub.challenge_response = previous_challenge
       end
+      # rubocop:enable Minitest/MultipleAssertions
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
+# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
