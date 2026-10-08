@@ -30,6 +30,10 @@ module Auth
 
       include AuthenticationBase
 
+      # Production controllers get this from SessionLimitGate; this double has no open resolution.
+
+      def session_limit_resolution = nil
+
       attr_accessor :actor_type, :checkpoint_participant, :dashboard_participant,
                     :oidc_authorization_login_challenge
       attr_writer :resource, :logged_in, :current_session_record, :allowed_policy

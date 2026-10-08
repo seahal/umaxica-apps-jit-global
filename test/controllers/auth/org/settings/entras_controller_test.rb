@@ -117,14 +117,4 @@ class Auth::Org::Settings::EntrasControllerTest < ActionDispatch::IntegrationTes
     }
     ExternalAuthentication::ProviderAvailabilityFactory.stub(:current, disabled, &)
   end
-
-  def jwt_access_token_for(resource, host:, session_public_id:, resource_type:)
-    AuthenticationToken.encode(
-      resource,
-      host: host,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      jwt_issuer_id: "surface:AUTH_ORG",
-    )
-  end
 end

@@ -10,7 +10,7 @@ require "test_helper"
 class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   fixtures :clients, :operators
 
-  ACCESS = AuthenticationBase::ACCESS_COOKIE_KEY
+  ACCESS = OidcRpBrowserCredentialContract::ACCESS_COOKIE
   REFRESH = AuthenticationBase::REFRESH_COOKIE_KEY
   DBSC = AuthenticationBase::DBSC_COOKIE_KEY
   AUTH_COOKIES = [ACCESS, REFRESH, DBSC].freeze
@@ -43,38 +43,42 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
       assert_no_set_cookie(ACCESS)
     end
 
-    # Anonymous Dashboard is 404 with no sign-in redirect (adr/home-dashboard-authentication-boundary.md).
-    test "#{surface}: a malformed access cookie on a protected page gets the same 404 as no cookie" do
+    # An anonymous HTML Dashboard request is sent to the passive sign-in page; a refused credential
+    # takes that same path after it is detached.
+    test "#{surface}: a malformed access cookie on a protected page takes the same sign-in redirect as no cookie" do
       host! ENV.fetch(config[:host_env])
       get "/dashboard?ri=jp"
 
-      assert_response :not_found
+      assert_response :redirect
+      anonymous_location = response.location
+
+      assert_equal "/sign", URI.parse(anonymous_location).path
 
       cookies[ACCESS] = "malformed"
       get "/dashboard?ri=jp"
 
-      assert_response :not_found
-      assert_nil response.location
+      assert_response :redirect
+      assert_equal anonymous_location, response.location
       assert_cookie_deleted(ACCESS)
-      # Only the registered credential deletion reaches the 404; no other cookie is committed.
-      assert_equal [ACCESS], set_cookie_names
     end
 
-    test "#{surface}: a HEAD with a malformed access cookie on a protected page detaches it on the 404" do
+    test "#{surface}: a HEAD with a malformed access cookie on a protected page detaches it on the redirect" do
       host! ENV.fetch(config[:host_env])
       cookies[ACCESS] = "malformed"
       head "/dashboard?ri=jp"
 
-      assert_response :not_found
+      assert_response :redirect
+      assert_equal "/sign", URI.parse(response.location).path
       assert_cookie_deleted(ACCESS)
     end
 
-    test "#{surface}: a protected page 404 without an access cookie emits no Set-Cookie" do
+    test "#{surface}: a protected page redirect without an access cookie deletes no credential cookie" do
       host! ENV.fetch(config[:host_env])
       get "/dashboard?ri=jp"
 
-      assert_response :not_found
-      assert_empty set_cookie_names
+      assert_response :redirect
+      AUTH_COOKIES.each { |name| assert_no_set_cookie(name) }
+      assert_no_set_cookie(ACCESS)
     end
 
     test "#{surface}: an access cookie naming a session that does not exist is detached" do

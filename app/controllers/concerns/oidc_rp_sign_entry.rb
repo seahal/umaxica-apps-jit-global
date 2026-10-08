@@ -16,7 +16,8 @@ module OidcRpSignEntry
   def create
     response.set_header("Cache-Control", "no-store")
     url = initiate_oidc_session!(pt: params[:pt].presence || "/")
-    redirect_to_oidc_authorization_url(url)
+    # The start is a POST; 303 makes the browser fetch the authorization endpoint with GET.
+    redirect_to_oidc_authorization_url(url, status: :see_other)
   end
 
   private

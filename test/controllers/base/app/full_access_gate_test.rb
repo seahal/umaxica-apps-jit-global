@@ -68,92 +68,11 @@ class Base::App::FullAccessGateTest < ActionDispatch::IntegrationTest
     headers
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-
-    if user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-      ensure_user_token_reference_records!
-      token =
-        if session_public_id.present?
-          ClientToken.find_by(public_id: session_public_id)
-        else
-          ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
-        end
-      token ||= ClientToken.create!(
-        user_id: user.id,
-        user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-        user_token_status_id: ClientTokenStatus::ACTIVE,
-        user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-        user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-      )
-      token.update!(
-        user_token_status_id: ClientTokenStatus::ACTIVE,
-        user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-        user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-      )
-      token_public_id = session_public_id.presence || token.public_id
-      access_token = AuthenticationToken.encode(
-        user,
-        host: host,
-        session_public_id: token_public_id,
-        resource_type: "client",
-        jwt_issuer_id: "surface:BASE_APP",
-      )
-      cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-      base["Cookie"] = [base["Cookie"], "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}"].compact.join("; ")
-      base["X-TEST-SESSION-PUBLIC-ID"] = token_public_id
-    end
-
-    base
-  end
-
   def ensure_user_token_reference_records!
     ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
     ClientTokenStatus.find_or_create_by!(id: ClientTokenStatus::ACTIVE)
     ClientTokenBindingMethod.find_or_create_by!(id: ClientTokenBindingMethod::LEGACY)
     ClientTokenDbscStatus.find_or_create_by!(id: ClientTokenDbscStatus::NOTHING)
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-
-    if staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-      token =
-        if session_public_id.present?
-          OperatorToken.find_by(public_id: session_public_id)
-        else
-          OperatorToken.where(staff_id: staff.id).where(
-            "discard_at > ?",
-            Time.current,
-          ).order(created_at: :desc).first
-        end
-      token ||= OperatorToken.create!(staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    VisitorTokenBindingMethod.ensure_defaults! if defined?(VisitorTokenBindingMethod)
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB) if defined?(VisitorTokenKind)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-
-    if visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-      token =
-        if session_public_id.present?
-          VisitorToken.find_by(public_id: session_public_id)
-        else
-          VisitorToken.where(visitor_id: visitor.id).where(
-            "discard_at > ?",
-            Time.current,
-          ).order(created_at: :desc).first
-        end
-      token ||= VisitorToken.create!(visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    base
   end
 
   def bearer_headers(token, host: nil, headers: {})

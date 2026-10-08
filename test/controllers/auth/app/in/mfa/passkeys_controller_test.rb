@@ -16,13 +16,16 @@ module Auth::App::In
     fixtures :client_statuses, :client_passkey_statuses, :client_email_statuses, :client_totp_credential_statuses
 
     setup do
-      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+      https!
+      ClientSignInFlowState.ensure_defaults!
       TurnstileVerifierStub.challenge_enabled = true
       TurnstileVerifierStub.challenge_response = { "success" => true }
 
       @user = Client.create!(id: 9_116_000_000_000 + Zlib.crc32(name), mfa_level_enabled: true)
       @email = "mfa_passkey_#{SecureRandom.hex(4)}@example.com".freeze
       @email_record = @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
+      @email_record.finalize_binding!
       ClientTotpCredential.create!(
         user: @user,
         private_key: ROTP::Base32.random_base32,
@@ -46,7 +49,18 @@ module Auth::App::In
       )
       get auth_app_sign_in_path, params: { entry_ref: @issuance.reference, ri: "jp" }
       csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      post "/ceremony_bindings", params: {
+        entry_ref: @issuance.reference, authenticity_token: csrf, ri: "jp",
+      }
+
+      assert_response :see_other
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: @issuance.reference)
+      binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+      get auth_app_sign_in_path, params: { entry_ref: @issuance.reference, ri: "jp" }
+      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
       post auth_app_sign_in_path, params: { entry_ref: @issuance.reference, authenticity_token: csrf, ri: "jp" }
+
+      assert_response :see_other
     end
 
     teardown do
@@ -66,14 +80,19 @@ module Auth::App::In
         email = @user.client_emails.first
         post auth_app_sign_in_email_path,
              params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test-only", :ri => "jp" }
-        secret = ROTP::Base32.random_base32
-        email.reload.store_otp(secret, 7, 5.minutes.from_now.to_i)
+        delivery_class = OtpEmailNotifierRollout.enabled?(:app) ? OtpNotifierEmailDeliveryJob : OtpMailDeliveryJob
+        delivery =
+          ActiveJob::Base.queue_adapter.enqueued_jobs.reverse.find do |entry|
+            entry.fetch(:job) == delivery_class
+          end
+        payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+        code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
         patch auth_app_sign_in_email_path,
-              params: { :user_email => { pass_code: ROTP::HOTP.new(secret).at(7).to_s },
+              params: { :user_email => { pass_code: code },
                         "cf-turnstile-response" => "test-only",
                         :ri => "jp", }
 
-        assert_equal "mfa", @issuance.transaction.reload.step
+        assert_predicate @issuance.transaction.reload, :sign_in_mfa_pending?
         get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
 
         assert_response :success
@@ -126,7 +145,7 @@ module Auth::App::In
       assert_redirected_to auth_app_sign_in_path(ri: "jp")
       assert_nil session[:pending_mfa]
       assert_nil session[:passkey_challenges]
-      assert_equal "guardrail", @issuance.transaction.reload.step
+      assert_predicate @issuance.transaction.reload, :sign_in_guardrail_pending?
       assert_nil @issuance.transaction.authentication_event_at
     end
 
@@ -164,7 +183,7 @@ module Auth::App::In
       assert_response :see_other
       assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
       assert_nil session[:passkey_challenges]
-      assert_equal "mfa", @issuance.transaction.reload.step
+      assert_predicate @issuance.transaction.reload, :sign_in_mfa_pending?
     end
 
     test "new sends the client back to the chooser when the relying party is not configured" do
@@ -234,7 +253,7 @@ module Auth::App::In
 
         assert_response :see_other
         assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
-        assert_equal "mfa", @issuance.transaction.reload.step
+        assert_predicate @issuance.transaction.reload, :sign_in_mfa_pending?
         assert_nil @issuance.transaction.authentication_event_at
         assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
         assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]

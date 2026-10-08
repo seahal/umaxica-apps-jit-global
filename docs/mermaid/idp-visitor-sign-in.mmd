@@ -25,7 +25,7 @@ stateDiagram-v2
     PRIMARY_PENDING --> HALTED: halt_sign_in!
     MFA_PENDING --> EXPIRED: expire_sign_in!
     MFA_PENDING --> CANCELLED: cancel_sign_in!
-    MFA_PENDING --> HALTED: halt_sign_in!
+    MFA_PENDING --> HALTED: halt_sign_in! / cancel_pending_mfa
     GUARDRAIL_PENDING --> EXPIRED: expire_sign_in!
     GUARDRAIL_PENDING --> CANCELLED: cancel_sign_in!
     GUARDRAIL_PENDING --> HALTED: halt_sign_in!
@@ -45,4 +45,3 @@ stateDiagram-v2
         The parent never enters SESSION_LIMIT_PENDING.
         IDs 30, 70 and 80 remain historical tombstones.
     end note
-

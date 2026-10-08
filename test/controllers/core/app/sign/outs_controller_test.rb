@@ -285,14 +285,6 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     headers.merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, session_public_id: nil, resource_type: nil)
-    host = ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")
-    AuthenticationToken.encode(
-      resource, host: host, session_public_id: session_public_id, resource_type: resource_type,
-                jwt_issuer_id: jwt_issuer_id_for_test_host(host, resource_type),
-    )
-  end
-
   # Core, like Base, does not necessarily resolve to a host containing its own
   # surface name (e.g. Core's real origin is jpx.umaxica.<tld>), so the issuer
   # namespace cannot be inferred from a host substring. Match against the

@@ -104,9 +104,14 @@ module OidcAuthorizationResultPost
   end
 
   def render_authorization_ceremony_start!
+    # The region is display context, not an authorization input, but the start POST builds the
+    # Auth entry URL from it; dropping it here sends the ceremony to the credential gateway
+    # region-less.
+    region = RequestContextContract.normalize_region(params[:ri])
+    fields = authorize_params.to_h
+    fields = fields.merge("ri" => region) if region.present?
     render "base/shared/authorization_ceremony_start", layout: false,
-                                                       locals: { action_url: request.path,
-                                                                 fields: authorize_params.to_h, }
+                                                       locals: { action_url: request.path, fields: fields }
   end
 
   def current_resource_for_oidc_authorization

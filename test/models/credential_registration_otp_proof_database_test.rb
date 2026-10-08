@@ -2,7 +2,7 @@
 
 require "test_helper"
 
-# Boolean snapshots keep keyed digests and root references out of assertion diagnostics.
+# Boolean snapshots keep keyed digests and original Root references out of failure output.
 # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 class CredentialRegistrationOtpProofDatabaseTest < ActiveSupport::TestCase
   [
@@ -10,9 +10,11 @@ class CredentialRegistrationOtpProofDatabaseTest < ActiveSupport::TestCase
     [Client, ClientToken, ClientTelephone, :user_id, :app, :telephone],
     [Visitor, VisitorToken, VisitorEmail, :visitor_id, :com, :email],
     [Visitor, VisitorToken, VisitorTelephone, :visitor_id, :com, :telephone],
+    [Operator, OperatorToken, OperatorEmail, :staff_id, :org, :email],
+    [Operator, OperatorToken, OperatorTelephone, :staff_id, :org, :telephone],
   ].each do |owner_model, root_model, contact_model, owner_key, surface, channel|
     test "#{surface} #{channel} registration proof rejects malformed direct writes and protects verified facts" do
-      owner = owner_model.create!(status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE)
+      owner = owner_model.create!
       root = root_model.create!(owner_key => owner.id, :discard_at => 1.day.from_now)
       root.rotate_refresh_token!
       contact = contact_model.create!(
@@ -24,98 +26,101 @@ class CredentialRegistrationOtpProofDatabaseTest < ActiveSupport::TestCase
             { raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}", confirm_using_mfa: "1" }
           end,
       )
-      secret = ROTP::Base32.random_base32
-      contact.store_otp(secret, 1, (contact.class.database_now + 10.minutes).to_i)
-      code = ROTP::HOTP.new(secret).at(1).to_s
       nonce = SecureRandom.urlsafe_base64(32)
-      flow = ContactRegistrationOtpIssuer.call!(
-        actor: owner, token: root, contact:, channel:, browser_nonce: nonce, code:,
-      )
-      original = contact.reload.credential_registration_otp_context.deep_dup
-      now = Time.iso8601(original.fetch("issued_at"))
+      issued =
+        if channel == :email
+          EmailCredentialRegistrationOtpIssuer.call(actor: owner, token: root, email: contact, browser_nonce: nonce)
+        else
+          TelephoneCredentialRegistrationOtpIssuer.call(
+            actor: owner, token: root, telephone: contact,
+            browser_nonce: nonce,
+          )
+        end
+
+      assert_predicate issued, :success?
+      flow = issued.transaction
+      original = flow.reload.attributes
+      digest_field = (channel == :email) ? :normalized_email_digest : :normalized_number_digest
+      candidate_field = (channel == :email) ? :email_candidate_ref : :telephone_candidate_ref
       malformed = [
-        [], {}, original.except("browser_digest"), original.merge("extra" => true),
-        original.merge("version" => 2), original.merge("surface" => "org"),
-        original.merge("purpose" => "sign_up"), original.merge("flow_ref" => ""),
-        original.merge("session_ref" => ""), original.merge("session_ref" => "x" * 22),
-        original.merge("owner_ref" => ""), original.merge("owner_ref" => "x" * 22),
-        original.merge("contact_ref" => "other"), original.merge("browser_digest" => nil),
-        original.merge("browser_digest" => "a" * 63), original.merge("browser_digest" => "a" * 65),
-        original.merge("destination_digest" => "a" * 63), original.merge("code_digest" => "a" * 65),
-        original.merge("destination_digest" => "a" * 65), original.merge("code_digest" => "a" * 63),
-        original.merge("counter" => 1), original.merge("counter" => "01"),
-        original.merge("counter" => "-1"), original.merge("counter" => nil),
-        original.merge("counter" => "18446744073709551616"),
-        original.merge("issued_at" => nil), original.merge("expires_at" => "infinity"),
-        original.merge("issued_at" => "-infinity"),
-        original.merge("expires_at" => now.iso8601(6)),
-        original.merge("verified_at" => now.iso8601(6)),
-        original.merge("result_expires_at" => (now + 60.seconds).iso8601(6)),
-        original.merge(
-          "verified_at" => (now - Rational(1, 1_000_000)).iso8601(6),
-          "result_expires_at" => (now + 60.seconds).iso8601(6),
-        ),
-        original.merge(
-          "verified_at" => now.iso8601(6),
-          "result_expires_at" => (now + 60.seconds + Rational(1, 1_000_000)).iso8601(6),
-        ),
-        original.merge("verified_at" => now.iso8601(6), "result_expires_at" => now.iso8601(6)),
+        { purpose: "unsupported" }, { otp_generation: nil }, { otp_generation: "not-a-uuid" },
+        { otp_verifier: "" }, { otp_verifier: "a" * 63 }, { otp_verifier: "a" * 65 },
+        { otp_verifier: "G" * 64 }, { otp_verifier: nil },
+        { actor_ref: "" }, { session_ref: "" }, { candidate_field => nil },
+        { digest_field => "a" * 63 }, { digest_field => "a" * 65 },
+        { otp_expires_at: Float::INFINITY }, { expires_at: -Float::INFINITY },
+        { otp_consumed_at: flow.class.database_now },
+        { otp_receipt_verifier: "a" * 64 }, { otp_result_expires_at: flow.class.database_now + 60.seconds },
       ]
       malformed.each_with_index do |replacement, index|
-        contact.class.transaction(requires_new: true) do
+        flow.class.transaction(requires_new: true) do
           assert_raises(ActiveRecord::StatementInvalid, "malformed proof partition #{index}") do
-            contact.update_columns(credential_registration_otp_context: replacement)
+            flow.update_columns(replacement)
+          end
+          raise ActiveRecord::Rollback
+        end
+        unchanged = original == flow.reload.attributes
+
+        assert unchanged, "Rejected SQL must preserve the original challenge without revealing its facts"
+      end
+
+      # Generation is an opaque UUID, not the retired unsigned-decimal HOTP counter.
+      flow.class.transaction(requires_new: true) do
+        assert flow.update_columns(otp_generation: SecureRandom.uuid, otp_verifier: "a" * 64)
+        raise ActiveRecord::Rollback
+      end
+
+      assert original == flow.reload.attributes
+
+      now = flow.class.database_now
+      [-Rational(1, 1_000_000), 0, Rational(1, 1_000_000),
+       60.seconds - Rational(1, 1_000_000), 60.seconds,
+       60.seconds + Rational(1, 1_000_000),].each do |ttl|
+        flow.class.transaction(requires_new: true) do
+          replacement = {
+            otp_consumed_at: now,
+            otp_verifier: nil,
+            otp_receipt_verifier: "a" * 64,
+            otp_result_expires_at: now + ttl,
+          }
+          if ttl.positive? && ttl <= 60.seconds
+            assert flow.update_columns(replacement)
+          else
+            assert_raises(ActiveRecord::StatementInvalid) { flow.update_columns(replacement) }
           end
           raise ActiveRecord::Rollback
         end
 
-        assert original == contact.reload.credential_registration_otp_context,
-               "rejected writes must preserve the original challenge without disclosing its facts"
+        assert original == flow.reload.attributes, "Rolled-back bounds must not manufacture a result"
       end
 
-      # PostgreSQL timestamps have microsecond precision; counters are canonical unsigned decimal strings.
-      valid_boundaries = [
-        original.merge("counter" => "0"), original.merge("counter" => "18446744073709551614"),
-        original.merge("counter" => "18446744073709551615"),
-        original.merge("session_ref" => "x", "owner_ref" => "x"),
-        original.merge("session_ref" => "x" * 21, "owner_ref" => "x" * 21),
-        original.merge(
-          "browser_digest" => "a" * 64, "destination_digest" => "a" * 64,
-          "code_digest" => "a" * 64,
-        ),
-      ]
-      [Rational(1, 1_000_000), 60.seconds - Rational(1, 1_000_000), 60.seconds].each do |ttl|
-        valid_boundaries << original.merge(
-          "verified_at" => now.iso8601(6), "result_expires_at" => (now + ttl).iso8601(6),
-        )
-      end
-      valid_boundaries.each do |replacement|
-        contact.class.transaction(requires_new: true) do
-          assert contact.update_columns(credential_registration_otp_context: replacement)
+      verified =
+        if channel == :email
+          EmailCredentialRegistrationOtpVerificationCommitter.call(
+            actor: owner, token: root, email: contact, transaction: flow, browser_nonce: nonce, code: issued.code,
+          )
+        else
+          TelephoneCredentialRegistrationOtpVerificationCommitter.call(
+            actor: owner, token: root, telephone: contact, transaction: flow, browser_nonce: nonce, code: issued.code,
+          )
+        end
+
+      assert_equal :verified, verified.status
+      committed = flow.reload.attributes
+      [
+        { otp_consumed_at: nil, otp_receipt_verifier: nil, otp_result_expires_at: nil },
+        { otp_verifier: original.fetch("otp_verifier") }, { otp_generation: SecureRandom.uuid },
+      ].each do |replacement|
+        flow.class.transaction(requires_new: true) do
+          assert_raises(ActiveRecord::StatementInvalid) { flow.update_columns(replacement) }
           raise ActiveRecord::Rollback
         end
 
-        assert original == contact.reload.credential_registration_otp_context,
-               "rolled-back boundary probes must not manufacture a verification result"
+        assert committed == flow.reload.attributes, "SQL cannot erase or replace committed proof"
       end
-
-      assert_equal :verified, ContactRegistrationOtpVerificationCommitter.call!(
-        actor: owner, token: root, contact:, transaction: flow, channel:, browser_nonce: nonce, code:,
-      )
-      committed = contact.reload.credential_registration_otp_context.deep_dup
-      [nil, original, committed.merge("counter" => "2")].each do |replacement|
-        contact.class.transaction(requires_new: true) do
-          assert_raises(ActiveRecord::StatementInvalid) do
-            contact.update_columns(credential_registration_otp_context: replacement)
-          end
-          raise ActiveRecord::Rollback
-        end
-
-        assert committed == contact.reload.credential_registration_otp_context,
-               "direct writes cannot erase or replace a committed proof"
-      end
-      assert_nil contact.get_otp
-      assert_not flow.reload.consumed?
+      assert_nil flow.otp_verifier
+      assert_not_nil flow.otp_consumed_at
+      assert_not flow.consumed?
     end
   end
 end

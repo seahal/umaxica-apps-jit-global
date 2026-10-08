@@ -15,7 +15,7 @@ module SignIn
       assert_predicate result, :empty?
       assert_predicate result, :cleared?
       assert_predicate cycle.reload, :sign_in_selector_pending?
-      assert_equal "selector", cycle.step
+      assert_equal "SELECTOR_PENDING", cycle.state_name_for(cycle.state_id)
     end
 
     test "checkpoint evaluator must return SignInParticipantItem" do
@@ -78,7 +78,7 @@ module SignIn
       assert_predicate result, :blocking?
       assert_equal [:bulletin], result.stack.map(&:key)
       assert_predicate cycle.reload, :sign_in_checkpoint_pending?
-      assert_equal "checkpoint", cycle.step
+      assert_equal "CHECKPOINT_PENDING", cycle.state_name_for(cycle.state_id)
     end
 
     test "post-auth routing resolves dashboard without a second lifecycle transition" do
@@ -104,7 +104,7 @@ module SignIn
       assert_equal :auto_committed, result.status
       assert_equal "Client", result.candidate.persona
       assert_predicate cycle.reload, :sign_in_session_issuance_pending?
-      assert_equal "session_issuance", cycle.step
+      assert_equal "SESSION_ISSUANCE_PENDING", cycle.state_name_for(cycle.state_id)
       assert_not_nil cycle.selector_completed_at if cycle.has_attribute?(:selector_completed_at)
     end
 
@@ -160,7 +160,7 @@ module SignIn
       assert_equal :signed_return, decision.kind
       assert_equal "/settings?tab=sessions", decision.target
       assert_predicate cycle.reload, :sign_in_completed?
-      assert_equal "completed", cycle.step
+      assert_equal "COMPLETED", cycle.state_name_for(cycle.state_id)
       assert_not_nil cycle.completed_at
       assert_equal "/settings?tab=sessions", cycle.return_to
     end
@@ -221,23 +221,13 @@ module SignIn
     def create_cycle(actor, cycle_class: ClientSignInFlow, status_name:, return_to: "/dashboard")
       cycle_class.create!(
         principal_id: actor.id,
-        status_id: cycle_class.status_id_for(status_name),
-        step: step_for(status_name),
+        state_id: cycle_class.state_id_for(status_name),
         return_to: return_to,
         nonce_digest: cycle_class.digest_nonce("nonce"),
         issued_at: Time.current,
         expires_at: 15.minutes.from_now,
         completed_at: (Time.current if status_name == "COMPLETED"),
       )
-    end
-
-    def step_for(status_name)
-      {
-        "CHECKPOINT_PENDING" => "checkpoint",
-        "SELECTOR_PENDING" => "selector",
-        "SESSION_ISSUANCE_PENDING" => "session_issuance",
-        "COMPLETED" => "completed",
-      }.fetch(status_name)
     end
   end
 end

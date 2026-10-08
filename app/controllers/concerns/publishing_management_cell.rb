@@ -55,7 +55,7 @@ module PublishingManagementCell
     #
     # The surface web rate limit comes from the staff ApplicationController
     # these controllers inherit (Edit::Org::ApplicationController).
-    before_action :authenticate_operator!
+    before_action :authenticate_browser_rp!
   end
 
   private
@@ -84,7 +84,7 @@ module PublishingManagementCell
     authorize!(record, to: to, with: PublishingEntryPolicy)
   end
 
-  # Provenance for every row this request writes. `authenticate_operator!` has
+  # Provenance for every row this request writes. `authenticate_browser_rp!` has
   # already run, so an absent operator here is a broken pipeline, not a
   # visitor: it raises rather than writing an anonymous revision.
   def operator_public_id

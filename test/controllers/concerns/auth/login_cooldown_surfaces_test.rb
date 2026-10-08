@@ -17,21 +17,21 @@ class AuthLoginCooldownSurfacesTest < ActiveSupport::TestCase
 
   SURFACES = {
     app: {
-      controller: Base::App::ApplicationController,
+      controller: Base::App::AuthorityController,
       host: "PUBLIC_BASE_SERVICE_URL",
       token_class: ClientToken,
       resource: -> { Client.create!(status_id: ClientStatus::NOTHING, birthdate: "2000-01-01") },
       token: ->(resource, attrs) { ClientToken.create!(user: resource, **attrs) },
     },
     com: {
-      controller: Base::Com::ApplicationController,
+      controller: Base::Com::AuthorityController,
       host: "PUBLIC_BASE_CORPORATE_URL",
       token_class: VisitorToken,
       resource: -> { Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR) },
       token: ->(resource, attrs) { VisitorToken.create!(visitor_id: resource.id, **attrs) },
     },
     org: {
-      controller: Base::Org::ApplicationController,
+      controller: Base::Org::AuthorityController,
       host: "PUBLIC_BASE_STAFF_URL",
       token_class: OperatorToken,
       resource: -> { Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF) },

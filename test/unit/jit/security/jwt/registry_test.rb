@@ -367,6 +367,12 @@ module Jit
             "OIDC_CLIENT_WARP_COM_PRIVATE_KEY" => base64_der(@surface_key),
             "OIDC_CLIENT_WARP_ORG_ACTIVE_KID" => "warp-org-kid",
             "OIDC_CLIENT_WARP_ORG_PRIVATE_KEY" => base64_der(@surface_key),
+            "OIDC_CLIENT_BASE_RP_APP_WW_ACTIVE_KID" => "base-rp-app-kid",
+            "OIDC_CLIENT_BASE_RP_APP_WW_PRIVATE_KEY" => base64_der(@surface_key),
+            "OIDC_CLIENT_BASE_RP_COM_WW_ACTIVE_KID" => "base-rp-com-kid",
+            "OIDC_CLIENT_BASE_RP_COM_WW_PRIVATE_KEY" => base64_der(@surface_key),
+            "OIDC_CLIENT_BASE_RP_ORG_WW_ACTIVE_KID" => "base-rp-org-kid",
+            "OIDC_CLIENT_BASE_RP_ORG_WW_PRIVATE_KEY" => base64_der(@surface_key),
           }.merge(extra_env)
           clear_unused_registry_namespace_env(env)
           env["AUTH_JWT_PRIVATE_KEYSET"] =

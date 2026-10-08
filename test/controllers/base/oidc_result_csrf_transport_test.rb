@@ -43,7 +43,7 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
                             headers: base_headers,
       )
 
-      assert_equal 302, owner.response.status
+      assert_equal 303, owner.response.status
       # Normalize Rack::Test's encoded multi-value Set-Cookie representation using
       # public response/CookieJar APIs, without synthesizing a browser session.
       cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)

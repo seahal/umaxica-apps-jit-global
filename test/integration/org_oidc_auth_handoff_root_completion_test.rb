@@ -58,7 +58,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
       browser.post("/sign", params: { ri: "jp", authenticity_token: csrf }, headers: base_headers)
 
-      assert_equal 302, browser.response.status
+      assert_equal 303, browser.response.status
       issuer = JitSecurityJwtRegistry.surface("BASE_ORG")
       entry_reference = nil
       2.times do |index|
@@ -82,7 +82,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
         browser.post(form["action"], params: fields, headers: base_headers)
 
-        assert_equal 302, browser.response.status
+        assert_equal 303, browser.response.status
       end
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_reference)
       parent = binding.authorization_transaction
@@ -334,7 +334,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
         browser.post("/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers: base_headers)
 
-        assert_equal 302, browser.response.status
+        assert_equal 303, browser.response.status
         assert parent.reload.base_finalized_at.present?
         root_reference ||= parent.browser_session_ref
 

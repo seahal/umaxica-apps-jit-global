@@ -13,6 +13,8 @@ stateDiagram-v2
     exhausted --> absent: native Valkey expiry
     note right of exhausted
         App/com signup and email sign-in; app/com/org destination confirmation.
+        EmailOtpVerificationFailureBudget and TelephoneOtpVerificationFailureBudget own separate policies.
+        Sharing here means candidate/flow/browser reuse within the explicit scope, not channel policy sharing.
         Existing recovery/reentry callers use their own purpose scopes.
         Dummy email sign-in counts well-formed attempts and cannot succeed.
         Key scope: surface, purpose, channel, normalized destination digest.

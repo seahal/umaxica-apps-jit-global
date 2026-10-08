@@ -9,7 +9,7 @@ require "test_helper"
 class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
   SURFACES = {
     app: {
-      controller: Base::App::ApplicationController,
+      controller: Base::App::AuthorityController,
       host: "PUBLIC_BASE_SERVICE_URL",
       token_class: ClientToken,
       foreign_key: :user_id,
@@ -18,7 +18,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
       resource: -> { Client.create!(status_id: ClientStatus::NOTHING, birthdate: "2000-01-01") },
     },
     com: {
-      controller: Base::Com::ApplicationController,
+      controller: Base::Com::AuthorityController,
       host: "PUBLIC_BASE_CORPORATE_URL",
       token_class: VisitorToken,
       foreign_key: :visitor_id,
@@ -27,7 +27,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
       resource: -> { Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR) },
     },
     org: {
-      controller: Base::Org::ApplicationController,
+      controller: Base::Org::AuthorityController,
       host: "PUBLIC_BASE_STAFF_URL",
       token_class: OperatorToken,
       foreign_key: :staff_id,
@@ -42,9 +42,9 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
     request = ActionDispatch::TestRequest.create
     request.host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     request.session = ActionController::TestSession.new
-    controller = Base::App::ApplicationController.new
+    controller = Base::App::AuthorityController.new
     controller.set_request!(request)
-    controller.set_response!(Base::App::ApplicationController.make_response!(request))
+    controller.set_response!(Base::App::AuthorityController.make_response!(request))
 
     assert_no_difference -> { ClientToken.where(user_id: actor.id).count } do
       AppTicketRecord.transaction(requires_new: true) do
@@ -86,13 +86,16 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
       existing = fill_sessions(config, resource, config[:limit])
       controller = build_controller(config)
       controller.session[:unrelated_marker] = "kept"
+      # A session-limit resolution is a child of the sign-in flow being committed (D-30).
+      flow = issuance_pending_flow(config, resource)
 
       result = nil
       assert_no_difference(-> { config[:token_class].count }) do
-        result = controller.log_in(resource, establishment: :root_login)
+        result = controller.log_in(resource, establishment: :root_login, sign_in_flow: flow)
       end
 
       assert_equal :session_limit_pending, result.fetch(:status)
+      assert_equal "SESSION_ISSUANCE_PENDING", flow.reload.state_name_for(flow.state_id)
       assert_nil controller.request.cookie_jar[AuthenticationBase::ACCESS_COOKIE_KEY]
       assert_nil controller.request.cookie_jar[AuthenticationBase::REFRESH_COOKIE_KEY]
       assert_equal "kept", controller.session[:unrelated_marker]
@@ -178,9 +181,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
     flow_class.create!(
       principal_id: resource.id,
       token_id: token&.id,
-      status_id: flow_class.status_id_for("SESSION_ISSUANCE_PENDING"),
-      state: "SESSION_ISSUANCE_PENDING",
-      step: "session_issuance",
+      state_id: flow_class.state_id_for("SESSION_ISSUANCE_PENDING"),
       nonce_digest: flow_class.digest_nonce(SecureRandom.hex(8)),
     )
   end

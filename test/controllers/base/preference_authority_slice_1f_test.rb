@@ -342,13 +342,6 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_public_id: nil, resource_type: nil)
-    AuthenticationToken.encode(
-      resource, host: host, session_public_id: session_public_id, resource_type: resource_type,
-                jwt_issuer_id: jwt_issuer_id_for_test_host(host, resource_type),
-    )
-  end
-
   # Base shares its production origin with Acme (both `https://www.umaxica.<tld>`), so the
   # issuer namespace cannot be inferred from a host substring like "base". Match against the
   # actual configured Base hosts first; fall back to substring heuristics for surfaces whose

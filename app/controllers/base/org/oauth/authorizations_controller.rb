@@ -129,7 +129,8 @@ module Base
                 entry_ref: issuance.handoff.reference,
               )
             end
-          redirect_to_jump_url(sign_url)
+          # The ceremony start is a local POST (D-82); 303 keeps the cross-host hop a GET.
+          redirect_to_jump_url(sign_url, status: :see_other)
         end
 
         def resume_authorization!(transaction, result_generation: nil)

@@ -9,18 +9,36 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
            :client_email_statuses, :client_totp_credential_statuses
 
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    https!
+    ClientSignInFlowState.ensure_defaults!
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     @user = Client.create!(mfa_level_enabled: true)
     @email = "challenge_hub_#{SecureRandom.hex(4)}@example.com".freeze
     @email_record = @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
+    @email_record.finalize_binding!
     ClientTotpCredential.create!(
       user: @user,
       private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
       title: "totp",
     )
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+    )
+    get auth_app_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
+
+    assert_response :see_other
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get auth_app_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_sign_in_path, params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
+
+    assert_response :see_other
   end
 
   teardown do
@@ -88,7 +106,7 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
 
     assert_response :see_other
     assert_redirected_to auth_app_sign_in_path(ri: "jp")
-    assert_predicate cycle.reload, :sign_in_failed?
+    assert_predicate cycle.reload, :sign_in_halted?
     assert_nil session[:pending_mfa]
     assert_nil session[:mfa_user_id]
     assert_nil session[:pending_login_user_id]
@@ -192,10 +210,17 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
 
     assert_response :found
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 55_555
-    pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
-    @email_record.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    delivery_class = OtpEmailNotifierRollout.enabled?(:app) ? OtpNotifierEmailDeliveryJob : OtpMailDeliveryJob
+    delivery =
+      ActiveJob::Base.queue_adapter.enqueued_jobs.reverse.find do |entry|
+        entry.fetch(:job) == delivery_class
+      end
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    ceremony = ClientAuthCeremonySession.find(payload.fetch(:auth_ceremony_session_ref))
+
+    assert_equal @email_record.public_id, ceremony.email_otp_context.fetch("contact_ref")
+    assert_equal payload.fetch(:auth_email_otp_generation), ceremony.email_otp_context.fetch("generation")
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
 
     patch(
       auth_app_sign_in_email_path(ri: "jp"), params: {

@@ -23,14 +23,12 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
         when "org" then operators(:one)
         end
       token = token_model.create!(owner_key => actor.id, kind_key => kind)
+      # Base UI is a Browser RP of itself: only its RP credential makes the browser authenticated.
+      install_base_browser_rp_credentials!(surface: surface, host: host, actor: actor, token: token)
+      token.reload
       before = token.attributes.slice(
         "user_token_status_id", "visitor_token_status_id", "staff_token_status_id", "discard_at",
         "refresh_token_digest", "last_step_up_at",
-      )
-      cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = AuthenticationToken.encode(
-        actor, host: host, session_public_id: token.public_id,
-               resource_type: { "app" => "client", "com" => "visitor", "org" => "operator" }.fetch(surface),
-               jwt_issuer_id: "surface:BASE_#{surface.upcase}",
       )
       assert_no_difference(-> { flow_model.count }) do
         get("/sign", params: { ri: "jp" })
@@ -71,9 +69,45 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
       https!
       get("/sign", params: { ri: "jp" })
       csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      assert_difference(-> { flow_model.count }, 1) do
+      # The RP start and the plain authorization GET mint nothing; only the receiver-local
+      # ceremony start POST creates the sign-in flow and its browser binding (D-82).
+      assert_no_difference(-> { flow_model.count }) do
         post(
           "/sign", params: { ri: "jp", authenticity_token: csrf }, headers: {
+            "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin",
+          },
+        )
+
+        assert_response :see_other
+        # The RP start reaches its own authorization endpoint through the signed Jump gateway.
+        start_issuer = JitSecurityJwtRegistry.surface("BASE_#{surface.upcase}")
+        start_payload, = JWT.decode(
+          Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt"),
+          JitSecurityJwtRegistry.public_key_for(start_issuer.id, start_issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        authorization = URI.parse(start_payload.fetch("url"))
+
+        assert_equal [host, "/oauth/authorize"], [authorization.host, authorization.path]
+        authorization_query = Rack::Utils.parse_query(authorization.query)
+
+        assert_equal "base-#{surface}-ww", authorization_query.fetch("client_id")
+        assert_equal "S256", authorization_query.fetch("code_challenge_method")
+        get(authorization.request_uri)
+
+        assert_response :success
+        assert_select 'form[method="post"] input[name="ceremony_action"][value="start"]', count: 1
+      end
+      start_form = response.parsed_body.at_css('form[method="post"]')
+      start_params = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      binding_model =
+        { "app" => ClientAuthAdmissionBinding,
+          "com" => VisitorAuthAdmissionBinding,
+          "org" => OperatorAuthAdmissionBinding, }.fetch(surface)
+      assert_difference(-> { binding_model.count }, 1) do
+        post(
+          start_form["action"], params: start_params, headers: {
             "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin",
           },
         )
@@ -109,10 +143,14 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
       query = Rack::Utils.parse_query(target.query)
 
       assert_equal "jp", query.fetch("ri")
-      flow = flow_model.find_by!(public_id: query.fetch("entry_ref"))
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: surface, reference: query.fetch("entry_ref"),
+      )
 
-      assert_nil flow.principal_id
-      assert_nil flow.token_id
+      # The OIDC start binds its authorization transaction, not an authenticated actor or session.
+      assert_predicate binding.authorization_transaction_id, :present?
+      assert_nil binding.base_token_id
+      assert_nil binding.redeemed_at
       # Simulate delivery of the verified outbound target, with a distinct Auth cookie jar.
       # This does not run the external gateway or its return-token verifier.
       auth_browser = open_session
@@ -122,7 +160,7 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
 
       assert_equal 200, auth_browser.response.status
       assert_includes auth_browser.response.body, 'name="authenticity_token"'
-      assert_nil flow.reload.token_id
+      assert_nil binding.reload.redeemed_at
     ensure
       ActionController::Base.allow_forgery_protection = previous
     end

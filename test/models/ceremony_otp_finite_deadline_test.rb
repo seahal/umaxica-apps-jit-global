@@ -20,7 +20,15 @@ class CeremonyOtpFiniteDeadlineTest < ActiveSupport::TestCase
           else
             transaction.issue_telephone_otp!(purpose: "credential_registration")
           end
-        transaction.update_columns(column => invalid_deadline)
+        original = transaction.reload.attributes
+        model.transaction(requires_new: true) do
+          assert_raises(ActiveRecord::StatementInvalid) { transaction.update_columns(column => invalid_deadline) }
+          raise ActiveRecord::Rollback
+        end
+        unchanged = original == transaction.reload.attributes
+
+        assert unchanged, "Invalid SQL deadlines must not change stored proof"
+        transaction[column] = invalid_deadline
         sent = false
         binding = {
           code: code,
@@ -32,17 +40,25 @@ class CeremonyOtpFiniteDeadlineTest < ActiveSupport::TestCase
         }
         if channel == :email
           assert_not transaction.email_otp_deliverable?(generation: transaction.otp_generation, at: model.database_now)
-          assert_not transaction.deliver_email_otp!(generation: transaction.otp_generation, code: code) { sent = true }
-          assert_not transaction.verify_email_otp!(**binding)
         else
           assert_not transaction.telephone_otp_deliverable?(
             generation: transaction.otp_generation,
             at: model.database_now,
           )
-          assert_not transaction.deliver_telephone_otp!(generation: transaction.otp_generation, code: code) {
-            sent = true
-          }
-          assert_not transaction.verify_telephone_otp!(**binding)
+        end
+        transaction.reload
+        model.stub(:database_now, transaction.otp_expires_at) do
+          if channel == :email
+            assert_not transaction.deliver_email_otp!(generation: transaction.otp_generation, code: code) {
+              sent = true
+            }
+            assert_not transaction.verify_email_otp!(**binding)
+          else
+            assert_not transaction.deliver_telephone_otp!(generation: transaction.otp_generation, code: code) {
+              sent = true
+            }
+            assert_not transaction.verify_telephone_otp!(**binding)
+          end
         end
 
         assert_not sent

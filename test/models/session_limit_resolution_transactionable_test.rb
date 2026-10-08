@@ -259,6 +259,10 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
           end
         rescue StandardError => e
           results << e
+        ensure
+          # Model clock reads lease connections to this executor thread; an unreleased lease
+          # outlives the future and starves the two-connection test pools.
+          ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end
     threads.each(&:wait)
@@ -299,6 +303,10 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
           end
         rescue StandardError => e
           results << e
+        ensure
+          # Model clock reads lease connections to this executor thread; an unreleased lease
+          # outlives the future and starves the two-connection test pools.
+          ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end
     threads.each(&:wait)

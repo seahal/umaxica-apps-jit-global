@@ -38,6 +38,24 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
+--
+-- Name: enforce_operator_email_terminal_otp_facts(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_operator_email_terminal_otp_facts() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN IF (OLD.otp_consumed_at IS NOT NULL OR OLD.otp_cancelled_at IS NOT NULL) AND ROW(NEW.purpose, NEW.otp_generation, NEW.otp_verifier, NEW.otp_expires_at, NEW.otp_consumed_at, NEW.otp_cancelled_at, NEW.otp_receipt_verifier, NEW.otp_result_expires_at, NEW.surface, NEW.transaction_id, NEW.actor_ref, NEW.session_ref, NEW.operation, NEW.expires_at, NEW.email_candidate_ref, NEW.normalized_email_digest, NEW.bootstrap_ceremony_transaction_ref) IS DISTINCT FROM ROW(OLD.purpose, OLD.otp_generation, OLD.otp_verifier, OLD.otp_expires_at, OLD.otp_consumed_at, OLD.otp_cancelled_at, OLD.otp_receipt_verifier, OLD.otp_result_expires_at, OLD.surface, OLD.transaction_id, OLD.actor_ref, OLD.session_ref, OLD.operation, OLD.expires_at, OLD.email_candidate_ref, OLD.normalized_email_digest, OLD.bootstrap_ceremony_transaction_ref) THEN RAISE EXCEPTION 'terminal OTP facts are immutable'; END IF; RETURN NEW; END; $$;
+
+
+--
+-- Name: enforce_operator_telephone_terminal_otp_facts(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_operator_telephone_terminal_otp_facts() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN IF (OLD.otp_consumed_at IS NOT NULL OR OLD.otp_cancelled_at IS NOT NULL) AND ROW(NEW.purpose, NEW.otp_generation, NEW.otp_verifier, NEW.otp_expires_at, NEW.otp_consumed_at, NEW.otp_cancelled_at, NEW.otp_receipt_verifier, NEW.otp_result_expires_at, NEW.surface, NEW.transaction_id, NEW.actor_ref, NEW.session_ref, NEW.operation, NEW.expires_at, NEW.telephone_candidate_ref, NEW.normalized_number_digest) IS DISTINCT FROM ROW(OLD.purpose, OLD.otp_generation, OLD.otp_verifier, OLD.otp_expires_at, OLD.otp_consumed_at, OLD.otp_cancelled_at, OLD.otp_receipt_verifier, OLD.otp_result_expires_at, OLD.surface, OLD.transaction_id, OLD.actor_ref, OLD.session_ref, OLD.operation, OLD.expires_at, OLD.telephone_candidate_ref, OLD.normalized_number_digest) THEN RAISE EXCEPTION 'terminal OTP facts are immutable'; END IF; RETURN NEW; END; $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -277,8 +295,11 @@ CREATE TABLE public.operator_email_ceremony_transactions (
     otp_cancelled_at timestamp(6) with time zone,
     otp_receipt_verifier character varying,
     otp_result_expires_at timestamp(6) with time zone,
+    bootstrap_ceremony_transaction_ref character varying,
     CONSTRAINT operator_email_ceremony_transactions_otp_material CHECK (((otp_verifier IS NULL) OR ((purpose IS NOT NULL) AND (otp_generation IS NOT NULL) AND (otp_expires_at IS NOT NULL)))),
     CONSTRAINT operator_email_ceremony_transactions_otp_purpose CHECK (((purpose IS NULL) OR ((purpose)::text = ANY ((ARRAY['sign_up'::character varying, 'sign_in'::character varying, 'recovery'::character varying, 'withdrawal'::character varying, 'credential_registration'::character varying])::text[])))),
+    CONSTRAINT operator_email_otp_bootstrap_purpose CHECK (((bootstrap_ceremony_transaction_ref IS NULL) OR (((operation)::text = 'registration'::text) AND (purpose IS NOT NULL) AND ((purpose)::text = 'credential_registration'::text)))),
+    CONSTRAINT operator_email_otp_proof_shape CHECK (((otp_generation IS NULL) OR (((purpose IS NOT NULL) AND ((actor_ref)::text <> ''::text) AND ((session_ref)::text <> ''::text) AND (email_candidate_ref IS NOT NULL) AND ((email_candidate_ref)::text <> ''::text) AND ((normalized_email_digest IS NULL) OR ((normalized_email_digest)::text ~ '^[0-9a-f]{64}$'::text)) AND (otp_expires_at IS NOT NULL) AND isfinite(otp_expires_at) AND isfinite(expires_at) AND (((otp_consumed_at IS NULL) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NOT NULL) AND ((otp_verifier)::text ~ '^[0-9a-f]{64}$'::text) AND (otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)) OR ((otp_consumed_at IS NOT NULL) AND isfinite(otp_consumed_at) AND (otp_consumed_at < otp_expires_at) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NULL) AND (otp_receipt_verifier IS NOT NULL) AND (otp_result_expires_at IS NOT NULL)) OR ((otp_cancelled_at IS NOT NULL) AND isfinite(otp_cancelled_at) AND (otp_consumed_at IS NULL) AND (otp_verifier IS NULL) AND (otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)))) IS TRUE))),
     CONSTRAINT operator_email_otp_receipt_bounds CHECK ((((otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)) OR ((otp_receipt_verifier IS NOT NULL) AND ((otp_receipt_verifier)::text ~ '^[0-9a-f]{64}$'::text) AND (otp_consumed_at IS NOT NULL) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NULL) AND (otp_result_expires_at IS NOT NULL) AND isfinite(otp_result_expires_at) AND (otp_result_expires_at > otp_consumed_at) AND (otp_result_expires_at <= (otp_consumed_at + '00:01:00'::interval)) AND (otp_result_expires_at <= expires_at))))
 );
 
@@ -1137,6 +1158,7 @@ CREATE TABLE public.operator_telephone_ceremony_transactions (
     otp_result_expires_at timestamp(6) with time zone,
     CONSTRAINT operator_telephone_ceremony_transactions_otp_material CHECK (((otp_verifier IS NULL) OR ((purpose IS NOT NULL) AND (otp_generation IS NOT NULL) AND (otp_expires_at IS NOT NULL)))),
     CONSTRAINT operator_telephone_ceremony_transactions_otp_purpose CHECK (((purpose IS NULL) OR ((purpose)::text = ANY ((ARRAY['sign_up'::character varying, 'sign_in'::character varying, 'recovery'::character varying, 'withdrawal'::character varying, 'credential_registration'::character varying])::text[])))),
+    CONSTRAINT operator_telephone_otp_proof_shape CHECK (((otp_generation IS NULL) OR (((purpose IS NOT NULL) AND ((actor_ref)::text <> ''::text) AND ((session_ref)::text <> ''::text) AND (telephone_candidate_ref IS NOT NULL) AND ((telephone_candidate_ref)::text <> ''::text) AND ((normalized_number_digest IS NULL) OR ((normalized_number_digest)::text ~ '^[0-9a-f]{64}$'::text)) AND (otp_expires_at IS NOT NULL) AND isfinite(otp_expires_at) AND isfinite(expires_at) AND (((otp_consumed_at IS NULL) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NOT NULL) AND ((otp_verifier)::text ~ '^[0-9a-f]{64}$'::text) AND (otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)) OR ((otp_consumed_at IS NOT NULL) AND isfinite(otp_consumed_at) AND (otp_consumed_at < otp_expires_at) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NULL) AND (otp_receipt_verifier IS NOT NULL) AND (otp_result_expires_at IS NOT NULL)) OR ((otp_cancelled_at IS NOT NULL) AND isfinite(otp_cancelled_at) AND (otp_consumed_at IS NULL) AND (otp_verifier IS NULL) AND (otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)))) IS TRUE))),
     CONSTRAINT operator_telephone_otp_receipt_bounds CHECK ((((otp_receipt_verifier IS NULL) AND (otp_result_expires_at IS NULL)) OR ((otp_receipt_verifier IS NOT NULL) AND ((otp_receipt_verifier)::text ~ '^[0-9a-f]{64}$'::text) AND (otp_consumed_at IS NOT NULL) AND (otp_cancelled_at IS NULL) AND (otp_verifier IS NULL) AND (otp_result_expires_at IS NOT NULL) AND isfinite(otp_result_expires_at) AND (otp_result_expires_at > otp_consumed_at) AND (otp_result_expires_at <= (otp_consumed_at + '00:01:00'::interval)) AND (otp_result_expires_at <= expires_at))))
 );
 
@@ -2875,6 +2897,27 @@ CREATE INDEX index_organization_invitations_on_organization_id ON public.organiz
 
 
 --
+-- Name: operator_email_otp_original_bootstrap; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX operator_email_otp_original_bootstrap ON public.operator_email_ceremony_transactions USING btree (bootstrap_ceremony_transaction_ref);
+
+
+--
+-- Name: operator_email_ceremony_transactions operator_email_terminal_otp_facts; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER operator_email_terminal_otp_facts BEFORE UPDATE ON public.operator_email_ceremony_transactions FOR EACH ROW EXECUTE FUNCTION public.enforce_operator_email_terminal_otp_facts();
+
+
+--
+-- Name: operator_telephone_ceremony_transactions operator_telephone_terminal_otp_facts; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER operator_telephone_terminal_otp_facts BEFORE UPDATE ON public.operator_telephone_ceremony_transactions FOR EACH ROW EXECUTE FUNCTION public.enforce_operator_telephone_terminal_otp_facts();
+
+
+--
 -- Name: operator_auth_admission_bindings fk_operator_auth_admission_bindings_admitted_session; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3131,12 +3174,24 @@ ALTER TABLE ONLY public.operator_tokens
 
 
 --
+-- Name: operator_email_ceremony_transactions operator_email_otp_original_bootstrap_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_email_ceremony_transactions
+    ADD CONSTRAINT operator_email_otp_original_bootstrap_fk FOREIGN KEY (bootstrap_ceremony_transaction_ref) REFERENCES public.operator_step_up_ceremony_transactions(transaction_id);
+
+
+--
 -- PostgreSQL database dump complete
 --
 
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261008150817'),
+('20261008145947'),
+('20261008094505'),
+('20261008093932'),
 ('20261008062955'),
 ('20261008062848'),
 ('20261007223858'),

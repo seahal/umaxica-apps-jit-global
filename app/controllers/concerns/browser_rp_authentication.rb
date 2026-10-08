@@ -395,8 +395,11 @@ module BrowserRpAuthentication
     []
   end
 
+  # A refused credential on a public HTML page is detached and the page renders anonymous
+  # (adr/invalid-browser-credential-recovery.md); other representations keep their
+  # authentication failure response.
   def browser_rp_invalid_credentials_are_ignored?
-    false
+    request.format.html?
   end
 
   def browser_rp_unauthenticated_redirect_path
@@ -415,8 +418,17 @@ module BrowserRpAuthentication
 
   def render_browser_rp_unauthenticated!
     response.set_header("Cache-Control", "no-store")
+    return render(json: { error: "Unauthorized" }, status: :unauthorized) if request.format.json?
+
     redirect_path = browser_rp_unauthenticated_redirect_path
     if redirect_path.present?
+      # An Inertia visit cannot follow a redirect out of its application; the protocol reserves
+      # 409 with X-Inertia-Location for that.
+      if request.headers["X-Inertia"].present?
+        response.set_header("X-Inertia-Location", redirect_path)
+        return head(:conflict)
+      end
+
       redirect_to(redirect_path, allow_other_host: false)
       return
     end

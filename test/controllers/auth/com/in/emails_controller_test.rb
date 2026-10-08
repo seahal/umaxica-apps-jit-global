@@ -11,6 +11,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   rate_limit_counters!
 
   include ActiveSupport::Testing::TimeHelpers
+  include ActiveJob::TestHelper
 
   test "dummy visitor sign in verification counts shared destination failures without creating an identity" do
     issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
@@ -119,6 +120,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     ActionMailer::Base.deliveries.clear
+    clear_enqueued_jobs
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     VisitorStatus.find_or_create_by!(id: VisitorStatus::ACTIVE)
@@ -398,7 +400,8 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :see_other
     assert_nil session[:user_email_authentication_id]
     assert_nil session[:user_email_authentication_address]
-    assert_predicate email.reload, :otp_expired?
+    assert_predicate ceremony.reload.email_otp_context.fetch("verified_at"), :present?
+    assert_predicate ceremony.email_otp_context.fetch("result_expires_at"), :present?
   end
 
   test "patch with a correct otp and missing or invalid Turnstile does not authenticate" do
@@ -415,11 +418,16 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :redirect
     assert_equal email.id, session[:user_email_authentication_id]
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    valid_pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
-    email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
-    expires_at_before = email.reload.otp_expires_at
+    delivery_class = OtpEmailNotifierRollout.enabled?(:com) ? OtpNotifierEmailDeliveryJob : OtpMailDeliveryJob
+    delivery = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == delivery_class }
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+
+    ceremony = VisitorAuthCeremonySession.find(payload.fetch(:auth_ceremony_session_ref))
+
+    assert_equal email.public_id, ceremony.email_otp_context.fetch("contact_ref")
+    assert_equal payload.fetch(:auth_email_otp_generation), ceremony.email_otp_context.fetch("generation")
+    valid_pass_code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+    proof_before = ceremony.reload.email_otp_context.deep_dup
     attempts_before = email.otp_attempts_count
     token_count_before = VisitorToken.where(visitor_id: visitor.id).count
     TurnstileVerifierStub.challenge_response = { "success" => false }
@@ -436,7 +444,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
       assert_includes inertia_props.fetch("form_errors"), I18n.t("turnstile_error")
     end
 
-    assert_equal expires_at_before, email.reload.otp_expires_at
+    assert_equal proof_before, ceremony.reload.email_otp_context
     assert_equal attempts_before, email.reload.otp_attempts_count
     assert_equal email.id, session[:user_email_authentication_id]
     assert_equal token_count_before, VisitorToken.where(visitor_id: visitor.id).count
@@ -453,8 +461,6 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
          headers: { "Host" => @host }
 
     assert_response :redirect
-
-    email.store_otp(ROTP::Base32.random_base32, 12_345, 12.minutes.from_now.to_i)
 
     patch auth_com_sign_in_email_url(ri: "jp"),
           params: { visitor_email: { pass_code: "not-a-code" } },
@@ -475,10 +481,16 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :redirect
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
-    wrong_code = ROTP::HOTP.new(otp_private_key).at(otp_counter + 1).to_s
+    delivery_class = OtpEmailNotifierRollout.enabled?(:com) ? OtpNotifierEmailDeliveryJob : OtpMailDeliveryJob
+    delivery = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == delivery_class }
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+
+    ceremony = VisitorAuthCeremonySession.find(payload.fetch(:auth_ceremony_session_ref))
+
+    assert_equal email.public_id, ceremony.email_otp_context.fetch("contact_ref")
+    assert_equal payload.fetch(:auth_email_otp_generation), ceremony.email_otp_context.fetch("generation")
+    correct_code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+    wrong_code = format("%06d", (Integer(correct_code, 10) + 1) % 1_000_000)
 
     patch auth_com_sign_in_email_url(ri: "jp"),
           params: { visitor_email: { pass_code: wrong_code } },
@@ -508,26 +520,6 @@ class Auth::Com::Sign::In::EmailsControllerTest
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
-  end
-
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
   end
 
   def jwt_issuer_id_for_test_host(host, resource_type)
@@ -596,8 +588,6 @@ class Auth::Com::Sign::In::EmailsControllerTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -611,8 +601,6 @@ class Auth::Com::Sign::In::EmailsControllerTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -833,75 +821,6 @@ class Auth::Com::Sign::In::EmailsControllerTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-    )
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discard_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-    )
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discard_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-    )
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -919,8 +838,6 @@ class Auth::Com::Sign::In::EmailsControllerTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     ).tap(&:finalize_binding!)

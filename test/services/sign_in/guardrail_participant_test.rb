@@ -16,7 +16,7 @@ module SignIn
       assert_predicate result, :cleared?
       assert_not_predicate result, :blocking?
       assert_predicate cycle.reload, :sign_in_checkpoint_pending?
-      assert_equal "checkpoint", cycle.step
+      assert_equal "CHECKPOINT_PENDING", cycle.state_name_for(cycle.state_id)
     end
 
     test "blocking evaluator stops without advancing" do
@@ -32,7 +32,7 @@ module SignIn
       assert_predicate result, :blocking?
       assert_equal [:blocked_for_test], result.stack.map(&:key)
       assert_predicate cycle.reload, :sign_in_guardrail_pending?
-      assert_equal "guardrail", cycle.step
+      assert_equal "GUARDRAIL_PENDING", cycle.state_name_for(cycle.state_id)
     end
 
     test "cleared blocking evaluator advances" do
@@ -115,8 +115,7 @@ module SignIn
     def create_cycle(actor, cycle_class: ClientSignInFlow)
       cycle_class.create!(
         principal_id: actor.id,
-        status_id: cycle_class.status_id_for("GUARDRAIL_PENDING"),
-        step: "guardrail",
+        state_id: cycle_class.state_id_for("GUARDRAIL_PENDING"),
         return_to: "/dashboard",
         nonce_digest: cycle_class.digest_nonce("nonce"),
         issued_at: Time.current,

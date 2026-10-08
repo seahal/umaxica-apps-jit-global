@@ -79,6 +79,9 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   class Harness
+    # Production controllers get this from SessionLimitGate; this double has no open resolution.
+    def session_limit_resolution = nil
+
     include CommonRedirect
     include AuthenticationSequenceGate
 

@@ -16,6 +16,14 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
            :client_token_binding_methods, :client_token_dbsc_statuses
 
   setup do
+    ClientSignOutFlowKind.ensure_defaults!
+    ClientSignOutFlowStatus.ensure_defaults!
+    ClientSessionLimitResolutionState::DEFAULTS.each do |id|
+      ClientSessionLimitResolutionState.find_or_create_by!(id: id) do |state|
+        state.created_at = Time.current
+        state.updated_at = Time.current
+      end
+    end
     @previous_secret_proof_retention = ENV["APP_SECRET_PROOF_RETENTION_SECONDS"]
     ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "1"
     @previous_secret_outbox_retention = ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"]
@@ -932,7 +940,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
     delivery_job =
       enqueued_jobs.reverse.find do |job|
-        next false unless job.fetch(:job) == OtpNotifierEmailDeliveryJob
+        next false unless job.fetch(:job) == OtpMailDeliveryJob
 
         delivery = ActiveJob::Arguments.deserialize(job.fetch(:args)).last.fetch(:params)
         delivery.fetch(:auth_ceremony_session_ref) == "#{ceremony.id}"

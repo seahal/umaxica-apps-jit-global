@@ -43,7 +43,7 @@ class TelephoneSignupHttpDeliveryTest < ActionDispatch::IntegrationTest
           },
         )
 
-        assert_equal 302, browser.response.status
+        assert_equal 303, browser.response.status
         issuer = JitSecurityJwtRegistry.surface(issuer_name)
         2.times do |hop|
           rt = Rack::Utils.parse_query(URI.parse(browser.response.location).query).fetch("rt")
@@ -68,7 +68,7 @@ class TelephoneSignupHttpDeliveryTest < ActionDispatch::IntegrationTest
             },
           )
 
-          assert_equal 302, browser.response.status
+          assert_equal 303, browser.response.status
         end
         3.times do |step|
           form = browser.response.parsed_body.at_css("form")

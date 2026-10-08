@@ -229,15 +229,36 @@ module AuthenticationHarness
       authentication_context: token_record.authentication_context_value.to_s,
     )
 
+    # A Browser RP host authenticates only by its own RP credential; the root cookie stays for the
+    # Authority endpoints served on the same Base FQDN.
+    cookie = [
+      "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
+      *authentication_harness_browser_rp_cookies(
+        resource, host: host_value, token: token_record,
+                  resource_type: resource_type,
+      ),
+    ].join("; ")
+
     host_headers(host)
       .merge(headers)
       .merge(
         session_header => resource.id.to_s,
         "X-TEST-SESSION-PUBLIC-ID" => token_record.public_id,
         "Authorization" => "Bearer #{access_token}",
-        "Cookie" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
-        "HTTP_COOKIE" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
+        "Cookie" => cookie,
+        "HTTP_COOKIE" => cookie,
       )
+  end
+
+  def authentication_harness_browser_rp_cookies(resource, host:, token:, resource_type:)
+    return [] if host.blank?
+
+    rp = browser_rp_client_for_host(host)
+    return [] unless rp && BaseBrowserRpTestHelper::BROWSER_RP_RESOURCE_TYPES.fetch(rp.fetch(:surface)) == resource_type
+
+    browser_rp_cookie_pairs(
+      client_id: rp.fetch(:client_id), surface: rp.fetch(:surface), host: host, actor: resource, token: token,
+    )
   end
 
   def authentication_harness_session_token(resource, session_public_id:)

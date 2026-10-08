@@ -22,7 +22,7 @@ class EditOrgJumpRtSignInTest < ActionDispatch::IntegrationTest
     https!
     post "/sign", params: { ri: "jp" }
 
-    assert_response :found
+    assert_response :see_other
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query)
 

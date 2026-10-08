@@ -11,19 +11,37 @@ module Auth::App::In
     fixtures :client_statuses, :client_passkey_statuses, :client_email_statuses, :client_totp_credential_statuses
 
     setup do
-      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+      https!
+      ClientSignInFlowState.ensure_defaults!
       TurnstileVerifierStub.challenge_enabled = true
       TurnstileVerifierStub.challenge_response = { "success" => true }
 
       @user = Client.create!(mfa_level_enabled: true)
       @email = "mfa_totp_#{SecureRandom.hex(4)}@example.com".freeze
       @email_record = @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
+      @email_record.finalize_binding!
       @totp = ClientTotpCredential.create!(
         user: @user,
         private_key: ROTP::Base32.random_base32,
         user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
         title: "totp",
       )
+      admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      get auth_app_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      post "/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
+
+      assert_response :see_other
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+      binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+      get auth_app_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      post auth_app_sign_in_path, params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
+
+      assert_response :see_other
     end
 
     teardown do
@@ -96,7 +114,7 @@ module Auth::App::In
       assert_redirected_to auth_app_sign_in_path(ri: "jp")
     end
 
-    test "create with valid TOTP code redirects to settings" do
+    test "create with valid TOTP code advances Auth evidence without issuing Root credentials" do
       with_prosopite_paused do
         establish_pending_mfa_via_email!
       end
@@ -119,24 +137,16 @@ module Auth::App::In
       # TOTP codes are only valid for a 30-second window, so generation and the
       # verifying request are pinned to the same instant -- otherwise a slow run can
       # straddle a window boundary and turn a valid code invalid before it arrives.
-      freeze_time do
-        totp_code = ROTP::TOTP.new(@totp.private_key).now
+      assert_no_difference -> { ClientToken.where(user_id: @user.id).count } do
+        freeze_time do
+          totp_code = ROTP::TOTP.new(@totp.private_key).now
 
-        with_prosopite_paused do
-          post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
-            totp_challenge_form: { token: totp_code },
-          }
+          with_prosopite_paused do
+            post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+              totp_challenge_form: { token: totp_code },
+            }
+          end
         end
-      end
-
-      # Debug: check if the response body contains TOTP verification error
-      if response.status == 422
-        errors = response.body.scan(/class="[^"]*error[^"]*"[^>]*>([^<]+)</)
-
-        flunk "TOTP verification failed (422). Errors: #{errors.inspect}. " \
-              "TOTP code: #{totp_code}. " \
-              "Client OTP count: #{user.client_totp_credentials.count}. " \
-              "pending_mfa after: #{session[:pending_mfa].inspect}"
       end
 
       assert_response :found
@@ -145,7 +155,12 @@ module Auth::App::In
       assert_includes [configured_host(:sign_service), ENV.fetch("PUBLIC_AUTH_SERVICE_URL")], uri.host
       assert_equal auth_app_sign_in_check_path, uri.path
       assert_nil session[:pending_mfa]
-      assert_not_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+      flow = ClientSignInFlow.where(principal_id: @user.id).order(:id).last
+
+      assert_predicate flow, :sign_in_checkpoint_pending?
+      assert_equal "email", flow.authentication_method
     end
 
     test "a correct TOTP code submitted after the pending sign-in expired does not sign in" do
@@ -355,26 +370,6 @@ class Auth::App::In::MfaTotpsControllerTest
   TEST_VERIFICATION_COOKIE_PREFIX = "test_verified:"
 
   private
-
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
@@ -670,87 +665,6 @@ class Auth::App::In::MfaTotpsControllerTest
     csrf_token = csrf_token_value
     cookies["csrf_token"] = csrf_token if respond_to?(:cookies, true)
     host_headers.merge("X-CSRF-Token" => csrf_token)
-  end
-
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discard_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discard_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-      )
-    else
-      base
-    end
   end
 
   def bearer_headers(token, host: nil, headers: {})

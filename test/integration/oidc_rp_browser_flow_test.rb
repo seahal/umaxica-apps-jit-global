@@ -31,6 +31,14 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   ].freeze
 
   setup do
+    ClientSignOutFlowKind.ensure_defaults!
+    ClientSignOutFlowStatus.ensure_defaults!
+    ClientSessionLimitResolutionState::DEFAULTS.each do |id|
+      ClientSessionLimitResolutionState.find_or_create_by!(id: id) do |state|
+        state.created_at = Time.current
+        state.updated_at = Time.current
+      end
+    end
     load_jump_rt_env!
     # Base RP surfaces resolve to the PUBLIC host family (https origins), so the
     # integration session must speak https for scheme/redirect_uri to line up.
@@ -70,10 +78,73 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
           )
         end
       issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email", code_verifier: code_verifier)
-      resolution = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
-        actor: user,
-        oidc_transaction: issuance.transaction,
+      host!(acme_host)
+      get "/sign", params: { ri: "jp" }
+      flow_nonce = SecureRandom.urlsafe_base64(32)
+      now = ClientSignInFlow.database_now
+      pending_flow = ClientSignInFlow.create!(
+        principal_id: user.id, state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+        nonce_digest: ClientSignInFlow.digest_nonce(flow_nonce), issued_at: now, expires_at: now + 5.minutes,
+        authentication_method: "email", authentication_event_at: now,
+        authentication_context: AuthenticationContextValue::NORMAL_KEY,
       )
+      browser_binding = SecureRandom.urlsafe_base64(32)
+      resolution = ClientSessionLimitResolutionTransaction.issue!(
+        actor: user, sign_in_flow: pending_flow, oidc_authorization_transaction: issuance.transaction,
+        browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(browser_binding),
+      )
+      gate = {
+        "nonce" => SecureRandom.hex(16),
+        "issued_at" => now.to_i,
+        "pt" => "/sign/in",
+        "flow" => pending_flow.public_id,
+        "resolution_challenge" => resolution.challenge,
+        "resolution_binding" => browser_binding,
+        "actor_type" => "Client",
+      }
+      session_key = Rails.application.config.session_options.fetch(:key)
+      request.cookie_jar.signed_or_encrypted[session_key] = request.session.to_hash.merge(
+        "session_limit_gate" => gate,
+        "app_sign_in_flow_locator" => { "public_id" => pending_flow.public_id, "nonce" => flow_nonce },
+      )
+      sealed_session = request.cookie_jar[session_key]
+      cookies.delete(session_key)
+      cookie_installed = cookies.merge(
+        "#{session_key}=#{Rack::Utils.escape(sealed_session)}",
+        URI.parse("https://#{acme_host}/"),
+      ).any?
+
+      assert cookie_installed, "The gate cookie must be installed on the original Base host"
+
+      get acme_app_sign_in_limitation_path, params: { resolution_challenge: resolution.challenge },
+                                            headers: browser_headers
+      received_gate = request.session[:session_limit_gate]
+      decision_time = ClientSignInFlow.database_now
+      gate_flags = {
+        cookie_sent: request.cookies[session_key] == sealed_session,
+        present: received_gate.is_a?(Hash),
+        challenge_bound: received_gate.is_a?(Hash) && received_gate["resolution_challenge"] == resolution.challenge,
+        browser_bound: received_gate.is_a?(Hash) && received_gate["resolution_binding"] == browser_binding,
+        child_open: resolution.transaction.reload.open?,
+        child_live: resolution.transaction.expires_at > decision_time,
+        child_parent_bound: resolution.transaction.sign_in_flow_id == pending_flow.id,
+        child_oidc_bound: resolution.transaction.oidc_authorization_transaction_id == issuance.transaction.id,
+        child_browser_bound: resolution.transaction.browser_binding_digest ==
+          ClientSessionLimitResolutionTransaction.digest_challenge(browser_binding),
+        parent_nonce_bound: pending_flow.reload.nonce_matches?(flow_nonce),
+        parent_actor_bound: pending_flow.principal_id == user.id,
+        parent_live: !pending_flow.expired?(decision_time),
+        oidc_actor_bound: issuance.transaction.reload.actor_ref == user.public_id,
+        oidc_authenticated: issuance.transaction.authenticated?,
+        oidc_live: !issuance.transaction.expired?(now: decision_time) &&
+          !issuance.transaction.login_challenge_expired?(now: decision_time),
+        oidc_not_finalized: issuance.transaction.base_finalized_at.nil?,
+      }
+
+      gate_flags.each do |condition, satisfied|
+        assert satisfied, "Resolution admission #{condition} must hold"
+      end
+      assert_equal 200, response.status
       selected = tokens.first
 
       active_session_count = ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
@@ -128,7 +199,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     with_core_oidc_client_key do
       TurnstileVerifierStub.challenge_enabled = true
       acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-      sign_host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")
+      sign_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")
       user = clients(:one)
       ClientToken.where(user_id: user.id).delete_all
@@ -170,17 +241,53 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       host!(acme_host)
       get(authorize_uri.request_uri, headers: browser_headers)
 
+      assert_response :success
+      form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+
+      assert_not_nil form
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      post(
+        form["action"], params: fields, headers: {
+          "Origin" => "https://#{acme_host}", "Sec-Fetch-Site" => "same-origin",
+        },
+      )
+
       assert_response :redirect
       sign_uri = URI.parse(jump_rt_url_from_location(response.location))
       sign_query = Rack::Utils.parse_nested_query(sign_uri.query.to_s)
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: "app", reference: sign_query.fetch("entry_ref"),
+      )
+      transaction = binding.authorization_transaction
+      original_transaction_id = transaction.id
 
       host!(sign_host)
-      redeem_auth_ceremony_entry!(
-        sign_uri.path,
-        reference: sign_query.fetch("transaction_ref"),
-        params: { ri: "jp" },
-        headers: browser_headers,
-      )
+      get(sign_uri.request_uri, params: { ri: "jp" })
+      3.times do |index|
+        assert_equal 200, response.status, "Admission continuation #{index} must render successfully"
+        html_response = response.media_type == "text/html"
+
+        assert html_response, "Admission continuation must render an HTML form"
+        form = response.parsed_body.at_css("form")
+
+        assert_not_nil form
+        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+        post(
+          form["action"], params: fields, headers: {
+            "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin",
+          },
+        )
+
+        assert_response :see_other
+        next if index == 2
+
+        target = URI.parse(response.location)
+        host!(target.host)
+        get(target.request_uri, params: { ri: "jp" })
+      end
+
+      assert_predicate binding.reload, :redeemed?
+      assert_equal original_transaction_id, binding.authorization_transaction_id
 
       assert_response :see_other
       follow_redirect!
@@ -201,12 +308,10 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
         assert_response :redirect
 
-        transaction = ClientOidcAuthorizationTransaction.find_by!(transaction_id: sign_query.fetch("transaction_ref"))
-        binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: transaction.id)
         ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
         delivery_job =
           enqueued_jobs.reverse.find do |job|
-            next false unless job.fetch(:job) == OtpNotifierEmailDeliveryJob
+            next false unless job.fetch(:job) == OtpMailDeliveryJob
 
             delivery = ActiveJob::Arguments.deserialize(job.fetch(:args)).last.fetch(:params)
             delivery.fetch(:auth_ceremony_session_ref) == ceremony.id.to_s
@@ -412,10 +517,73 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       authentication_event_at: Time.current,
     )
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
-    resolution = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
-      actor: user,
-      oidc_transaction: issuance.transaction,
+    host!(acme_host)
+    get "/sign", params: { ri: "jp" }
+    flow_nonce = SecureRandom.urlsafe_base64(32)
+    now = ClientSignInFlow.database_now
+    pending_flow = ClientSignInFlow.create!(
+      principal_id: user.id, state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+      nonce_digest: ClientSignInFlow.digest_nonce(flow_nonce), issued_at: now, expires_at: now + 5.minutes,
+      authentication_method: "email", authentication_event_at: now,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
     )
+    browser_binding = SecureRandom.urlsafe_base64(32)
+    resolution = ClientSessionLimitResolutionTransaction.issue!(
+      actor: user, sign_in_flow: pending_flow, oidc_authorization_transaction: issuance.transaction,
+      browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(browser_binding),
+    )
+    gate = {
+      "nonce" => SecureRandom.hex(16),
+      "issued_at" => now.to_i,
+      "pt" => "/sign/in",
+      "flow" => pending_flow.public_id,
+      "resolution_challenge" => resolution.challenge,
+      "resolution_binding" => browser_binding,
+      "actor_type" => "Client",
+    }
+    session_key = Rails.application.config.session_options.fetch(:key)
+    request.cookie_jar.signed_or_encrypted[session_key] = request.session.to_hash.merge(
+      "session_limit_gate" => gate,
+      "app_sign_in_flow_locator" => { "public_id" => pending_flow.public_id, "nonce" => flow_nonce },
+    )
+    sealed_session = request.cookie_jar[session_key]
+    cookies.delete(session_key)
+    cookie_installed = cookies.merge(
+      "#{session_key}=#{Rack::Utils.escape(sealed_session)}",
+      URI.parse("https://#{acme_host}/"),
+    ).any?
+
+    assert cookie_installed, "The gate cookie must be installed on the original Base host"
+
+    get acme_app_sign_in_limitation_path, params: { resolution_challenge: resolution.challenge },
+                                          headers: browser_headers
+    received_gate = request.session[:session_limit_gate]
+    decision_time = ClientSignInFlow.database_now
+    gate_flags = {
+      cookie_sent: request.cookies[session_key] == sealed_session,
+      present: received_gate.is_a?(Hash),
+      challenge_bound: received_gate.is_a?(Hash) && received_gate["resolution_challenge"] == resolution.challenge,
+      browser_bound: received_gate.is_a?(Hash) && received_gate["resolution_binding"] == browser_binding,
+      child_open: resolution.transaction.reload.open?,
+      child_live: resolution.transaction.expires_at > decision_time,
+      child_parent_bound: resolution.transaction.sign_in_flow_id == pending_flow.id,
+      child_oidc_bound: resolution.transaction.oidc_authorization_transaction_id == issuance.transaction.id,
+      child_browser_bound: resolution.transaction.browser_binding_digest ==
+        ClientSessionLimitResolutionTransaction.digest_challenge(browser_binding),
+      parent_nonce_bound: pending_flow.reload.nonce_matches?(flow_nonce),
+      parent_actor_bound: pending_flow.principal_id == user.id,
+      parent_live: !pending_flow.expired?(decision_time),
+      oidc_actor_bound: issuance.transaction.reload.actor_ref == user.public_id,
+      oidc_authenticated: issuance.transaction.authenticated?,
+      oidc_live: !issuance.transaction.expired?(now: decision_time) &&
+        !issuance.transaction.login_challenge_expired?(now: decision_time),
+      oidc_not_finalized: issuance.transaction.base_finalized_at.nil?,
+    }
+
+    gate_flags.each do |condition, satisfied|
+      assert satisfied, "Resolution admission #{condition} must hold"
+    end
+    assert_equal 200, response.status
 
     host! acme_host
     patch acme_app_sign_in_limitation_path,
@@ -440,16 +608,75 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::ACTIVE,
       authentication_event_at: Time.current,
     )
+    Array.new(ClientToken::MAX_TOTAL_SESSIONS_PER_USER - 1) { ClientToken.create!(user: user) }
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
-    resolution = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
-      actor: user,
-      oidc_transaction: issuance.transaction,
+    host!(acme_host)
+    get("/sign", params: { ri: "jp" })
+    flow_nonce = SecureRandom.urlsafe_base64(32)
+    now = ClientSignInFlow.database_now
+    pending_flow = ClientSignInFlow.create!(
+      principal_id: user.id, state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+      nonce_digest: ClientSignInFlow.digest_nonce(flow_nonce), issued_at: now, expires_at: now + 5.minutes,
+      authentication_method: "email", authentication_event_at: now,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
     )
-    controller_class = Base::App::Sign::In::LimitationsController
-    original_method = controller_class.instance_method(:hard_reject_still_applies?)
-    controller_class.define_method(:hard_reject_still_applies?) { true }
-    controller_class.send(:private, :hard_reject_still_applies?)
+    browser_binding = SecureRandom.urlsafe_base64(32)
+    resolution = ClientSessionLimitResolutionTransaction.issue!(
+      actor: user, sign_in_flow: pending_flow, oidc_authorization_transaction: issuance.transaction,
+      browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(browser_binding),
+    )
+    gate = {
+      "nonce" => SecureRandom.hex(16),
+      "issued_at" => now.to_i,
+      "pt" => "/sign/in",
+      "flow" => pending_flow.public_id,
+      "resolution_challenge" => resolution.challenge,
+      "resolution_binding" => browser_binding,
+      "actor_type" => "Client",
+    }
+    session_key = Rails.application.config.session_options.fetch(:key)
+    request.cookie_jar.signed_or_encrypted[session_key] = request.session.to_hash.merge(
+      "session_limit_gate" => gate,
+      "app_sign_in_flow_locator" => { "public_id" => pending_flow.public_id, "nonce" => flow_nonce },
+    )
+    sealed_session = request.cookie_jar[session_key]
+    cookies.delete(session_key)
+    cookie_installed = cookies.merge(
+      "#{session_key}=#{Rack::Utils.escape(sealed_session)}",
+      URI.parse("https://#{acme_host}/"),
+    ).any?
 
+    assert cookie_installed, "The gate cookie must be installed on the original Base host"
+
+    get acme_app_sign_in_limitation_path, params: { resolution_challenge: resolution.challenge },
+                                          headers: browser_headers
+    received_gate = request.session[:session_limit_gate]
+    decision_time = ClientSignInFlow.database_now
+    gate_flags = {
+      cookie_sent: request.cookies[session_key] == sealed_session,
+      present: received_gate.is_a?(Hash),
+      challenge_bound: received_gate.is_a?(Hash) && received_gate["resolution_challenge"] == resolution.challenge,
+      browser_bound: received_gate.is_a?(Hash) && received_gate["resolution_binding"] == browser_binding,
+      child_open: resolution.transaction.reload.open?,
+      child_live: resolution.transaction.expires_at > decision_time,
+      child_parent_bound: resolution.transaction.sign_in_flow_id == pending_flow.id,
+      child_oidc_bound: resolution.transaction.oidc_authorization_transaction_id == issuance.transaction.id,
+      child_browser_bound: resolution.transaction.browser_binding_digest ==
+        ClientSessionLimitResolutionTransaction.digest_challenge(browser_binding),
+      parent_nonce_bound: pending_flow.reload.nonce_matches?(flow_nonce),
+      parent_actor_bound: pending_flow.principal_id == user.id,
+      parent_live: !pending_flow.expired?(decision_time),
+      oidc_actor_bound: issuance.transaction.reload.actor_ref == user.public_id,
+      oidc_authenticated: issuance.transaction.authenticated?,
+      oidc_live: !issuance.transaction.expired?(now: decision_time) &&
+        !issuance.transaction.login_challenge_expired?(now: decision_time),
+      oidc_not_finalized: issuance.transaction.base_finalized_at.nil?,
+    }
+
+    gate_flags.each do |condition, satisfied|
+      assert satisfied, "Resolution admission #{condition} must hold"
+    end
+    assert_equal 200, response.status
     host!(acme_host)
     assert_no_difference -> { ClientToken.where(user_id: user.id).count } do
       patch(
@@ -463,14 +690,9 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :unprocessable_content
-    assert_includes response.body, I18n.t("acme.app.sign.in.limitations.capacity_still_full")
+    assert_includes response.body, I18n.t("base.app.sign.in.limitations.capacity_still_full")
     assert_predicate token.reload, :revoked?
     assert_not_predicate issuance.transaction.reload, :consumed?
-  ensure
-    if original_method
-      controller_class.define_method(:hard_reject_still_applies?, original_method)
-      controller_class.send(:private, :hard_reject_still_applies?)
-    end
   end
 
   test "acme app session-limit limitation rejects tampered challenge without revoking" do
@@ -536,10 +758,73 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
-    resolution = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
-      actor: user,
-      oidc_transaction: issuance.transaction,
+    host!(acme_host)
+    get "/sign", params: { ri: "jp" }
+    flow_nonce = SecureRandom.urlsafe_base64(32)
+    now = ClientSignInFlow.database_now
+    pending_flow = ClientSignInFlow.create!(
+      principal_id: user.id, state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+      nonce_digest: ClientSignInFlow.digest_nonce(flow_nonce), issued_at: now, expires_at: now + 5.minutes,
+      authentication_method: "email", authentication_event_at: now,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
     )
+    browser_binding = SecureRandom.urlsafe_base64(32)
+    resolution = ClientSessionLimitResolutionTransaction.issue!(
+      actor: user, sign_in_flow: pending_flow, oidc_authorization_transaction: issuance.transaction,
+      browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(browser_binding),
+    )
+    gate = {
+      "nonce" => SecureRandom.hex(16),
+      "issued_at" => now.to_i,
+      "pt" => "/sign/in",
+      "flow" => pending_flow.public_id,
+      "resolution_challenge" => resolution.challenge,
+      "resolution_binding" => browser_binding,
+      "actor_type" => "Client",
+    }
+    session_key = Rails.application.config.session_options.fetch(:key)
+    request.cookie_jar.signed_or_encrypted[session_key] = request.session.to_hash.merge(
+      "session_limit_gate" => gate,
+      "app_sign_in_flow_locator" => { "public_id" => pending_flow.public_id, "nonce" => flow_nonce },
+    )
+    sealed_session = request.cookie_jar[session_key]
+    cookies.delete(session_key)
+    cookie_installed = cookies.merge(
+      "#{session_key}=#{Rack::Utils.escape(sealed_session)}",
+      URI.parse("https://#{acme_host}/"),
+    ).any?
+
+    assert cookie_installed, "The gate cookie must be installed on the original Base host"
+
+    get acme_app_sign_in_limitation_path, params: { resolution_challenge: resolution.challenge },
+                                          headers: browser_headers
+    received_gate = request.session[:session_limit_gate]
+    decision_time = ClientSignInFlow.database_now
+    gate_flags = {
+      cookie_sent: request.cookies[session_key] == sealed_session,
+      present: received_gate.is_a?(Hash),
+      challenge_bound: received_gate.is_a?(Hash) && received_gate["resolution_challenge"] == resolution.challenge,
+      browser_bound: received_gate.is_a?(Hash) && received_gate["resolution_binding"] == browser_binding,
+      child_open: resolution.transaction.reload.open?,
+      child_live: resolution.transaction.expires_at > decision_time,
+      child_parent_bound: resolution.transaction.sign_in_flow_id == pending_flow.id,
+      child_oidc_bound: resolution.transaction.oidc_authorization_transaction_id == issuance.transaction.id,
+      child_browser_bound: resolution.transaction.browser_binding_digest ==
+        ClientSessionLimitResolutionTransaction.digest_challenge(browser_binding),
+      parent_nonce_bound: pending_flow.reload.nonce_matches?(flow_nonce),
+      parent_actor_bound: pending_flow.principal_id == user.id,
+      parent_live: !pending_flow.expired?(decision_time),
+      oidc_actor_bound: issuance.transaction.reload.actor_ref == user.public_id,
+      oidc_authenticated: issuance.transaction.authenticated?,
+      oidc_live: !issuance.transaction.expired?(now: decision_time) &&
+        !issuance.transaction.login_challenge_expired?(now: decision_time),
+      oidc_not_finalized: issuance.transaction.base_finalized_at.nil?,
+    }
+
+    gate_flags.each do |condition, satisfied|
+      assert satisfied, "Resolution admission #{condition} must hold"
+    end
+    assert_equal 200, response.status
 
     host! acme_host
     assert_no_difference -> { ClientToken.where(user_id: user.id).count } do
@@ -558,10 +843,73 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
-    resolution = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
-      actor: user,
-      oidc_transaction: issuance.transaction,
+    host!(acme_host)
+    get "/sign", params: { ri: "jp" }
+    flow_nonce = SecureRandom.urlsafe_base64(32)
+    now = ClientSignInFlow.database_now
+    pending_flow = ClientSignInFlow.create!(
+      principal_id: user.id, state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+      nonce_digest: ClientSignInFlow.digest_nonce(flow_nonce), issued_at: now, expires_at: now + 5.minutes,
+      authentication_method: "email", authentication_event_at: now,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
     )
+    browser_binding = SecureRandom.urlsafe_base64(32)
+    resolution = ClientSessionLimitResolutionTransaction.issue!(
+      actor: user, sign_in_flow: pending_flow, oidc_authorization_transaction: issuance.transaction,
+      browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(browser_binding),
+    )
+    gate = {
+      "nonce" => SecureRandom.hex(16),
+      "issued_at" => now.to_i,
+      "pt" => "/sign/in",
+      "flow" => pending_flow.public_id,
+      "resolution_challenge" => resolution.challenge,
+      "resolution_binding" => browser_binding,
+      "actor_type" => "Client",
+    }
+    session_key = Rails.application.config.session_options.fetch(:key)
+    request.cookie_jar.signed_or_encrypted[session_key] = request.session.to_hash.merge(
+      "session_limit_gate" => gate,
+      "app_sign_in_flow_locator" => { "public_id" => pending_flow.public_id, "nonce" => flow_nonce },
+    )
+    sealed_session = request.cookie_jar[session_key]
+    cookies.delete(session_key)
+    cookie_installed = cookies.merge(
+      "#{session_key}=#{Rack::Utils.escape(sealed_session)}",
+      URI.parse("https://#{acme_host}/"),
+    ).any?
+
+    assert cookie_installed, "The gate cookie must be installed on the original Base host"
+
+    get acme_app_sign_in_limitation_path, params: { resolution_challenge: resolution.challenge },
+                                          headers: browser_headers
+    received_gate = request.session[:session_limit_gate]
+    decision_time = ClientSignInFlow.database_now
+    gate_flags = {
+      cookie_sent: request.cookies[session_key] == sealed_session,
+      present: received_gate.is_a?(Hash),
+      challenge_bound: received_gate.is_a?(Hash) && received_gate["resolution_challenge"] == resolution.challenge,
+      browser_bound: received_gate.is_a?(Hash) && received_gate["resolution_binding"] == browser_binding,
+      child_open: resolution.transaction.reload.open?,
+      child_live: resolution.transaction.expires_at > decision_time,
+      child_parent_bound: resolution.transaction.sign_in_flow_id == pending_flow.id,
+      child_oidc_bound: resolution.transaction.oidc_authorization_transaction_id == issuance.transaction.id,
+      child_browser_bound: resolution.transaction.browser_binding_digest ==
+        ClientSessionLimitResolutionTransaction.digest_challenge(browser_binding),
+      parent_nonce_bound: pending_flow.reload.nonce_matches?(flow_nonce),
+      parent_actor_bound: pending_flow.principal_id == user.id,
+      parent_live: !pending_flow.expired?(decision_time),
+      oidc_actor_bound: issuance.transaction.reload.actor_ref == user.public_id,
+      oidc_authenticated: issuance.transaction.authenticated?,
+      oidc_live: !issuance.transaction.expired?(now: decision_time) &&
+        !issuance.transaction.login_challenge_expired?(now: decision_time),
+      oidc_not_finalized: issuance.transaction.base_finalized_at.nil?,
+    }
+
+    gate_flags.each do |condition, satisfied|
+      assert satisfied, "Resolution admission #{condition} must hold"
+    end
+    assert_equal 200, response.status
 
     host! acme_host
     delete acme_app_sign_in_limitation_path,
@@ -575,7 +923,8 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
     location = URI.parse(payload.fetch("url"))
 
-    assert_equal URI.parse("https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}").host, location.host
+    assert_equal URI.parse("https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}").host, location.host
+    assert_equal "/sign", location.path
     assert_nil response.headers["Location"]
     assert_predicate resolution.transaction.reload, :cancelled?
   end
@@ -602,6 +951,17 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         )
 
         # Each surface has its own registered RP identity and exact callback.
+        assert_equal 200, session.response.status, surface[:client_id]
+        form = session.response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+
+        assert_not_nil form
+        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+        session.post(
+          form["action"], params: fields, headers: {
+            "Origin" => "https://#{surface[:acme_host]}", "Sec-Fetch-Site" => "same-origin",
+          },
+        )
+
         assert_equal 302, session.response.status, surface[:client_id]
 
         session.get("/oauth/authorization", headers: browser_headers)
@@ -704,7 +1064,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         surface: "app",
         login_challenge: transaction.login_challenge,
         actor: user,
-        session_ref: SecureRandom.hex(16),
+        session_ref: nil,
         auth_method: auth_method,
         authentication_event_at: Time.current,
       )
@@ -772,26 +1132,6 @@ class OidcRpBrowserFlowTest
 
   def configured_host(surface_name)
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
-  end
-
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
   end
 
   def jwt_issuer_id_for_test_host(host, resource_type)
@@ -1138,78 +1478,6 @@ class OidcRpBrowserFlowTest
     # multi-host flow (SURFACES loops, RP->OP->Sign hops) to the first host.
     # Let host! govern the request host instead.
     { "Client-Agent" => self.class::TEST_BROWSER_USER_AGENT, "X-CSRF-Token" => csrf_token }
-  end
-
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-      authentication_event_at: Time.current,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-    )
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discard_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-      authentication_event_at: Time.current,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-    )
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discard_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-      authentication_event_at: Time.current,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-    )
   end
 
   def ensure_visitor_reference_records!

@@ -14,10 +14,22 @@ module AuthEmailMfaHelper
 
     assert_response :found
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 55_555
-    pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
-    email_record.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    delivery_class = OtpEmailNotifierRollout.enabled?(surface) ? OtpNotifierEmailDeliveryJob : OtpMailDeliveryJob
+    delivery =
+      ActiveJob::Base.queue_adapter.enqueued_jobs.reverse.find do |entry|
+        entry.fetch(:job) == delivery_class
+      end
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    ceremony =
+      case surface.to_sym
+      when :app then ClientAuthCeremonySession.find(payload.fetch(:auth_ceremony_session_ref))
+      when :com then VisitorAuthCeremonySession.find(payload.fetch(:auth_ceremony_session_ref))
+      else raise ArgumentError, "unsupported MFA email surface"
+      end
+
+    assert_equal email_record.public_id, ceremony.email_otp_context.fetch("contact_ref")
+    assert_equal payload.fetch(:auth_email_otp_generation), ceremony.email_otp_context.fetch("generation")
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
 
     patch(
       email_path,

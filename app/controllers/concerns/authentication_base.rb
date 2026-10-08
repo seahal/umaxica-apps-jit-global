@@ -2605,10 +2605,7 @@ module AuthenticationBase
     session.delete(:mfa_user_id)
   end
 
-  # Ends a sign-in ceremony that is waiting on its second factor: the sign-in cycle is failed so it
-  # cannot be resumed, its browser locator and the pending MFA state are removed, and no session or
-  # token is issued. The outer Auth ceremony (and any OIDC authorization transaction it carries) is
-  # left intact so the actor returns to the same sign-in entry point.
+  # Cancelling MFA must not issue Root credentials or discard the outer OIDC admission.
   def cancel_pending_mfa!
     actor = pending_mfa_user
     if actor

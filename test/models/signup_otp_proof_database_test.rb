@@ -5,6 +5,13 @@ require "test_helper"
 # rubocop:disable Minitest/AssertEqual -- Proof snapshots must not disclose references or keyed digests on failure.
 
 class SignupOtpProofDatabaseTest < ActiveSupport::TestCase
+  setup do
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+  end
+
   [
     [Client, ClientEmail, :user_id, ClientSignUpFlow, :app, :email],
     [Client, ClientTelephone, :user_id, ClientSignUpFlow, :app, :telephone],
@@ -29,62 +36,66 @@ class SignupOtpProofDatabaseTest < ActiveSupport::TestCase
           end,
       )
       now = flow_model.database_now
-      private_key = ROTP::Base32.random_base32
-      contact.store_otp(private_key, 1, (now + 10.minutes).to_i)
-      code = ROTP::HOTP.new(private_key).at(1).to_s
+      nonce = SecureRandom.hex(32)
       flow = flow_model.create!(
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
-        nonce_digest: flow_model.digest_nonce(SecureRandom.hex(32)), issued_at: now,
+        nonce_digest: flow_model.digest_nonce(nonce), issued_at: now,
         expires_at: now + 15.minutes, entry_method: channel.to_s,
         pending_contact_type: channel.to_s, pending_contact_id: contact.id,
       )
-      arguments = {
-        purpose: :sign_up,
-        surface: surface,
-        channel: channel,
-        subject: flow,
-        destination: destination,
-        code: code,
-        session_nonce: flow.public_id,
-      }
-      recorded = SignUpOtpChallengeRecorder.call(flow: flow, record: contact, channel: channel, code: code)
+      issued =
+        if channel == :email
+          EmailSignUpOtpIssuer.call(flow: flow, email: contact, session_nonce: nonce)
+        else
+          TelephoneSignUpOtpIssuer.call(flow: flow, telephone: contact, session_nonce: nonce)
+        end
 
-      assert recorded, "newly issued signup challenge must retain its original authority"
+      assert_predicate issued, :success?, "newly issued signup challenge must retain its original authority"
+      transaction = issued.transaction
+      original = transaction.reload.attributes
 
-      original = contact.reload.sign_up_otp_context.deep_dup
       invalid_contexts = [
-        original.merge("version" => 2), original.except("nonce_digest"),
-        original.merge("extra" => "field"), original.merge("purpose" => "sign_in"),
-        original.merge("surface" => "org"), original.merge("contact_ref" => "other_contact"),
-        original.merge("counter" => 1), original.merge("counter" => "18446744073709551616"),
-        original.merge("verified_at" => now.utc.iso8601(6)),
-        original.merge("expires_at" => "infinity"), original.merge("issued_at" => "-infinity"),
+        { purpose: "unsupported" }, { otp_generation: nil }, { otp_generation: "not-a-uuid" },
+        { otp_verifier: "a" * 63 }, { otp_verifier: "a" * 65 },
+        { otp_verifier: "G" * 64 }, { otp_verifier: "" },
+        { otp_expires_at: Float::INFINITY }, { expires_at: -Float::INFINITY },
+        { otp_consumed_at: now }, { otp_receipt_verifier: "a" * 64 },
       ]
       invalid_contexts.each do |invalid|
-        contact.class.transaction(requires_new: true) do
+        transaction.class.transaction(requires_new: true) do
           assert_raises(ActiveRecord::StatementInvalid) do
-            contact.update_columns(sign_up_otp_context: invalid)
+            transaction.update_columns(invalid)
           end
           raise ActiveRecord::Rollback
         end
 
-        assert_operator original, :==, contact.reload.sign_up_otp_context,
+        assert_operator original, :==, transaction.reload.attributes,
                         "rejected direct writes must preserve challenge facts"
       end
 
-      verified = SignOtpCeremony.verify!(**arguments)
+      verified =
+        if channel == :email
+          EmailSignUpOtpVerificationCommitter.call(flow: flow, email: contact, session_nonce: nonce, code: issued.code)
+        else
+          TelephoneSignUpOtpVerificationCommitter.call(
+            flow: flow, telephone: contact, session_nonce: nonce, code: issued.code,
+          )
+        end
 
       assert_predicate verified, :success?, "public verification must establish the immutable result"
-      committed = contact.reload.sign_up_otp_context.deep_dup
-      [nil, original, committed.merge("counter" => "2")].each do |replacement|
-        contact.class.transaction(requires_new: true) do
+      committed = transaction.reload.attributes
+      [
+        { otp_consumed_at: nil, otp_receipt_verifier: nil, otp_result_expires_at: nil },
+        { otp_verifier: original.fetch("otp_verifier") }, { otp_generation: SecureRandom.uuid },
+      ].each do |replacement|
+        transaction.class.transaction(requires_new: true) do
           assert_raises(ActiveRecord::StatementInvalid) do
-            contact.update_columns(sign_up_otp_context: replacement)
+            transaction.update_columns(replacement)
           end
           raise ActiveRecord::Rollback
         end
 
-        assert_operator committed, :==, contact.reload.sign_up_otp_context,
+        assert_operator committed, :==, transaction.reload.attributes,
                         "direct SQL cannot erase or replace committed proof"
       end
     end

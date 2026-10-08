@@ -11,11 +11,34 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
 
   setup do
     clear_enqueued_jobs
+    @previous_forgery_protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    @notifier_app_enabled = Flipper.enabled?(:otp_email_notifier_app)
+    @notifier_com_enabled = Flipper.enabled?(:otp_email_notifier_com)
+    Flipper.enable(:otp_email_notifier_app)
+    Flipper.enable(:otp_email_notifier_com)
+    ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
+    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
+    ClientSessionLimitResolutionState::DEFAULTS.each do |id|
+      ClientSessionLimitResolutionState.find_or_create_by!(id: id) do |state|
+        state.created_at = Time.current
+        state.updated_at = Time.current
+      end
+    end
+    ClientSignOutFlowKind::DEFAULTS.each { |id| ClientSignOutFlowKind.find_or_create_by!(id: id) }
+    ClientSignOutFlowStatus::DEFAULTS.each { |id| ClientSignOutFlowStatus.find_or_create_by!(id: id) }
+    ClientIdentityState::DEFAULTS.each { |id| ClientIdentityState.find_or_create_by!(id: id) }
+    VisitorIdentityState::DEFAULTS.each { |id| VisitorIdentityState.find_or_create_by!(id: id) }
+    VisitorSecretCredentialKind::DEFAULTS.each { |id| VisitorSecretCredentialKind.find_or_create_by!(id: id) }
+    VisitorSecretCredentialStatus::DEFAULTS.each { |id| VisitorSecretCredentialStatus.find_or_create_by!(id: id) }
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
   end
 
   teardown do
+    ActionController::Base.allow_forgery_protection = @previous_forgery_protection
+    Flipper.disable(:otp_email_notifier_app) unless @notifier_app_enabled
+    Flipper.disable(:otp_email_notifier_com) unless @notifier_com_enabled
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
     TurnstileVerifierStub.enabled = false
@@ -41,7 +64,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
             actor = Client.create!(id: 9_114_000_000_000 + index)
             actor.client_emails.create!(
               address: "primary-app-#{SecureRandom.hex(8)}@example.com",
-              user_email_status_id: ClientEmailStatus::VERIFIED,
+              user_email_status_id: ClientEmailStatus::VERIFIED, binding_finalized_at: Time.current,
             )
             passkey = actor.client_passkeys.create!(
               webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0,
@@ -54,7 +77,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
             actor = Visitor.create!(id: 9_114_000_000_000 + index)
             actor.visitor_emails.create!(
               address: "primary-com-#{SecureRandom.hex(8)}@example.com",
-              visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+              visitor_email_status_id: VisitorEmailStatus::VERIFIED, binding_finalized_at: Time.current,
             )
             passkey = actor.visitor_passkeys.create!(
               webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0,
@@ -65,22 +88,101 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
              auth_com_sign_in_passkey_verification_path,]
           end
         # Public Base issuance isolates admission from the separately tested Base redirect transport.
-        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        base = open_session
+        auth = self
+        base_host = ((surface == :app) ? ENV.fetch("PUBLIC_BASE_SERVICE_URL") : ENV.fetch("PUBLIC_BASE_CORPORATE_URL"))
+        auth_host = auth_host
+        base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+        auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+        base.host!(base_host)
+        base.https!
+        base.get("/sign", params: { ri: "jp" })
+
+        assert_equal 200, base.response.status
+        entry_form = Nokogiri::HTML(base.response.body).at_css("form")
+        entry_fields = entry_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+        base.post(entry_form["action"], params: entry_fields, headers: base_headers)
+
+        assert_equal 303, base.response.status
+        issuer = JitSecurityJwtRegistry.surface(((surface == :app) ? "BASE_APP" : "BASE_COM"))
+        rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
+        payload, = JWT.decode(
+          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
         )
-        get sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" }
-        csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        post sign_in_path, params: { entry_ref: issuance.reference, authenticity_token: csrf, ri: "jp" }
+        target = URI.parse(payload.fetch("url"))
+
+        assert_equal base_host, target.host
+        base.get(target.request_uri)
+        authorization_form = Nokogiri::HTML(base.response.body).at_css("form#base-authorization-ceremony-start-form")
+        authorization_fields = authorization_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+        base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
+
+        assert_equal 303, base.response.status
+        # There is no local-parent HTTP issuer; its public API remains the fixture seam,
+        # while attachment, Base confirmation and redemption retain all browser protections.
+        nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
+        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: surface.to_s, intent: "sign_in",
+          base_browser_nonce: base.session.fetch(BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY),
+          base_token: nil, nonce_digest: ((surface == :app) ? ClientSignInFlow : VisitorSignInFlow).digest_nonce(nonce),
+        )
+        flow = issuance.transaction
+        SignInCycleLocator.new(base.session, surface: surface.to_s).issue!(flow, nonce: nonce)
+        session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+        session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
+        session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
+        encoded_session = session_cookie_jar[session_key]
+        base.cookies.delete(session_key)
+        base.cookies.merge( # rubocop:disable Lint/Void
+          "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
+        )
+        binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: surface.to_s,
+          reference: issuance.reference,
+        )
+        auth.host!(auth_host)
+        auth.https!
+        auth.get(sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" })
+
+        assert_equal 200, auth.response.status
+        csrf = nil
+        3.times do |admission_index|
+          browser = (admission_index == 1) ? base : auth
+          form = Nokogiri::HTML(browser.response.body).at_css("form")
+
+          assert_not_nil form, "Admission step #{admission_index} must render its real continuation"
+          fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+          csrf = fields.fetch("authenticity_token") if admission_index == 2
+          assert_nil binding.reload.base_confirmed_at if admission_index == 1
+          browser.post(form["action"], params: fields, headers: (admission_index == 1) ? base_headers : auth_headers)
+
+          assert_equal 303, browser.response.status
+          assert_not_nil binding.reload.base_confirmed_at if admission_index == 1
+          next if admission_index == 2
+
+          target = URI.parse(browser.response.location)
+          receiver = admission_index.zero? ? base : auth
+
+          assert_equal(admission_index.zero? ? base_host : auth_host, target.host)
+          receiver.get(target.request_uri)
+        end
+
+        assert_predicate binding.reload, :redeemed?
+        auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
 
         assert_response :see_other
-        post options_path, params: { "cf-turnstile-response" => "test-only", :ri => "jp" }, as: :json
+        post options_path, params: { "cf-turnstile-response" => "test-only", :ri => "jp" }, headers: auth_headers,
+                           as: :json
 
         assert_response :success
         options = response.parsed_body
         assertion = fake.get(challenge: options.fetch("options").fetch("challenge"), user_verified: true, sign_count: 3)
         passkey.class.stub(:database_now, unbounded ? deadline : deadline + Rational(microseconds, 1_000_000)) do
           post verification_path,
-               params: { challenge_id: options.fetch("challenge_id"), credential: assertion, ri: "jp" }, as: :json
+               params: { challenge_id: options.fetch("challenge_id"), credential: assertion, ri: "jp" },
+               headers: auth_headers, as: :json
         end
 
         assert_response(eligible ? :success : :unauthorized)
@@ -97,6 +199,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # rubocop:disable Minitest/MultipleAssertions
   test "APP and COM MFA recheck Passkey revocation and writer expiry after issuing a challenge" do
     %i(app com).each do |surface|
       [-1, 0, 1, :revoked].each_with_index do |state, index|
@@ -113,7 +216,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
             actor = Client.create!(id: 9_115_000_000_000 + index)
             email = actor.client_emails.create!(
               address: "mfa-app-#{SecureRandom.hex(8)}@example.com",
-              user_email_status_id: ClientEmailStatus::VERIFIED,
+              user_email_status_id: ClientEmailStatus::VERIFIED, binding_finalized_at: Time.current,
             )
             passkey = actor.client_passkeys.create!(
               webauthn_id: credential.id, public_key: credential.public_key,
@@ -126,7 +229,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
             actor = Visitor.create!(id: 9_115_000_000_000 + index)
             email = actor.visitor_emails.create!(
               address: "mfa-com-#{SecureRandom.hex(8)}@example.com",
-              visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+              visitor_email_status_id: VisitorEmailStatus::VERIFIED, binding_finalized_at: Time.current,
             )
             passkey = actor.visitor_passkeys.create!(
               webauthn_id: credential.id, public_key: credential.public_key,
@@ -136,15 +239,93 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
              new_auth_com_sign_in_challenge_passkey_path, auth_com_sign_in_challenge_passkey_path,
              auth_com_sign_in_challenge_path,]
           end
-        actor.update!(mfa_level_enabled: true)
-        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        actor.reload.update!(mfa_level_enabled: true)
+        base = open_session
+        auth = self
+        base_host = ((surface == :app) ? ENV.fetch("PUBLIC_BASE_SERVICE_URL") : ENV.fetch("PUBLIC_BASE_CORPORATE_URL"))
+        auth_host = auth_host
+        base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+        auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+        base.host!(base_host)
+        base.https!
+        base.get("/sign", params: { ri: "jp" })
+
+        assert_equal 200, base.response.status
+        entry_form = Nokogiri::HTML(base.response.body).at_css("form")
+        entry_fields = entry_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+        base.post(entry_form["action"], params: entry_fields, headers: base_headers)
+
+        assert_equal 303, base.response.status
+        issuer = JitSecurityJwtRegistry.surface(((surface == :app) ? "BASE_APP" : "BASE_COM"))
+        rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
+        payload, = JWT.decode(
+          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
         )
-        get sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" }
-        csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        post sign_in_path, params: { entry_ref: issuance.reference, authenticity_token: csrf, ri: "jp" }
+        target = URI.parse(payload.fetch("url"))
+
+        assert_equal base_host, target.host
+        base.get(target.request_uri)
+        authorization_form = Nokogiri::HTML(base.response.body).at_css("form#base-authorization-ceremony-start-form")
+        authorization_fields = authorization_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+        base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
+
+        assert_equal 303, base.response.status
+        # There is no local-parent HTTP issuer; its public API remains the fixture seam,
+        # while attachment, Base confirmation and redemption retain all browser protections.
+        nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
+        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: surface.to_s, intent: "sign_in",
+          base_browser_nonce: base.session.fetch(BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY),
+          base_token: nil, nonce_digest: ((surface == :app) ? ClientSignInFlow : VisitorSignInFlow).digest_nonce(nonce),
+        )
+        flow = issuance.transaction
+        SignInCycleLocator.new(base.session, surface: surface.to_s).issue!(flow, nonce: nonce)
+        session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+        session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
+        session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
+        encoded_session = session_cookie_jar[session_key]
+        base.cookies.delete(session_key)
+        base.cookies.merge( # rubocop:disable Lint/Void
+          "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
+        )
+        binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: surface.to_s,
+          reference: issuance.reference,
+        )
+        auth.host!(auth_host)
+        auth.https!
+        auth.get(sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" })
+
+        assert_equal 200, auth.response.status
+        csrf = nil
+        3.times do |admission_index|
+          browser = (admission_index == 1) ? base : auth
+          form = Nokogiri::HTML(browser.response.body).at_css("form")
+
+          assert_not_nil form, "Admission step #{admission_index} must render its real continuation"
+          fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+          csrf = fields.fetch("authenticity_token") if admission_index == 2
+          assert_nil binding.reload.base_confirmed_at if admission_index == 1
+          browser.post(form["action"], params: fields, headers: (admission_index == 1) ? base_headers : auth_headers)
+
+          assert_equal 303, browser.response.status
+          assert_not_nil binding.reload.base_confirmed_at if admission_index == 1
+          next if admission_index == 2
+
+          target = URI.parse(browser.response.location)
+          receiver = admission_index.zero? ? base : auth
+
+          assert_equal(admission_index.zero? ? base_host : auth_host, target.host)
+          receiver.get(target.request_uri)
+        end
+
+        assert_predicate binding.reload, :redeemed?
+        auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
         post email_path,
-             params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test-only", :ri => "jp" }
+             params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test-only", :ri => "jp" },
+             headers: auth_headers
         delivery_job = enqueued_jobs.reverse.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
 
         assert_not_nil delivery_job
@@ -174,10 +355,11 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
         assert_nil context.fetch("verified_at")
         assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
         patch email_path,
-              params: { :user_email => { pass_code: code }, "cf-turnstile-response" => "test-only", :ri => "jp" }
+              params: { :user_email => { pass_code: code }, "cf-turnstile-response" => "test-only", :ri => "jp" },
+              headers: auth_headers
 
         assert_response :redirect
-        assert_equal "mfa", issuance.transaction.reload.step
+        assert_predicate issuance.transaction.reload, :sign_in_mfa_pending?
         get new_path, params: { ri: "jp" }
 
         assert_response :success
@@ -197,17 +379,17 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
                                    credential_json: JSON.generate(assertion), },
             "cf-turnstile-response" => "test-only",
             :ri => "jp",
-          }
+          }, headers: auth_headers
         end
 
         assert_response :redirect
         if state == -1
           assert_equal 3, passkey.reload.sign_count
-          assert_not_equal "mfa", issuance.transaction.reload.step
+          assert_not issuance.transaction.reload.sign_in_mfa_pending?
         else
           assert_equal URI.parse(chooser_path).path, URI.parse(response.location).path
           assert_equal 0, passkey.reload.sign_count
-          assert_equal "mfa", issuance.transaction.reload.step
+          assert_predicate issuance.transaction.reload, :sign_in_mfa_pending?
           assert_nil issuance.transaction.authentication_event_at
         end
 
@@ -217,14 +399,89 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # rubocop:enable Minitest/MultipleAssertions
+
   test "a redeemed local sign in admission cannot open the sign up ceremony" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    base = open_session
+    auth = self
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+    base.host!(base_host)
+    base.https!
+    base.get("/sign", params: { ri: "jp" })
+
+    assert_equal 200, base.response.status
+    entry_form = Nokogiri::HTML(base.response.body).at_css("form")
+    entry_fields = entry_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    base.post(entry_form["action"], params: entry_fields, headers: base_headers)
+
+    assert_equal 303, base.response.status
+    issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
+    payload, = JWT.decode(
+      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
     )
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    get auth_app_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_sign_in_path, params: { entry_ref: issuance.reference, authenticity_token: csrf, ri: "jp" }
+    target = URI.parse(payload.fetch("url"))
+
+    assert_equal base_host, target.host
+    base.get(target.request_uri)
+    authorization_form = Nokogiri::HTML(base.response.body).at_css("form#base-authorization-ceremony-start-form")
+    authorization_fields = authorization_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
+
+    assert_equal 303, base.response.status
+    # There is no local-parent HTTP issuer; its public API remains the fixture seam,
+    # while attachment, Base confirmation and redemption retain all browser protections.
+    nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in",
+      base_browser_nonce: base.session.fetch(BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY),
+      base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
+    )
+    flow = issuance.transaction
+    SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
+    session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+    session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
+    session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
+    encoded_session = session_cookie_jar[session_key]
+    base.cookies.delete(session_key)
+    base.cookies.merge( # rubocop:disable Lint/Void
+      "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    auth.host!(auth_host)
+    auth.https!
+    auth.get(auth_app_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" })
+
+    assert_equal 200, auth.response.status
+    csrf = nil
+    3.times do |admission_index|
+      browser = (admission_index == 1) ? base : auth
+      form = Nokogiri::HTML(browser.response.body).at_css("form")
+
+      assert_not_nil form, "Admission step #{admission_index} must render its real continuation"
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      csrf = fields.fetch("authenticity_token") if admission_index == 2
+      assert_nil binding.reload.base_confirmed_at if admission_index == 1
+      browser.post(form["action"], params: fields, headers: (admission_index == 1) ? base_headers : auth_headers)
+
+      assert_equal 303, browser.response.status
+      assert_not_nil binding.reload.base_confirmed_at if admission_index == 1
+      next if admission_index == 2
+
+      target = URI.parse(browser.response.location)
+      receiver = admission_index.zero? ? base : auth
+
+      assert_equal(admission_index.zero? ? base_host : auth_host, target.host)
+      receiver.get(target.request_uri)
+    end
+
+    assert_predicate binding.reload, :redeemed?
+    auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
 
     assert_response :see_other
     get auth_app_sign_up_path, params: { ri: "jp" }
@@ -235,13 +492,22 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
 
   test "email delivery refuses missing admission before changing the credential" do
     actor = clients(:one)
-    email = actor.client_emails.create!(address: "missing-admission@example.com")
+    email = actor.client_emails.create!(
+      address: "missing-admission@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
+      binding_finalized_at: Time.current,
+    )
     source_before = email.reload.attributes
     ceremonies_before = ClientAuthCeremonySession.order(:id).map(&:attributes)
     deliveries_before = enqueued_jobs.length
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    https!
+    get auth_app_root_path, params: { ri: "jp" }
+    csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
     post auth_app_sign_in_email_path,
-         params: { :user_email => { address: email.address }, "cf-turnstile-response" => "t", :ri => "jp" }
+         params: { :user_email => { address: email.address }, "cf-turnstile-response" => "t", :ri => "jp" },
+         headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}",
+                    "Sec-Fetch-Site" => "same-origin",
+                    "X-CSRF-Token" => csrf, }
 
     assert_response :bad_request
     # Boolean snapshots avoid exposing credential or ceremony material on refusal.
@@ -254,40 +520,188 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   test "local sign up admission refuses a direct sign in credential endpoint" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_up", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    base = open_session
+    auth = self
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+    base.host!(base_host)
+    base.https!
+    base.get("/sign", params: { ri: "jp" })
+
+    assert_equal 200, base.response.status
+    entry_form = Nokogiri::HTML(base.response.body).at_css("form")
+    entry_fields = entry_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    base.post(entry_form["action"], params: entry_fields, headers: base_headers)
+
+    assert_equal 303, base.response.status
+    issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
+    payload, = JWT.decode(
+      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
     )
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    get auth_app_sign_up_path, params: { entry_ref: issuance.reference, ri: "jp" }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_sign_up_path, params: { entry_ref: issuance.reference, authenticity_token: csrf, ri: "jp" }
+    target = URI.parse(payload.fetch("url"))
+
+    assert_equal base_host, target.host
+    base.get(target.request_uri)
+    authorization_form = Nokogiri::HTML(base.response.body).at_css("form#base-authorization-ceremony-start-form")
+    authorization_fields = authorization_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
+
+    assert_equal 303, base.response.status
+    # There is no local-parent HTTP issuer; its public API remains the fixture seam,
+    # while attachment, Base confirmation and redemption retain all browser protections.
+    nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_up",
+      base_browser_nonce: base.session.fetch(BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY),
+      base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
+    )
+    flow = issuance.transaction
+    SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
+    session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+    session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
+    session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
+    encoded_session = session_cookie_jar[session_key]
+    base.cookies.delete(session_key)
+    base.cookies.merge( # rubocop:disable Lint/Void
+      "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    auth.host!(auth_host)
+    auth.https!
+    auth.get(auth_app_sign_up_path, params: { entry_ref: issuance.reference, ri: "jp" })
+
+    assert_equal 200, auth.response.status
+    csrf = nil
+    3.times do |admission_index|
+      browser = (admission_index == 1) ? base : auth
+      form = Nokogiri::HTML(browser.response.body).at_css("form")
+
+      assert_not_nil form, "Admission step #{admission_index} must render its real continuation"
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      csrf = fields.fetch("authenticity_token") if admission_index == 2
+      assert_nil binding.reload.base_confirmed_at if admission_index == 1
+      browser.post(form["action"], params: fields, headers: (admission_index == 1) ? base_headers : auth_headers)
+
+      assert_equal 303, browser.response.status
+      assert_not_nil binding.reload.base_confirmed_at if admission_index == 1
+      next if admission_index == 2
+
+      target = URI.parse(browser.response.location)
+      receiver = admission_index.zero? ? base : auth
+
+      assert_equal(admission_index.zero? ? base_host : auth_host, target.host)
+      receiver.get(target.request_uri)
+    end
+
+    assert_predicate binding.reload, :redeemed?
+    auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
 
     assert_response :see_other
     post auth_app_sign_in_email_path,
-         params: { :user_email => { address: "unexpected@example.com" }, "cf-turnstile-response" => "t", :ri => "jp" }
+         params: { :user_email => { address: "unexpected@example.com" }, "cf-turnstile-response" => "t", :ri => "jp" },
+         headers: auth_headers
 
     assert_response :bad_request
     assert_nil issuance.transaction.reload.principal_id
   end
 
+  # rubocop:disable Minitest/MultipleAssertions
   test "Auth records local email evidence on the admitted Base flow and issues no root credential" do
     actor = clients(:one)
-    email = actor.client_emails.create!(address: "local-boundary@example.com")
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    email = actor.client_emails.create!(
+      address: "local-boundary@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
+      binding_finalized_at: Time.current,
     )
-    original_nonce_digest = issuance.transaction.nonce_digest
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    get auth_app_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" }
+    base = open_session
+    auth = self
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+    base.host!(base_host)
+    base.https!
+    base.get("/sign", params: { ri: "jp" })
 
-    assert_response :success
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_sign_in_path, params: { entry_ref: issuance.reference, authenticity_token: csrf, ri: "jp" }
+    assert_equal 200, base.response.status
+    entry_form = Nokogiri::HTML(base.response.body).at_css("form")
+    entry_fields = entry_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    base.post(entry_form["action"], params: entry_fields, headers: base_headers)
+
+    assert_equal 303, base.response.status
+    issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
+    payload, = JWT.decode(
+      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    target = URI.parse(payload.fetch("url"))
+
+    assert_equal base_host, target.host
+    base.get(target.request_uri)
+    authorization_form = Nokogiri::HTML(base.response.body).at_css("form#base-authorization-ceremony-start-form")
+    authorization_fields = authorization_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
+
+    assert_equal 303, base.response.status
+    # There is no local-parent HTTP issuer; its public API remains the fixture seam,
+    # while attachment, Base confirmation and redemption retain all browser protections.
+    nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in",
+      base_browser_nonce: base.session.fetch(BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY),
+      base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
+    )
+    flow = issuance.transaction
+    SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
+    session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+    session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
+    session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
+    encoded_session = session_cookie_jar[session_key]
+    base.cookies.delete(session_key)
+    base.cookies.merge( # rubocop:disable Lint/Void
+      "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    auth.host!(auth_host)
+    auth.https!
+    auth.get(auth_app_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" })
+
+    assert_equal 200, auth.response.status
+    csrf = nil
+    3.times do |admission_index|
+      browser = (admission_index == 1) ? base : auth
+      form = Nokogiri::HTML(browser.response.body).at_css("form")
+
+      assert_not_nil form, "Admission step #{admission_index} must render its real continuation"
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      csrf = fields.fetch("authenticity_token") if admission_index == 2
+      assert_nil binding.reload.base_confirmed_at if admission_index == 1
+      browser.post(form["action"], params: fields, headers: (admission_index == 1) ? base_headers : auth_headers)
+
+      assert_equal 303, browser.response.status
+      assert_not_nil binding.reload.base_confirmed_at if admission_index == 1
+      next if admission_index == 2
+
+      target = URI.parse(browser.response.location)
+      receiver = admission_index.zero? ? base : auth
+
+      assert_equal(admission_index.zero? ? base_host : auth_host, target.host)
+      receiver.get(target.request_uri)
+    end
+
+    assert_predicate binding.reload, :redeemed?
+    auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
 
     assert_response :see_other
 
     post auth_app_sign_in_email_path,
-         params: { :user_email => { address: email.address }, "cf-turnstile-response" => "t" }
+         params: { :user_email => { address: email.address }, "cf-turnstile-response" => "t" }, headers: auth_headers
 
     assert_response :redirect
     delivery_job = enqueued_jobs.reverse.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
@@ -317,10 +731,11 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
     assert_nil context.fetch("verified_at")
     assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
+    original_nonce_digest = issuance.transaction.reload.nonce_digest
     before_count = ClientSignInFlow.count
     assert_no_difference("ClientToken.count") do
       patch auth_app_sign_in_email_path,
-            params: { :user_email => { pass_code: code }, "cf-turnstile-response" => "t" }
+            params: { :user_email => { pass_code: code }, "cf-turnstile-response" => "t" }, headers: auth_headers
     end
     assert_response :redirect
     assert_equal before_count, ClientSignInFlow.count
@@ -336,33 +751,104 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   # One journey must retain separate Base/Auth cookie jars and verify both issuance boundaries.
+  # rubocop:enable Minitest/MultipleAssertions
+
   # rubocop:disable Minitest/MultipleAssertions
   test "Base finalizes a local email ceremony once and rejects its result in another browser" do
-    actor = clients(:one)
-    email = actor.client_emails.create!(address: "local-roundtrip@example.com")
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    destination = nil
-    JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
-      RedirectsJumpGatewayUrl.stub(
-        :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
-      ) do
-        post base_app_sign_show_path, params: { ri: "jp" }
-      end
+    actor = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+    bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
+
+    assert_instance_of ClientIdentity, bootstrap.identity
+    assert_equal actor.id, bootstrap.identity.source_record_id
+    email = actor.client_emails.create!(
+      address: "local-roundtrip@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
+      binding_finalized_at: Time.current,
+    )
+    base = self
+    auth = open_session
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+    base.host!(base_host)
+    base.https!
+    base.get("/sign", params: { ri: "jp" })
+
+    assert_equal 200, base.response.status
+    entry_form = Nokogiri::HTML(base.response.body).at_css("form")
+    entry_fields = entry_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    base.post(entry_form["action"], params: entry_fields, headers: base_headers)
+
+    assert_equal 303, base.response.status
+    issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
+    payload, = JWT.decode(
+      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    target = URI.parse(payload.fetch("url"))
+
+    assert_equal base_host, target.host
+    base.get(target.request_uri)
+    authorization_form = Nokogiri::HTML(base.response.body).at_css("form#base-authorization-ceremony-start-form")
+    authorization_fields = authorization_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
+
+    assert_equal 303, base.response.status
+    # There is no local-parent HTTP issuer; its public API remains the fixture seam,
+    # while attachment, Base confirmation and redemption retain all browser protections.
+    nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in",
+      base_browser_nonce: base.session.fetch(BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY),
+      base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
+    )
+    flow = issuance.transaction
+    SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
+    session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+    session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
+    session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
+    encoded_session = session_cookie_jar[session_key]
+    base.cookies.delete(session_key)
+    base.cookies.merge( # rubocop:disable Lint/Void
+      "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    auth.host!(auth_host)
+    auth.https!
+    auth.get(auth_app_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" })
+
+    assert_equal 200, auth.response.status
+    csrf = nil
+    3.times do |admission_index|
+      browser = (admission_index == 1) ? base : auth
+      form = Nokogiri::HTML(browser.response.body).at_css("form")
+
+      assert_not_nil form, "Admission step #{admission_index} must render its real continuation"
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      csrf = fields.fetch("authenticity_token") if admission_index == 2
+      assert_nil binding.reload.base_confirmed_at if admission_index == 1
+      browser.post(form["action"], params: fields, headers: (admission_index == 1) ? base_headers : auth_headers)
+
+      assert_equal 303, browser.response.status
+      assert_not_nil binding.reload.base_confirmed_at if admission_index == 1
+      next if admission_index == 2
+
+      target = URI.parse(browser.response.location)
+      receiver = admission_index.zero? ? base : auth
+
+      assert_equal(admission_index.zero? ? base_host : auth_host, target.host)
+      receiver.get(target.request_uri)
     end
 
-    assert_response :see_other
-    entry_ref = Rack::Utils.parse_nested_query(URI.parse(destination).query).fetch("entry_ref")
-    flow = ClientSignInFlow.find_by!(public_id: entry_ref)
-    browser = open_session
-    browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
-    browser.get(auth_app_sign_in_path, params: { ri: "jp", entry_ref: entry_ref })
-
-    assert_equal 200, browser.response.status
-    csrf = Nokogiri::HTML(browser.response.body).at_css('input[name="authenticity_token"]')["value"]
-    browser.post(auth_app_sign_in_path, params: { ri: "jp", entry_ref: entry_ref, authenticity_token: csrf })
+    assert_predicate binding.reload, :redeemed?
+    auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
+    browser = auth
     browser.post(
       auth_app_sign_in_email_path,
       params: { :ri => "jp", :user_email => { address: email.address }, "cf-turnstile-response" => "t" },
+      headers: auth_headers,
     )
 
     assert_equal 302, browser.response.status
@@ -399,6 +885,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
         params: { :ri => "jp",
                   :user_email => { pass_code: code },
                   "cf-turnstile-response" => "t", },
+        headers: auth_headers,
       )
       browser.follow_redirect!
 
@@ -407,18 +894,25 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
       browser.follow_redirect!
 
       assert_equal 200, browser.response.status
-      browser.post(auth_app_sign_handoff_path, params: { ri: "jp" })
+      browser.post(auth_app_sign_handoff_path, params: { ri: "jp" }, headers: auth_headers)
 
-      assert_equal 200, browser.response.status
+      assert_equal 303, browser.response.status
     end
-    document = Nokogiri::HTML(browser.response.body)
-    result = document.at_css('input[name="result"]')["value"]
-    completion_params = { ri: "jp", result: result, transaction_ref: flow.public_id }
-    headers = { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-site" }
+    completion_uri = URI.parse(browser.response.location).request_uri
+    get completion_uri
+
+    assert_response :success
+    completion_form = response.parsed_body.at_css("form")
+    completion_params = completion_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
+    headers = base_headers
     other_browser = open_session
     other_browser.host!(ENV.fetch("PUBLIC_BASE_SERVICE_URL"))
+    other_browser.https!
+    other_browser.get(completion_uri)
+    other_form = Nokogiri::HTML(other_browser.response.body).at_css("form")
+    other_params = other_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
     assert_no_difference("ClientToken.count") do
-      other_browser.post(base_app_sign_completion_path, params: completion_params, headers: headers)
+      other_browser.post(base_app_sign_completion_path, params: other_params, headers: headers)
     end
     assert_equal 400, other_browser.response.status
 
@@ -433,11 +927,122 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     assert_not_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil browser.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    get completion_uri
+    completion_form = response.parsed_body.at_css("form")
+    completion_params = completion_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
     assert_no_difference("ClientToken.count") do
       post base_app_sign_completion_path, params: completion_params, headers: headers
     end
     assert_response :see_other
 
+    # A Root is OP authority, not a Browser-RP credential. Complete the real self-RP
+    # callback before continuing into Base's protected browser operations.
+    assert_no_difference("ClientToken.count") do
+      get "/sign", params: { ri: "jp", pt: base_app_dashboard_path(ri: "jp") }
+      rp_form = response.parsed_body.at_css("form")
+      rp_fields = rp_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
+      post rp_form["action"], params: rp_fields, headers: base_headers
+
+      assert_response :redirect
+      rp_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
+      rp_payload, = JWT.decode(
+        rp_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      authorize_uri = URI.parse(rp_payload.fetch("url"))
+
+      assert_equal base_host, authorize_uri.host
+      get authorize_uri.request_uri
+
+      assert_response :redirect
+      callback_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
+      callback_payload, = JWT.decode(
+        callback_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      callback_uri = URI.parse(callback_payload.fetch("url"))
+
+      assert_equal base_host, callback_uri.host
+      protocol_browser = open_session
+      protocol_browser.host!(base_host)
+      protocol_browser.https!
+      # Substitute network transport only: the token and UserInfo requests still run
+      # through their real public controllers, including PKCE and client authentication.
+      transport =
+        Faraday::Adapter::Test::Stubs.new do |stub|
+          stub.post(/.*/) do |env|
+            # The nested Rack executor must not complete the in-flight callback.
+            outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
+            outer_actor = Actor.context
+            executor_key = Rails.application.executor.active_key
+            outer_execution = ActiveSupport::IsolatedExecutionState.delete(executor_key)
+            begin
+              protocol_browser.host!(env.url.authority)
+              protocol_browser.https!(env.url.scheme == "https")
+              protocol_browser.post(
+                env.url.request_uri, params: Rack::Utils.parse_query(env.body),
+                                     headers: { "Accept" => "application/json" },
+              )
+            ensure
+              ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
+            end
+
+            # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+            assert ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller)
+            assert Actor.context.equal?(outer_actor)
+            # rubocop:enable Minitest/AssertSame
+            assert_equal 200, protocol_browser.response.status
+            [protocol_browser.response.status, { "Content-Type" => "application/json" },
+             protocol_browser.response.body,]
+          end
+          stub.get(/.*/) do |env|
+            outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
+            outer_actor = Actor.context
+            executor_key = Rails.application.executor.active_key
+            outer_execution = ActiveSupport::IsolatedExecutionState.delete(executor_key)
+            begin
+              protocol_browser.host!(env.url.authority)
+              protocol_browser.https!(env.url.scheme == "https")
+              protocol_browser.get(
+                env.url.request_uri, headers: { "Authorization" => env.request_headers.fetch("Authorization"),
+                                                "Accept" => "application/json", },
+              )
+            ensure
+              ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
+            end
+
+            # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+            assert ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller)
+            assert Actor.context.equal?(outer_actor)
+            # rubocop:enable Minitest/AssertSame
+            assert_equal 200, protocol_browser.response.status
+            [protocol_browser.response.status, { "Content-Type" => "application/json" },
+             protocol_browser.response.body,]
+          end
+        end
+      connection =
+        Faraday.new do |builder|
+          builder.request(:url_encoded)
+          builder.adapter(:test, transport)
+        end
+      OutboundHttp::Connection.stub(
+        :build, ->(**args) {
+          assert_equal base_host, args.fetch(:url).host
+          connection
+        },
+      ) do
+        TestSupport::OutboundHttpGuard.allow do
+          get callback_uri.request_uri
+        end
+      end
+
+      assert_response :redirect
+      assert_predicate cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s, :present?
+      assert_predicate cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s, :present?
+      transport.verify_stubbed_calls
+    end
     # Continue from the root session actually established on Base. Only the external Jump
     # transport and Turnstile service are substituted; the Passkey assertion uses real crypto.
     origin = "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}"
@@ -459,32 +1064,57 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     pt = verifier.generate(
       { "flow" => "step_up.bootstrap",
         "surface" => "app",
-        "session_nonce" => token.device_session.public_id,
+        "session_nonce" => token.public_id,
         "pt" => path, },
       purpose: :path_target, expires_in: 15.minutes,
     )
-    JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
-      RedirectsJumpGatewayUrl.stub(
-        :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
-      ) do
-        post base_app_verification_path(ri: "jp"), params: { scope: "settings_birthdate", pt: pt }
-      end
-    end
+    get "/sign", params: { ri: "jp" }
+    base_csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post base_app_verification_path(ri: "jp"), params: { scope: "settings_birthdate", pt: pt },
+                                               headers: base_headers.merge("X-CSRF-Token" => base_csrf)
 
     assert_response :see_other
-    entry = Rack::Utils.parse_nested_query(URI.parse(destination).query).fetch("entry_ref")
-    browser.get(auth_app_verification_path, params: { ri: "jp", entry_ref: entry })
+    step_up_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
+    step_up_payload, = JWT.decode(
+      step_up_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    destination = URI.parse(step_up_payload.fetch("url"))
+
+    assert_equal auth_host, destination.host
+    entry = Rack::Utils.parse_query(destination.query).fetch("entry_ref")
+    step_up_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry)
+    browser.get(destination.request_uri)
 
     assert_equal 200, browser.response.status
-    csrf = Nokogiri::HTML(browser.response.body).at_css('input[name="authenticity_token"]')["value"]
-    browser.post(auth_app_verification_path, params: { ri: "jp", entry_ref: entry, authenticity_token: csrf })
+    3.times do |admission_index|
+      receiver = (admission_index == 1) ? self : browser
+      continuation = Nokogiri::HTML(receiver.response.body).at_css("form")
+      continuation_fields = continuation.css("input[name]").to_h { |field| [field["name"], field["value"]] }
+      receiver.post(
+        continuation["action"], params: continuation_fields,
+                                headers: (admission_index == 1) ? base_headers : auth_headers,
+      )
 
-    assert_equal 303, browser.response.status
+      assert_equal 303, receiver.response.status
+      csrf = continuation_fields.fetch("authenticity_token") if admission_index == 2
+      next if admission_index == 2
+
+      next_uri = URI.parse(receiver.response.location)
+
+      assert_equal(admission_index.zero? ? base_host : auth_host, next_uri.host)
+      next_receiver = admission_index.zero? ? self : browser
+      next_receiver.get(next_uri.request_uri)
+    end
+
+    assert_predicate step_up_binding.reload, :redeemed?
+    auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
     browser.post(
       auth_app_verification_passkey_options_path(ri: "jp"),
-      params: { "cf-turnstile-response" => "test-only" }, headers: { "X-CSRF-Token" => csrf }, as: :json,
+      params: { "cf-turnstile-response" => "test-only" }, headers: auth_headers, as: :json,
     )
 
     assert_equal 200, browser.response.status
@@ -494,7 +1124,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     browser.post(
       auth_app_verification_passkey_path(ri: "jp"),
       params: { challenge_id: reference, credential: assertion },
-      headers: { "X-CSRF-Token" => csrf }, as: :json,
+      headers: auth_headers, as: :json,
     )
 
     assert_equal 200, browser.response.status
@@ -502,14 +1132,21 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     browser.get(browser.response.parsed_body.fetch("redirect_url"))
 
     assert_equal 200, browser.response.status
-    browser.post(auth_app_verification_handoff_path(ri: "jp"), params: { authenticity_token: csrf })
+    browser.post(
+      auth_app_verification_handoff_path(ri: "jp"), params: { authenticity_token: csrf },
+                                                    headers: auth_headers,
+    )
 
-    assert_equal 200, browser.response.status
-    document = Nokogiri::HTML(browser.response.body)
-    post base_app_verification_completion_path(ri: "jp"), params: {
-      result: document.at_css('input[name="result"]')["value"],
-      transaction_ref: record.step_up_ceremony_transaction_ref,
-    }, headers: headers
+    assert_equal 303, browser.response.status
+    result_uri = URI.parse(browser.response.location)
+
+    assert_equal base_host, result_uri.host
+    get result_uri.request_uri
+
+    assert_response :success
+    result_form = response.parsed_body.at_css("form")
+    result_fields = result_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
+    post result_form["action"], params: result_fields, headers: base_headers
 
     assert_response :see_other
     assert_equal path, URI.parse(response.location).request_uri
@@ -525,32 +1162,99 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
 
   test "COM Base finalizes a local email ceremony once and rejects its result in another browser" do
     actor = Visitor.create!(status_id: VisitorStatus::ACTIVE, birthdate: "2000-01-01")
+    bootstrap = BaseSelectorBootstrapAuthority.call(surface: :com, principal: actor)
+
+    assert_instance_of VisitorIdentity, bootstrap.identity
+    assert_equal actor.id, bootstrap.identity.source_record_id
     email = actor.visitor_emails.create!(
       address: "com-local-roundtrip@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+      binding_finalized_at: Time.current,
     )
-    host! ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    destination = nil
-    JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
-      RedirectsJumpGatewayUrl.stub(
-        :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
-      ) do
-        post base_com_sign_show_path, params: { ri: "jp" }
-      end
+    base = self
+    auth = open_session
+    base_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    auth_host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+    base.host!(base_host)
+    base.https!
+    base.get("/sign", params: { ri: "jp" })
+
+    assert_equal 200, base.response.status
+    entry_form = Nokogiri::HTML(base.response.body).at_css("form")
+    entry_fields = entry_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    base.post(entry_form["action"], params: entry_fields, headers: base_headers)
+
+    assert_equal 303, base.response.status
+    issuer = JitSecurityJwtRegistry.surface("BASE_COM")
+    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
+    payload, = JWT.decode(
+      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    target = URI.parse(payload.fetch("url"))
+
+    assert_equal base_host, target.host
+    base.get(target.request_uri)
+    authorization_form = Nokogiri::HTML(base.response.body).at_css("form#base-authorization-ceremony-start-form")
+    authorization_fields = authorization_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
+
+    assert_equal 303, base.response.status
+    # There is no local-parent HTTP issuer; its public API remains the fixture seam,
+    # while attachment, Base confirmation and redemption retain all browser protections.
+    nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_in",
+      base_browser_nonce: base.session.fetch(BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY),
+      base_token: nil, nonce_digest: VisitorSignInFlow.digest_nonce(nonce),
+    )
+    flow = issuance.transaction
+    SignInCycleLocator.new(base.session, surface: "com").issue!(flow, nonce: nonce)
+    session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+    session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
+    session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
+    encoded_session = session_cookie_jar[session_key]
+    base.cookies.delete(session_key)
+    base.cookies.merge( # rubocop:disable Lint/Void
+      "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
+    auth.host!(auth_host)
+    auth.https!
+    auth.get(auth_com_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" })
+
+    assert_equal 200, auth.response.status
+    csrf = nil
+    3.times do |admission_index|
+      browser = (admission_index == 1) ? base : auth
+      form = Nokogiri::HTML(browser.response.body).at_css("form")
+
+      assert_not_nil form, "Admission step #{admission_index} must render its real continuation"
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      csrf = fields.fetch("authenticity_token") if admission_index == 2
+      assert_nil binding.reload.base_confirmed_at if admission_index == 1
+      browser.post(form["action"], params: fields, headers: (admission_index == 1) ? base_headers : auth_headers)
+
+      assert_equal 303, browser.response.status
+      assert_not_nil binding.reload.base_confirmed_at if admission_index == 1
+      next if admission_index == 2
+
+      target = URI.parse(browser.response.location)
+      receiver = admission_index.zero? ? base : auth
+
+      assert_equal(admission_index.zero? ? base_host : auth_host, target.host)
+      receiver.get(target.request_uri)
     end
 
-    assert_response :see_other
-    entry_ref = Rack::Utils.parse_nested_query(URI.parse(destination).query).fetch("entry_ref")
-    flow = VisitorSignInFlow.find_by!(public_id: entry_ref)
-    browser = open_session
-    browser.host!(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"))
-    browser.get(auth_com_sign_in_path, params: { ri: "jp", entry_ref: entry_ref })
-
-    assert_equal 200, browser.response.status
-    csrf = Nokogiri::HTML(browser.response.body).at_css('input[name="authenticity_token"]')["value"]
-    browser.post(auth_com_sign_in_path, params: { ri: "jp", entry_ref: entry_ref, authenticity_token: csrf })
+    assert_predicate binding.reload, :redeemed?
+    auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
+    browser = auth
     browser.post(
       auth_com_sign_in_email_path,
       params: { :ri => "jp", :user_email => { address: email.address }, "cf-turnstile-response" => "t" },
+      headers: auth_headers,
     )
 
     assert_equal 302, browser.response.status
@@ -587,6 +1291,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
         params: { :ri => "jp",
                   :user_email => { pass_code: code },
                   "cf-turnstile-response" => "t", },
+        headers: auth_headers,
       )
 
       assert_equal "/sign/in/check", URI.parse(browser.response.location).path
@@ -598,18 +1303,25 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
       browser.follow_redirect!
 
       assert_equal 200, browser.response.status
-      browser.post(auth_com_sign_handoff_path, params: { ri: "jp" })
+      browser.post(auth_com_sign_handoff_path, params: { ri: "jp" }, headers: auth_headers)
 
-      assert_equal 200, browser.response.status
+      assert_equal 303, browser.response.status
     end
-    document = Nokogiri::HTML(browser.response.body)
-    result = document.at_css('input[name="result"]')["value"]
-    completion_params = { ri: "jp", result: result, transaction_ref: flow.public_id }
-    headers = { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")}", "Sec-Fetch-Site" => "same-site" }
+    completion_uri = URI.parse(browser.response.location).request_uri
+    get completion_uri
+
+    assert_response :success
+    completion_form = response.parsed_body.at_css("form")
+    completion_params = completion_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
+    headers = base_headers
     other_browser = open_session
     other_browser.host!(ENV.fetch("PUBLIC_BASE_CORPORATE_URL"))
+    other_browser.https!
+    other_browser.get(completion_uri)
+    other_form = Nokogiri::HTML(other_browser.response.body).at_css("form")
+    other_params = other_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
     assert_no_difference("VisitorToken.count") do
-      other_browser.post(base_com_sign_completion_path, params: completion_params, headers: headers)
+      other_browser.post(base_com_sign_completion_path, params: other_params, headers: headers)
     end
     assert_equal 400, other_browser.response.status
 
@@ -624,11 +1336,122 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     assert_not_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil browser.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    get completion_uri
+    completion_form = response.parsed_body.at_css("form")
+    completion_params = completion_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
     assert_no_difference("VisitorToken.count") do
       post base_com_sign_completion_path, params: completion_params, headers: headers
     end
     assert_response :see_other
 
+    # A Root is OP authority, not a Browser-RP credential. Complete the real self-RP
+    # callback before continuing into Base's protected browser operations.
+    assert_no_difference("VisitorToken.count") do
+      get "/sign", params: { ri: "jp", pt: base_com_dashboard_path(ri: "jp") }
+      rp_form = response.parsed_body.at_css("form")
+      rp_fields = rp_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
+      post rp_form["action"], params: rp_fields, headers: base_headers
+
+      assert_response :redirect
+      rp_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
+      rp_payload, = JWT.decode(
+        rp_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      authorize_uri = URI.parse(rp_payload.fetch("url"))
+
+      assert_equal base_host, authorize_uri.host
+      get authorize_uri.request_uri
+
+      assert_response :redirect
+      callback_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
+      callback_payload, = JWT.decode(
+        callback_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      callback_uri = URI.parse(callback_payload.fetch("url"))
+
+      assert_equal base_host, callback_uri.host
+      protocol_browser = open_session
+      protocol_browser.host!(base_host)
+      protocol_browser.https!
+      # Substitute network transport only: the token and UserInfo requests still run
+      # through their real public controllers, including PKCE and client authentication.
+      transport =
+        Faraday::Adapter::Test::Stubs.new do |stub|
+          stub.post(/.*/) do |env|
+            # The nested Rack executor must not complete the in-flight callback.
+            outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
+            outer_actor = Actor.context
+            executor_key = Rails.application.executor.active_key
+            outer_execution = ActiveSupport::IsolatedExecutionState.delete(executor_key)
+            begin
+              protocol_browser.host!(env.url.authority)
+              protocol_browser.https!(env.url.scheme == "https")
+              protocol_browser.post(
+                env.url.request_uri, params: Rack::Utils.parse_query(env.body),
+                                     headers: { "Accept" => "application/json" },
+              )
+            ensure
+              ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
+            end
+
+            # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+            assert ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller)
+            assert Actor.context.equal?(outer_actor)
+            # rubocop:enable Minitest/AssertSame
+            assert_equal 200, protocol_browser.response.status
+            [protocol_browser.response.status, { "Content-Type" => "application/json" },
+             protocol_browser.response.body,]
+          end
+          stub.get(/.*/) do |env|
+            outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
+            outer_actor = Actor.context
+            executor_key = Rails.application.executor.active_key
+            outer_execution = ActiveSupport::IsolatedExecutionState.delete(executor_key)
+            begin
+              protocol_browser.host!(env.url.authority)
+              protocol_browser.https!(env.url.scheme == "https")
+              protocol_browser.get(
+                env.url.request_uri, headers: { "Authorization" => env.request_headers.fetch("Authorization"),
+                                                "Accept" => "application/json", },
+              )
+            ensure
+              ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
+            end
+
+            # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+            assert ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller)
+            assert Actor.context.equal?(outer_actor)
+            # rubocop:enable Minitest/AssertSame
+            assert_equal 200, protocol_browser.response.status
+            [protocol_browser.response.status, { "Content-Type" => "application/json" },
+             protocol_browser.response.body,]
+          end
+        end
+      connection =
+        Faraday.new do |builder|
+          builder.request(:url_encoded)
+          builder.adapter(:test, transport)
+        end
+      OutboundHttp::Connection.stub(
+        :build, ->(**args) {
+          assert_equal base_host, args.fetch(:url).host
+          connection
+        },
+      ) do
+        TestSupport::OutboundHttpGuard.allow do
+          get callback_uri.request_uri
+        end
+      end
+
+      assert_response :redirect
+      assert_predicate cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s, :present?
+      assert_predicate cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s, :present?
+      transport.verify_stubbed_calls
+    end
     origin = "https://#{ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")}"
     fake = WebAuthn::FakeClient.new(origin, encoding: :base64url)
     registration = fake.create(
@@ -650,32 +1473,57 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     pt = verifier.generate(
       { "flow" => "step_up.bootstrap",
         "surface" => "com",
-        "session_nonce" => token.device_session.public_id,
+        "session_nonce" => token.public_id,
         "pt" => path, },
       purpose: :path_target, expires_in: 15.minutes,
     )
-    JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
-      RedirectsJumpGatewayUrl.stub(
-        :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
-      ) do
-        post base_com_verification_path(ri: "jp"), params: { scope: "settings_birthdate", pt: pt }
-      end
-    end
+    get "/sign", params: { ri: "jp" }
+    base_csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post base_com_verification_path(ri: "jp"), params: { scope: "settings_birthdate", pt: pt },
+                                               headers: base_headers.merge("X-CSRF-Token" => base_csrf)
 
     assert_response :see_other
-    entry = Rack::Utils.parse_nested_query(URI.parse(destination).query).fetch("entry_ref")
-    browser.get(auth_com_verification_path, params: { ri: "jp", entry_ref: entry })
+    step_up_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
+    step_up_payload, = JWT.decode(
+      step_up_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    destination = URI.parse(step_up_payload.fetch("url"))
+
+    assert_equal auth_host, destination.host
+    entry = Rack::Utils.parse_query(destination.query).fetch("entry_ref")
+    step_up_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: entry)
+    browser.get(destination.request_uri)
 
     assert_equal 200, browser.response.status
-    csrf = Nokogiri::HTML(browser.response.body).at_css('input[name="authenticity_token"]')["value"]
-    browser.post(auth_com_verification_path, params: { ri: "jp", entry_ref: entry, authenticity_token: csrf })
+    3.times do |admission_index|
+      receiver = (admission_index == 1) ? self : browser
+      continuation = Nokogiri::HTML(receiver.response.body).at_css("form")
+      continuation_fields = continuation.css("input[name]").to_h { |field| [field["name"], field["value"]] }
+      receiver.post(
+        continuation["action"], params: continuation_fields,
+                                headers: (admission_index == 1) ? base_headers : auth_headers,
+      )
 
-    assert_equal 303, browser.response.status
+      assert_equal 303, receiver.response.status
+      csrf = continuation_fields.fetch("authenticity_token") if admission_index == 2
+      next if admission_index == 2
+
+      next_uri = URI.parse(receiver.response.location)
+
+      assert_equal(admission_index.zero? ? base_host : auth_host, next_uri.host)
+      next_receiver = admission_index.zero? ? self : browser
+      next_receiver.get(next_uri.request_uri)
+    end
+
+    assert_predicate step_up_binding.reload, :redeemed?
+    auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
     browser.post(
       auth_com_verification_passkey_options_path(ri: "jp"),
-      params: { "cf-turnstile-response" => "test-only" }, headers: { "X-CSRF-Token" => csrf }, as: :json,
+      params: { "cf-turnstile-response" => "test-only" }, headers: auth_headers, as: :json,
     )
 
     assert_equal 200, browser.response.status
@@ -685,7 +1533,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     browser.post(
       auth_com_verification_passkey_path(ri: "jp"),
       params: { challenge_id: reference, credential: assertion },
-      headers: { "X-CSRF-Token" => csrf }, as: :json,
+      headers: auth_headers, as: :json,
     )
 
     assert_equal 200, browser.response.status
@@ -693,14 +1541,21 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     browser.get(browser.response.parsed_body.fetch("redirect_url"))
 
     assert_equal 200, browser.response.status
-    browser.post(auth_com_verification_handoff_path(ri: "jp"), params: { authenticity_token: csrf })
+    browser.post(
+      auth_com_verification_handoff_path(ri: "jp"), params: { authenticity_token: csrf },
+                                                    headers: auth_headers,
+    )
 
-    assert_equal 200, browser.response.status
-    document = Nokogiri::HTML(browser.response.body)
-    post base_com_verification_completion_path(ri: "jp"), params: {
-      result: document.at_css('input[name="result"]')["value"],
-      transaction_ref: record.step_up_ceremony_transaction_ref,
-    }, headers: headers
+    assert_equal 303, browser.response.status
+    result_uri = URI.parse(browser.response.location)
+
+    assert_equal base_host, result_uri.host
+    get result_uri.request_uri
+
+    assert_response :success
+    result_form = response.parsed_body.at_css("form")
+    result_fields = result_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
+    post result_form["action"], params: result_fields, headers: base_headers
 
     assert_response :see_other
     assert_equal path, URI.parse(response.location).request_uri

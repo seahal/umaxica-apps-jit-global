@@ -13,11 +13,15 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
         end
       owner.update!(discard_at: owner.created_at, purge_eligible_at: owner.created_at) if realm == "org"
       address = "repeated-dead-#{SecureRandom.hex(8)}@example.com"
-      histories = 2.times.map do
-        attributes = { owner_key => owner.id, :raw_address => address, :confirm_policy => true, :created_at => 3.days.ago }
-        attributes.merge!(discard_at: 2.days.ago, purge_eligible_at: 1.day.ago) unless realm == "org"
-        EmailIdentifierPurger.call(record: model.create!(attributes))
-      end
+      histories =
+        2.times.map do
+          attributes = { owner_key => owner.id,
+                         :raw_address => address,
+                         :confirm_policy => true,
+                         :created_at => 3.days.ago, }
+          attributes.merge!(discard_at: 2.days.ago, purge_eligible_at: 1.day.ago) unless realm == "org"
+          EmailIdentifierPurger.call(record: model.create!(attributes))
+        end
 
       assert_equal 2, history_model.where(id: histories.map(&:id)).count
       assert_not_equal histories.first.fingerprint, histories.last.fingerprint
@@ -25,7 +29,8 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
       assert histories.last.matches_identifier?(address)
     end
 
-    test "#{realm} repeated dead telephone generates independently salted history rows without reserving the destination" do
+    test "#{realm} repeated dead telephone generates independently salted history rows " \
+         "without reserving the destination" do
       model, history_model, owner, owner_key =
         case realm
         when "app" then [ClientTelephone, ClientTelephoneHistory, clients(:one), :user_id]
@@ -34,14 +39,18 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
         end
       owner.update!(discard_at: owner.created_at, purge_eligible_at: owner.created_at) if realm == "org"
       number = "+819012399911"
-      histories = 2.times.map do
-        attributes = {
-          owner_key => owner.id, :raw_number => number, :confirm_policy => true,
-          :confirm_using_mfa => true, :created_at => 3.days.ago,
-        }
-        attributes.merge!(discard_at: 2.days.ago, purge_eligible_at: 1.day.ago) unless realm == "org"
-        TelephoneIdentifierPurger.call(record: model.create!(attributes))
-      end
+      histories =
+        2.times.map do
+          attributes = {
+            owner_key => owner.id,
+            :raw_number => number,
+            :confirm_policy => true,
+            :confirm_using_mfa => true,
+            :created_at => 3.days.ago,
+          }
+          attributes.merge!(discard_at: 2.days.ago, purge_eligible_at: 1.day.ago) unless realm == "org"
+          TelephoneIdentifierPurger.call(record: model.create!(attributes))
+        end
 
       assert_equal 2, history_model.where(id: histories.map(&:id)).count
       assert_not_equal histories.first.fingerprint, histories.last.fingerprint

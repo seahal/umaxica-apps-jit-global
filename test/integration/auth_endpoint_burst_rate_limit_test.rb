@@ -41,6 +41,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app passkey options answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    admit_auth_local_entry!(surface: "app", intent: "sign_in")
 
     (BURST_ALLOWANCE + 1).times do
       post auth_app_sign_in_passkey_options_url(ri: "jp", host: host),
@@ -54,6 +55,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app passkey verification answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    admit_auth_local_entry!(surface: "app", intent: "sign_in")
 
     (BURST_ALLOWANCE + 1).times do
       post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host),
@@ -66,6 +68,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "com passkey options answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! host
+    admit_auth_local_entry!(surface: "com", intent: "sign_in")
 
     (BURST_ALLOWANCE + 1).times do
       post auth_com_sign_in_passkey_options_url(ri: "jp", host: host),
@@ -78,6 +81,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "com passkey verification answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! host
+    admit_auth_local_entry!(surface: "com", intent: "sign_in")
 
     (BURST_ALLOWANCE + 1).times do
       post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host),
@@ -90,6 +94,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "org passkey options answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host
+    admit_auth_local_entry!(surface: "org", intent: "sign_in")
 
     (BURST_ALLOWANCE + 1).times do
       post auth_org_sign_in_passkey_options_url(ri: "jp", host: host),
@@ -102,6 +107,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "org passkey verification answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host
+    admit_auth_local_entry!(surface: "org", intent: "sign_in")
 
     (BURST_ALLOWANCE + 1).times do
       post auth_org_sign_in_passkey_verification_url(ri: "jp", host: host),
@@ -114,6 +120,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app MFA passkey challenge answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    admit_auth_local_entry!(surface: "app", intent: "sign_in")
 
     (BURST_ALLOWANCE + 1).times do
       post auth_app_sign_in_challenge_passkey_url(ri: "jp", host: host),
@@ -126,6 +133,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "com MFA passkey challenge answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! host
+    admit_auth_local_entry!(surface: "com", intent: "sign_in")
 
     (BURST_ALLOWANCE + 1).times do
       post auth_com_sign_in_challenge_passkey_url(ri: "jp", host: host),
@@ -138,6 +146,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app MFA TOTP challenge answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    admit_auth_local_entry!(surface: "app", intent: "sign_in")
 
     (BURST_ALLOWANCE + 1).times do
       post auth_app_sign_in_challenge_totp_url(ri: "jp", host: host),
@@ -150,6 +159,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app email sign-in answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    admit_auth_local_entry!(surface: "app", intent: "sign_in")
 
     (BURST_ALLOWANCE + 1).times do
       post auth_app_sign_in_email_url(ri: "jp", host: host),
@@ -162,6 +172,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "com email sign-in answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! host
+    admit_auth_local_entry!(surface: "com", intent: "sign_in")
 
     (BURST_ALLOWANCE + 1).times do
       post auth_com_sign_in_email_url(ri: "jp", host: host),
@@ -186,6 +197,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     test "#{label} answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
       host = ENV.fetch(host_env)
       host! host
+      admit_auth_local_entry!(surface: label.split.first, intent: "sign_in")
 
       (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
         travel((burst * 61).seconds) do
@@ -205,6 +217,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app passkey options answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    admit_auth_local_entry!(surface: "app", intent: "sign_in")
 
     # Four bursts of five, each after the one-minute burst window has rolled
     # over, spend the sustained allowance without ever tripping the burst rule.
@@ -231,6 +244,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "com passkey options answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! host
+    admit_auth_local_entry!(surface: "com", intent: "sign_in")
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
@@ -253,6 +267,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "org passkey options answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host
+    admit_auth_local_entry!(surface: "org", intent: "sign_in")
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
@@ -275,6 +290,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app passkey verification answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    admit_auth_local_entry!(surface: "app", intent: "sign_in")
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
@@ -297,6 +313,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "com passkey verification answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! host
+    admit_auth_local_entry!(surface: "com", intent: "sign_in")
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
@@ -319,6 +336,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "org passkey verification answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host
+    admit_auth_local_entry!(surface: "org", intent: "sign_in")
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
@@ -348,6 +366,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     test "#{surface} MFA passkey challenge answers 429 with the sustained hint once the 15-minute allowance is spent" do
       host = ENV.fetch(host_env)
       host! host
+      admit_auth_local_entry!(surface: surface, intent: "sign_in")
 
       (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
         travel((burst * 61).seconds) do
@@ -374,6 +393,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app MFA TOTP challenge answers 429 once the per-account allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    admit_auth_local_entry!(surface: "app", intent: "sign_in")
 
     (ACCOUNT_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
@@ -398,6 +418,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app email sign-in code submission answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    admit_auth_local_entry!(surface: "app", intent: "sign_in")
 
     (BURST_ALLOWANCE + 1).times do
       patch auth_app_sign_in_email_url(ri: "jp", host: host), params: { client_email: { pass_code: "000000" } }
@@ -410,6 +431,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app email sign-in code submission answers 429 with the sustained hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    admit_auth_local_entry!(surface: "app", intent: "sign_in")
     params = { client_email: { pass_code: "000000" } }
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
@@ -441,6 +463,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       TurnstileVerifierStub.challenge_response = { "success" => false }
       host = ENV.fetch(host_env)
       host! host
+      admit_auth_local_entry!(surface: surface, intent: "sign_up")
       quota = RateLimitProfiles.interactive_post_ip.to
 
       quota.times do
@@ -460,6 +483,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     test "#{surface} sign-up email answers 429 once one address has spent its allowance" do
       host = ENV.fetch(host_env)
       host! host
+      admit_auth_local_entry!(surface: surface, intent: "sign_up")
       quota = RateLimitProfiles.email_address_submit.to
       params = { param_key => { address: "signup_addr_#{surface}@example.com", confirm_policy: "1" } }
 

@@ -109,20 +109,6 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil, **)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type || "client",
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host)
     normalized = host.to_s
     service = (normalized.include?("auth") || normalized.include?("sign")) ? "AUTH" : "BASE"

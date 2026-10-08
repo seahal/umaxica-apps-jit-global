@@ -5,6 +5,7 @@ module Base
   module Org
     class WelcomesController < Base::Org::ApplicationController
       include ::SurfaceInertiaPage
+      include ::SignInWelcomeGate
 
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
@@ -25,6 +26,14 @@ module Base
 
       def after_welcome_path
         base_org_dashboard_path(ri: params[:ri])
+      end
+
+      def sign_in_sequence_surface = "org"
+
+      # The root sign-in flow is complete before this self-RP page is reachable, so only the
+      # one-shot Welcome gate decides between showing the page and going on to the Dashboard.
+      def continue_welcome_sequence_without_content!
+        redirect_to(after_welcome_path) unless consume_welcome_gate!
       end
     end
   end

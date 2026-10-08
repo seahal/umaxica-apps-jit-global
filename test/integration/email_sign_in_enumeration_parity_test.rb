@@ -56,6 +56,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
           assert unchanged, "expiry evaluation must retain challenge history"
         end
       end
+
       [0, 1].each do |microseconds|
         assert_equal paths.fetch(["real", microseconds]), paths.fetch(["fake", microseconds])
       end

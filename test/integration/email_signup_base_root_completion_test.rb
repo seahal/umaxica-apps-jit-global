@@ -51,7 +51,7 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
         "/sign", params: { ri: "jp", authenticity_token: csrf }, headers: base_headers,
       )
 
-      assert_equal 302, owner.response.status
+      assert_equal 303, owner.response.status
 
       cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
       issuer = JitSecurityJwtRegistry.surface(issuer_name)
@@ -80,7 +80,7 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
         parameters = fields.except("authenticity_token", "ceremony_action")
         owner.post(form["action"], params: fields, headers: base_headers)
 
-        assert_equal 302, owner.response.status
+        assert_equal 303, owner.response.status
       end
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: entry_reference)
       parent = binding.authorization_transaction
@@ -271,7 +271,7 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
         csrf = owner.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
         owner.post("/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers: base_headers)
 
-        assert_equal 302, owner.response.status
+        assert_equal 303, owner.response.status
         assert parent.reload.base_finalized_at.present?
         root_reference ||= parent.browser_session_ref
 

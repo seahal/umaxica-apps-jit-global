@@ -68,7 +68,7 @@ class JumpDirectedHandoffsTest < ActionDispatch::IntegrationTest
     https!
     post "/sign", params: { ri: "jp" }
 
-    assert_response :found
+    assert_response :see_other
     target = URI.parse(response.location)
 
     assert_equal "https", target.scheme

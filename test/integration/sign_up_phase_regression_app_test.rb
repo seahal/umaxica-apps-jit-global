@@ -8,14 +8,42 @@ require "test_helper"
 # asserted literally here.
 class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
   include ActiveSupport::Testing::TimeHelpers
+  include ActiveJob::TestHelper
 
   REFUSAL_BODY = "戻るはだめです"
 
   setup do
-    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
     host! @host
+    https!
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    get auth_app_sign_up_path(ri: "jp", entry_ref: issuance.reference)
+
+    assert_response :success
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
+    post "/ceremony_bindings",
+         params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf }, headers: headers
+
+    assert_response :see_other
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get auth_app_sign_up_path(ri: "jp", entry_ref: issuance.reference)
+
+    assert_response :success
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_sign_up_path(ri: "jp"),
+         params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: headers
+
+    assert_response :see_other
   end
 
   teardown do
@@ -45,9 +73,26 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
          params: { :user_email => { raw_address: "phase-past-get@example.com", confirm_policy: "1" },
                    "cf-turnstile-response" => "test", }
     otp_url = response.location
-    otp_data = ClientEmail.order(:created_at).last.get_otp
+    candidate = ClientEmail.order(:created_at).last
+    delivery =
+      enqueued_jobs.reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        payload = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last.fetch(:params)
+        payload.fetch(:public_id) == candidate.public_id
+      end
+
+    assert_not_nil delivery
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: payload.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_data = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+
+    assert_equal candidate.public_id, transaction.email_candidate_ref
+    assert_equal transaction.otp_generation, payload.fetch(:sign_up_email_otp_generation)
     patch otp_url,
-          params: { client_email: { pass_code: ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s } }
+          params: { client_email: { pass_code: otp_data } }
     flow = ClientSignUpFlow.order(:created_at).last
     updated_at = flow.updated_at
 
@@ -81,9 +126,26 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
          params: { :user_email => { raw_address: "phase-past-post@example.com", confirm_policy: "1" },
                    "cf-turnstile-response" => "test", }
     otp_url = response.location
-    otp_data = ClientEmail.order(:created_at).last.get_otp
+    candidate = ClientEmail.order(:created_at).last
+    delivery =
+      enqueued_jobs.reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        payload = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last.fetch(:params)
+        payload.fetch(:public_id) == candidate.public_id
+      end
+
+    assert_not_nil delivery
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: payload.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_data = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+
+    assert_equal candidate.public_id, transaction.email_candidate_ref
+    assert_equal transaction.otp_generation, payload.fetch(:sign_up_email_otp_generation)
     patch otp_url,
-          params: { client_email: { pass_code: ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s } }
+          params: { client_email: { pass_code: otp_data } }
     flow = ClientSignUpFlow.order(:created_at).last
     deliveries_before = ActionMailer::Base.deliveries.size
 
@@ -118,9 +180,26 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
                    "cf-turnstile-response" => "test", }
     otp_url = response.location
     binding = Rack::Utils.parse_query(URI.parse(otp_url).query).fetch("fb")
-    otp_data = ClientEmail.order(:created_at).last.get_otp
+    candidate = ClientEmail.order(:created_at).last
+    delivery =
+      enqueued_jobs.reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        payload = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last.fetch(:params)
+        payload.fetch(:public_id) == candidate.public_id
+      end
+
+    assert_not_nil delivery
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: payload.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_data = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+
+    assert_equal candidate.public_id, transaction.email_candidate_ref
+    assert_equal transaction.otp_generation, payload.fetch(:sign_up_email_otp_generation)
     patch otp_url,
-          params: { client_email: { pass_code: ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s } }
+          params: { client_email: { pass_code: otp_data } }
     flow = ClientSignUpFlow.order(:created_at).last
     post otp_url
     tokens_before = ClientToken.count
@@ -144,9 +223,26 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
                    "cf-turnstile-response" => "test", }
     otp_url = response.location
     binding = Rack::Utils.parse_query(URI.parse(otp_url).query).fetch("fb")
-    otp_data = ClientEmail.order(:created_at).last.get_otp
+    candidate = ClientEmail.order(:created_at).last
+    delivery =
+      enqueued_jobs.reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        payload = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last.fetch(:params)
+        payload.fetch(:public_id) == candidate.public_id
+      end
+
+    assert_not_nil delivery
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: payload.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_data = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+
+    assert_equal candidate.public_id, transaction.email_candidate_ref
+    assert_equal transaction.otp_generation, payload.fetch(:sign_up_email_otp_generation)
     patch otp_url,
-          params: { client_email: { pass_code: ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s } }
+          params: { client_email: { pass_code: otp_data } }
     flow = ClientSignUpFlow.order(:created_at).last
 
     post otp_url
@@ -169,9 +265,26 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
                    "cf-turnstile-response" => "test", }
     otp_url_a = response.location
     binding_a = Rack::Utils.parse_query(URI.parse(otp_url_a).query).fetch("fb")
-    otp_data_a = ClientEmail.order(:created_at).last.get_otp
+    candidate = ClientEmail.order(:created_at).last
+    delivery =
+      enqueued_jobs.reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        payload = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last.fetch(:params)
+        payload.fetch(:public_id) == candidate.public_id
+      end
+
+    assert_not_nil delivery
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: payload.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_data_a = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+
+    assert_equal candidate.public_id, transaction.email_candidate_ref
+    assert_equal transaction.otp_generation, payload.fetch(:sign_up_email_otp_generation)
     patch otp_url_a,
-          params: { client_email: { pass_code: ROTP::HOTP.new(otp_data_a[:otp_private_key]).at(otp_data_a[:otp_counter]).to_s } }
+          params: { client_email: { pass_code: otp_data_a } }
     flow_a = ClientSignUpFlow.order(:created_at).last
 
     post auth_app_sign_up_email_url(ri: "jp"),
@@ -192,9 +305,26 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
     assert_equal ClientSignUpFlowStatus::HALTED, flow_a.reload.status_id
     assert_equal ClientSignUpFlowStatus::CONTACT_PENDING, flow_b.reload.status_id
 
-    otp_data_b = ClientEmail.order(:created_at).last.get_otp
+    candidate = ClientEmail.order(:created_at).last
+    delivery =
+      enqueued_jobs.reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        payload = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last.fetch(:params)
+        payload.fetch(:public_id) == candidate.public_id
+      end
+
+    assert_not_nil delivery
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: payload.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_data_b = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+
+    assert_equal candidate.public_id, transaction.email_candidate_ref
+    assert_equal transaction.otp_generation, payload.fetch(:sign_up_email_otp_generation)
     patch otp_url_b,
-          params: { client_email: { pass_code: ROTP::HOTP.new(otp_data_b[:otp_private_key]).at(otp_data_b[:otp_counter]).to_s } }
+          params: { client_email: { pass_code: otp_data_b } }
     birthdate_url_b = response.location
     patch birthdate_url_b,
           params: { requirement: "birthdate",
@@ -210,8 +340,25 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
          params: { :user_email => { raw_address: "phase-two-tabs@example.com", confirm_policy: "1" },
                    "cf-turnstile-response" => "test", }
     otp_url = response.location
-    otp_data = ClientEmail.order(:created_at).last.get_otp
-    pass_code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    candidate = ClientEmail.order(:created_at).last
+    delivery =
+      enqueued_jobs.reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        payload = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last.fetch(:params)
+        payload.fetch(:public_id) == candidate.public_id
+      end
+
+    assert_not_nil delivery
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: payload.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_data = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+
+    assert_equal candidate.public_id, transaction.email_candidate_ref
+    assert_equal transaction.otp_generation, payload.fetch(:sign_up_email_otp_generation)
+    pass_code = otp_data
     patch otp_url, params: { client_email: { pass_code: pass_code } }
     flow = ClientSignUpFlow.order(:created_at).last
 
@@ -228,19 +375,30 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
                    "cf-turnstile-response" => "test", }
     otp_url = response.location
     email = ClientEmail.order(:created_at).last
-    otp_data = email.get_otp
+    candidate = email
+    delivery =
+      enqueued_jobs.reverse.find do |entry|
+        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+
+        payload = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last.fetch(:params)
+        payload.fetch(:public_id) == candidate.public_id
+      end
+
+    assert_not_nil delivery
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: payload.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_data = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+
+    assert_equal candidate.public_id, transaction.email_candidate_ref
+    assert_equal transaction.otp_generation, payload.fetch(:sign_up_email_otp_generation)
     patch otp_url,
-          params: { client_email: { pass_code: ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s } }
+          params: { client_email: { pass_code: otp_data } }
     birthdate_url = response.location
     flow = ClientSignUpFlow.order(:created_at).last
     version = flow.checkpoint_version
     patch birthdate_url, params: { requirement: "birthdate", checkpoint_version: version, birthdate: "1990-01-15" }
-    response_excerpt = response.body
-      .gsub(/<script.*?<\/script>/m, "")
-      .gsub(/<style.*?<\/style>/m, "")
-      .gsub(/<[^>]+>/, " ")
-      .squish[0, 500]
-    warn "DBG #{response_excerpt}"
 
     assert_equal ClientSignUpFlowStatus::COMPLETED, flow.reload.status_id
 
@@ -301,22 +459,21 @@ class SignUpPhaseRegressionAppTest < ActionDispatch::IntegrationTest
   end
 
   test "the otp phase is served one second before expiry and refused without a halt at and after expiry" do
-    travel_to Time.zone.local(2026, 10, 6, 12, 0, 0) do
-      post auth_app_sign_up_email_url(ri: "jp"),
-           params: { :user_email => { raw_address: "phase-expiry@example.com", confirm_policy: "1" },
-                     "cf-turnstile-response" => "test", }
-    end
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :user_email => { raw_address: "phase-expiry@example.com", confirm_policy: "1" },
+                   "cf-turnstile-response" => "test", }
     otp_url = response.location
     flow = ClientSignUpFlow.order(:created_at).last
+    flow.update!(expires_at: flow.class.database_now + 1.minute)
 
-    travel_to flow.expires_at - 1.second do
+    travel_to flow.expires_at - 1.second, with_usec: true do
       get otp_url
 
       assert_response :success
     end
 
     [flow.expires_at, flow.expires_at + 1.second].each do |instant|
-      travel_to instant do
+      travel_to instant, with_usec: true do
         get otp_url
 
         assert_not_equal 200, response.status, "GET at #{instant.iso8601}"
