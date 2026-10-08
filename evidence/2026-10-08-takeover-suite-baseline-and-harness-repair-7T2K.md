@@ -89,3 +89,23 @@ timeouts and concurrency tests). They are not yet isolated.
 `two.md` tasks 16.1, 16.3 to 16.6, 19.2 to 19.4, 23.1, 23.3 and 23.4 remain unchecked. The
 `three.md` audit has only its structural sections (5.1 to 5.3, 7) observed; sections 6 and 8 are not
 complete. `bun run test`, lint, typecheck, build and `db:verify_no_schema_drift` were not run.
+
+## Audit: Auth cannot establish a browser session (D-10), development-side
+
+Observed at commit `032b9b4dd` with `bin/rails runner` after eager loading:
+
+- `AuthenticationBase#log_in` calls `validate_login_establishment!`, which raises
+  `SignInFlowIssuanceRejected` when `auth_credential_ceremony?` is true; `log_in` turns that into
+  `:invalid_request` and issues nothing.
+- All 145 controllers under `Auth::` that include `AuthenticationBase` resolve
+  `auth_credential_ceremony?` to their surface `ApplicationController`, which returns `true` (app
+  63, com 45, org 37). None uses the base definition. The 31 root-authenticated controllers outside
+  `Auth::` use the base definition (`false`).
+
+Consequence: the two root-issuing paths that `AuthenticationSequenceGate` still exposes to Auth
+controllers (`promote_current_session_limit_cycle!` and `issue_active_session_for_selector!`) cannot
+issue on an Auth host. The Auth session-limit pages
+(`Auth::{App,Com,Org}::Sign::In::SessionsController`, `/sign/in/session`) are therefore unreachable
+as issuers; session-limit resolution is served by Base `/sign/in/limitation`. They are leftover
+carriers that Task 7.2 should have removed. Not yet removed: their three test files (28 failing
+tests) assert the retired Auth-side issuance.
