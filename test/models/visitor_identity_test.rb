@@ -79,7 +79,9 @@ class VisitorIdentityTest < ActiveSupport::TestCase
     assert_includes secret_credential.errors[:base], Visitor::RECOVERY_IDENTITY_REQUIRED_MESSAGE
   end
 
-  test "visitor passkey requires verified recovery identity" do
+  # D-90: a usable Identity with a usable passkey may hold zero contacts, so a passkey no longer
+  # requires a verified contact. The recovery secret above still does.
+  test "visitor passkey does not require a verified contact" do
     visitor = Visitor.create!
     passkey = VisitorPasskey.new(
       visitor: visitor,
@@ -89,8 +91,9 @@ class VisitorIdentityTest < ActiveSupport::TestCase
       description: "Visitor Passkey",
     )
 
-    assert_not passkey.valid?
-    assert_includes passkey.errors[:base], Visitor::RECOVERY_IDENTITY_REQUIRED_MESSAGE
+    passkey.valid?
+
+    assert_not_includes passkey.errors[:base], Visitor::RECOVERY_IDENTITY_REQUIRED_MESSAGE
   end
 
   test "creates visitor identity mapping" do
