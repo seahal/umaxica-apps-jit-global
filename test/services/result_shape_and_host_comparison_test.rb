@@ -12,7 +12,7 @@ class ResultShapeAndHostComparisonTest < ActiveSupport::TestCase
 
   test "only the declared terminal sign-in statuses map to an HTTP status" do
     {
-      session_limit_hard_reject: :forbidden,
+      session_limit_conflict: :service_unavailable,
       guardrail_blocked: :forbidden,
       login_forbidden: :forbidden,
       credential_failed: :unauthorized,

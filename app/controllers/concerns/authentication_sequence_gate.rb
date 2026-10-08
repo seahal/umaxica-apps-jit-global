@@ -473,7 +473,9 @@ module AuthenticationSequenceGate
     return result if cycle.sign_in_completed?
 
     case result[:status]
-    when :session_limit_pending
+    when :session_limit_pending, :session_limit_conflict
+      # Both leave the flow resumable: a pending resolution, or a temporary failure that issued
+      # nothing. Neither is terminal.
       sign_in_flow_locator_for(actor: resource).issue!(cycle) unless local_authentication_ceremony?
     when :success, :authentication_evidence_recorded
       cycle.advance_sign_in_to_guardrail! if cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
@@ -485,7 +487,6 @@ module AuthenticationSequenceGate
     else
       cycle.halt_sign_in! unless cycle.sign_in_completed? || cycle.sign_in_failed? || cycle.sign_in_expired? ||
         cycle.sign_in_cancelled? || cycle.sign_in_halted?
-      sign_in_flow_locator_for(actor: resource).issue!(cycle) if result[:status] == :session_limit_hard_reject
     end
     result
   end

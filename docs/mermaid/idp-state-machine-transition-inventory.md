@@ -217,7 +217,7 @@ SESSION_LIMIT_PENDING/DASHBOARD_PENDING → COMPLETED although the model TRANSIT
 These are real public method edges, not invented map edges.
 
 `SignInStateMachine` contains result classifiers and PRIMARY_VERIFIED_TRANSITIONS metadata only.
-`session_limit_hard_reject`, `guardrail_blocked`, `credential_failed`, etc. are results, not stored
+`session_limit_conflict`, `guardrail_blocked`, `credential_failed`, etc. are results, not stored
 states. Participant blockers normally preserve the current state. New paths use selector before
 issuance; DASHBOARD_PENDING and RETURN_PENDING are legacy states with no incoming DASHBOARD_PENDING
 edge in the model map, but AuthenticationSequenceGate directly writes SELECTOR_PENDING to
@@ -292,7 +292,7 @@ SESSION_LIMIT_PENDING/DASHBOARD_PENDING → COMPLETED although the model TRANSIT
 These are real public method edges, not invented map edges.
 
 `SignInStateMachine` contains result classifiers and PRIMARY_VERIFIED_TRANSITIONS metadata only.
-`session_limit_hard_reject`, `guardrail_blocked`, `credential_failed`, etc. are results, not stored
+`session_limit_conflict`, `guardrail_blocked`, `credential_failed`, etc. are results, not stored
 states. Participant blockers normally preserve the current state. New paths use selector before
 issuance; DASHBOARD_PENDING and RETURN_PENDING are legacy states with no incoming DASHBOARD_PENDING
 edge in the model map, but AuthenticationSequenceGate directly writes SELECTOR_PENDING to
@@ -367,7 +367,7 @@ SESSION_LIMIT_PENDING/DASHBOARD_PENDING → COMPLETED although the model TRANSIT
 These are real public method edges, not invented map edges.
 
 `SignInStateMachine` contains result classifiers and PRIMARY_VERIFIED_TRANSITIONS metadata only.
-`session_limit_hard_reject`, `guardrail_blocked`, `credential_failed`, etc. are results, not stored
+`session_limit_conflict`, `guardrail_blocked`, `credential_failed`, etc. are results, not stored
 states. Participant blockers normally preserve the current state. New paths use selector before
 issuance; DASHBOARD_PENDING and RETURN_PENDING are legacy states with no incoming DASHBOARD_PENDING
 edge in the model map, but AuthenticationSequenceGate directly writes SELECTOR_PENDING to

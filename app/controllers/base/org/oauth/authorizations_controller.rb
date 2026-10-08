@@ -145,7 +145,12 @@ module Base
             resource, transaction, result_generation: result_generation,
           )
           return redirect_to_session_limitation! if finalization[:status] == :session_limit_pending
-          return render_session_limit_hard_reject if finalization[:status] == :session_limit_hard_reject
+          if finalization[:status] == :session_limit_conflict
+            return render_sign_in_refusal(
+              message: finalization[:message], http_status: finalization[:http_status],
+              error_code: "session_limit_conflict",
+            )
+          end
           return render(
             json: { error: "invalid_request", error_description: "login_failed" },
             status: :bad_request,

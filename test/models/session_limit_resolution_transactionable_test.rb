@@ -320,6 +320,84 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
     assert_predicate second_token.reload, :currently_usable?
   end
 
+  # D-30: capacity is decided at session commit under the actor lock. Two logins racing for the
+  # last slot must leave the actor exactly at the limit: one commits, the other is sent to the
+  # ordinary resolution and issues nothing.
+  [
+    ["app", Base::App::AuthorityController, "PUBLIC_BASE_SERVICE_URL", ClientToken, :user_id,
+     ClientToken::MAX_SESSIONS_PER_USER, ClientSessionLimitResolutionTransaction,],
+    ["com", Base::Com::AuthorityController, "PUBLIC_BASE_CORPORATE_URL", VisitorToken, :visitor_id,
+     VisitorToken::MAX_SESSIONS_PER_VISITOR, VisitorSessionLimitResolutionTransaction,],
+    ["org", Base::Org::AuthorityController, "PUBLIC_BASE_STAFF_URL", OperatorToken, :staff_id,
+     OperatorToken::MAX_SESSIONS_PER_STAFF, OperatorSessionLimitResolutionTransaction,],
+  ].each do |surface, controller_class, host_env, token_class, owner_key, limit, resolution_class|
+    test "#{surface} concurrent root logins for the last slot commit one session and resolve the other" do
+      previous_cooldown = login_cooldown
+      self.login_cooldown = 0.seconds
+      actor, flows =
+        case surface
+        when "app"
+          client = Client.create!(status_id: ClientStatus::ACTIVE)
+          [client, Array.new(2) { client_flow(client) }]
+        when "com"
+          visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+          [visitor, Array.new(2) { visitor_flow(visitor) }]
+        when "org"
+          operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+          [operator, Array.new(2) { operator_flow(operator) }]
+        end
+      # This file is not transactional and fixture loading recycles primary keys, so rows left by
+      # an earlier interrupted run can carry this actor's or a future token's id. Remove only
+      # those leftovers: sessions under the recycled actor id, and flows bound to a token that no
+      # longer exists.
+      token_class.where(owner_key => actor.id).delete_all
+      stale_flows = flows.first.class.where.not(token_id: nil).where.not(token_id: token_class.select(:id))
+      resolution_class.where(sign_in_flow_id: stale_flows.select(:id)).delete_all
+      stale_flows.delete_all
+      (limit - 1).times { token_class.create!(owner_key => actor.id) }
+      controllers =
+        Array.new(2) do
+          request = ActionDispatch::TestRequest.create
+          request.host = ENV.fetch(host_env)
+          request.session = ActionController::TestSession.new
+          controller = controller_class.new
+          controller.set_request!(request)
+          controller.set_response!(controller_class.make_response!(request))
+          controller
+        end
+      ActiveRecord::Base.connection_handler.clear_active_connections!
+      barrier = Concurrent::CyclicBarrier.new(2)
+      results = Queue.new
+
+      threads =
+        controllers.zip(flows).map do |controller, flow|
+          Concurrent::Future.execute do
+            barrier.wait
+            results << controller.log_in(
+              actor.class.find(actor.id), establishment: :root_login, sign_in_flow: flow.class.find(flow.id),
+            ).fetch(:status)
+          rescue StandardError => e
+            results << e
+          ensure
+            ActiveRecord::Base.connection_handler.clear_active_connections!
+          end
+        end
+      threads.each(&:wait)
+      outcomes = 2.times.map { results.pop }
+
+      assert_equal %i(session_limit_pending success), outcomes.map(&:to_s).sort.map(&:to_sym), outcomes.inspect
+      assert_equal limit, token_class.where(owner_key => actor.id).count { |token| token.currently_usable? }
+      assert_equal 1, resolution_class.open.where(sign_in_flow_id: flows.map(&:id)).count
+    ensure
+      self.login_cooldown = previous_cooldown
+      if actor
+        resolution_class.where(sign_in_flow_id: flows.map(&:id)).delete_all
+        flows.first.class.where(id: flows.map(&:id)).delete_all
+        token_class.where(owner_key => actor.id).delete_all
+      end
+    end
+  end
+
   private
 
   def client_flow(actor)

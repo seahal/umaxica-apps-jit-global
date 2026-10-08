@@ -23,8 +23,13 @@ unexpired, unrotated token rows. No restricted placeholder is issued
 | `com`   | `Visitor`  | `VisitorToken`  | 1               | 2                       |
 | `org`   | `Operator` | `OperatorToken` | 1               | 2                       |
 
-The total-row ceiling is the token model's create validation (`MAX_TOTAL_SESSIONS_*`); it remains a
-last line of defence and is answered with `:session_limit_hard_reject`.
+The total-row ceiling is the token model's create validation (`MAX_TOTAL_SESSIONS_*`); it remains
+the last line of defence. When it refuses a login that the active-session gate allowed, the commit
+is retried once under the actor lock and sent to the ordinary session-limit resolution, so the
+result is `:session_limit_pending` and nothing is issued. If that retry is refused as well, the
+login answers `:session_limit_conflict` with HTTP 503: a temporary failure that issues nothing and
+leaves the sign-in flow resumable. The former immediate 403 (`session_limit_hard_reject`) no longer
+exists.
 
 ## Login-Time Behavior
 
@@ -109,7 +114,7 @@ model-level failure before excess live token rows are accepted.
 ## Delivered reconciliation (2026-10-06)
 
 All three realms use the durable session-limit resolution contract. The parent sign-in flow remains
-in `SESSION_ISSUANCE_PENDING` while the child transaction is bound to actor, browser, realm and
-OIDC transaction where present. Resolve, cancel, expire and conflict transitions lock and reload
-the owner and use the database clock; there is no early `SESSION_LIMIT_PENDING` graph edge or
+in `SESSION_ISSUANCE_PENDING` while the child transaction is bound to actor, browser, realm and OIDC
+transaction where present. Resolve, cancel, expire and conflict transitions lock and reload the
+owner and use the database clock; there is no early `SESSION_LIMIT_PENDING` graph edge or
 placeholder session. The former Acme/sign authority wording is historical.

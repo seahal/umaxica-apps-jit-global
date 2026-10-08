@@ -245,7 +245,7 @@ module Base
             token.present? && @actor.present? && token.user_id == @actor.id && token.currently_usable?
           end
 
-          def hard_reject_still_applies?
+          def session_limit_still_reached?
             AppTicketRecord.connected_to(role: :writing) do
               ClientToken.active_status.where(user_id: @actor.id).count >= ClientToken::MAX_SESSIONS_PER_USER ||
                 ClientToken.not_revoked.where(user_id: @actor.id, rotated_at: nil).count >=

@@ -137,13 +137,14 @@ module SessionLimitGate
     gate["resolution_binding"].presence
   end
 
-  def render_session_limit_hard_reject(message: nil, http_status: nil)
+  # Renders a sign-in refusal that issued nothing. `error_code` names the refusal for JSON clients.
+  def render_sign_in_refusal(message: nil, http_status: nil, error_code: "sign_in_refused")
     msg = message || I18n.t("session_limit.login_limit_exceeded")
     status = http_status || :forbidden
 
     respond_to do |format|
       format.html { render plain: msg, status: status }
-      format.json { render json: { error: msg, error_code: "session_limit_hard_reject" }, status: status }
+      format.json { render json: { error: msg, error_code: error_code }, status: status }
     end
   end
 

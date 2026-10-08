@@ -78,15 +78,15 @@ class SignInResultTest < ActiveSupport::TestCase
     end
   end
 
-  test "maps hard reject to terminal forbidden result" do
+  test "maps a session-limit conflict to a temporary failure result" do
     result = SignInResult.from_session_result(
-      { status: :session_limit_hard_reject, message: "full" },
+      { status: :session_limit_conflict, message: "unavailable" },
     )
 
     assert_predicate result, :terminal?
-    assert_equal :session_limit_hard_reject, result.status
-    assert_equal :forbidden, result.response_status
-    assert_equal "full", result.message
+    assert_equal :session_limit_conflict, result.status
+    assert_equal :service_unavailable, result.response_status
+    assert_equal "unavailable", result.message
   end
 
   test "passes through terminal sign-in failure statuses" do

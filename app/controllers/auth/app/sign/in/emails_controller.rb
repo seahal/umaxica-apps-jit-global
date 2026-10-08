@@ -174,8 +174,11 @@ module Auth
 
             if result[:success]
               respond_to_successful_email_login(result)
-            elsif result[:hard_reject]
-              render_session_limit_hard_reject(message: result[:error], http_status: result[:http_status])
+            elsif result[:session_limit_conflict]
+              render_sign_in_refusal(
+                message: result[:error], http_status: result[:http_status],
+                error_code: "session_limit_conflict",
+              )
             else
               respond_to_failed_email_login(result)
             end
@@ -387,10 +390,10 @@ module Auth
               sign_in_result = sign_in_result_from_session_result(result, actor: user)
               if sign_in_result.mfa_required?
                 { success: true, redirect_path: sign_in_result.redirect_to }
-              elsif sign_in_result.status == :session_limit_hard_reject
+              elsif sign_in_result.status == :session_limit_conflict
                 { success: false,
                   error: sign_in_result.message,
-                  hard_reject: true,
+                  session_limit_conflict: true,
                   http_status: sign_in_result.response_status, }
               elsif sign_in_result.session_limit_pending?
                 { success: true, session_limit_pending: true, redirect_path: sign_in_result.redirect_to }

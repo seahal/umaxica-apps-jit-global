@@ -78,8 +78,11 @@ module Auth
               when :mfa_required
                 render json: { status: "mfa_required", redirect_url: result[:redirect_path] }, status: :ok
                 true
-              when :session_limit_hard_reject
-                render_session_limit_hard_reject(message: result[:message], http_status: result[:http_status])
+              when :session_limit_conflict
+                render_sign_in_refusal(
+                  message: result[:message], http_status: result[:http_status],
+                  error_code: "session_limit_conflict",
+                )
                 true
               else
                 false

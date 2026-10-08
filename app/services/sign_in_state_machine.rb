@@ -3,7 +3,7 @@
 
 class SignInStateMachine
   TERMINAL_RESULT_STATUSES = {
-    session_limit_hard_reject: :forbidden,
+    session_limit_conflict: :service_unavailable,
     guardrail_blocked: :forbidden,
     login_forbidden: :forbidden,
     credential_failed: :unauthorized,

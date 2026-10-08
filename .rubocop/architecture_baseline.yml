@@ -280,7 +280,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/app/identity/sessions_controller.rb: 3
   app/controllers/base/app/identity/standings_controller.rb: 1
   app/controllers/base/app/identity/telephones/registrations_controller.rb: 4
-  app/controllers/base/app/identity/telephones_controller.rb: 5
   app/controllers/base/app/identity/withdrawal/sessions_controller.rb: 1
   app/controllers/base/app/identity/withdrawals_controller.rb: 5
   app/controllers/base/app/mcps_controller.rb: 1
@@ -331,7 +330,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/com/identity/sessions_controller.rb: 3
   app/controllers/base/com/identity/standings_controller.rb: 1
   app/controllers/base/com/identity/telephones/registrations_controller.rb: 4
-  app/controllers/base/com/identity/telephones_controller.rb: 5
   app/controllers/base/com/identity/withdrawal/sessions_controller.rb: 2
   app/controllers/base/com/identity/withdrawals_controller.rb: 5
   app/controllers/base/com/mcps_controller.rb: 1
@@ -397,8 +395,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/org/identity/secret_credentials_controller.rb: 7
   app/controllers/base/org/identity/sessions_controller.rb: 3
   app/controllers/base/org/identity/standings_controller.rb: 1
-  app/controllers/base/org/identity/telephones/registrations_controller.rb: 4
-  app/controllers/base/org/identity/telephones_controller.rb: 5
   app/controllers/base/org/identity/withdrawals_controller.rb: 1
   app/controllers/base/org/mcps_controller.rb: 1
   app/controllers/base/org/oauth/authorizations_controller.rb: 1
@@ -435,7 +431,7 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/concerns/authentication_logout_current_session.rb: 2
   app/controllers/concerns/authentication_operator.rb: 8
   app/controllers/concerns/authentication_redirects.rb: 33
-  app/controllers/concerns/authentication_sequence_gate.rb: 30
+  app/controllers/concerns/authentication_sequence_gate.rb: 26
   app/controllers/concerns/authentication_session_revoker.rb: 3
   app/controllers/concerns/authentication_token.rb: 8
   app/controllers/concerns/authentication_token_service.rb: 11
@@ -462,13 +458,11 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/concerns/sign_com_in_check_controller_support.rb: 1
   app/controllers/concerns/sign_com_route_alias_helper.rb: 3
   app/controllers/concerns/sign_dbsc_registration_endpoint.rb: 1
-  app/controllers/concerns/sign_email_registration_flow.rb: 5
   app/controllers/concerns/sign_error_responses.rb: 3
   app/controllers/concerns/sign_oidc_logout.rb: 2
   app/controllers/concerns/sign_org_in_check_controller_support.rb: 1
   app/controllers/concerns/sign_out_cancellation.rb: 1
   app/controllers/concerns/sign_settings_authority_redirect.rb: 5
-  app/controllers/concerns/sign_telephone_registrable.rb: 3
   app/controllers/concerns/sign_up_social_check_birthdate_controller_support.rb: 3
   app/controllers/concerns/social_callback_guard.rb: 2
   app/controllers/concerns/social_omniauth_callback_flow.rb: 1
@@ -933,7 +927,6 @@ Umaxica/ExplicitMethodVisibility:
   app/models/operator_bulletin.rb: 2
   app/models/operator_chronicle.rb: 5
   app/models/operator_chronicle_event.rb: 1
-  app/models/operator_email.rb: 2
   app/models/operator_lifecycle_request.rb: 11
   app/models/operator_oidc_connection.rb: 3
   app/models/operator_preference.rb: 1
@@ -1107,10 +1100,6 @@ Umaxica/ExplicitMethodVisibility:
   app/operations/publishing/restore_version_operation.rb: 1
   app/operations/publishing/revise_entry_operation.rb: 1
   app/operations/publishing/unarchive_entry_operation.rb: 1
-  app/operations/sign_app_up_telephone_registration_finalizer.rb: 2
-  app/operations/sign_app_up_telephone_signup_creator.rb: 2
-  app/operations/sign_com_up_telephone_registration_finalizer.rb: 2
-  app/operations/sign_com_up_telephone_signup_creator.rb: 2
   app/operations/social_auth_signup_finalizer.rb: 2
   app/operations/withdrawal_personal_data_anonymizer.rb: 2
   app/policies/account_policy.rb: 1
@@ -1145,14 +1134,12 @@ Umaxica/ExplicitMethodVisibility:
   app/policies/external_authentication/provider_surface_policy.rb: 1
   app/policies/group_avatar_membership_policy.rb: 3
   app/policies/operator_chronicle_policy.rb: 1
-  app/policies/operator_email_policy.rb: 4
   app/policies/operator_lifecycle_request_policy.rb: 6
   app/policies/operator_oidc_connection_policy.rb: 2
   app/policies/operator_passkey_policy.rb: 7
   app/policies/operator_policy.rb: 6
   app/policies/operator_preference_policy.rb: 1
   app/policies/operator_secret_credential_policy.rb: 7
-  app/policies/operator_telephone_policy.rb: 4
   app/policies/operator_token_policy.rb: 4
   app/policies/operator_withdrawal_policy.rb: 1
   app/policies/org_preference_policy.rb: 1
@@ -1301,7 +1288,6 @@ Umaxica/ExplicitMethodVisibility:
   app/services/sign_in_selector_participant.rb: 1
   app/services/sign_in_sequence_carrier.rb: 8
   app/services/sign_in_state_machine.rb: 2
-  app/services/sign_otp_ceremony.rb: 4
   app/services/sign_recovery_passcode_requirement.rb: 2
   app/services/sign_risk_emitter.rb: 2
   app/services/sign_risk_enforcer.rb: 4
@@ -1311,7 +1297,6 @@ Umaxica/ExplicitMethodVisibility:
   app/services/sign_secret_revoke.rb: 2
   app/services/sign_secret_rotate.rb: 2
   app/services/sign_secret_verify.rb: 2
-  app/services/sign_telephone_otp_delivery.rb: 3
   app/services/sign_up_artifact_cleanup.rb: 5
   app/services/sign_up_cancellation.rb: 1
   app/services/sign_up_cycle_locator.rb: 3

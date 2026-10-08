@@ -131,7 +131,6 @@ module AuthenticationBase
   ACCESS_TOKEN_TTL = ::SecurityTokenLifetimes::AUTH_ACCESS_JWT_TTL
   REFRESH_TOKEN_TTL = ::SecurityTokenLifetimes::CLIENT_REFRESH_TOKEN_TTL
   DBSC_COOKIE_TTL = 10.minutes
-  SESSION_LIMIT_HARD_REJECT_MESSAGE = I18n.t("errors.messages.session_limit_exceeded")
 
   # Raised before any write when a new root login falls inside the cooldown
   # window of the previous established root login.
@@ -339,7 +338,7 @@ module AuthenticationBase
     dpop_result = validate_login_dpop_proof
     return { status: dpop_result[:status], error: dpop_result[:error] } unless dpop_result[:status] == :success
 
-    issuance = commit_login_session_under_actor_lock(
+    issuance = commit_login_session_rechecking_limit(
       resource,
       establishment: establishment,
       token_kind_id: token_kind_id,
@@ -360,7 +359,7 @@ module AuthenticationBase
     session[:inertia_clear_history] = true if establishment == :root_login && result[:status] == :success
     result
   rescue ConcurrentSessionLimitExceededError
-    session_limit_hard_reject_result(resource)
+    session_limit_conflict_result(resource)
   rescue SignInFlowIssuanceRejected => e
     log_sign_in_flow_issuance_rejection(resource, sign_in_flow, e)
     { status: :invalid_request }
@@ -442,18 +441,31 @@ module AuthenticationBase
     end
   end
 
-  def session_limit_hard_reject_result(resource)
-    Rails.logger.info(
+  # The capacity gate counts active sessions; the token model also enforces a total ceiling and
+  # is the last line. When the model refuses what the gate allowed, the actor is at a limit the
+  # gate did not see, so the one retry under the lock goes to the ordinary resolution instead of
+  # issuing. A refusal of that retry is raised to the caller as a temporary failure.
+  def commit_login_session_rechecking_limit(resource, **issuance_attributes)
+    commit_login_session_under_actor_lock(resource, **issuance_attributes)
+  rescue ConcurrentSessionLimitExceededError
+    commit_login_session_under_actor_lock(resource, limit_refused: true, **issuance_attributes)
+  end
+  private :commit_login_session_rechecking_limit
+
+  # Not the ordinary full-limit outcome (that is `:session_limit_pending`). Nothing was issued and
+  # the sign-in flow stays resumable, so the answer is a temporary failure, never a success.
+  def session_limit_conflict_result(resource)
+    Rails.logger.warn(
       JitLogEvent.format(
-        "session.limit.hard_reject",
+        "session.limit.conflict",
         "#{resource_type}_id": resource.id,
         ip_address: request_ip_address,
       ),
     )
     {
-      status: :session_limit_hard_reject,
-      http_status: :forbidden,
-      message: SESSION_LIMIT_HARD_REJECT_MESSAGE,
+      status: :session_limit_conflict,
+      http_status: :service_unavailable,
+      message: I18n.t("errors.rate_limit.backend_unavailable"),
     }
   end
 
@@ -514,7 +526,7 @@ module AuthenticationBase
   # A raise (cooldown, invalid flow, database error) rolls every write back.
   def commit_login_session!(resource, establishment:, token_kind_id:, dpop_jkt:, established_authentication_method:,
                             authentication_context:, authentication_event_at:, sign_in_flow:,
-                            oidc_authorization_transaction: nil)
+                            oidc_authorization_transaction: nil, limit_refused: false)
     token_record_connection_owner.connected_to(role: :writing) do
       token_class.transaction(requires_new: true) do
         check_login_cooldown!(resource) if establishment == :root_login
@@ -526,7 +538,7 @@ module AuthenticationBase
           sign_in_flow: sign_in_flow,
         )
 
-        if session_limit_state_for(resource) == :at_limit
+        if limit_refused || session_limit_state_for(resource) == :at_limit
           issue_pending_session_limit_resolution!(
             resource,
             locked_flow: locked_flow,
@@ -2683,8 +2695,8 @@ module AuthenticationBase
     advance_pending_sign_in_flow_after_primary!(cycle, user, result) if cycle
 
     case result[:status]
-    when :session_limit_hard_reject
-      { status: :session_limit_hard_reject, message: result[:message], http_status: result[:http_status] }
+    when :session_limit_conflict
+      { status: :session_limit_conflict, message: result[:message], http_status: result[:http_status] }
     when :success, :authentication_evidence_recorded
       result.merge(redirect_path: sign_in_sequence_redirect_path(pt: pt))
     else

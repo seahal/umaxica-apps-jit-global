@@ -202,8 +202,11 @@ module Auth
             def complete_mfa_login!(visitor)
               result = finalize_mfa_login!(visitor)
               case result[:status]
-              when :session_limit_hard_reject
-                render_session_limit_hard_reject(message: result[:message], http_status: result[:http_status])
+              when :session_limit_conflict
+                render_sign_in_refusal(
+                  message: result[:message], http_status: result[:http_status],
+                  error_code: "session_limit_conflict",
+                )
               when :session_limit_pending
                 redirect_to(result[:redirect_path])
               when :success, :authentication_evidence_recorded

@@ -119,8 +119,11 @@ module SignOrgEmergencyPasskeyCeremony
 
   def handle_domain_specific_login_status(result)
     case result[:status]
-    when :session_limit_hard_reject
-      render_session_limit_hard_reject(message: result[:message], http_status: result[:http_status])
+    when :session_limit_conflict
+      render_sign_in_refusal(
+        message: result[:message], http_status: result[:http_status],
+        error_code: "session_limit_conflict",
+      )
       true
     else
       false

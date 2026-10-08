@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 TERMINAL_HTTP_STATUSES = {
-  session_limit_hard_reject: :forbidden,
+  session_limit_conflict: :service_unavailable,
   guardrail_blocked: :forbidden,
   login_forbidden: :forbidden,
   access_locked: :forbidden,

@@ -149,7 +149,7 @@ module Auth
             )
             sign_in_result = sign_in_result_from_session_result(result, actor: visitor)
             unless sign_in_result.proceed? || sign_in_result.mfa_required? || sign_in_result.session_limit_pending?
-              return render_session_limit_hard_reject(
+              return render_sign_in_refusal(
                 message: sign_in_result.message,
                 http_status: sign_in_result.response_status,
               )

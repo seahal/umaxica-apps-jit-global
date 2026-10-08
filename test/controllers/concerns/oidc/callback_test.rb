@@ -7,7 +7,7 @@ require "test_helper"
 class OidcCallbackTestController < ApplicationController
   class << self
     # rubocop:disable ThreadSafety/ClassAndModuleAttributes
-    attr_accessor :login_result_for_test, :last_login_kwargs, :hard_reject_payload, :use_rp_credentials
+    attr_accessor :login_result_for_test, :last_login_kwargs, :refusal_payload, :use_rp_credentials
     # rubocop:enable ThreadSafety/ClassAndModuleAttributes
   end
 
@@ -134,8 +134,9 @@ class OidcCallbackTestController < ApplicationController
     self.class.login_result_for_test || { status: :success }
   end
 
-  def render_session_limit_hard_reject(message: nil, http_status: nil)
-    self.class.hard_reject_payload = { message: message, http_status: http_status }
+  def render_sign_in_refusal(message: nil, http_status: nil, error_code: "sign_in_refused")
+    _ = error_code
+    self.class.refusal_payload = { message: message, http_status: http_status }
     render plain: message, status: http_status
   end
 end
@@ -215,7 +216,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     @authentication_event_at = Time.utc(2026, 1, 2, 3, 4, 5).to_i
     OidcCallbackTestController.login_result_for_test = nil
     OidcCallbackTestController.last_login_kwargs = nil
-    OidcCallbackTestController.hard_reject_payload = nil
+    OidcCallbackTestController.refusal_payload = nil
     OidcCallbackTestController.use_rp_credentials = false
 
     Rails.application.routes.draw do
@@ -914,9 +915,9 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       error: nil,
     )
     OidcCallbackTestController.login_result_for_test = {
-      status: :session_limit_hard_reject,
-      message: "too many sessions",
-      http_status: :forbidden,
+      status: :session_limit_conflict,
+      message: "temporarily unavailable",
+      http_status: :service_unavailable,
     }
 
     OidcRpTokenClient.stub(:call, result) do
@@ -926,11 +927,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_response :forbidden
-    assert_equal "too many sessions", response.body
+    assert_response :service_unavailable
+    assert_equal "temporarily unavailable", response.body
     assert_equal(
-      { message: "too many sessions", http_status: :forbidden },
-      OidcCallbackTestController.hard_reject_payload,
+      { message: "temporarily unavailable", http_status: :service_unavailable },
+      OidcCallbackTestController.refusal_payload,
     )
   end
 

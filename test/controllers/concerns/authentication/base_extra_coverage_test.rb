@@ -13,6 +13,11 @@ class AuthenticationBaseExtraCoverageTest < ActiveSupport::TestCase
       request_method == "GET"
     end
 
+    # This double stands for an ordinary document request, not an Inertia visit.
+    def inertia?
+      false
+    end
+
     def filtered_parameters
       {}
     end
@@ -205,14 +210,14 @@ class AuthenticationBaseExtraCoverageTest < ActiveSupport::TestCase
     assert_nil @harness.session[AuthenticationBase::BULLETIN_SESSION_KEY]
   end
 
-  test "session_limit_hard_reject_result returns forbidden payload" do
+  test "session_limit_conflict_result is a temporary failure, not a limit refusal" do
     resource = Client.new(id: 123)
 
-    result = @harness.send(:session_limit_hard_reject_result, resource)
+    result = @harness.send(:session_limit_conflict_result, resource)
 
-    assert_equal :session_limit_hard_reject, result[:status]
-    assert_equal :forbidden, result[:http_status]
-    assert_equal AuthenticationBase::SESSION_LIMIT_HARD_REJECT_MESSAGE, result[:message]
+    assert_equal :session_limit_conflict, result[:status]
+    assert_equal :service_unavailable, result[:http_status]
+    assert_equal I18n.t("errors.rate_limit.backend_unavailable"), result[:message]
   end
 
   test "validate_login_dpop_proof returns success when proof is blank" do

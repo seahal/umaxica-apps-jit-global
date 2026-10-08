@@ -29,12 +29,12 @@ rechecks the generation under the locked PostgreSQL row before finalizing. A cur
 retried while its transport TTL remains; `base_finalized_at` makes Browser Session finalization
 idempotent and a transaction creates at most one Browser Session.
 
-The transport is not the authorization grant. Authorization-code aliases may be issued for the
-same durable transaction, while `authorization_grant_redeemed_at` is claimed atomically in the
-same surface ticket-database transaction that creates or resolves the RP Session. Raw result and
+The transport is not the authorization grant. Authorization-code aliases may be issued for the same
+durable transaction, while `authorization_grant_redeemed_at` is claimed atomically in the same
+surface ticket-database transaction that creates or resolves the RP Session. Raw result and
 authorization-code values are never stored in PostgreSQL. Valkey cleanup is transport cleanup, not
-the durable session or grant authority. Rails forgery protection remains enabled for both local
-and cross-surface POST boundaries.
+the durable session or grant authority. Rails forgery protection remains enabled for both local and
+cross-surface POST boundaries.
 
 The historical `sign/id` and `acme/www` sections that follow must therefore not be used to infer
 that a result is signed, Valkey-one-shot, or owned by Acme in the current Rails implementation.
@@ -163,7 +163,7 @@ directly in controller code.
 
 All successful sign-in routes must normalize the completion result through the shared `SignInResult`
 adapter. The current result shape includes `success`, `mfa_required`, `session_limit_pending`,
-`session_limit_hard_reject`, `credential_rejected`, `identity_unavailable`, `transaction_expired`,
+`session_limit_conflict`, `credential_rejected`, `identity_unavailable`, `transaction_expired`,
 `failure`, and `invalid_request`.
 
 ## Timing And Enumeration Mitigation
@@ -177,11 +177,11 @@ that must either use that response budget or document another timing-equalized p
 
 Current coverage is:
 
-| Credential path                       | Mitigation                                                      |
-| ------------------------------------- | --------------------------------------------------------------- |
-| App email OTP sign-in                 | Dummy OTP generation and minimum elapsed verification on update |
-| App/com/org passkey sign-in           | `MinimumResponseBudget` on challenge/options endpoints          |
-| Org Entra sign-in                     | `MinimumResponseBudget` on authorization start                  |
+| Credential path             | Mitigation                                                      |
+| --------------------------- | --------------------------------------------------------------- |
+| App email OTP sign-in       | Dummy OTP generation and minimum elapsed verification on update |
+| App/com/org passkey sign-in | `MinimumResponseBudget` on challenge/options endpoints          |
+| Org Entra sign-in           | `MinimumResponseBudget` on authorization start                  |
 
 New credential endpoints must be added to the contract test. If an endpoint intentionally opts out
 of the response budget, it must have an alternate dummy-work or fixed-time verification path that is

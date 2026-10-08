@@ -106,8 +106,8 @@ module OidcCallback
         )
       end
     # No restricted session is issued at a full limit; the RP refuses.
-    if %i(session_limit_hard_reject session_limit_pending).include?(login_result[:status])
-      return render_oidc_session_limit_hard_reject(login_result.reverse_merge(http_status: :forbidden))
+    if %i(session_limit_conflict session_limit_pending).include?(login_result[:status])
+      return render_oidc_session_limit_refusal(login_result.reverse_merge(http_status: :forbidden))
     end
 
     return render_callback_failure("identity_resolution_failed") unless login_result[:status] == :success
@@ -259,9 +259,9 @@ module OidcCallback
     "/"
   end
 
-  def render_oidc_session_limit_hard_reject(login_result)
-    if respond_to?(:render_session_limit_hard_reject, true)
-      return render_session_limit_hard_reject(
+  def render_oidc_session_limit_refusal(login_result)
+    if respond_to?(:render_sign_in_refusal, true)
+      return render_sign_in_refusal(
         message: login_result[:message],
         http_status: login_result[:http_status],
       )

@@ -1172,7 +1172,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     test_email = user.client_emails.create!(
-      address: "session_limit_hard_reject_#{SecureRandom.hex(4)}@example.com",
+      address: "session_limit_conflict_#{SecureRandom.hex(4)}@example.com",
     ).tap(&:finalize_binding!)
 
     post auth_app_sign_in_email_url(ri: "jp"),

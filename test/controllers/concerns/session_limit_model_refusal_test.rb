@@ -4,11 +4,15 @@
 require "test_helper"
 # require "helpers/global_test_support"
 
-class SessionLimitHardRejectTest < ActionDispatch::IntegrationTest
+# The capacity gate counts active sessions while the token model also enforces a total ceiling.
+# When the model refuses a login the gate allowed, nothing is issued: the login goes to the ordinary
+# session-limit resolution, never to the retired immediate 403 refusal.
+class SessionLimitModelRefusalTest < ActionDispatch::IntegrationTest
   fixtures :clients
 
   class TestController < ApplicationController
     include AuthenticationClient
+    include SessionLimitGate
 
     declare_authentication_mode! :open
 
@@ -18,19 +22,10 @@ class SessionLimitHardRejectTest < ActionDispatch::IntegrationTest
 
     def create
       user = Client.find(params[:user_id])
-      result = log_in(user, establishment: :root_login, require_totp_check: false)
+      flow = ClientSignInFlow.find_by(id: params[:flow_id])
+      result = log_in(user, establishment: :root_login, require_totp_check: false, sign_in_flow: flow)
 
-      if result[:status] == :session_limit_hard_reject
-        respond_to do |format|
-          format.html { render plain: result[:message], status: result[:http_status] }
-          format.json {
-            render json: { error: result[:message], error_code: "session_limit_hard_reject" },
-                   status: result[:http_status]
-          }
-        end
-      else
-        render json: { status: "ok" }, status: :ok
-      end
+      render json: { status: result.fetch(:status).to_s }, status: :ok
     end
   end
 
@@ -52,7 +47,7 @@ class SessionLimitHardRejectTest < ActionDispatch::IntegrationTest
     end
 
     Rails.application.routes.draw do
-      post "/test/hard_reject_login" => "session_limit_hard_reject_test/test#create"
+      post "/test/model_refusal_login" => "session_limit_model_refusal_test/test#create"
     end
   end
 
@@ -61,25 +56,31 @@ class SessionLimitHardRejectTest < ActionDispatch::IntegrationTest
     Rails.application.reload_routes!
   end
 
-  test "hard reject returns 403 for html and does not create new token" do
+  test "a login the token model refuses goes to session-limit resolution and issues nothing" do
+    flow = ClientSignInFlow.create!(
+      principal_id: @user.id,
+      state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.hex(8)),
+    )
     before_count = ClientToken.where(user_id: @user.id).count
 
-    post "/test/hard_reject_login", params: { user_id: @user.id }
+    assert_difference(-> { ClientSessionLimitResolutionTransaction.open.where(sign_in_flow_id: flow.id).count }, 1) do
+      post "/test/model_refusal_login", params: { user_id: @user.id, flow_id: flow.id }, as: :json
+    end
 
-    assert_response :forbidden
-    assert_equal AuthenticationBase::SESSION_LIMIT_HARD_REJECT_MESSAGE, response.body
+    assert_response :ok
+    assert_equal "session_limit_pending", response.parsed_body.fetch("status")
     assert_equal before_count, ClientToken.where(user_id: @user.id).count
+    assert_equal "SESSION_ISSUANCE_PENDING", flow.reload.state_name_for(flow.state_id)
   end
 
-  test "hard reject returns 403 for json and does not create new token" do
+  test "a refused login without a sign-in flow has no resolution parent and issues nothing" do
     before_count = ClientToken.where(user_id: @user.id).count
 
-    post "/test/hard_reject_login",
-         params: { user_id: @user.id },
-         as: :json
+    post "/test/model_refusal_login", params: { user_id: @user.id }, as: :json
 
-    assert_response :forbidden
-    assert_equal "session_limit_hard_reject", response.parsed_body["error_code"]
+    assert_response :ok
+    assert_equal "invalid_request", response.parsed_body.fetch("status")
     assert_equal before_count, ClientToken.where(user_id: @user.id).count
   end
 
@@ -91,9 +92,10 @@ class SessionLimitHardRejectTest < ActionDispatch::IntegrationTest
       end
     tokens.first.device_session.revoke!(reason: "capacity-test")
 
-    post "/test/hard_reject_login", params: { user_id: @user.id }, as: :json
+    post "/test/model_refusal_login", params: { user_id: @user.id }, as: :json
 
     assert_response :ok
+    assert_equal "success", response.parsed_body.fetch("status")
     assert_equal ClientToken::MAX_SESSIONS_PER_USER + 1, ClientToken.where(user_id: @user.id).count
     assert_equal ClientToken::MAX_SESSIONS_PER_USER, ClientToken.where(user_id: @user.id).joins(:device_session)
       .where(client_device_sessions: { status_id: ClientDeviceSession::STATUS_ACTIVE, revoked_at: nil })
