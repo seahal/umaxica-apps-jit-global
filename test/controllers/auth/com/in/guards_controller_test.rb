@@ -41,10 +41,14 @@ class Auth::Com::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     assert_equal before_attrs, guarded_cycle_attrs(cycle.reload)
   end
 
-  test "session limit state redirects to session" do
-    cycle = create_cycle(status: "SESSION_LIMIT_PENDING")
+  test "an open session-limit resolution redirects to session" do
+    cycle = create_cycle(status: "SESSION_ISSUANCE_PENDING")
+    resolution = VisitorSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: cycle, actor: @visitor,
+      browser_binding_digest: VisitorSessionLimitResolutionTransaction.digest_challenge(SecureRandom.hex(32)),
+    ).transaction
     before_attrs = guarded_cycle_attrs(cycle.reload)
-    controller = build_controller(cycle: cycle)
+    controller = build_controller(cycle: cycle, resolution: resolution)
 
     controller.show
 
@@ -61,8 +65,8 @@ class Auth::Com::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     assert_equal "/sign/in/selector?pt=/dashboard", controller.redirected_to
   end
 
-  test "later state redirects to welcome sequence path" do
-    cycle = create_cycle(status: "DASHBOARD_PENDING", return_to: "/dashboard")
+  test "session issuance state redirects to welcome sequence path" do
+    cycle = create_cycle(status: "SESSION_ISSUANCE_PENDING", return_to: "/dashboard")
     controller = build_controller(cycle: cycle)
 
     controller.show
@@ -77,7 +81,7 @@ class Auth::Com::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     controller.show
 
     assert_equal "/sign/in?ri=jp", controller.redirected_to
-    assert_equal "CHECKPOINT_PENDING", cycle.reload.state
+    assert_equal "CHECKPOINT_PENDING", cycle.reload.state_name_for(cycle.state_id)
   end
 
   test "unsafe return target redirects to sign in entry without flash" do
@@ -87,7 +91,7 @@ class Auth::Com::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     controller.show
 
     assert_equal "/sign/in?ri=jp", controller.redirected_to
-    assert_equal "CHECKPOINT_PENDING", cycle.reload.state
+    assert_equal "CHECKPOINT_PENDING", cycle.reload.state_name_for(cycle.state_id)
   end
 
   test "missing or expired cycle redirects to sign in entry without flash" do
@@ -110,7 +114,7 @@ class Auth::Com::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     )
   end
 
-  def build_controller(cycle:, path_target: nil, signed_pt: nil, signed_token: "signed-pt")
+  def build_controller(cycle:, path_target: nil, signed_pt: nil, signed_token: "signed-pt", resolution: nil)
     controller = Auth::Com::Sign::In::GuardsController.new
     controller.define_singleton_method(:params) { ActionController::Parameters.new(ri: "jp") }
     controller.define_singleton_method(:path_target_value) { path_target }
@@ -118,6 +122,8 @@ class Auth::Com::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     controller.define_singleton_method(:signed_pt_token) { |path| path.presence && signed_token }
     controller.define_singleton_method(:path_from_signed_pt) { |_| path_target }
     controller.define_singleton_method(:current_db_sign_in_flow_for_sequence) { cycle }
+    # Production reads the open resolution from the session-limit gate; here it is given.
+    controller.define_singleton_method(:session_limit_resolution) { resolution }
     controller.define_singleton_method(:sign_in_flow_actor) { |_| @visitor }
     controller.define_singleton_method(:auth_com_sign_in_path) { |ri: nil| "/sign/in?ri=#{ri}" }
     controller.define_singleton_method(:auth_com_sign_in_check_path) { |ri: nil, pt: nil|
