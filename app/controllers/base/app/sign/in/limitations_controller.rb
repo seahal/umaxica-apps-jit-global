@@ -58,6 +58,8 @@ module Base
 
             # Base's neutral entry owns fresh admission. Cancellation grants no Auth continuity.
             redirect_to(base_app_sign_show_path(ri: params[:ri]), status: :see_other)
+            # The entry is a plain document, not an Inertia page.
+            convert_redirect_to_inertia_location!
           end
 
           private

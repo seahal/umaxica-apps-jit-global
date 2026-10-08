@@ -45,6 +45,8 @@ module BaseSignInLimitations
     return render_invalid_resolution unless cancel_pending_resolution!
 
     redirect_to(base_sign_entry_path(ri: params[:ri]), status: :see_other)
+    # The entry is a plain document, not an Inertia page.
+    convert_redirect_to_inertia_location!
   end
 
   private

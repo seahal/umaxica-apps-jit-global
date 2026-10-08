@@ -103,10 +103,12 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         "actor_type" => "Client",
       }
       session_key = Rails.application.config.session_options.fetch(:key)
-      request.cookie_jar.signed_or_encrypted[session_key] = request.session.to_hash.merge(
+      # CookieStore treats a cookie without a session id as no session at all.
+      sealed_state = { "session_id" => SecureRandom.hex(16) }.merge(request.session.to_hash).merge(
         "session_limit_gate" => gate,
         "app_sign_in_flow_locator" => { "public_id" => pending_flow.public_id, "nonce" => flow_nonce },
       )
+      request.cookie_jar.signed_or_encrypted[session_key] = { value: sealed_state }
       sealed_session = request.cookie_jar[session_key]
       cookies.delete(session_key)
       cookie_installed = cookies.merge(
@@ -116,8 +118,8 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
       assert cookie_installed, "The gate cookie must be installed on the original Base host"
 
-      get acme_app_sign_in_limitation_path, params: { resolution_challenge: resolution.challenge },
-                                            headers: browser_headers
+      get acme_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
+                                                      headers: browser_headers
       received_gate = request.session[:session_limit_gate]
       decision_time = ClientSignInFlow.database_now
       gate_flags = {
@@ -205,6 +207,8 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       ClientToken.where(user_id: user.id).delete_all
       email = user.client_emails.create!(address: "oidc_email_limit_#{SecureRandom.hex(4)}@example.com")
       email.finalize_binding!
+      # Sign-up provisions the canonical identity an RP binds to; the fixture actor never signed up.
+      IdentityGraphProvisioner.call!(surface: :app, principal: user)
 
       first_active = ClientToken.create!(
         user: user,
@@ -353,26 +357,36 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
       post(auth_app_sign_oidc_handoff_path(ri: "jp"), headers: browser_headers)
 
-      assert_response :success
+      # The result travels as an opaque reference: Auth redirects to Base, whose own document posts it.
+      assert_response :see_other
+      handoff_uri = URI.parse(response.location)
+
+      assert_equal acme_host, handoff_uri.host
+      assert_equal "/oauth/authorize", handoff_uri.path
       assert_equal auth_token_count_before_handoff,
                    ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count,
                    "Auth must hand off authentication evidence without creating a Base Browser Session"
-      result_code = response.body[/name="result"[^>]+value="([^"]+)"/, 1]
-      transaction_ref = response.body[/name="transaction_ref"[^>]+value="([^"]+)"/, 1]
-
-      assert_predicate result_code, :present?
-      assert_predicate transaction_ref, :present?
 
       # Keep the integration session's cookie jar aligned with the actual Base host. A manual
       # Host header alone does not update the jar's host context, so Base-issued host-only
       # credentials would be omitted from the subsequent resolution request.
       host!(acme_host)
+      get(handoff_uri.request_uri, headers: browser_headers)
+
+      assert_response :success
+      result_form = css_select("form#oidc-authorization-result-form").first
+      result_ref = result_form.at_css(%(input[name="result_ref"]))["value"]
+      transaction_ref = result_form.at_css(%(input[name="transaction_ref"]))["value"]
+
+      assert_predicate result_ref, :present?
+      assert_predicate transaction_ref, :present?
+
       post(
-        "/oauth/authorize",
-        params: { result: result_code, transaction_ref: transaction_ref, ri: "jp" },
+        result_form["action"],
+        params: { result_ref: result_ref, transaction_ref: transaction_ref, ri: "jp" },
         headers: browser_headers.merge(
-          "Origin" => "https://#{sign_host}",
-          "Sec-Fetch-Site" => "same-site",
+          "Origin" => "https://#{acme_host}",
+          "Sec-Fetch-Site" => "same-origin",
         ),
       )
 
@@ -382,7 +396,11 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
       assert_equal acme_host, resume_uri.host
       assert_equal "/sign/in/limitation", resume_uri.path
-      assert_predicate resume_query.fetch("resolution_challenge"), :present?
+      # The challenge stays in the browser session; the URL carries no grant.
+      assert_not resume_query.key?("resolution_challenge")
+      resolution_challenge = session.fetch(:session_limit_gate).fetch("resolution_challenge")
+
+      assert_predicate resolution_challenge, :present?
 
       transaction = ClientOidcAuthorizationTransaction.find_by!(transaction_id: transaction_ref)
 
@@ -391,9 +409,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       # Waiting on the limit issues nothing: no restricted placeholder, no third row.
       assert_equal 2, ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
 
-      resolution = ClientSessionLimitResolutionTransaction.find_active_by_challenge(
-        resume_query.fetch("resolution_challenge"),
-      )
+      resolution = ClientSessionLimitResolutionTransaction.find_active_by_challenge(resolution_challenge)
 
       assert_predicate resolution, :present?
       assert_not_predicate ClientToken.restricted_status.where(user_id: user.id), :exists?
@@ -439,9 +455,10 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       )
       rp_access_token = AuthenticationTokenService.encode(
         user,
-        host: core_host,
+        host: acme_host,
         resource_type: "client",
         session_public_id: rp_root_token.public_id,
+        base_session_public_id: rp_root_token.public_id,
         oidc_sid: rp_session.public_id,
         oidc_jti: rp_session.oidc_jti,
         expires_at: 10.minutes.from_now,
@@ -458,8 +475,17 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
           access_token: rp_access_token,
           refresh_token: rp_session.issue_refresh_token!,
           id_token: id_token,
+          expires_in: 600,
+          refresh_token_expires_in: 600,
         },
         error: nil,
+      )
+
+      userinfo_result = OidcRpUserInfoClient::Result.new(
+        success: true,
+        claims: { "sub" => OidcSubject.for(user, resource_type: "client") },
+        error: nil,
+        dependency_failure: false,
       )
 
       OidcRpTokenClient.stub(:call, token_result) do
@@ -471,7 +497,9 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
           "session=#{Rack::Utils.escape(core_continuity_cookies.fetch("session"))}",
           URI.parse("https://#{core_host}/"),
         )
-        get(callback_uri.request_uri, headers: browser_headers)
+        OidcRpUserInfoClient.stub(:call, userinfo_result) do
+          get(callback_uri.request_uri, headers: browser_headers)
+        end
       end
 
       assert_response :redirect
@@ -542,10 +570,12 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       "actor_type" => "Client",
     }
     session_key = Rails.application.config.session_options.fetch(:key)
-    request.cookie_jar.signed_or_encrypted[session_key] = request.session.to_hash.merge(
+    # CookieStore treats a cookie without a session id as no session at all.
+    sealed_state = { "session_id" => SecureRandom.hex(16) }.merge(request.session.to_hash).merge(
       "session_limit_gate" => gate,
       "app_sign_in_flow_locator" => { "public_id" => pending_flow.public_id, "nonce" => flow_nonce },
     )
+    request.cookie_jar.signed_or_encrypted[session_key] = { value: sealed_state }
     sealed_session = request.cookie_jar[session_key]
     cookies.delete(session_key)
     cookie_installed = cookies.merge(
@@ -555,8 +585,8 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     assert cookie_installed, "The gate cookie must be installed on the original Base host"
 
-    get acme_app_sign_in_limitation_path, params: { resolution_challenge: resolution.challenge },
-                                          headers: browser_headers
+    get acme_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
+                                                    headers: browser_headers
     received_gate = request.session[:session_limit_gate]
     decision_time = ClientSignInFlow.database_now
     gate_flags = {
@@ -635,10 +665,12 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       "actor_type" => "Client",
     }
     session_key = Rails.application.config.session_options.fetch(:key)
-    request.cookie_jar.signed_or_encrypted[session_key] = request.session.to_hash.merge(
+    # CookieStore treats a cookie without a session id as no session at all.
+    sealed_state = { "session_id" => SecureRandom.hex(16) }.merge(request.session.to_hash).merge(
       "session_limit_gate" => gate,
       "app_sign_in_flow_locator" => { "public_id" => pending_flow.public_id, "nonce" => flow_nonce },
     )
+    request.cookie_jar.signed_or_encrypted[session_key] = { value: sealed_state }
     sealed_session = request.cookie_jar[session_key]
     cookies.delete(session_key)
     cookie_installed = cookies.merge(
@@ -648,8 +680,8 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     assert cookie_installed, "The gate cookie must be installed on the original Base host"
 
-    get acme_app_sign_in_limitation_path, params: { resolution_challenge: resolution.challenge },
-                                          headers: browser_headers
+    get acme_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
+                                                    headers: browser_headers
     received_gate = request.session[:session_limit_gate]
     decision_time = ClientSignInFlow.database_now
     gate_flags = {
@@ -783,10 +815,12 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       "actor_type" => "Client",
     }
     session_key = Rails.application.config.session_options.fetch(:key)
-    request.cookie_jar.signed_or_encrypted[session_key] = request.session.to_hash.merge(
+    # CookieStore treats a cookie without a session id as no session at all.
+    sealed_state = { "session_id" => SecureRandom.hex(16) }.merge(request.session.to_hash).merge(
       "session_limit_gate" => gate,
       "app_sign_in_flow_locator" => { "public_id" => pending_flow.public_id, "nonce" => flow_nonce },
     )
+    request.cookie_jar.signed_or_encrypted[session_key] = { value: sealed_state }
     sealed_session = request.cookie_jar[session_key]
     cookies.delete(session_key)
     cookie_installed = cookies.merge(
@@ -796,8 +830,8 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     assert cookie_installed, "The gate cookie must be installed on the original Base host"
 
-    get acme_app_sign_in_limitation_path, params: { resolution_challenge: resolution.challenge },
-                                          headers: browser_headers
+    get acme_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
+                                                    headers: browser_headers
     received_gate = request.session[:session_limit_gate]
     decision_time = ClientSignInFlow.database_now
     gate_flags = {
@@ -868,10 +902,12 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       "actor_type" => "Client",
     }
     session_key = Rails.application.config.session_options.fetch(:key)
-    request.cookie_jar.signed_or_encrypted[session_key] = request.session.to_hash.merge(
+    # CookieStore treats a cookie without a session id as no session at all.
+    sealed_state = { "session_id" => SecureRandom.hex(16) }.merge(request.session.to_hash).merge(
       "session_limit_gate" => gate,
       "app_sign_in_flow_locator" => { "public_id" => pending_flow.public_id, "nonce" => flow_nonce },
     )
+    request.cookie_jar.signed_or_encrypted[session_key] = { value: sealed_state }
     sealed_session = request.cookie_jar[session_key]
     cookies.delete(session_key)
     cookie_installed = cookies.merge(
@@ -881,8 +917,8 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     assert cookie_installed, "The gate cookie must be installed on the original Base host"
 
-    get acme_app_sign_in_limitation_path, params: { resolution_challenge: resolution.challenge },
-                                          headers: browser_headers
+    get acme_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
+                                                    headers: browser_headers
     received_gate = request.session[:session_limit_gate]
     decision_time = ClientSignInFlow.database_now
     gate_flags = {
@@ -917,11 +953,8 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
            headers: browser_headers.merge("X-Inertia" => "true")
 
     assert_response :conflict
-    gateway = URI.parse(response.headers["X-Inertia-Location"])
-
-    assert_equal "jump.umaxica.net", gateway.host
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-    location = URI.parse(payload.fetch("url"))
+    # The neutral Base entry is on this host, so the visit needs no Jump gateway.
+    location = URI.parse(response.headers["X-Inertia-Location"])
 
     assert_equal URI.parse("https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}").host, location.host
     assert_equal "/sign", location.path
@@ -962,7 +995,8 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
           },
         )
 
-        assert_equal 302, session.response.status, surface[:client_id]
+        # A POST that hands the browser on to a GET answers 303.
+        assert_equal 303, session.response.status, surface[:client_id]
 
         session.get("/oauth/authorization", headers: browser_headers)
 

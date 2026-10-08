@@ -275,7 +275,9 @@ module SessionLimitResolutionTransactionable
         raise FlowInvalidTransition, "selected session could not be revoked" unless result.success?
       end
 
-      { resolved_at: self.class.database_now }
+      # two.md 4.2 folds finalization into this transition; there is no later finalize step.
+      now = self.class.database_now
+      { resolved_at: now, finalized_at: now }
     end
   end
 
