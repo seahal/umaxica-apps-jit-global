@@ -7,11 +7,12 @@ changes described here.
 `bin/rails test` (16 workers, about 200 seconds), no extra environment, local test fleet verified by
 `Umaxica::TestEnvironment::DatabaseSafety.verify_catalog!`:
 
-| Run                                                | Result                                                    |
-| -------------------------------------------------- | --------------------------------------------------------- |
-| First stable run after the other agent was stopped | 14,841 runs, 797 failures, 258 errors, 1 skip             |
-| After the changes below                            | 14,841 runs, 491 failures, 199 errors, 1 skip (250 files) |
-| After the sign-start and RP response fixes         | 14,841 runs, 471 failures, 232 errors, 1 skip (268 files) |
+| Run                                                                  | Result                                                    |
+| -------------------------------------------------------------------- | --------------------------------------------------------- |
+| First stable run after the other agent was stopped                   | 14,841 runs, 797 failures, 258 errors, 1 skip             |
+| After the changes below                                              | 14,841 runs, 491 failures, 199 errors, 1 skip (250 files) |
+| After the sign-start and RP response fixes                           | 14,841 runs, 471 failures, 232 errors, 1 skip (268 files) |
+| At commit `4bb90565f` (D4, D5, D2, RP credential tests, stable runs) | 14,911 runs, 462 failures, 199 errors, 1 skip (238 files) |
 
 The Task 0.1 baseline record executed no assertion (Bundler could not materialize Rails), so no
 failure can be classified as pre-existing. Every remaining failure is unclassified.
@@ -60,6 +61,28 @@ failure can be classified as pre-existing. Every remaining failure is unclassifi
 
 Between consecutive full runs about 50 failures appear and disappear with the seed (connection-pool
 timeouts and concurrency tests). They are not yet isolated.
+
+## Later findings in the same session (development-side verification)
+
+- Full runs hung for three separate reasons, all removed: ownerless identifier rows (four empty
+  fixtures now truncate the identifier tables), pooled test threads that kept database leases
+  (twenty blocks now release them; connection-pool timeouts went from 24 to 0), and one test that
+  waited forever on a queue when a thread failed before signalling.
+- `browser_rp_authentication_test.rb` executed no assertion: its probe controller lacked the
+  authentication concern and all five tests raised. It now runs 40 tests and 85 assertions covering
+  issuer, audience, client, subject, Browser Session, malformed values, exp plus leeway at -1/0/+1
+  second, revoked and missing parents, refresh values, and unsafe requests (failed CSRF or
+  `Origin: null` gives no rotation and no mutation; a successful refresh gives exactly one).
+- The Browser RP credential is validated against its live chain on every request. D-53 describes
+  offline verification; the implementation is stricter. Not changed; decision requested.
+- Base `/welcome` raised after every sign-in (no `authorize!`, and root sequence methods the self-RP
+  controller no longer inherits). Fixed; the page follows a verified return target only.
+- `session_limit_hard_reject` is removed in all realms; a model-refused login is retried once under
+  the actor lock into the ordinary resolution, otherwise `session_limit_conflict` (503).
+- D-07: 25 of the 35 dynamic-dispatch lines added to `app/` are now explicit. Six keep a pattern
+  present at the baseline; four are `respond_to?(:to_time)` input checks.
+- D-110 (`test/test_helper.rb`, new `test/support` helpers) is not corrected: an exception was
+  requested and no decision has been received.
 
 ## Not done
 
