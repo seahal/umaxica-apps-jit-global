@@ -25,6 +25,29 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
     assert_no_store
   end
 
+  # Rack adds a validator to the page, and a 304 is produced only after the action ran. A
+  # conditional request therefore cannot skip the credential check: without a valid credential the
+  # matching validator earns the sign-in redirect, never a 304.
+  test "a matching validator does not let a conditional request bypass authentication" do
+    headers = as_user_headers(@user, host: @host)
+    get base_app_accounts_url(ri: "jp", host: @host), headers: headers
+
+    assert_response :success
+    assert_no_store
+    validator = response.headers.fetch("ETag")
+
+    get base_app_accounts_url(ri: "jp", host: @host), headers: host_headers(@host).merge("If-None-Match" => validator)
+
+    assert_response :redirect
+    assert_equal "/sign", URI.parse(response.location).path
+
+    @token.device_session.revoke!(reason: "cache-policy-test")
+    get base_app_accounts_url(ri: "jp", host: @host), headers: headers.merge("If-None-Match" => validator)
+
+    assert_not_equal 304, response.status
+    assert_response :redirect
+  end
+
   test "an authenticated Inertia visit is no-store" do
     get base_app_accounts_url(ri: "jp", host: @host), headers: as_user_headers(@user, host: @host)
     version = inertia_page.fetch("version")
