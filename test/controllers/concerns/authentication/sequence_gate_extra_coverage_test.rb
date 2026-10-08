@@ -199,13 +199,15 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
 
     def sign_in_selector_path(pt: nil) = super
 
-    def sign_in_session_limit_path(pt: nil) = super
-
     def sign_in_checkpoint_path(pt: nil) = "/checkpoint?pt=#{pt}"
 
     def sign_in_welcome_path(pt: nil) = "/welcome?pt=#{pt}"
 
-    def sign_app_sign_in_session_path(**attrs) = "/app/session?#{attrs.compact.to_query}"
+    def base_app_sign_in_limitation_path(**attrs) = "/app/limitation?#{attrs.compact.to_query}"
+
+    def base_com_sign_in_limitation_path(**attrs) = "/com/limitation?#{attrs.compact.to_query}"
+
+    def base_org_sign_in_limitation_path(**attrs) = "/org/limitation?#{attrs.compact.to_query}"
 
     def sign_app_selector_path(**attrs) = "/app/selector?#{attrs.compact.to_query}"
 
@@ -225,24 +227,21 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   class FallbackHarness < Harness
-    undef_method :sign_app_sign_in_session_path
     undef_method :sign_app_selector_path
   end
 
   class OrgHarness < Harness
-    undef_method :sign_app_sign_in_session_path
     undef_method :sign_app_selector_path
 
-    def sign_org_sign_in_session_path(**attrs) = "/org/session?#{attrs.compact.to_query}"
+    def sign_in_sequence_surface = :org
 
     def sign_org_selector_path(**attrs) = "/org/selector?#{attrs.compact.to_query}"
   end
 
   class ComHarness < Harness
-    undef_method :sign_app_sign_in_session_path
     undef_method :sign_app_selector_path
 
-    def sign_com_sign_in_session_path(**attrs) = "/com/session?#{attrs.compact.to_query}"
+    def sign_in_sequence_surface = :com
 
     def sign_com_selector_path(**attrs) = "/com/selector?#{attrs.compact.to_query}"
   end
@@ -269,15 +268,15 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     @harness = Harness.new
   end
 
-  test "sign_in_session_limit_path prefers surface helper and falls back to generic path" do
-    assert_equal "/app/session?pt=pt%3Atarget&ri=jp", @harness.sign_in_session_limit_path(pt: "target")
+  test "sign_in_session_limit_path names the Base limitation page of each surface and refuses an unknown one" do
+    assert_equal "/app/limitation?ri=jp", @harness.sign_in_session_limit_path
+    assert_equal "/org/limitation?ri=jp", OrgHarness.new.sign_in_session_limit_path
+    assert_equal "/com/limitation?ri=jp", ComHarness.new.sign_in_session_limit_path
 
-    fallback = FallbackHarness.new
+    unknown = Harness.new
+    unknown.define_singleton_method(:sign_in_sequence_surface) { :net }
 
-    assert_equal "/in/session?pt=pt%3Atarget&ri=jp", fallback.sign_in_session_limit_path(pt: "target")
-
-    assert_equal "/org/session?pt=pt%3Atarget&ri=jp", OrgHarness.new.sign_in_session_limit_path(pt: "target")
-    assert_equal "/com/session?pt=pt%3Atarget&ri=jp", ComHarness.new.sign_in_session_limit_path(pt: "target")
+    assert_raises(ArgumentError) { unknown.sign_in_session_limit_path }
   end
 
   test "legacy bulletin session state does not hold an otherwise clear checkpoint" do
@@ -302,7 +301,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     harness = FallbackHarness.new
     harness.params_hash = { ri: "https://evil.example" }
 
-    assert_equal "/in/session?pt=pt%3Atarget&ri=jp", harness.sign_in_session_limit_path(pt: "target")
+    assert_equal "/app/limitation?ri=jp", harness.sign_in_session_limit_path
     assert_equal "/selector?pt=pt%3Atarget&ri=jp", harness.sign_in_selector_path(pt: "target")
   end
 
@@ -629,11 +628,10 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     assert_equal "/dashboard", @harness.sign_in_sequence_redirect_path
   end
 
-  test "sign_in_session_limit_path and sign_in_selector_path fall back to bare paths without query attributes" do
+  test "sign_in_selector_path falls back to the bare path without query attributes" do
     fallback = FallbackHarness.new
     fallback.define_singleton_method(:current_region_identifier) { nil }
 
-    assert_equal "/in/session", fallback.sign_in_session_limit_path(pt: nil)
     assert_equal "/selector", fallback.sign_in_selector_path(pt: nil)
   end
 

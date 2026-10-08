@@ -36,7 +36,6 @@ vi.mock("@/features/turnstile/TurnstileWidget", () => ({
 const { default: OrgPasskeySettingsIndex } =
   await import("@/pages/base/org/identity/passkeys/index");
 const { default: OrgPasskeySettingsShow } = await import("@/pages/base/org/identity/passkeys/show");
-const { default: OrgSessionLimitPage } = await import("@/pages/auth/org/sign/in/sessions/show");
 
 let container: HTMLDivElement;
 let root: Root;
@@ -50,15 +49,6 @@ const mount = (element: React.ReactElement) => {
   act(() => {
     root.render(element);
   });
-};
-
-const submitForm = (index = 0) => {
-  const form = container.querySelectorAll("form")[index];
-  const event = new Event("submit", { bubbles: true, cancelable: true });
-  act(() => {
-    form?.dispatchEvent(event);
-  });
-  return event;
 };
 
 const clickButton = (label: string) => {
@@ -166,69 +156,5 @@ describe("org passkey settings confirmation", () => {
     clickButton("削除");
     answerConfirmation(true);
     expect(deleteRequest).toHaveBeenCalledWith("/settings/passkeys/pk_1");
-  });
-});
-
-describe("org session limit confirmation", () => {
-  const props = {
-    title: "セッション上限",
-    heading: "セッション上限に達しました",
-    description: "いずれかのセッションを解除してください。",
-    form_action: "/sign/in/session",
-    active_sessions_heading: "有効なセッション",
-    session_label: "セッション",
-    created_at_label: "作成",
-    last_used_label: "最終使用",
-    no_sessions: "セッションがありません。",
-    submit_label: "解除する",
-    cancel_logout_label: "キャンセルしてログアウト",
-    cancel_logout_confirm: "キャンセルしますか？ログアウトされます。",
-    sessions: [
-      {
-        ref: "signed-ref",
-        digest: "abcd",
-        created_at: "2026-01-01",
-        last_used_at: "2026-01-02",
-      },
-      {
-        ref: "signed-ref-2",
-        digest: "efgh",
-        created_at: "2026-01-01",
-        last_used_at: null,
-      },
-    ],
-  };
-
-  it("cancels the ceremony only once the operator accepts", () => {
-    mount(<OrgSessionLimitPage {...props} />);
-
-    // The first form is the revocation, which carries no confirmation.
-    expect(submitForm(0).defaultPrevented).toBe(false);
-
-    expect(submitForm(1).defaultPrevented).toBe(true);
-    answerConfirmation(false);
-    expect(submitted).not.toHaveBeenCalled();
-
-    submitForm(1);
-    answerConfirmation(true);
-    expect(submitted).toHaveBeenCalledTimes(1);
-  });
-
-  // Authentication already succeeded, so the page carries no link back into the sign-in form.
-  it("renders no navigation link, leaving the cancellation as the only exit", () => {
-    mount(<OrgSessionLimitPage {...props} />);
-
-    expect(container.querySelectorAll("a")).toHaveLength(0);
-  });
-
-  it("shows the empty copy when the server named no sessions", () => {
-    mount(
-      <OrgSessionLimitPage
-        {...props}
-        sessions={[]}
-      />,
-    );
-
-    expect(container.textContent).toContain("セッションがありません。");
   });
 });

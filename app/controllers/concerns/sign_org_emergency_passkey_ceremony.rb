@@ -130,13 +130,6 @@ module SignOrgEmergencyPasskeyCeremony
     end
   end
 
-  def render_passkey_session_limit_pending(_result)
-    render json: {
-      status: "session_limit_pending",
-      redirect_url: auth_org_sign_in_session_path,
-    }, status: :ok
-  end
-
   def passkey_checkpoint_redirect_url
     auth_org_sign_in_check_path(pt: retrieve_pt_for_checkpoint, ri: current_region_identifier)
   end

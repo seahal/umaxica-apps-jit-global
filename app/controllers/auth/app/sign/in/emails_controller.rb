@@ -395,8 +395,6 @@ module Auth
                   error: sign_in_result.message,
                   session_limit_conflict: true,
                   http_status: sign_in_result.response_status, }
-              elsif sign_in_result.session_limit_pending?
-                { success: true, session_limit_pending: true, redirect_path: sign_in_result.redirect_to }
               elsif sign_in_result.success?
                 { success: true, tokens: sign_in_result.token }
               elsif sign_in_result.proceed?
@@ -450,13 +448,7 @@ module Auth
           end
 
           def render_successful_email_login_json(result)
-            if result[:session_limit_pending]
-              render json: {
-                status: "session_limit_pending",
-                redirect_url: result[:redirect_path],
-                message: I18n.t("sign.app.in.session.restricted_notice"),
-              }, status: :ok
-            elsif result[:status] == :authentication_evidence_recorded
+            if result[:status] == :authentication_evidence_recorded
               render json: {
                 status: "authentication_evidence_recorded",
                 redirect_url: sign_in_sequence_redirect_path(pt: retrieve_pt),

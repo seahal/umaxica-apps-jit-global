@@ -45,8 +45,8 @@ A pending flow does not block other sign-ins of the account.
 
 ## Session-Limit Resolution
 
-- Auth: `Auth::{App,Com,Org}::Sign::In::SessionsController` opens only for the browser whose flow
-  locator names a flow in `SESSION_LIMIT_PENDING`. The actor is that flow's principal.
+- Auth: none. An Auth host runs credential ceremonies and issues no session, so it never holds a
+  resolution; its former `/sign/in/session` page is removed.
 - Base app, OIDC resume: `/sign/in/limitation` with the `ClientSessionLimitResolutionTransaction`
   challenge.
 - Base app, social completion: `/sign/in/limitation` on the Base host that ran the completion,

@@ -24,8 +24,6 @@ module Auth
           end
 
           def route_guard_cycle(cycle)
-            return redirect_to(auth_app_sign_in_session_path(ri: current_region_identifier, pt: guard_pt_for(cycle))) if
-              session_limit_resolution
             return route_pending_guard(cycle) if cycle.sign_in_guardrail_pending?
             return redirect_to_guard_check(cycle) if cycle.sign_in_checkpoint_pending?
             return redirect_to(sign_in_selector_path(pt: guard_return_to(cycle))) if cycle.sign_in_selector_pending?

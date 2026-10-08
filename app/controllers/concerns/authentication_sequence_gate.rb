@@ -8,7 +8,7 @@ module AuthenticationSequenceGate
 
   def sign_in_sequence_redirect_path(pt: nil, default_path: after_dashboard_path)
     cycle = current_db_sign_in_flow_for_sequence
-    return sign_in_session_limit_path(pt: pt) if session_limit_resolution
+    return sign_in_session_limit_path if session_limit_resolution
 
     if cycle
       url_pt = signed_pt_token(pt || cycle.return_to)
@@ -29,21 +29,15 @@ module AuthenticationSequenceGate
     default_path
   end
 
-  def sign_in_session_limit_path(pt: nil)
+  # Not an Auth path: only Base issues a root session, so only Base ever holds a resolution.
+  def sign_in_session_limit_path
     attrs = { ri: current_region_identifier }
-    safe_pt = signed_pt_token(pt)
-    attrs[AuthIoKeys::Params::PT] = safe_pt if safe_pt.present?
 
-    if respond_to?(:sign_app_sign_in_session_path, true)
-      sign_app_sign_in_session_path(**attrs)
-    elsif respond_to?(:sign_org_sign_in_session_path, true)
-      sign_org_sign_in_session_path(**attrs)
-    elsif respond_to?(:sign_com_sign_in_session_path, true)
-      sign_com_sign_in_session_path(**attrs)
-    else
-      path = "/in/session"
-      query = attrs.compact.to_query
-      query.present? ? "#{path}?#{query}" : path
+    case sign_in_sequence_surface.to_s
+    when "app" then base_app_sign_in_limitation_path(**attrs)
+    when "com" then base_com_sign_in_limitation_path(**attrs)
+    when "org" then base_org_sign_in_limitation_path(**attrs)
+    else raise ArgumentError, "unsupported sign-in surface: #{sign_in_sequence_surface.inspect}"
     end
   end
 
@@ -203,7 +197,7 @@ module AuthenticationSequenceGate
       clear_current_sign_in_flow_locator!
       return redirect_to(decision.target)
     end
-    return redirect_to(sign_in_session_limit_path(pt: cycle.return_to)) if session_limit_resolution
+    return redirect_to(sign_in_session_limit_path) if session_limit_resolution
     return redirect_to(sign_in_checkpoint_path(pt: cycle.return_to)) if cycle.sign_in_checkpoint_pending?
     return redirect_to(sign_in_selector_path(pt: cycle.return_to)) if cycle.sign_in_selector_pending?
     return redirect_to(after_welcome_path) unless welcome_gate_available?
@@ -650,7 +644,7 @@ module AuthenticationSequenceGate
       result,
       actor: actor,
       sequence_id: sequence_id,
-      session_management_path: session_management_path,
+      session_management_path: sign_in_session_limit_path,
     )
   end
 

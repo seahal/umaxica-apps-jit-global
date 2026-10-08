@@ -18,6 +18,19 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     assert_equal expected.fetch(:action), route.fetch(:action)
   end
 
+  test "Auth exposes no session-limit resolution page because only Base issues a session" do
+    [SIGN_APP_HOST, SIGN_COM_HOST, SIGN_ORG_HOST].each do |host|
+      %i(get patch delete).each do |method|
+        assert_raises(
+          ActionController::RoutingError,
+          "#{method.to_s.upcase} #{host}/sign/in/session must be retired",
+        ) do
+          Rails.application.routes.recognize_path("http://#{host}/sign/in/session", method: method)
+        end
+      end
+    end
+  end
+
   test "telephone sign-up does not expose retired permanent Secret Credential steps" do
     [
       [SIGN_APP_HOST, "/sign/up/check/telephone/passcode"],
@@ -238,11 +251,6 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
         Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/sign/in/check", method: method)
       end
     end
-
-    assert_recognizes(
-      { controller: "auth/app/sign/in/sessions", action: "destroy" },
-      { path: "http://#{SIGN_APP_HOST}/sign/in/session", method: :delete },
-    )
 
     assert_recognizes(
       { controller: "auth/app/verification/cancellations", action: "create" },
@@ -628,11 +636,6 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     end
 
     assert_recognizes(
-      { controller: "auth/com/sign/in/sessions", action: "destroy" },
-      { path: "http://#{SIGN_COM_HOST}/sign/in/session", method: :delete },
-    )
-
-    assert_recognizes(
       { controller: "auth/com/verification/cancellations", action: "create" },
       { path: "http://#{SIGN_COM_HOST}/verification/cancellation", method: :post },
     )
@@ -819,11 +822,6 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
         Rails.application.routes.recognize_path("http://#{SIGN_ORG_HOST}/sign/in/check", method: method)
       end
     end
-
-    assert_recognizes(
-      { controller: "auth/org/sign/in/sessions", action: "destroy" },
-      { path: "http://#{SIGN_ORG_HOST}/sign/in/session", method: :delete },
-    )
 
     assert_recognizes(
       { controller: "auth/org/verification/cancellations", action: "create" },

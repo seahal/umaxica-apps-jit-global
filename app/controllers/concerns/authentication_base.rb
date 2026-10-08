@@ -2704,18 +2704,6 @@ module AuthenticationBase
     end
   end
 
-  def session_management_path
-    if respond_to?(:sign_app_sign_in_session_path, true)
-      sign_app_sign_in_session_path
-    elsif respond_to?(:sign_org_sign_in_session_path, true)
-      sign_org_sign_in_session_path
-    elsif respond_to?(:sign_com_sign_in_session_path, true)
-      sign_com_sign_in_session_path
-    else
-      "/sign/in/session"
-    end
-  end
-
   # Default redirect destination after login for guest authentication mode.
   # Override in controllers to customize (e.g. to preserve ri parameter).
   def after_login_path

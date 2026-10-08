@@ -155,8 +155,6 @@ scope(module: :auth, as: :auth) do
             resource :verification, only: :create
           end
 
-          resource :session, only: %i(show update destroy)
-
           resource :guard, only: :show
           resource :check, only: :show
 
@@ -378,8 +376,6 @@ scope(module: :auth, as: :auth) do
             resource :verification, only: :create
           end
 
-          resource :session, only: %i(show update destroy)
-
           resource :guard, only: :show
           resource :check, only: :show
 
@@ -416,8 +412,6 @@ scope(module: :auth, as: :auth) do
 
       # Settings and credential management.
       resource :settings, only: :show
-      namespace :settings do
-      end
     end
   end
 
@@ -542,8 +536,6 @@ scope(module: :auth, as: :auth) do
               resource :verification, only: :create
             end
           end
-
-          resource :session, only: %i(show update destroy)
 
           resource :guard, only: :show
           resource :check, only: :show

@@ -193,31 +193,6 @@ module Auth::App::In
       assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
     end
 
-    test "verification with session limit exceeded returns session_limit_pending" do
-      # Create 2 active sessions to hit the limit
-      ClientToken.where(user_id: @user.id).delete_all
-      2.times do
-        create_rotated_active_user_session(@user, rotations: 3)
-      end
-
-      # Get challenge
-      email = ClientEmail.find_by(user: @user).address
-      post auth_app_sign_in_passkey_options_path(ri: "jp"), params: options_params(identifier: email)
-      explanation = response.parsed_body
-
-      post auth_app_sign_in_passkey_verification_path(ri: "jp"), params: assertion_params_for(
-        challenge_id: explanation["challenge_id"],
-        challenge: explanation.dig("options", "challenge"),
-      )
-
-      assert_response :ok
-      json = response.parsed_body
-
-      assert_equal "session_limit_pending", json["status"]
-      assert_equal auth_app_sign_in_session_path(ri: "jp"), json["redirect_url"]
-      assert_equal 0, ClientToken.where(user_id: @user.id, user_token_status_id: ClientTokenStatus::RESTRICTED).count
-    end
-
     test "verification returns same response for credential mismatch and missing verified pii" do
       # Baseline: credential mismatch
       post auth_app_sign_in_passkey_options_path(ri: "jp"),

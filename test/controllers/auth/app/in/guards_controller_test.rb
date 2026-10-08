@@ -64,21 +64,6 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     assert_equal before_attrs, guarded_cycle_attrs(cycle.reload)
   end
 
-  test "an open session-limit resolution redirects to session" do
-    cycle = create_cycle(status: "SESSION_ISSUANCE_PENDING")
-    resolution = ClientSessionLimitResolutionTransaction.issue!(
-      sign_in_flow: cycle, actor: @user,
-      browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(SecureRandom.urlsafe_base64(32)),
-    ).transaction
-    before_attrs = guarded_cycle_attrs(cycle.reload)
-    controller = build_controller(cycle: cycle, actor: @user, resolution: resolution)
-
-    controller.show
-
-    assert_equal "/sign/in/session?ri=jp", controller.redirected_to
-    assert_equal before_attrs, guarded_cycle_attrs(cycle.reload)
-  end
-
   test "selector state redirects to selector sequence path" do
     cycle = create_cycle(status: "SELECTOR_PENDING", return_to: "/dashboard")
     controller = build_controller(cycle: cycle, actor: @user)
@@ -144,7 +129,7 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     )
   end
 
-  def build_controller(cycle:, actor:, path_target: nil, signed_pt: nil, signed_token: "signed-pt", resolution: nil)
+  def build_controller(cycle:, actor:, path_target: nil, signed_pt: nil, signed_token: "signed-pt")
     controller = Auth::App::Sign::In::GuardsController.new
     controller.define_singleton_method(:params) { ActionController::Parameters.new(ri: "jp") }
     controller.define_singleton_method(:path_target_value) { path_target }
@@ -152,15 +137,10 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     controller.define_singleton_method(:signed_pt_token) { |path| path.presence && signed_token }
     controller.define_singleton_method(:path_from_signed_pt) { |_| path_target }
     controller.define_singleton_method(:current_db_sign_in_flow_for_sequence) { cycle }
-    # Production reads the open resolution from the session-limit gate; here it is given.
-    controller.define_singleton_method(:session_limit_resolution) { resolution }
     controller.define_singleton_method(:sign_in_flow_actor) { |_| actor }
     controller.define_singleton_method(:auth_app_sign_in_path) { |ri: nil| "/sign/in?ri=#{ri}" }
     controller.define_singleton_method(:auth_app_sign_in_check_path) { |ri: nil, pt: nil|
       "/sign/in/check?ri=#{ri}#{pt ? "&pt=#{pt}" : ""}"
-    }
-    controller.define_singleton_method(:auth_app_sign_in_session_path) { |ri: nil, pt: nil|
-      "/sign/in/session?ri=#{ri}#{pt ? "&pt=#{pt}" : ""}"
     }
     controller.define_singleton_method(:sign_in_selector_path) { |pt: nil| "/sign/in/selector?pt=#{pt}" }
     controller.define_singleton_method(:sign_in_welcome_path) { |pt: nil| "/sign/in/welcome?pt=#{pt}" }

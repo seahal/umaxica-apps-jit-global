@@ -3219,12 +3219,13 @@ Sources: `app/models/concerns/session_limit_resolution_transactionable.rb`,
 
 ## idp-operator-session-limit-resolution
 
-Implementation: `SessionLimitResolutionTransactionable / Auth::Org::Sign::In::SessionsController`.
-Storage: `operator_session_limit_resolution_transactions` / `state_id`.
+Implementation:
+`SessionLimitResolutionTransactionable / Base::Org::Sign::In::LimitationsController`. Storage:
+`operator_session_limit_resolution_transactions` / `state_id`.
 
 Sources: `app/models/concerns/session_limit_resolution_transactionable.rb`,
 `app/models/operator_session_limit_resolution_transaction.rb`,
-`app/controllers/auth/org/sign/in/sessions_controller.rb`.
+`app/controllers/base/org/sign/in/limitations_controller.rb`.
 
 | Transition ID                              | Mutation kind         | From                     | Event / Trigger | To               | Guard                                                                                                      | Side effect                          | Source file                                                     | Confidence |
 | ------------------------------------------ | --------------------- | ------------------------ | --------------- | ---------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------- | ---------- |

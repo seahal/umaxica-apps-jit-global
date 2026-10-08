@@ -154,7 +154,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/app/sign/in/passkey/options_controller.rb: 1
   app/controllers/auth/app/sign/in/passkey/verifications_controller.rb: 1
   app/controllers/auth/app/sign/in/passkeys_controller.rb: 1
-  app/controllers/auth/app/sign/in/sessions_controller.rb: 3
   app/controllers/auth/app/sign/ins_controller.rb: 1
   app/controllers/auth/app/sign/outs_controller.rb: 4
   app/controllers/auth/app/sign/up/check/apple/confirmations_controller.rb: 3
@@ -193,7 +192,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/com/sign/in/passkey/options_controller.rb: 1
   app/controllers/auth/com/sign/in/passkey/verifications_controller.rb: 1
   app/controllers/auth/com/sign/in/passkeys_controller.rb: 1
-  app/controllers/auth/com/sign/in/sessions_controller.rb: 3
   app/controllers/auth/com/sign/ins_controller.rb: 1
   app/controllers/auth/com/sign/outs_controller.rb: 4
   app/controllers/auth/com/sign/up/check/email/birthdates_controller.rb: 3
@@ -236,7 +234,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/org/sign/in/passkey/options_controller.rb: 1
   app/controllers/auth/org/sign/in/passkey/verifications_controller.rb: 1
   app/controllers/auth/org/sign/in/passkeys_controller.rb: 1
-  app/controllers/auth/org/sign/in/sessions_controller.rb: 3
   app/controllers/auth/org/sign/ins_controller.rb: 1
   app/controllers/auth/org/sign/outs_controller.rb: 4
   app/controllers/auth/org/sign/up/invitations_controller.rb: 2

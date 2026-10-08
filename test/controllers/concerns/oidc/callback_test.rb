@@ -106,10 +106,6 @@ class OidcCallbackTestController < ApplicationController
     "CORE_APP"
   end
 
-  def sign_app_sign_in_session_path
-    "/sign/in/session"
-  end
-
   def provision_rp_account_from_id_token_payload!(payload, _canonical_audience, authoritative_resource: nil)
     raise ArgumentError, "unexpected authoritative resource" if authoritative_resource
 
