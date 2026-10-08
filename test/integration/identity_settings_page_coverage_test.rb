@@ -54,6 +54,10 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
       jwt_issuer_id: "surface:BASE_COM",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
+    install_base_browser_rp_credentials!(
+      surface: "com", host: host, actor: visitor, token: token,
+    )
     headers = {
       "Authorization" => "Bearer #{access_token}",
       "Accept" => "text/html,application/xhtml+xml",
@@ -202,6 +206,10 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
       jwt_issuer_id: "surface:BASE_COM",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
+    install_base_browser_rp_credentials!(
+      surface: "com", host: host, actor: visitor, token: token,
+    )
     headers = {
       "Authorization" => "Bearer #{access_token}",
       "Accept" => "text/html,application/xhtml+xml",
@@ -396,6 +404,10 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
       jwt_issuer_id: "surface:BASE_ORG",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
+    install_base_browser_rp_credentials!(
+      surface: "org", host: host, actor: operator, token: token,
+    )
     headers = {
       "Authorization" => "Bearer #{access_token}",
       "Accept" => "text/html,application/xhtml+xml",
@@ -639,6 +651,10 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
       jwt_issuer_id: "surface:BASE_APP",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
+    install_base_browser_rp_credentials!(
+      surface: "app", host: host, actor: user, token: token,
+    )
     headers = {
       "Authorization" => "Bearer #{access_token}",
       "Accept" => "text/html,application/xhtml+xml",

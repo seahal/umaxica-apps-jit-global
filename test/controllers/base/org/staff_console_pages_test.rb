@@ -35,6 +35,10 @@ class Base::Org::StaffConsolePagesTest < ActionDispatch::IntegrationTest
       jwt_issuer_id: "surface:BASE_ORG",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
+    install_base_browser_rp_credentials!(
+      surface: "org", host: @host, actor: @operator, token: @token,
+    )
     @headers = {
       "Authorization" => "Bearer #{access_token}",
       "Client-Agent" => "Mozilla/5.0",

@@ -66,6 +66,10 @@ class SurfaceSignOutEntryAndBirthdateTest < ActionDispatch::IntegrationTest
                resource_type: "visitor", jwt_issuer_id: "surface:BASE_COM",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
+    install_base_browser_rp_credentials!(
+      surface: "com", host: host, actor: visitor, token: token,
+    )
 
     get base_com_identity_birthdate_url(ri: "jp", host: host),
         headers: {
@@ -105,6 +109,10 @@ class SurfaceSignOutEntryAndBirthdateTest < ActionDispatch::IntegrationTest
                 resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
+    install_base_browser_rp_credentials!(
+      surface: "org", host: host, actor: operator, token: token,
+    )
 
     get base_org_identity_birthdate_url(ri: "jp", host: host),
         headers: {
