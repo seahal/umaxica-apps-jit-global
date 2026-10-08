@@ -637,6 +637,9 @@ module BrowserRpAuthentication
   end
 
   def clear_browser_rp_cookies!
+    # Whenever the browser's RP credential is dropped, the signed-in pages are still in the
+    # document's Inertia history; the next page must clear it.
+    session[:inertia_clear_history] = true
     clear_browser_rp_access_cookie!
     cookies.delete(
       OidcRpBrowserCredentialContract::REFRESH_COOKIE,

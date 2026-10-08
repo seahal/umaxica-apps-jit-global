@@ -331,6 +331,32 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     assert_nil response.headers["Set-Cookie"]
   end
 
+  # A connection pool that cannot serve the state read is the same dependency failure.
+  test "an exhausted connection pool while reading live state answers 503 and keeps the cookies" do
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
+
+    ClientRpSession.stub(:find_by, ->(*) { raise ActiveRecord::ConnectionTimeoutError, "injected" }) do
+      get :show, params: { required: "1" }
+    end
+
+    assert_response :service_unavailable
+    assert_nil response.headers["Set-Cookie"]
+  end
+
+  # Revocation applies to the next request after it commits; the request before it was served.
+  test "a request before revocation is served and the request after it is refused" do
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
+
+    get :show, params: { required: "1" }
+
+    assert_response :success
+
+    @root_token.device_session.revoke!(reason: "rp-authentication-test")
+    get :show, params: { required: "1" }
+
+    assert_response :unauthorized
+  end
+
   test "a visitor-realm credential does not authenticate a client-realm controller" do
     visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
     visitor_token = VisitorToken.create!(visitor: visitor)

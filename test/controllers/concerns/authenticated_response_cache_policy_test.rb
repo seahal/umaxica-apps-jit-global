@@ -108,10 +108,4 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
   def configured_host(surface_name)
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
   end
-
-  def jwt_issuer_id_for_test_host(host)
-    normalized = host.to_s
-    service = (normalized.include?("auth") || normalized.include?("sign")) ? "AUTH" : "BASE"
-    "surface:#{service}_APP"
-  end
 end
