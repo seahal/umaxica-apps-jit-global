@@ -17,7 +17,7 @@ module AuthOidcResultHandoff
       "auth/shared/oidc_authorization_handoff",
       layout: oidc_result_handoff_layout,
       locals: {
-        completion_url: public_send(oidc_result_handoff_create_helper, ri: params[:ri]),
+        completion_url: oidc_result_handoff_create_path(ri: params[:ri]),
         ri: params[:ri],
       },
     )
@@ -42,8 +42,7 @@ module AuthOidcResultHandoff
     complete_auth_ceremony_session!
 
     redirect_to(
-      public_send(
-        oidc_result_base_completion_helper,
+      oidc_result_base_completion_url(
         result_ref: issuance.reference,
         transaction_ref: issuance.transaction.transaction_id,
         ri: params[:ri],
@@ -84,11 +83,11 @@ module AuthOidcResultHandoff
     raise NotImplementedError, "#{self.class} must define #oidc_result_handoff_surface"
   end
 
-  def oidc_result_handoff_create_helper
-    raise NotImplementedError, "#{self.class} must define #oidc_result_handoff_create_helper"
+  def oidc_result_handoff_create_path(**)
+    raise NotImplementedError, "#{self.class} must define #oidc_result_handoff_create_path"
   end
 
-  def oidc_result_base_completion_helper
-    raise NotImplementedError, "#{self.class} must define #oidc_result_base_completion_helper"
+  def oidc_result_base_completion_url(**)
+    raise NotImplementedError, "#{self.class} must define #oidc_result_base_completion_url"
   end
 end

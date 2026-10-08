@@ -28,9 +28,9 @@ module Auth
 
         def oidc_result_handoff_surface = "app"
 
-        def oidc_result_handoff_create_helper = :auth_app_sign_oidc_handoff_path
+        def oidc_result_handoff_create_path(**) = auth_app_sign_oidc_handoff_path(**)
 
-        def oidc_result_base_completion_helper = :base_app_oauth_authorization_url
+        def oidc_result_base_completion_url(**) = base_app_oauth_authorization_url(**)
       end
     end
   end
