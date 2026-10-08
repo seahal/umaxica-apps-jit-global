@@ -55,8 +55,14 @@ class Base::App::WelcomesControllerTest < ActionDispatch::IntegrationTest
   end
 end
 
-class Base::App::WelcomeAuthorizationControllerTest < ActionController::TestCase
+# The self-RP Welcome page is reachable only after the root sign-in completed. Its one-shot gate
+# decides whether the page renders, and "Next" returns to the page the browser was heading to only
+# when a path-target token issued by this browser session's own sign-in for this surface says so.
+class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
   tests Base::App::WelcomesController
+
+  DASHBOARD = "/dashboard?ri=jp"
+  SESSION_NONCE = "welcome-return-target-nonce"
 
   setup do
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
@@ -64,45 +70,139 @@ class Base::App::WelcomeAuthorizationControllerTest < ActionController::TestCase
     @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
-
-    nonce = "welcome-policy-controller-test-nonce"
-    @cycle = ClientSignInFlow.create!(
-      principal_id: @user.id,
-      token: @token,
-      state_id: ClientSignInFlow.state_id_for("DASHBOARD_PENDING"),
-      return_to: "/after",
-      nonce_digest: ClientSignInFlow.digest_nonce(nonce),
-      issued_at: Time.current,
-      expires_at: 15.minutes.from_now,
-    )
-    SignInCycleLocator.new(@request.session, surface: :app, actor: @user, token: @token).issue!(@cycle, nonce: nonce)
+    @request.host = @host
+    browser_rp_cookie_pairs(
+      client_id: "base-app-ww", surface: "app", host: @host, actor: @user, token: @token,
+    ).each do |pair|
+      name, value = pair.split("=", 2)
+      @request.cookies[name] = Rack::Utils.unescape(value)
+    end
     @request.session[:app_sign_in_welcome] = {
       "remaining" => 5,
       "issued_at" => Time.current.to_i,
       "expires_at" => 10.minutes.from_now.to_i,
-      "sequence_id" => @cycle.public_id,
+      "sequence_id" => nil,
     }
-    @request.host = @host
-    @request.headers["X-TEST-CURRENT-USER"] = @user.id.to_s
-    @request.headers["X-TEST-SESSION-PUBLIC-ID"] = @token.public_id
-    @request.headers["Authorization"] = "Bearer #{access_token}"
+    @request.session[:authentication_pt_nonce] = SESSION_NONCE
+    @request.headers["X-Inertia"] = "true"
+    @request.headers["X-Inertia-Version"] = InertiaRails.configuration.version
   end
 
-  test "dashboard-pending welcome authorizes the sign-in cycle before rendering" do
+  test "Next returns to the verified pre-sign-in page" do
+    get :show, params: { ri: "jp", pt: path_target("/identity?ri=jp") }
+
+    assert_response :success
+    assert_equal "/identity?ri=jp", next_href
+  end
+
+  test "Next goes to the Dashboard when no return target was carried" do
     get :show, params: { ri: "jp" }
 
     assert_response :success
+    assert_equal DASHBOARD, next_href
+  end
+
+  test "a tampered return target is ignored" do
+    token = path_target("/identity?ri=jp")
+
+    get :show, params: { ri: "jp", pt: "#{token[0...-2]}xx" }
+
+    assert_equal DASHBOARD, next_href
+  end
+
+  test "a return target issued for another surface is ignored" do
+    get :show, params: { ri: "jp", pt: path_target("/identity?ri=jp", surface: "com") }
+
+    assert_equal DASHBOARD, next_href
+  end
+
+  test "a return target issued for another flow is ignored" do
+    get :show, params: { ri: "jp", pt: path_target("/identity?ri=jp", flow: "step_up") }
+
+    assert_equal DASHBOARD, next_href
+  end
+
+  test "a return target bound to another browser session is ignored" do
+    get :show, params: { ri: "jp", pt: path_target("/identity?ri=jp", session_nonce: "another-browser") }
+
+    assert_equal DASHBOARD, next_href
+  end
+
+  test "a return target is ignored when this browser session carries no nonce" do
+    token = path_target("/identity?ri=jp")
+    @request.session.delete(:authentication_pt_nonce)
+
+    get :show, params: { ri: "jp", pt: token }
+
+    assert_equal DASHBOARD, next_href
+  end
+
+  # MessageVerifier accepts a token strictly before its expiry instant.
+  [[-1, "/identity?ri=jp"], [0, DASHBOARD], [1, DASHBOARD]].each do |offset, expected|
+    test "a return target #{offset} second(s) from its expiry resolves to #{expected}" do
+      freeze_time
+      token = path_target("/identity?ri=jp", expires_in: 60.seconds)
+      travel 60.seconds + offset.seconds
+
+      get :show, params: { ri: "jp", pt: token }
+
+      assert_equal expected, next_href
+    end
+  end
+
+  ["/welcome?ri=jp", "/sign?ri=jp", "/sign/out?ri=jp"].each do |destination|
+    test "a return target of #{destination} cannot make Next loop" do
+      get :show, params: { ri: "jp", pt: path_target(destination) }
+
+      assert_equal DASHBOARD, next_href
+    end
+  end
+
+  ["https://evil.example/", "//evil.example/x", "/\\evil.example", "", " ", "/a\u0000b"].each do |destination|
+    test "a signed return target of #{destination.inspect} is not an internal path" do
+      get :show, params: { ri: "jp", pt: path_target(destination) }
+
+      assert_equal DASHBOARD, next_href
+    end
+  end
+
+  [nil, "", " ", "0", %w(a b), { "k" => "v" }].each do |value|
+    test "a return target parameter of #{value.inspect} falls back to the Dashboard" do
+      get :show, params: { ri: "jp", pt: value }
+
+      assert_response :success
+      assert_equal DASHBOARD, next_href
+    end
+  end
+
+  test "without the gate the page is skipped and no return target is followed" do
+    @request.session.delete(:app_sign_in_welcome)
+
+    get :show, params: { ri: "jp", pt: path_target("/identity?ri=jp") }
+
+    assert_redirected_to "/dashboard?ri=jp"
+  end
+
+  test "the gate is spent one use at a time and never extended" do
+    get :show, params: { ri: "jp" }
+
+    assert_equal 4, session[:app_sign_in_welcome]["remaining"]
   end
 
   private
 
-  def access_token
-    AuthenticationToken.encode(
-      @user,
-      host: @host,
-      session_public_id: @token.public_id,
-      resource_type: "client",
-      jwt_issuer_id: "surface:BASE_APP",
+  def next_href
+    response.parsed_body.dig("props", "next_link", "href")
+  end
+
+  def path_target(destination, surface: "app", flow: "authentication", session_nonce: SESSION_NONCE,
+                  expires_in: 5.minutes)
+    ActiveSupport::MessageVerifier.new(
+      Rails.application.key_generator.generate_key(AuthenticationRedirects::PATH_TARGET_TOKEN_SALT, 32),
+      digest: "SHA256", serializer: JSON, url_safe: true,
+    ).generate(
+      { "flow" => flow, "surface" => surface, "session_nonce" => session_nonce, "pt" => destination },
+      purpose: AuthenticationRedirects::PATH_TARGET_TOKEN_PURPOSE, expires_in: expires_in,
     )
   end
 end

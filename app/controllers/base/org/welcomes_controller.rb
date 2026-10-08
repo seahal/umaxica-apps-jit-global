@@ -13,6 +13,7 @@ module Base
       before_action :continue_welcome_sequence_without_content!
 
       def show
+        authorize!(current_operator, to: :show?)
         render inertia: true, props: {
           title: "Welcome!",
           next_link: {
@@ -33,7 +34,9 @@ module Base
       # The root sign-in flow is complete before this self-RP page is reachable, so only the
       # one-shot Welcome gate decides between showing the page and going on to the Dashboard.
       def continue_welcome_sequence_without_content!
-        redirect_to(after_welcome_path) unless consume_welcome_gate!
+        return redirect_to(after_welcome_path) unless consume_welcome_gate!
+
+        @welcome_next_path = welcome_return_path(params[AuthIoKeys::Params::PT])
       end
     end
   end

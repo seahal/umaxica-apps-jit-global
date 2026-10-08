@@ -9,6 +9,7 @@ module AuthenticationRedirects
   DEFAULT_PT_SESSION_KEY = AuthIoKeys::Session::DEFAULT_PT
   PATH_TARGET_TOKEN_SALT = "path_target_token"
   PATH_TARGET_TOKEN_PURPOSE = :path_target
+  PATH_TARGET_TOKEN_FLOW = "authentication"
   PATH_TARGET_TOKEN_EXPIRES_IN = 15.minutes
 
   # A controller asked for a sign-in destination without belonging to a sign-in surface.
@@ -372,7 +373,7 @@ module AuthenticationRedirects
   end
 
   def authentication_pt_flow
-    "authentication"
+    PATH_TARGET_TOKEN_FLOW
   end
 
   def authentication_pt_surface

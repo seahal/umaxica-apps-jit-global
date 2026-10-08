@@ -58,4 +58,35 @@ module SignInWelcomeGate
     expires_at = gate["expires_at"].to_i
     expires_at <= 0 || Time.current.to_i >= expires_at
   end
+
+  # The page the browser was heading to before sign-in, or nil. Only a path-target token that this
+  # browser session's own sign-in issued for this surface is honoured; an absent session nonce means
+  # the origin is unknown, so the caller falls back to its default. Welcome and the sign entry are
+  # refused as destinations so "Next" can never loop.
+  #
+  # The including class also supplies RedirectsSignedTargetSupport and CommonRedirect.
+  def welcome_return_path(token)
+    session_nonce = session[:authentication_pt_nonce].to_s
+    return if session_nonce.blank?
+
+    payload = verified_signed_target_payload(
+      token,
+      purpose: AuthenticationRedirects::PATH_TARGET_TOKEN_PURPOSE,
+      salt: AuthenticationRedirects::PATH_TARGET_TOKEN_SALT,
+      expected_flow: AuthenticationRedirects::PATH_TARGET_TOKEN_FLOW,
+      expected_surface: sign_in_sequence_surface,
+      session_nonce: session_nonce,
+    )
+    return if payload.blank?
+
+    path = safe_internal_path(signed_target_internal_path(payload["pt"]))
+    return if path.blank?
+
+    destination = URI.parse(path).path
+    return if destination == "/welcome" || destination == "/sign" || destination.start_with?("/sign/")
+
+    path
+  rescue URI::InvalidURIError
+    nil
+  end
 end
