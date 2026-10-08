@@ -1,0 +1,3 @@
+# Empty fixture — ensures the table is truncated during fixture loading
+# so that sessions left by an interrupted non-transactional test cannot count against a later
+# visitor that reuses the same primary key (client and operator tables are fixture-loaded too).
