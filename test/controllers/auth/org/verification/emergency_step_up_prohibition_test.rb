@@ -137,6 +137,8 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
     now = Time.current
     @token.update!(
       last_step_up_at: now, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up-credential", last_step_up_full_reauthentication: false,
       last_step_up_aal: "aal1", last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
       last_step_up_session_public_id: @token.public_id,
     )
