@@ -36,6 +36,8 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
       ClientSecretAuditOutbox.where(client_ref: @actor.public_id).find_each(&:destroy!)
       ClientSecretCredential.where(client_id: @actor.id).find_each(&:destroy!)
       ClientSecretIssuance.where(client_id: @actor.id).find_each(&:destroy!)
+      # An Identity is physically erased only once it has lapsed and is purgeable.
+      @actor.reload.update!(discard_at: @actor.created_at, purge_eligible_at: @actor.created_at)
       @actor.reload.destroy!
     end
   end

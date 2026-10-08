@@ -106,6 +106,8 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
       ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
       token&.destroy!
+      # An Identity is physically erased only once it has lapsed and is purgeable.
+      actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
       actor.reload.destroy!
     end
   end
@@ -214,6 +216,8 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
       ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
       token&.destroy!
+      # An Identity is physically erased only once it has lapsed and is purgeable.
+      actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
       actor.reload.destroy!
     end
   end
@@ -302,6 +306,8 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
       ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
       token&.destroy!
+      # An Identity is physically erased only once it has lapsed and is purgeable.
+      actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
       actor.reload.destroy!
     end
   end

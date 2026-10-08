@@ -15,6 +15,8 @@ class PreferenceCurrencyAssociationDestroyTest < ActiveSupport::TestCase
     preference = ClientPreference.create!(user: client)
     currency = ClientPreferenceCurrency.create!(preference: preference)
 
+    # An Identity is physically erased only once it has lapsed and is purgeable.
+    client.reload.update!(discard_at: client.created_at, purge_eligible_at: client.created_at)
     client.destroy!
 
     assert_not ClientPreference.exists?(preference.id)
@@ -26,6 +28,8 @@ class PreferenceCurrencyAssociationDestroyTest < ActiveSupport::TestCase
     preference = VisitorPreference.create!(visitor: visitor)
     currency = VisitorPreferenceCurrency.create!(preference: preference)
 
+    # An Identity is physically erased only once it has lapsed and is purgeable.
+    visitor.reload.update!(discard_at: visitor.created_at, purge_eligible_at: visitor.created_at)
     visitor.destroy!
 
     assert_not VisitorPreference.exists?(preference.id)

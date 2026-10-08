@@ -186,9 +186,13 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         raise Denied.new("admission continuation is unavailable", code: "invalid_admission")
       end
 
-      validate_admission_parent!(binding)
-      validate_admission_root!(binding)
-      validate_entry_parent_intent!(binding, expected_intent)
+      # The parent and root are the authority for this decision, so they are read from the
+      # writer: a replica that has not caught up would refuse a sound admission.
+      admission_binding_model(surface).connection_owner.connected_to(role: :writing) do
+        validate_admission_parent!(binding)
+        validate_admission_root!(binding)
+        validate_entry_parent_intent!(binding, expected_intent)
+      end
       binding
     end
 
@@ -861,24 +865,34 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       raise Denied.new("Auth ceremony session is invalid", code: "session_binding_mismatch")
     end
 
+    # A parent that cannot be loaded is an unavailable admission, not a server error: the refusal
+    # must stay the generic one whatever state the reference is in.
     def validate_admission_parent!(binding)
+      parent = admission_parent_record(binding)
+      now = parent&.class&.database_now
       available =
         case binding.parent_kind
         when :sign_in_flow
-          flow = binding.sign_in_flow.reload
-          flow.sign_in_primary_pending? && !flow.expired?(flow.class.database_now) && flow.principal_id.nil?
+          parent.present? && parent.sign_in_primary_pending? && !parent.expired?(now) && parent.principal_id.nil?
         when :authorization_transaction
-          transaction = binding.authorization_transaction.reload
-          now = transaction.class.database_now
-          transaction.status == "pending" && !transaction.expired?(now:) && !transaction.login_challenge_expired?(now:)
+          parent.present? && parent.status == "pending" && !parent.expired?(now:) &&
+          !parent.login_challenge_expired?(now:)
         when :step_up_ceremony_transaction
-          transaction = binding.step_up_ceremony_transaction.reload
-          %w(pending
-             verified).include?(transaction.status) && !transaction.expired?(now: transaction.class.database_now)
+          parent.present? && %w(pending verified).include?(parent.status) && !parent.expired?(now:)
         else
           false
         end
       raise Denied.new("admission parent is unavailable", code: "invalid_admission") unless available
+    end
+
+    def admission_parent_record(binding)
+      case binding.parent_kind
+      when :sign_in_flow then binding.sign_in_flow&.reload
+      when :authorization_transaction then binding.authorization_transaction&.reload
+      when :step_up_ceremony_transaction then binding.step_up_ceremony_transaction&.reload
+      end
+    rescue ActiveRecord::RecordNotFound
+      nil
     end
 
     def validate_admission_root!(binding)

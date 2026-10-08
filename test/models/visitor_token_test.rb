@@ -224,6 +224,8 @@ class VisitorTokenTest < ActiveSupport::TestCase
   test "destroying the actor removes tokens before its device sessions" do
     session_id = @token.device_session.id
 
+    # An Identity is physically erased only once it has lapsed and is purgeable.
+    @visitor.reload.update!(discard_at: @visitor.created_at, purge_eligible_at: @visitor.created_at)
     @visitor.destroy!
 
     assert_not VisitorToken.exists?(@token.id)

@@ -224,6 +224,8 @@ class ClientTokenTest < ActiveSupport::TestCase
   test "destroying the actor removes tokens before its device sessions" do
     session_id = @token.device_session.id
 
+    # An Identity is physically erased only once it has lapsed and is purgeable.
+    @user.reload.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
     @user.destroy!
 
     assert_not ClientToken.exists?(@token.id)
@@ -522,6 +524,8 @@ class ClientTokenTest < ActiveSupport::TestCase
 
   test "association deletion: destroys when user is destroyed" do
     @token.reload # Ensure it exists
+    # An Identity is physically erased only once it has lapsed and is purgeable.
+    @user.reload.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
     @user.destroy
     assert_raise(ActiveRecord::RecordNotFound) { @token.reload }
   end
