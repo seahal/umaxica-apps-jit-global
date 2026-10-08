@@ -159,7 +159,7 @@ class VisitorTest < ActiveSupport::TestCase
       address: "verified@example.com",
       confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate visitor, :verified_email?
   end
@@ -171,7 +171,7 @@ class VisitorTest < ActiveSupport::TestCase
       address: "loaded@example.com",
       confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     visitor.visitor_emails.load
 
     assert_predicate visitor, :verified_email?
@@ -184,7 +184,7 @@ class VisitorTest < ActiveSupport::TestCase
       address: "signup@example.com",
       confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED_WITH_SIGN_UP,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate visitor, :verified_email?
   end
@@ -196,7 +196,7 @@ class VisitorTest < ActiveSupport::TestCase
       address: "unverified@example.com",
       confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::UNVERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_not visitor.verified_email?
   end
@@ -207,7 +207,7 @@ class VisitorTest < ActiveSupport::TestCase
       visitor: visitor,
       number: "+15551234567",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate visitor, :verified_telephone?
   end
@@ -218,7 +218,7 @@ class VisitorTest < ActiveSupport::TestCase
       visitor: visitor,
       number: "+15557654321",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     visitor.visitor_telephones.load
 
     assert_predicate visitor, :verified_telephone?
@@ -230,7 +230,7 @@ class VisitorTest < ActiveSupport::TestCase
       visitor: visitor,
       number: "+15551234567",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_not visitor.verified_telephone?
   end
@@ -242,7 +242,7 @@ class VisitorTest < ActiveSupport::TestCase
       address: "verified@example.com",
       confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate visitor, :has_verified_pii?
   end
@@ -253,7 +253,7 @@ class VisitorTest < ActiveSupport::TestCase
       visitor: visitor,
       number: "+15551234567",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate visitor, :has_verified_pii?
   end
@@ -282,7 +282,7 @@ class VisitorTest < ActiveSupport::TestCase
       visitor: visitor,
       number: "+15550001111",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     VisitorPasskey.create!(
       visitor: visitor,
       webauthn_id: "visitor-passkey-login",
@@ -299,7 +299,7 @@ class VisitorTest < ActiveSupport::TestCase
       visitor: visitor,
       number: "+15550002222",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     VisitorPasskey.create!(
       visitor: visitor,
       webauthn_id: "loaded-passkey",

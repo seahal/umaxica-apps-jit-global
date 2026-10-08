@@ -198,18 +198,24 @@ class Visitor < ComPrincipalRecord
   end
 
   def verified_email?
+    # Only an effective binding identifies the Visitor (D-85); a verified-status candidate does not.
     if visitor_emails.loaded?
-      visitor_emails.any? { |e| VERIFIED_RECOVERY_EMAIL_STATUS_IDS.include?(e.visitor_email_status_id) }
+      visitor_emails.any? { |e|
+        e.binding_effective? && VERIFIED_RECOVERY_EMAIL_STATUS_IDS.include?(e.visitor_email_status_id)
+      }
     else
-      visitor_emails.exists?(visitor_email_status_id: VERIFIED_RECOVERY_EMAIL_STATUS_IDS)
+      visitor_emails.effective_binding.exists?(visitor_email_status_id: VERIFIED_RECOVERY_EMAIL_STATUS_IDS)
     end
   end
 
   def verified_telephone?
     if visitor_telephones.loaded?
-      visitor_telephones.any? { |t| VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS.include?(t.visitor_telephone_status_id) }
+      visitor_telephones.any? { |t|
+        t.binding_effective? && VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS.include?(t.visitor_telephone_status_id)
+      }
     else
-      visitor_telephones.exists?(visitor_telephone_status_id: VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS)
+      visitor_telephones.effective_binding
+        .exists?(visitor_telephone_status_id: VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS)
     end
   end
 

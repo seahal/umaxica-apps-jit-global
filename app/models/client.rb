@@ -351,8 +351,9 @@ class Client < AppPrincipalRecord
   end
 
   def verified_email?
+    # Only an effective binding identifies the Client (D-85); a verified-status candidate does not.
     return client_emails.any? { |e|
-      VERIFIED_RECOVERY_EMAIL_STATUS_IDS.include?(e.user_email_status_id)
+      e.binding_effective? && VERIFIED_RECOVERY_EMAIL_STATUS_IDS.include?(e.user_email_status_id)
     } if client_emails.loaded?
 
     client_emails.effective_binding.exists?(user_email_status_id: VERIFIED_RECOVERY_EMAIL_STATUS_IDS)
@@ -360,7 +361,7 @@ class Client < AppPrincipalRecord
 
   def verified_telephone?
     return client_telephones.any? { |t|
-      VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS.include?(t.user_identity_telephone_status_id)
+      t.binding_effective? && VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS.include?(t.user_identity_telephone_status_id)
     } if client_telephones.loaded?
 
     client_telephones.effective_binding.exists?(

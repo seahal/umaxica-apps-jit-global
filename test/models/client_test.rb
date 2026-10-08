@@ -219,6 +219,8 @@ class ClientTest < ActiveSupport::TestCase
   test "association deletion: destroys dependent client_emails" do
     email = ClientEmail.create!(user: @user, address: "delete_test@example.com")
     assert_difference("ClientEmail.count", -1) do
+      # An Identity is physically erased only once it has lapsed and is purgeable.
+      @user.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
       @user.destroy
     end
     assert_raise(ActiveRecord::RecordNotFound) { email.reload }
@@ -227,6 +229,8 @@ class ClientTest < ActiveSupport::TestCase
   test "association deletion: destroys dependent client_telephones" do
     phone = ClientTelephone.create!(user: @user, number: "+15551234567")
     assert_difference("ClientTelephone.count", -1) do
+      # An Identity is physically erased only once it has lapsed and is purgeable.
+      @user.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
       @user.destroy
     end
     assert_raise(ActiveRecord::RecordNotFound) { phone.reload }
@@ -238,6 +242,8 @@ class ClientTest < ActiveSupport::TestCase
       discard_at: 1.day.from_now,
     )
     assert_difference("ClientToken.count", -@user.client_tokens.count) do
+      # An Identity is physically erased only once it has lapsed and is purgeable.
+      @user.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
       @user.destroy
     end
     assert_raise(ActiveRecord::RecordNotFound) { token.reload }
@@ -326,7 +332,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :login_methods_remaining?
   end
@@ -337,7 +343,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     methods = @user.remaining_login_methods
 
@@ -350,7 +356,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :verified_email?
   end
@@ -361,7 +367,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "unverified@example.com",
       user_email_status_id: ClientEmailStatus::UNVERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_not @user.verified_email?
   end
@@ -371,7 +377,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :verified_telephone?
   end
@@ -381,7 +387,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15557654321",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
     @user.client_telephones.load
 
@@ -393,7 +399,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::UNVERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_not @user.verified_telephone?
   end
@@ -408,7 +414,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :has_verified_pii?
   end
@@ -418,7 +424,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :has_verified_pii?
   end
@@ -455,7 +461,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     methods = @user.remaining_login_methods(excluding_provider: "google")
 
@@ -492,7 +498,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     ClientPasskey.create!(
       user: @user,
       status_id: ClientPasskeyStatus::ACTIVE,
@@ -515,7 +521,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     ClientPasskey.create!(
       user: @user,
       status_id: ClientPasskeyStatus::ACTIVE,
@@ -583,7 +589,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_includes @user.remaining_social_unlink_methods(excluding_provider: "google"), :email
   end
@@ -628,7 +634,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED_WITH_SIGN_UP,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :verified_email?
   end
@@ -639,7 +645,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     @user.client_emails.load
 
@@ -651,7 +657,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED_WITH_SIGN_UP,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :verified_telephone?
   end
@@ -673,7 +679,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::UNVERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     ClientPasskey.create!(
       user: @user,
       status_id: ClientPasskeyStatus::ACTIVE,
@@ -690,7 +696,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     ClientPasskey.create!(
       user: @user,
       status_id: ClientPasskeyStatus::ACTIVE,
