@@ -357,7 +357,7 @@ class Base::Com::Identity::Telephones::RegistrationsControllerTest < ActionDispa
   test "telephone replacement preserves the old binding on wrong OTP and atomically audits the successful swap" do
     previous = @visitor.visitor_telephones.create!(
       number: "+15558675363", visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED, confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
     previous.finalize_binding!
     previous.update!(otp_attempts_count: 2)
     post base_com_identity_telephones_registration_url(ri: "jp", host: @host),

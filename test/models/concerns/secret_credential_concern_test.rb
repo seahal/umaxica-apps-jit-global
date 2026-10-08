@@ -28,7 +28,7 @@ class SecretCredentialConcernTest < ActiveSupport::TestCase
     @visitor.visitor_emails.create!(
       address: "legacy-secret-#{SecureRandom.hex(8)}@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     record, raw = VisitorSecretCredential.issue!(
       name: "Test Secret", visitor: @visitor, visitor_secret_credential_kind_id: VisitorSecretCredentialKind::LOGIN,
     )

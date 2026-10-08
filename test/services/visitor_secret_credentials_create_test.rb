@@ -12,7 +12,7 @@ class VisitorSecretCredentialsCreateTest < ActiveSupport::TestCase
       address: "visitor-#{SecureRandom.hex(4)}@example.com",
       confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
   end
 
   test "creates an active secret credential with a generated raw secret" do

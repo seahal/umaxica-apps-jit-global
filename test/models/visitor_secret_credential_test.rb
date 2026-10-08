@@ -495,7 +495,7 @@ class VisitorSecretCredentialTest
       otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
-    )
+    ).tap(&:finalize_binding!)
     visitor.reload
   end
 
