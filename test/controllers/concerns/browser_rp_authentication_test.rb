@@ -270,6 +270,24 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     assert_raises(RpSession::IssuanceRejected) { @rp_session.reload.issue_refresh_token! }
   end
 
+  test "DBGMEASURE" do
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
+    queries = []
+    callback =
+      lambda do |_name, start, finish, _id, payload|
+        next if payload[:name] == "SCHEMA" || payload[:cached]
+
+        queries << [payload[:sql].gsub(/\s+/, " ")[0, 110], ((finish - start) * 1000).round(2)]
+      end
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      get :show, params: { required: "1" }
+    end
+
+    assert_response :success
+    puts "QCOUNT #{queries.size} total_ms=#{queries.sum(&:last).round(2)}"
+    queries.each { |q| puts "Q #{q[1]}ms #{q[0]}" }
+  end
+
   # --- Refresh credential values (RP3) -----------------------------------------------------------
 
   ["", " ", "\t", "a\u0000b", " padded "].each do |value|

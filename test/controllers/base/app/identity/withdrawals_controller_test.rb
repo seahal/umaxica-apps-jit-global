@@ -34,6 +34,8 @@ class Base::App::Identity::WithdrawalsControllerTest < ActionDispatch::Integrati
                resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
+    install_base_browser_rp_credentials!(surface: "app", host: @host, actor: @client, token: @token)
     @headers = {
       "Authorization" => "Bearer #{access_token}",
       "Client-Agent" => "Mozilla/5.0",

@@ -65,7 +65,9 @@ module BaseSettingsWithdrawalFlow
       current_session_public_id: withdrawal_current_session_public_id,
       request: request,
     )
-    clear_auth_cookies!
+    # Suspension revokes the sessions server-side; this drops the browser's own RP credential so
+    # the next request is not presented with a credential that can only be refused.
+    clear_browser_rp_cookies!
     issue_withdrawal_ceremony!(subject: actor, purpose: "status")
 
     safe_redirect_to(

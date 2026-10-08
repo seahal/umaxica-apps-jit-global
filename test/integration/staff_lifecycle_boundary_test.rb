@@ -57,6 +57,11 @@ class StaffLifecycleBoundaryTest < ActionDispatch::IntegrationTest
       audience: "step_up:org",
       purpose_bound: true,
       audience_bound: true,
+      phishing_resistant_required: true,
+      user_verification_required: true,
+      full_reauthentication_required: false,
+      resource_bound: true,
+      tenant_bound: true,
     )
     StepUpResolver.stub(:call, satisfied, &)
   end

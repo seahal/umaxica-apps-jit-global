@@ -37,6 +37,7 @@ module BrowserRpAuthentication
   AUTHENTICATION_REQUIRED_REASONS = {
     missing: "access_credential_missing",
     invalid: "access_credential_invalid",
+    withdrawal_required: "withdrawal_required",
   }.freeze
   private_constant :AUTHENTICATION_REQUIRED_REASONS
 
@@ -220,6 +221,11 @@ module BrowserRpAuthentication
             "Denied by default authentication mode for #{self.class.name}##{action_name}. " \
             "Declare a concrete authentication mode before exposing this endpoint."
     when :bare, :open
+      # Ordinary credentials of a deactivated actor never open the withdrawal recovery pages; only
+      # the withdrawal ceremony does. Every other open page renders anonymous.
+      if browser_rp_access_state.status == :withdrawal_required && withdrawal_controller_allowlisted?
+        return render_browser_rp_withdrawal_required!
+      end
       return true unless authentication_credentials_invalid?
 
       clear_browser_rp_cookies!
@@ -278,6 +284,7 @@ module BrowserRpAuthentication
   def authenticate_browser_rp!
     return true if browser_rp_authenticated?
     return false if browser_rp_dependency_failed?
+    return render_browser_rp_withdrawal_required! if browser_rp_access_state.status == :withdrawal_required
 
     log_browser_rp_authentication_required!
     clear_browser_rp_cookies! if browser_rp_access_state.status == :invalid
@@ -523,6 +530,10 @@ module BrowserRpAuthentication
       rp_session: rp_session,
       access_payload: payload,
     )
+    # A deactivated actor holds a sound credential but is not an authenticated member: protected
+    # pages answer `withdrawal_required` and the credential is kept, so recovery stays reachable.
+    return withdrawal_required_browser_rp_access if resource.deactivated?
+
     @current_access_token_payload = payload
     AccessState.new(
       status: :valid,
@@ -562,7 +573,11 @@ module BrowserRpAuthentication
     return false unless browser_session.current_refresh_token_id == root_token.id
     return false unless browser_session.usable? && root_token.currently_usable?
     return false unless rp_session.active?
-    return false unless resource.is_a?(browser_rp_resource_class) && resource.active?
+    # The actor's withdrawal lifecycle is not a credential fact: a closing, suspended or terminated
+    # actor stays identified so AuthenticationWithdrawalGate can confine it to the withdrawal pages
+    # (test/security/invariants/withdrawal_gate_invariant_test.rb). Refusing it here would make
+    # withdrawal recovery unreachable.
+    return false unless resource.is_a?(browser_rp_resource_class)
     return false unless AuthorizationTokenClaims.base_session_id(payload).to_s == root_token.public_id.to_s
 
     expected_subject = OidcSubject.for(resource, resource_type: browser_rp_resource_type)
@@ -574,6 +589,43 @@ module BrowserRpAuthentication
 
   def invalid_browser_rp_access
     AccessState.new(status: :invalid, resource: nil, rp_session: nil, payload: nil, security_context: nil)
+  end
+
+  def withdrawal_required_browser_rp_access
+    AccessState.new(
+      status: :withdrawal_required, resource: nil, rp_session: nil, payload: nil, security_context: nil,
+    )
+  end
+
+  # The same answers root authentication gives a deactivated actor: JSON 403, and on the app and
+  # com Base surfaces an HTML redirect to that surface's withdrawal session entry.
+  def render_browser_rp_withdrawal_required!
+    response.set_header("Cache-Control", "no-store")
+    if request.format.json?
+      render json: { error: "WITHDRAWAL_REQUIRED", error_code: "withdrawal_required" }, status: :forbidden
+      return false
+    end
+
+    # The withdrawal pages are the recovery ceremony's own; ordinary authentication never opens
+    # them for a deactivated actor and never redirects from them
+    # (test/security/invariants/withdrawal_gate_invariant_test.rb).
+    if withdrawal_controller_allowlisted?
+      head :unauthorized
+      return false
+    end
+
+    ri = params[AuthIoKeys::Params::RI]
+    entry_path =
+      case controller_path.split("/").first(2)
+      when %w(base app) then new_base_app_identity_withdrawal_session_path(ri: ri)
+      when %w(base com) then new_base_com_identity_withdrawal_session_path(ri: ri)
+      end
+    if entry_path
+      redirect_to(entry_path, allow_other_host: false)
+    else
+      render plain: "Authentication required", status: :unauthorized, content_type: "text/plain"
+    end
+    false
   end
 
   def clear_browser_rp_access_cookie!

@@ -11,6 +11,8 @@ module BrowserRpSafeRequestRefresh
   def authenticate_browser_rp_safe_request!
     return if request.post? || request.patch? || request.put? || request.delete? || request.options?
     return if browser_rp_authenticated? || browser_rp_dependency_failed?
+    # A sound credential of a deactivated actor needs no refresh; it is answered as it stands.
+    return if browser_rp_access_state.status == :withdrawal_required
     return if refresh_browser_rp_credentials! == :dependency
 
     browser_rp_access_state

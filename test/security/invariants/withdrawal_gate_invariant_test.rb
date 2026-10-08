@@ -170,15 +170,8 @@ module Security
         satisfy_user_verification(token)
         token.update!(last_step_up_at: Time.current, last_step_up_scope: "withdrawal")
 
-        [
-          user,
-          {
-            "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-            "Authorization" => "Bearer #{
-              jwt_access_token_for(user, host: @host, session_public_id: token.public_id, resource_type: "client")
-            }",
-          },
-        ]
+        # Base pages authenticate by the Browser RP credential, issued here for this session.
+        [user, as_user_headers(user, host: @host, session_public_id: token.public_id)]
       end
 
       def withdrawal_visitor_and_headers(state)
@@ -193,18 +186,7 @@ module Security
         satisfy_visitor_verification(token)
         token.update!(last_step_up_at: Time.current, last_step_up_scope: "withdrawal")
 
-        [
-          visitor,
-          {
-            "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-            "Authorization" => "Bearer #{
-              jwt_access_token_for(
-                visitor, host: @com_host, session_public_id: token.public_id,
-                         resource_type: "visitor",
-              )
-            }",
-          },
-        ]
+        [visitor, as_visitor_headers(visitor, host: @com_host, session_public_id: token.public_id)]
       end
 
       def apply_withdrawal_state!(user, state)
@@ -255,7 +237,7 @@ module Security
       def with_step_up_satisfied(surface:, &)
         satisfied = Actor::StepUp.new(
           scope: "withdrawal",
-          required_aal: :aal2,
+          required_aal: nil,
           allowed_methods: %i(totp passkey),
           satisfied: true,
           satisfied_at: Time.current,
@@ -268,6 +250,11 @@ module Security
           audience: "step_up:#{surface}",
           purpose_bound: true,
           audience_bound: true,
+          phishing_resistant_required: true,
+          user_verification_required: true,
+          full_reauthentication_required: false,
+          resource_bound: true,
+          tenant_bound: true,
         )
         StepUpResolver.stub(:call, satisfied, &)
       end

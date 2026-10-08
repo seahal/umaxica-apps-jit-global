@@ -15,6 +15,9 @@ module Base
         declare_authentication_mode! :open
 
         before_action :withdrawal_ceremony_required!, only: %i(edit create destroy)
+        # Starting or changing a withdrawal needs an authenticated member; a deactivated actor is
+        # answered `withdrawal_required` here instead of an authorization failure.
+        before_action :authenticate_browser_rp!, only: %i(new update)
         before_action :authorize_withdrawal!, only: %i(new update)
         before_action :authorize_withdrawal_ceremony!, only: %i(edit create destroy)
 
