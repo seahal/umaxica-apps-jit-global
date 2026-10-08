@@ -206,7 +206,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     ).transaction
     # Synthetic evidence isolates the scope consumer; the success case verifies actual signatures.
     transaction.record_verification!(
-      method: "passkey", aal: "aal1", phishing_resistant: true,
+      method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: true,
       verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
     )
     ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
@@ -315,7 +315,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
       end
       # Synthetic evidence isolates cross-ticket transport, not signature verification.
       foreign.record_verification!(
-        method: "passkey", aal: "aal1", phishing_resistant: true,
+        method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: true,
         verified_at: foreign.class.database_now, verified_credential_ref: reference,
       )
       foreign_result = BaseAuthAdmissionCoordinator.issue_result!(
@@ -333,7 +333,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
       assert_not_predicate foreign_ceremony.reload, :completed?
 
       own.record_verification!(
-        method: "passkey", aal: "aal1", phishing_resistant: true,
+        method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: true,
         verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
       )
       ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
@@ -387,7 +387,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
       ).transaction
       # Synthetic evidence isolates freshness consumption; the success case verifies signatures.
       transaction.record_verification!(
-        method: "passkey", aal: "aal1", phishing_resistant: true,
+        method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: true,
         verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
       )
       ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(

@@ -154,7 +154,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
     )
     transaction = issuance.transaction
     transaction.record_verification!(
-      method: "passkey", aal: "aal1", phishing_resistant: true,
+      method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: true,
       verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
     )
     ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(

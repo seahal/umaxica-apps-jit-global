@@ -27,9 +27,14 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
         session: token,
       ).selectable_candidates.first
       scope = "settings_birthdate"
+      # D-70: a requirement states every mandatory property explicitly; nothing is defaulted.
       requirement = StepUpRequirement.new(
-        scope: scope, allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:#{surface}",
+        step_up_required: true, scope: scope, allowed_methods: [:passkey],
+        phishing_resistant_required: true, user_verification_required: true,
+        full_reauthentication_required: false, ttl: 15.minutes,
+        purpose: "step_up", audience: "step_up:#{surface}",
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
+        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
       pending = issue_base_step_up_admission!(
         actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
@@ -104,15 +109,19 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
       candidate.fetch(:public).fetch(:organization_public_id) == company.public_id
     end.fetch(:public)
     requirement = StepUpRequirement.new(
-      scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:com",
+      step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
+      phishing_resistant_required: true, user_verification_required: true,
+      full_reauthentication_required: false, ttl: 15.minutes,
+      purpose: "step_up", audience: "step_up:com",
       session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
+      actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
     proof = issue_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     ).transaction
     # This is a stored-evidence lifecycle test, not proof of a credential assertion.
     proof.record_verification!(
-      method: "passkey", aal: "aal1", phishing_resistant: true,
+      method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: true,
       verified_at: VisitorStepUpCeremonyTransaction.database_now, verified_credential_ref: "lifecycle-test-credential",
     )
     continuity, = VisitorAuthCeremonySession.rotate_and_admit!(
