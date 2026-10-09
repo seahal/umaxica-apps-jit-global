@@ -286,6 +286,11 @@ COPY --from=bun-toolchain /usr/local/bin/bun /usr/local/bin/bun
 # system dependencies, so without these `chrome-headless-shell` exits 127 on
 # libatk-1.0.so.0 and the whole project fails to start before any test runs.
 # Trixie carries the 64-bit-time_t (`t64`) names.
+#
+# chromium, xvfb, openbox, x11vnc, novnc, websockify and the Noto fonts are the
+# browser desktop (podman/core/desktop.sh). `chromium-sandbox` is left out on
+# purpose: it is a setuid helper, and `core` runs with `no-new-privileges`, so
+# it could never take effect -- Chromium uses its user-namespace sandbox here.
 # hadolint ignore=DL3008
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -299,9 +304,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && apt-get install --no-install-recommends -y \
     bat \
     bubblewrap \
+    chromium \
     entr \
     fd-find \
     fontconfig \
+    fonts-noto-cjk \
+    fonts-noto-color-emoji \
     fzf \
     git-secrets \
     gitleaks \
@@ -328,6 +336,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     lsb-release \
     ncdu \
     netcat-openbsd \
+    novnc \
+    openbox \
     openssh-client \
     openssh-server \
     openssl \
@@ -339,7 +349,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     tree \
     util-linux \
     watch \
+    websockify \
     wget \
+    x11vnc \
+    xvfb \
     yq \
     zip \
     && rm -rf /tmp/* /var/tmp/* "/home/${DOCKER_USER}/"
@@ -385,6 +398,7 @@ RUN mkdir -p "${HOME}/workspace" \
 
 COPY --chown=0:0 podman/core/entrypoint.sh /usr/local/bin/core-entrypoint
 COPY --chown=0:0 podman/core/dev-supervisor.sh /usr/local/bin/core-dev-supervisor
+COPY --chown=0:0 podman/core/desktop.sh /usr/local/bin/core-desktop
 # Root-owned and read-only: `global` owns the workspace bind, so leaving either of
 # these there would let anything with a development shell rewrite what the next
 # container start executes -- including which keys it accepts.
@@ -404,6 +418,7 @@ COPY --chown=0:0 .devcontainer/tailscale-wrapper.sh /usr/local/bin/tailscale
 RUN chmod 0555 \
     /usr/local/bin/core-entrypoint \
     /usr/local/bin/core-dev-supervisor \
+    /usr/local/bin/core-desktop \
     /usr/local/bin/remote-sshd-entrypoint \
     /usr/local/bin/tailscale \
     && chmod 0444 /etc/ssh/remote-sshd_config

@@ -134,6 +134,7 @@ podman/*
 podman/core/*
 !podman/core/entrypoint.sh
 !podman/core/dev-supervisor.sh
+!podman/core/desktop.sh
 !podman/core/sshd_config
 gke/
 

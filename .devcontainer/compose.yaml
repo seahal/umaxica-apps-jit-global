@@ -48,9 +48,19 @@ services:
       - "/usr/local/bin/core-entrypoint"
     # The container stays up idle; start the Rails/Vite/jobs stack manually
     # with `bin/dev` inside the container when it is wanted.
+    #
+    # `core-desktop exec` starts the browser desktop (Xvfb, x11vnc, noVNC) and then
+    # becomes the command that follows; a desktop that fails to start is logged and
+    # skipped. See docs/operations/development-browser-desktop.md.
     command:
+      - /usr/local/bin/core-desktop
+      - exec
       - sleep
       - infinity
+    # The display the browser desktop serves, so a headed browser started from any
+    # shell in this container is drawn where noVNC can show it.
+    environment:
+      DISPLAY: ":99"
     # Rails loads the ignored repository .env via config/boot.rb. Compose only
     # supplies the process environment; it does not own application configuration.
     env_file:
@@ -139,6 +149,8 @@ services:
     ports:
       - "127.0.0.1:3001:3000"
       - "127.0.0.1:3036:3036"
+      # noVNC for the browser desktop. The RFB port (5900) is not published.
+      - "127.0.0.1:6080:6080"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

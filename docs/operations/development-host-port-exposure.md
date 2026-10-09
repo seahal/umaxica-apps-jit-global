@@ -16,8 +16,8 @@ particular service, and a host firewall is not an acceptable substitute for it.
    `0.0.0.0`, which places the service on every host interface — LAN, Wi-Fi, Ethernet, and Tailscale
    included.
 3. **Host-native datastore access is loopback-only.** PostgreSQL (`primary`, `replica`) and Valkey
-   publish only explicit `127.0.0.1` mappings for host-native Rails (`5432`/`5433`, `6379`,
-   `6380`, and `6381`). Containers continue to use Compose DNS names.
+   publish only explicit `127.0.0.1` mappings for host-native Rails (`5432`/`5433`, `6379`, `6380`,
+   and `6381`). Containers continue to use Compose DNS names.
 
 ## Container Bind and Host Publication Are Separate Decisions
 
@@ -42,6 +42,7 @@ changing nothing about host exposure.
 | ------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `core` (Rails, 3000)            | `127.0.0.1:3001`           | Keeps host port `3000` available for host-native Rails while forwarding host browser traffic to container port `3000`.  |
 | `core` (Vite, 3036)             | `127.0.0.1:3036`           | `@vite/client` opens its HMR socket to the dev server from the browser.                                                 |
+| `core` (noVNC, 6080)            | `127.0.0.1:6080`           | The developer's own browser watches the container's browser desktop. RFB (5900) stays inside the container.             |
 | `primary` (writer)              | `127.0.0.1:5432`           | Host-native Rails writer; containers use `primary:5432`.                                                                |
 | `replica` (reader)              | `127.0.0.1:5433`           | Host-native Rails reader; containers use `replica:5432`.                                                                |
 | `valkey-cache`                  | `127.0.0.1:6380`           | Rails.cache. Dev Container uses Compose DNS `valkey-cache:6379`.                                                        |
@@ -130,14 +131,14 @@ Run on the **host**, not inside a container:
 
 ```sh
 podman ps --format 'table {{.Names}}\t{{.Ports}}'
-sudo ss -lntup | grep -E ':(3000|3001|3036|9092|5432|5433|6379|6380|6381|13000|4318)\b'
+sudo ss -lntup | grep -E ':(3000|3001|3036|6080|9092|5432|5433|6379|6380|6381|13000|4318)\b'
 ```
 
 Expected: `core` shows `127.0.0.1:3001->3000/tcp`, `primary` shows `127.0.0.1:5432->5432/tcp`,
 `replica` shows `127.0.0.1:5433->5432/tcp`, `valkey` shows `127.0.0.1:6379->6379/tcp`,
-`valkey-cache` shows `127.0.0.1:6380->6379/tcp`, `valkey-kvs` shows `127.0.0.1:6381->6379/tcp`. The Dev
-Container `core` service shows loopback-only Rails publications when the combined config is used. No
-line anywhere contains `0.0.0.0`, `*`, or a LAN address for these services. `grafana` shows
+`valkey-cache` shows `127.0.0.1:6380->6379/tcp`, `valkey-kvs` shows `127.0.0.1:6381->6379/tcp`. The
+Dev Container `core` service shows loopback-only Rails publications when the combined config is
+used. No line anywhere contains `0.0.0.0`, `*`, or a LAN address for these services. `grafana` shows
 `127.0.0.1:13000->3000/tcp` and `alloy` shows `127.0.0.1:4318->4318/tcp`; `tempo`, `prometheus` and
 `loki` show no host mapping at all.
 
