@@ -109,3 +109,38 @@ issue on an Auth host. The Auth session-limit pages
 as issuers; session-limit resolution is served by Base `/sign/in/limitation`. They are leftover
 carriers that Task 7.2 should have removed. Not yet removed: their three test files (28 failing
 tests) assert the retired Auth-side issuance.
+
+## Finding: the local sign-in admission has no production issuer (open decision)
+
+Observed at commit `9f653edc2` (worktree also held uncommitted dependency updates made outside this
+session: `Gemfile.lock` moved Rails from revision `b8725ee9a909` to `3f51c579b73a`; runs from run27
+on executed against the newer revision).
+
+- `BaseAuthAdmissionCoordinator.issue_local_entry!` has no caller under `app/`. Its last caller, the
+  Base `/sign` entry, was replaced by the self-RP OIDC entry (`OidcRpSignEntry`) in commit
+  `48ff7040d`. `bin/rails routes` shows Base `/sign` GET/POST and `/sign/completion` GET/POST only.
+- Production sign-in therefore always reaches Auth through `/oauth/authorize` and
+  `BaseAuthAdmissionCoordinator.issue_handoff!` (OIDC parent). The local ceremony branch
+  (`local_authentication_ceremony?`, the Auth `sign/handoffs` controllers, Base `sign/completions`,
+  `LocalAuthenticationResultCoordinator`) can be entered only with an admission that tests create by
+  calling `issue_local_entry!` directly.
+- Tests that admit a browser this way pass or fail on a path a user cannot start. The org emergency
+  passkey tests (11 errors) instead drive Base `POST /sign` and expect a local `entry_ref`; they
+  fail because that request now starts OIDC authorization.
+
+Not changed. Removing the local path and re-parenting those tests on the OIDC handoff is a Task 7.2
+size change touching Auth, Base and many test files; keeping it requires a production issuer. Raised
+to the user as a decision.
+
+## Run26 and run27 (development-side)
+
+| Run | Commit      | Runs   | Failures | Errors | Files |
+| --- | ----------- | ------ | -------- | ------ | ----- |
+| 26  | `66aba8eac` | 14,924 | 355      | 128    | 198   |
+| 27  | `326a3ca46` | 14,874 | 334      | 110    | 193   |
+
+Run27's failing set varied in the com realm between runs. Cause found afterwards: one
+`visitor_rp_sessions` row had outlived its device session in six worker clones
+(`test_com_ticket_db_{1,2,4,9,10,11}`), because fixture loading empties `visitor_device_sessions`
+with foreign keys suspended. An empty `test/fixtures/visitor_rp_sessions.yml` now truncates it;
+after a 16-worker run of `test/controllers/base/com` the count was 0 in all 17 databases.
