@@ -24,6 +24,7 @@ class SocialAuthLinkHandlerTest < ActiveSupport::TestCase
         SocialAuthLinkHandler.call(
           principal: replacement, credential_candidate: nil, current_client: @client,
           repository: @repository, provider: "google", uid: replacement.subject,
+          ceremony_started_at: Time.current,
         )
       end
 
@@ -41,6 +42,7 @@ class SocialAuthLinkHandlerTest < ActiveSupport::TestCase
         SocialAuthLinkHandler.call(
           principal: @principal, credential_candidate: nil, current_client: @client,
           repository: @repository, provider: "google", uid: @principal.subject,
+          ceremony_started_at: Time.current,
         )
       end
 
@@ -62,12 +64,39 @@ class SocialAuthLinkHandlerTest < ActiveSupport::TestCase
           SocialAuthLinkHandler.call(
             principal: @principal, credential_candidate: nil, current_client: @client,
             repository: @repository, provider: "google", uid: @principal.subject,
+            ceremony_started_at: Time.current,
           )
         end
       end
 
     assert_equal ["errors.social_auth.identity_conflict", :conflict], [error.i18n_key, error.status_code]
     assert_equal 0, ClientExternalIdentity.where(client_id: @client.id).count
+  end
+
+  test "Source audit failure rolls back a new social binding" do
+    assert_no_difference -> { ClientExternalIdentity.where(client_id: @client.id).count } do
+      assert_no_difference -> { ClientSocialAuditOutbox.where(owner_ref: @client.public_id).count } do
+        ClientSocialAuditOutbox.stub(:create!, ->(*) { raise RuntimeError, "Source audit unavailable" }) do
+          assert_raises(RuntimeError) do
+            SocialAuthLinkHandler.call(
+              principal: @principal, credential_candidate: nil, current_client: @client,
+              repository: @repository, provider: "google", uid: @principal.subject,
+              ceremony_started_at: Time.current,
+            )
+          end
+        end
+      end
+    end
+    assert_no_difference -> { ClientChronicle.where(event_id: ClientChronicleEvent::SOCIAL_LINKED).count } do
+      result = SocialAuthLinkHandler.call(
+        principal: @principal, credential_candidate: nil, current_client: @client,
+        repository: @repository, provider: "google", uid: @principal.subject,
+        ceremony_started_at: Time.current,
+      )
+
+      assert_equal @client, result.fetch(:user)
+    end
+    assert_equal 1, ClientSocialAuditOutbox.where(owner_ref: @client.public_id, event_name: "linked").count
   end
 
   test "refreshes an active identity already linked to the current client" do
@@ -78,6 +107,7 @@ class SocialAuthLinkHandlerTest < ActiveSupport::TestCase
     result = SocialAuthLinkHandler.call(
       principal: refreshed, credential_candidate: nil, current_client: @client,
       repository: @repository, provider: "google", uid: refreshed.subject,
+      ceremony_started_at: Time.current,
     )
 
     assert_equal @client, result.fetch(:user)

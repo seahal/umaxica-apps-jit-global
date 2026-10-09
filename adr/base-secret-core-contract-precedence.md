@@ -18,7 +18,7 @@ precedence can restore retired behavior. The latest user clarification also dist
 Sign display from Sign initiation.
 
 The [integration analysis](../research/base-secret-core-integration.md) describes dependencies. The
-[acceptance catalog](../research/base-secret-core-acceptance.md) defines the evidence needed to
+[acceptance catalog](../specs/base-secret-core-contract/checklists/acceptance.md) defines the evidence needed to
 judge delivery. Neither is a parallel active backlog.
 
 ## Decisions

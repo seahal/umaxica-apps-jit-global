@@ -15,7 +15,7 @@ and outbound provider traffic; and incomplete confidence in the REQ-to-step mapp
 mechanically against the full source requirements. Independent phases may be planned and
 investigated; only dependent execution slices are blocked. The detailed evidence, counter-tests,
 95-row traceability report and proposed gated sequence are preserved in
-[the full re-audit record](research/implementation/2026-09-14-refactor-plan-history.md#1-executive-verdict).
+[the full re-audit record](2026-09-14-refactor-plan-history.md#1-executive-verdict).
 
 This run is **planning only**. Do not implement, migrate, change routes/configuration/ADRs/tests, or
 continue into the preserved execution draft below. In particular, its former D-ENTRY selection is
@@ -913,7 +913,7 @@ This section records the current readiness decision for the read-only re-audit. 
 freezing one autonomous implementation run across all 95 requirements. It does not establish that
 every reported issue is exploitable or require stopping independent investigation and planning. The
 detailed report is preserved in
-[the full re-audit record](research/implementation/2026-09-14-refactor-plan-history.md#1-executive-verdict).
+[the full re-audit record](2026-09-14-refactor-plan-history.md#1-executive-verdict).
 
 The NO-GO is based on these unresolved gates:
 

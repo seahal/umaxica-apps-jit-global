@@ -3,6 +3,13 @@
 # explicitly so a local worker does not silently exercise a different set.
 
 development:
+  social_audit_delivery:
+    class: SocialAuditDeliveryJob
+    queue: retention
+    priority: 50
+    args:
+      - batch_size: 500
+    schedule: every 15 minutes
   contact_audit_delivery:
     class: ContactAuditDeliveryJob
     queue: retention
@@ -124,6 +131,13 @@ development:
 test: {}
 
 production:
+  social_audit_delivery:
+    class: SocialAuditDeliveryJob
+    queue: retention
+    priority: 50
+    args:
+      - batch_size: 500
+    schedule: every 15 minutes
   contact_audit_delivery:
     class: ContactAuditDeliveryJob
     queue: retention

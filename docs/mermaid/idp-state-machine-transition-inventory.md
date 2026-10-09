@@ -1376,7 +1376,8 @@ Implementation: `SocialCeremonyTransactionable`. Storage: `client_social_ceremon
 
 Sources: `app/models/client_social_ceremony_transaction.rb`,
 `app/models/concerns/social_ceremony_transactionable.rb`,
-`app/operations/identity_social_ceremony_final_committer.rb`.
+`app/operations/identity_social_ceremony_final_committer.rb`,
+`app/controllers/auth/app/social/link_completions_controller.rb`.
 
 Tests read: `test/models/concerns/social_ceremony_transactionable_test.rb`, UNKNOWN dedicated social
 final-committer test (path not present).
@@ -1384,6 +1385,7 @@ final-committer test (path not present).
 | Transition ID                   | Mutation kind         | From    | Event / Trigger                        | To       | Guard                                        | Side effect                     | Source file                                            | Confidence |
 | ------------------------------- | --------------------- | ------- | -------------------------------------- | -------- | -------------------------------------------- | ------------------------------- | ------------------------------------------------------ | ---------- |
 | idp-client-social-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! / Base final committer | consumed | unconsumed; TTL; row lock; unique result_jti | consumed_at and result evidence | app/models/concerns/social_ceremony_transactionable.rb | CONFIRMED  |
+| idp-client-social-ceremony:T002 | DOCUMENTED_TRANSITION | pending | app link completion | pending with expired grant | pending; unconsumed; TTL; candidate and session match | expires_at set to current DB time after candidate consumption | app/controllers/auth/app/social/link_completions_controller.rb | CONFIRMED |
 
 These concrete machines exist only in app/client. pending default; consumed terminal; TTL 10 minutes
 is predicate-only and background purge retires rows after retention. No canceled/failed state or
@@ -3325,7 +3327,8 @@ Implementation: `ClientExternalIdentityRepositoryAdapter / Apple notification pr
 
 Sources: `app/models/client_external_identity.rb`,
 `app/services/external_authentication_apple_notification_processor.rb`,
-`app/adapters/external_authentication/client_external_identity_repository_adapter.rb`.
+`app/adapters/external_authentication/client_external_identity_repository_adapter.rb`,
+`app/operations/withdrawal_personal_data_anonymizer.rb`.
 
 Tests read: `test/models/client_external_identity_test.rb`,
 `test/services/external_authentication_apple_notification_processor_test.rb`,
@@ -3339,11 +3342,14 @@ Tests read: `test/models/client_external_identity_test.rb`,
 | idp-client-external-identity:T004 | DOCUMENTED_TRANSITION | consent_revoked | account-deleted      | account_deleted | Not account_deleted; provider event newer than last_provider_event_at | Persist state/event time; revoke all sessions when applied | app/services/external_authentication_apple_notification_processor.rb                | CONFIRMED  |
 | idp-client-external-identity:T005 | OUT_OF_BAND           | active          | repository.activate! | active          | Provider matches; account_deleted refused                             | state direct update                                        | app/adapters/external_authentication/client_external_identity_repository_adapter.rb | CONFIRMED  |
 | idp-client-external-identity:T006 | OUT_OF_BAND           | consent_revoked | repository.activate! | active          | Provider matches; account_deleted refused                             | state direct update                                        | app/adapters/external_authentication/client_external_identity_repository_adapter.rb | CONFIRMED  |
+| idp-client-external-identity:T007 | DOCUMENTED_TRANSITION | active or consent_revoked | app withdrawal termination | removed | Source owner transaction and subject lock | release proof commits before identity removal | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
 
 String CHECK/no state reference. Consent revocation can reactivate through repository; account
 deletion cannot. Provider-event ordering uses timestamp comparison without row lock in processor.
 Event result and identity state are separate. Public repository destroy physically removes identity,
-separate from account_deleted; authentication metadata refresh does not change lifecycle. No cancel
+separate from account_deleted. App withdrawal termination records a keyed social release proof in
+the same Source transaction before removing the row; org Entra ID is unaffected. Authentication
+metadata refresh does not change lifecycle. No cancel
 or deadline: entitlement remains until provider/admin action.
 
 ## idp-client-totp-credential

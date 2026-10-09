@@ -7,20 +7,33 @@ class SocialAuthLoginHandler
     new(...).call
   end
 
-  def initialize(principal:, credential_candidate:, repository:, provider:, uid:, sign_up_entry: false)
+  def initialize(principal:, credential_candidate:, repository:, provider:, uid:, sign_up_entry: false,
+                 ceremony_started_at:)
     @principal = principal
     @credential_candidate = credential_candidate
     @repository = repository
     @provider = provider
     @uid = uid
     @sign_up_entry = sign_up_entry
+    @ceremony_started_at = ceremony_started_at
   end
 
   def call
-    identity = repository.find_by_subject(uid, lock: true)
-    Rails.logger.debug { "[SocialAuth] handle_login - identity found: #{identity.present?}" }
+    ClientExternalIdentity.with_subject_lock(
+      provider: provider, issuer: principal.issuer, subject: uid,
+    ) do
+      if ClientExternalIdentity.released_since_ceremony?(
+        provider: provider, issuer: principal.issuer, subject: uid,
+        ceremony_started_at: ceremony_started_at,
+      )
+        raise SocialAuth::ConflictError.new("errors.social_auth.identity_conflict")
+      end
 
-    identity ? login_existing_identity(identity) : pending_social_signup
+      identity = repository.find_by_subject(uid, lock: true)
+      Rails.logger.debug { "[SocialAuth] handle_login - identity found: #{identity.present?}" }
+
+      identity ? login_existing_identity(identity) : pending_social_signup
+    end
   rescue ActiveRecord::RecordNotUnique => e
     Rails.logger.info(
       JitLogEvent.format(
@@ -35,7 +48,8 @@ class SocialAuthLoginHandler
 
   private
 
-  attr_reader :principal, :credential_candidate, :repository, :provider, :uid, :sign_up_entry
+  attr_reader :principal, :credential_candidate, :repository, :provider, :uid, :sign_up_entry,
+              :ceremony_started_at
 
   def login_existing_identity(identity)
     user = identity.user

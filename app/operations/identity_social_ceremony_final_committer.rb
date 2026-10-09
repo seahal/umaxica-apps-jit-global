@@ -130,6 +130,7 @@ class IdentitySocialCeremonyFinalCommitter
       repository: identity_repository,
       provider: provider,
       uid: provider_subject,
+      ceremony_started_at: transaction.created_at,
     )[:identity]
   end
 
@@ -141,6 +142,7 @@ class IdentitySocialCeremonyFinalCommitter
       principal: callback_result.principal,
       credential_candidate: callback_result.credential_candidate,
       sign_up_entry: transaction_return_entry == "sign_up",
+      ceremony_started_at: transaction.created_at,
     )
     Commit.new(
       transaction: consumption.transaction,
@@ -175,6 +177,7 @@ class IdentitySocialCeremonyFinalCommitter
           principal: candidate.callback_result.principal,
           credential_candidate: candidate.callback_result.credential_candidate,
           birthdate: birthdate,
+          ceremony_started_at: transaction.created_at,
         )
         signup.user.with_lock do
           AppTicketRecord.connected_to(role: :writing) do

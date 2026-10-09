@@ -1,5 +1,9 @@
 # Contact Auth Integration Note
 
+> Historical, non-normative record. The acceptance wording below describes the former track, not
+> current authority. Its customer/user/staff terminology and Core/Sign ownership may be obsolete.
+> Revalidate any claim against the applicable accepted ADR and current code before using it.
+
 ## Status
 
 Accepted implementation note for the contact/auth integration track.

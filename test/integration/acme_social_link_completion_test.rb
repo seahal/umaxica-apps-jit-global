@@ -197,10 +197,11 @@ class BaseSocialLinkCompletionTest < ActionDispatch::IntegrationTest
         ].join("; ")
         fx0_user_headers["HTTP_COOKIE"] = fx0_user_headers.fetch("Cookie")
 
-        Struct.new(:state, :user_headers, :session_public_id, keyword_init: true).new(
+        Struct.new(:state, :user_headers, :session_public_id, :transaction_id, keyword_init: true).new(
           state: social_auth_state_from_response,
           user_headers: fx0_user_headers,
           session_public_id: fx0_session_public_id,
+          transaction_id: fx0_issuance.transaction.transaction_id,
         )
       end
 
@@ -227,6 +228,9 @@ class BaseSocialLinkCompletionTest < ActionDispatch::IntegrationTest
 
     assert_equal user.id, identity.user_id
     assert_not_respond_to identity, :token
+    grant = ClientSocialCeremonyTransaction.find_by!(transaction_id: grant_session.transaction_id)
+
+    assert_operator grant.expires_at, :<=, ClientSocialCeremonyTransaction.database_now
   end
 
   test "base completion rejects a malformed social result without committing" do

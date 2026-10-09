@@ -1,36 +1,22 @@
 # Documentation Index
 
-Repository documents are separated by purpose.
+Natural-language repository documentation for programmers, reviewers, maintainers, operators and
+AI coding agents. Product-user prose belongs in [manuals](../manuals/README.md).
 
-- `docs/` contains current, stable documentation for the single Rails app, its `app` / `org` / `com`
-  surfaces, and the repository boundary with the separate regional codebase.
-- `plans/` contains future work, proposals, drafts, migration plans, and backlog notes.
-- `adr/` contains accepted architecture and design decisions, including rationale and tradeoffs.
-- `research/` contains non-authoritative ADR-adjacent notes and implementation handoff notes.
-- `research/` contains exploratory observations and rough analysis that do not affect
-  implementation.
-- `evidence/` contains records of verification that was actually performed - what was checked, how,
-  what was observed, and what was concluded. Tests, validations, audits, security checks,
-  performance checks, migration verification, and defect reproduction belong here.
+- [Knowledge architecture](reference/repository-knowledge-architecture.md): directory responsibilities,
+  authority and maintenance.
+- [Runtime compatibility](reference/agent-runtime-compatibility.md): shared guidance and vendor adapters.
+- [Durable checklists](checklists/README.md): behavior that must keep working.
+- [Risk management](risk-management/README.md): actual risks, responses and ownership.
+- [Spec lifecycle](../specs/README.md): accepted changes, evidence and closure.
 
-Rules:
+Write repository prose in English, following [language policy](reference/repository-language-policy.md).
+Keep current descriptions aligned with delivered behavior. A future design is not evidence of delivery.
+Historical evidence remains in flat `evidence/` Markdown records named
+`YYYY-MM-DD-<topic>-XXXX.md`, with full commit hash and relevant dirty-worktree qualification.
 
-- Write repository documentation in English. Non-English text is allowed only for explicit
-  localization material, translation fixtures, or quoted external sources where the original
-  language matters. See `docs/reference/repository-language-policy.md`.
-- Keep non-authoritative implementation notes out of `docs/`, `plans/`, and `adr/`; use `research/`
-  instead.
-- Keep exploratory notes that do not affect implementation in `research/`.
-- Keep future-facing material out of `docs/`.
-- Keep stable operational guidance out of `plans/`.
-- Record major accepted design decisions in `adr/`.
-- When a plan is implemented, update `docs/`.
-- Keep intentions out of `evidence/`: it records work that was performed, not work that is planned.
-  A check that could not be completed is recorded as such, with the reason and the partial result.
-  `evidence/` is flat, holds only `.md` files named `YYYY-MM-DD-<topic>.md`, and never holds raw
-  logs, screenshots, dumps, or other generated artifacts - summarize those in the record.
-- Do not document `safe_path_from_encoded_rt` as an approved helper. It is deprecated; if this term
-  appears while updating docs, remove it or replace it with signed `ReturnTargetToken` handling.
+For current redirect guidance, use signed `ReturnTargetToken` handling rather than the deprecated
+`safe_path_from_encoded_rt` helper.
 
 Current content-model references:
 

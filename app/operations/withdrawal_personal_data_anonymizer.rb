@@ -66,8 +66,16 @@ class WithdrawalPersonalDataAnonymizer
   end
 
   def remove_common_social_identities
-    actor.client_external_identities.find_each do |identity|
-      identity.destroy!
+    AppPrincipalRecord.transaction do
+      actor.client_external_identities.order(:id).each do |identity|
+        ClientExternalIdentity.with_subject_lock(
+          provider: identity.provider, issuer: identity.issuer, subject: identity.subject,
+        ) do
+          identity.release!
+          ClientSocialAuditOutbox.record!(identity: identity, owner: actor, event_name: "unlinked")
+          identity.destroy!
+        end
+      end
     end
   end
 end

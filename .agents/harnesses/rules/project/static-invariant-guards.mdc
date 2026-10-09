@@ -15,6 +15,7 @@ provider or deployment edge:
 - `test/unit/security/webauthn_invariants_test.rb`
 - the authentication-method inventory/removal guard tests
 
-CI runs these guards as an explicit quality gate in addition to the complete Rails suite. A failing
+The GitHub Rails job runs the complete suite, which includes these guards. The local `bin/ci`
+pipeline also has an explicit invariant step. Run affected guards directly during local changes. A failing
 guard requires fixing the implementation or recording a reviewed contract change; do not weaken an
 assertion, add a broad allowlist, skip the test, or remove the guard to obtain green CI.

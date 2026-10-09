@@ -14,10 +14,12 @@ stateDiagram-v2
     state "released_at present (historical binding)" as released
     active --> released: release binding
     consent_revoked --> released: release binding
-    released --> [*]
+    released --> [*]: app withdrawal termination / Source release proof
     note right of active
         Resolution uses verified issuer and subject only.
         Active uniqueness is one subject per Client and one active
         social binding per Client across Google and Apple.
         A released subject cannot be reattached by an old callback.
+        App withdrawal removes the row only after persisting its keyed
+        release proof; org Entra authority is outside this axis.
     end note

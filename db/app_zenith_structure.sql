@@ -2982,6 +2982,52 @@ ALTER SEQUENCE public.client_secret_issuances_id_seq OWNED BY public.client_secr
 
 
 --
+-- Name: client_social_audit_outboxes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_social_audit_outboxes (
+    id bigint NOT NULL,
+    event_uuid uuid NOT NULL,
+    operation_ref character varying NOT NULL,
+    owner_ref character varying NOT NULL,
+    identity_ref character varying NOT NULL,
+    provider character varying NOT NULL,
+    provider_subject_digest character varying NOT NULL,
+    event_name character varying NOT NULL,
+    occurred_at timestamp(6) with time zone NOT NULL,
+    released_at timestamp(6) with time zone,
+    acknowledged_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT client_social_audit_acknowledgment CHECK (((acknowledged_at IS NULL) OR (acknowledged_at >= occurred_at))),
+    CONSTRAINT client_social_audit_digest CHECK (((provider_subject_digest)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT client_social_audit_event CHECK (((event_name)::text = ANY ((ARRAY['linked'::character varying, 'unlinked'::character varying])::text[]))),
+    CONSTRAINT client_social_audit_provider CHECK (((provider)::text = ANY ((ARRAY['apple'::character varying, 'google'::character varying])::text[]))),
+    CONSTRAINT client_social_audit_references CHECK ((((operation_ref)::text <> ''::text) AND ((owner_ref)::text <> ''::text) AND ((identity_ref)::text <> ''::text))),
+    CONSTRAINT client_social_audit_release CHECK (((((event_name)::text = 'linked'::text) AND (released_at IS NULL)) OR (((event_name)::text = 'unlinked'::text) AND (released_at IS NOT NULL))))
+);
+
+
+--
+-- Name: client_social_audit_outboxes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_social_audit_outboxes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_social_audit_outboxes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_social_audit_outboxes_id_seq OWNED BY public.client_social_audit_outboxes.id;
+
+
+--
 -- Name: client_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -4985,6 +5031,13 @@ ALTER TABLE ONLY public.client_secret_issuances ALTER COLUMN id SET DEFAULT next
 
 
 --
+-- Name: client_social_audit_outboxes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_social_audit_outboxes ALTER COLUMN id SET DEFAULT nextval('public.client_social_audit_outboxes_id_seq'::regclass);
+
+
+--
 -- Name: client_statuses id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -5959,6 +6012,14 @@ ALTER TABLE ONLY public.client_secret_issuances
 
 
 --
+-- Name: client_social_audit_outboxes client_social_audit_outboxes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_social_audit_outboxes
+    ADD CONSTRAINT client_social_audit_outboxes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: client_statuses client_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6328,6 +6389,20 @@ CREATE UNIQUE INDEX client_emails_effective_owner ON public.client_emails USING 
 --
 
 CREATE UNIQUE INDEX client_rotation_operation ON public.client_identifier_rotation_audits USING btree (operation_ref, channel, record_id);
+
+
+--
+-- Name: client_social_audit_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX client_social_audit_pending ON public.client_social_audit_outboxes USING btree (id) WHERE (acknowledged_at IS NULL);
+
+
+--
+-- Name: client_social_audit_release_lookup; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX client_social_audit_release_lookup ON public.client_social_audit_outboxes USING btree (provider, provider_subject_digest, released_at) WHERE ((event_name)::text = 'unlinked'::text);
 
 
 --
@@ -7532,6 +7607,13 @@ CREATE UNIQUE INDEX index_client_secret_issuances_on_id_and_client_id ON public.
 --
 
 CREATE UNIQUE INDEX index_client_secret_issuances_on_public_id ON public.client_secret_issuances USING btree (public_id);
+
+
+--
+-- Name: index_client_social_audit_outboxes_on_event_uuid; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_client_social_audit_outboxes_on_event_uuid ON public.client_social_audit_outboxes USING btree (event_uuid);
 
 
 --
@@ -9406,6 +9488,9 @@ ALTER TABLE ONLY public.client_preference_timezones
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261009211717'),
+('20261009211605'),
+('20261009204005'),
 ('20261008025001'),
 ('20261007224308'),
 ('20261007220227'),

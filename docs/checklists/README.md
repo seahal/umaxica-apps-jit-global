@@ -1,27 +1,19 @@
-# Checklists
+# Durable acceptance checklists
 
-Durable behavior that must keep working, one file per functional area (for example
-`authentication.md`, `session-management.md`, `authorization.md`).
+`docs/checklists/` states WHAT MUST KEEP WORKING. `test/`, `gait/` and `e2e/` implement checks;
+`evidence/` records WHAT WAS ACTUALLY OBSERVED. A checklist is neither a test result nor proof.
 
-```text
-docs/checklists/   WHAT MUST KEEP WORKING
-test/ gait/ e2e/   HOW IT IS TESTED
-evidence/          WHAT WAS ACTUALLY OBSERVED
-```
+- [Authentication](authentication.md)
+- [Session management](session-management.md)
+- [Authorization](authorization.md)
 
-A checklist item is a statement of behavior, not a test and not a record that anything was checked.
+Use one document per functional area, stable local IDs and explicit surface applicability. Link to
+the accepted contract instead of copying implementation details. Use ordinary behavior statements,
+not permanent checked boxes. Select lasting criteria from verified specs; one-time migration steps
+and temporary acceptance stay with the change.
 
-## Where items come from
-
-When a change in `specs/<feature>/` is implemented and verified, the acceptance criteria that
-describe lasting behavior are promoted here. Criteria that only describe the change itself (a
-migration step, a one-time cleanup) are not.
-
-## Using a checklist
-
-- Before changing behavior in an area, read its checklist.
-- If a change intentionally alters an item, update the item in the same change.
-- If a checklist disagrees with the code, a spec or an ADR, raise the disagreement instead of
-  picking a side.
-
-See `.agents/harnesses/rules/project/acceptance-checklists.mdc`.
+Read the relevant checklist before changing behavior. Update an intentionally changed contract in
+the same change, with its authorizing spec or ADR. Surface disagreements with code, specs or ADRs;
+never silently choose one. The initial entries extract existing accepted requirements, not a new
+claim that the current implementation has passed them. Do not duplicate broader QA scenario lists;
+link those where needed.

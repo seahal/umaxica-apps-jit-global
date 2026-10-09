@@ -67,7 +67,7 @@ reservation conflict and expiry predicates. Those results do not prove allocatio
 Passkey registration journey. Completion also requires real multi-connection
 issuance/confirmation/claim races, both registration paths across A=0..20, atomic confirmation,
 zero-generation omission and browser notification tests. See the
-[integration acceptance catalog](../research/base-secret-core-acceptance.md) and
+[integration acceptance catalog](../specs/base-secret-core-contract/checklists/acceptance.md) and
 [persistence proposal](../research/app-secret-persistence-shape-proposal.md).
 
 ## Delivered reconciliation (2026-10-06)

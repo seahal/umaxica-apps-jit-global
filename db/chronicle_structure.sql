@@ -834,6 +834,7 @@ CREATE TABLE public.client_chronicles (
     subject_type text NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    event_uuid uuid,
     CONSTRAINT user_activities_event_id_non_negative_check CHECK ((event_id >= 0)),
     CONSTRAINT user_activities_level_id_non_negative_check CHECK ((level_id >= 0))
 );
@@ -3323,6 +3324,13 @@ CREATE INDEX index_client_chronicles_on_event_id ON public.client_chronicles USI
 
 
 --
+-- Name: index_client_chronicles_on_event_uuid; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_client_chronicles_on_event_uuid ON public.client_chronicles USING btree (event_uuid);
+
+
+--
 -- Name: index_client_chronicles_on_level_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4130,6 +4138,8 @@ ALTER TABLE ONLY public.org_preference_chronicles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261009204220'),
+('20261009204011'),
 ('20260926130000'),
 ('20260921133000'),
 ('20260727130000'),

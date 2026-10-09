@@ -47,6 +47,7 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
       repository: repository,
       provider: principal.provider,
       uid: principal.subject,
+      ceremony_started_at: Time.current,
     )
 
     assert_equal client, result[:user]
@@ -74,6 +75,7 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
       repository: repository,
       provider: principal.provider,
       uid: principal.subject, sign_up_entry: true,
+      ceremony_started_at: Time.current,
     )
 
     assert result[:pending_social_signup]
@@ -103,6 +105,7 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
       repository: repository,
       provider: principal.provider,
       uid: principal.subject, sign_up_entry: true,
+      ceremony_started_at: Time.current,
     )
 
     assert result[:pending_social_signup]
@@ -132,6 +135,7 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
           repository: repository,
           provider: principal.provider,
           uid: principal.subject,
+          ceremony_started_at: Time.current,
         )
       end
 

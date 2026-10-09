@@ -1040,7 +1040,7 @@ credential-management coverage.
 
 The OTP delivery-event/DEBUG disclosure identified on 2026-10-03 is escalated as mandatory
 comprehensive remediation in the
-[active plan](../active/otp-observability-secret-exposure-remediation.md), under its
+[accepted remediation plan](../../specs/otp-observability-secret-exposure-remediation/plan.md), under its
 [accepted handling decision](../../adr/otp-observability-secret-exposure-remediation.md). The R15
 secret-protection work remains open until that plan's relevant completion criteria are verified;
 recording the issue is not its resolution.

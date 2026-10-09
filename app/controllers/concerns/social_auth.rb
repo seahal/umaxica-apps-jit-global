@@ -554,17 +554,20 @@ module SocialAuth
   end
 
   def resolve_social_auth_callback_result(callback_result, intent)
-    auth_social_admission_binding! if intent.to_s == "login"
-    resolve_external_authentication_use_case(callback_result, intent)
+    binding = auth_social_admission_binding! if intent.to_s == "login"
+    resolve_external_authentication_use_case(
+      callback_result, intent, ceremony_started_at: binding&.created_at,
+    )
   end
 
-  def resolve_external_authentication_use_case(callback_result, intent)
+  def resolve_external_authentication_use_case(callback_result, intent, ceremony_started_at:)
     case intent.to_s
     when "login"
       login_result = ExternalAuthenticationLoginUseCase.call(
         principal: callback_result.principal,
         credential_candidate: callback_result.credential_candidate,
         sign_up_entry: current_social_auth_entry == "sign_up",
+        ceremony_started_at: ceremony_started_at,
       )
       return ExternalAuthentication::CallbackOutcome.new(
         status: :signup_required,
@@ -590,11 +593,13 @@ module SocialAuth
     token = social_auth_current_session_token
     raise SocialAuth::UnauthorizedError.new("errors.social_auth.not_logged_in") unless token
 
+    transaction = active_social_link_transaction!(token, callback_result.principal.provider)
+
     candidate = IdentitySocialCeremonyCandidateStore.store!(
       surface: "app", actor_ref: current_client.public_id,
-      session_ref: token.device_session.public_id, transaction_id: SecureRandom.uuid,
+      session_ref: token.device_session.public_id, transaction_id: transaction.transaction_id,
       operation: "link", provider: callback_result.principal.provider, callback_result: callback_result,
-      expires_at: IdentitySocialCeremonyCandidate.database_now + STATE_TTL,
+      expires_at: [transaction.expires_at, IdentitySocialCeremonyCandidate.database_now + STATE_TTL].min,
     )
     session[SOCIAL_LINK_COMPLETION_SESSION_KEY] = [candidate.ref, token.public_id]
     response.headers["Cache-Control"] = "private, no-store"
@@ -603,6 +608,22 @@ module SocialAuth
     render "auth/shared/social_link_completion", layout: false,
                                                  locals: { candidate_ref: candidate.ref, ri: params[:ri] }
     nil
+  end
+
+  def active_social_link_transaction!(token, provider)
+    grant = social_ceremony_grant
+    unless grant["operation"] == "link" && grant["actor_ref"] == current_client.public_id &&
+        grant["session_ref"] == token.device_session.public_id && grant["provider"] == provider
+      raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+    end
+
+    transaction = IdentitySocialCeremonyReplayStore.for("app").find_transaction!(grant["transaction_id"])
+    return transaction if transaction.grant_jti == grant["jti"] &&
+      transaction.status == SocialCeremonyTransactionable::STATUS_PENDING &&
+      transaction.consumed_at.nil? &&
+      transaction.expires_at > IdentitySocialCeremonyCandidate.database_now
+
+    raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
   end
 
   def classify_social_auth_error_reason(error)

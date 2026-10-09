@@ -4,6 +4,8 @@
 # Run using bin/ci
 
 CI.run do
+  step "Structure: Repository knowledge", "scripts/check-repository-knowledge"
+
   step "Setup: create test databases",
        "env RAILS_ENV=test bin/rails db:create"
   step "Setup: test database",

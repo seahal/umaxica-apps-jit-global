@@ -15,3 +15,7 @@ description: Read and maintain docs/checklists/ when changing behavior it covers
 - When a checklist disagrees with current code, a spec or an ADR, report the disagreement before
   choosing an implementation path.
 - A checklist item is not evidence. Record what was actually verified in `evidence/`.
+
+Keep item IDs stable within each functional checklist. State surface applicability and link the
+accepted source. Use behavior statements, not permanent checked boxes or copies of test code.
+One-time migration and feature-only criteria stay in their spec.

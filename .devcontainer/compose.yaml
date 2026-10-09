@@ -101,11 +101,12 @@ services:
         target: "/home/global/workspace"
         bind:
           selinux: Z
-      # The Dev Container string-form `readonly` mounts are writable with the
-      # current rootless Podman provider. Keep host configuration and guarded
-      # workspace paths in Compose long syntax so the effective mount flags stay
-      # inspectable. The host SSH directory is intentionally absent: nothing in
-      # this container needs host private keys.
+      - type: bind
+        source: "./podman/alloy"
+        target: "/home/global/workspace/podman/alloy"
+        read_only: true
+        bind:
+          selinux: Z
       - type: bind
         source: "./.github"
         target: "/home/global/workspace/.github"

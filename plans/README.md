@@ -12,7 +12,7 @@ Investigation and decision-support material lives in `research/`, not here.
 ## Source of truth
 
 An accepted change is specified in `specs/<feature>/` when it warrants a written specification (see
-`specs/README.md`); GitHub issues track accepted work.
+`specs/README.md`). Scheduling tools, when used, do not duplicate the change contract.
 
 Documents under `plans/` MUST NOT override current accepted ADRs, explicit architecture contracts,
 or current implementation decisions.
@@ -23,7 +23,7 @@ An open, recent, or detailed plan does not by itself establish current architect
 
 Planning material should normally move through:
 
-`research -> backlog -> accepted (GitHub issue, and specs/<feature>/ when warranted) -> implementation`
+`optional research -> optional backlog -> accepted specification when warranted -> implementation`
 
 After implementation, obsolete planning documents should be deleted or moved to `archive/` only when
 historical traceability is useful.

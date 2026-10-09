@@ -9,7 +9,7 @@ code, database, or external configuration is changed by creating this analysis.
 
 The target decisions and scoped replacements are canonical in
 [contract precedence](../adr/base-secret-core-contract-precedence.md). The
-[acceptance catalog](base-secret-core-acceptance.md) supplies completion criteria. Older
+[acceptance catalog](../specs/base-secret-core-contract/checklists/acceptance.md) supplies completion criteria. Older
 implementation instructions are input material, not competing current contracts.
 
 Companion decision-support material covers [customer copy](base-secret-core-customer-copy.md),

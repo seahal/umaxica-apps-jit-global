@@ -26,9 +26,12 @@ class SocialAuthLinkHandlerDiagnosticsTest < ActiveSupport::TestCase
       audience: "test-client", verification_authority: "google_oidc", verified_at: ClientExternalIdentity.database_now,
     )
     subject = SocialAuthLinkHandler.new(
-      principal: nil, credential_candidate: nil, current_client: @client,
+      principal: ExternalAuthentication::VerifiedPrincipal.new(
+        provider: "google", subject: "uid-1", issuer: "https://accounts.google.com",
+        audience: "test-client", verified_at: Time.current, verification_authority: "google_oidc",
+      ), credential_candidate: nil, current_client: @client,
       repository: ExternalAuthentication::ClientExternalIdentityRepositoryAdapter.new(provider: "google"),
-      provider: "google", uid: "uid-1",
+      provider: "google", uid: "uid-1", ceremony_started_at: Time.current,
     )
 
     assert_raises(SocialAuth::ConflictError) { subject.call }
@@ -43,9 +46,12 @@ class SocialAuthLinkHandlerDiagnosticsTest < ActiveSupport::TestCase
       audience: "test-client", verification_authority: "google_oidc", verified_at: ClientExternalIdentity.database_now,
     )
     subject = SocialAuthLinkHandler.new(
-      principal: nil, credential_candidate: nil, current_client: @client,
+      principal: ExternalAuthentication::VerifiedPrincipal.new(
+        provider: "google", subject: "uid-1", issuer: "https://accounts.google.com",
+        audience: "test-client", verified_at: Time.current, verification_authority: "google_oidc",
+      ), credential_candidate: nil, current_client: @client,
       repository: ExternalAuthentication::ClientExternalIdentityRepositoryAdapter.new(provider: "google"),
-      provider: "google", uid: "uid-1",
+      provider: "google", uid: "uid-1", ceremony_started_at: Time.current,
     )
 
     assert_raises(SocialAuth::ConflictError) { subject.call }

@@ -1,58 +1,23 @@
 ---
 name: repository-knowledge-tree
-description: This repo's knowledge directories, decision priority, and note locations and promotion.
+description: Select knowledge by scope and distinguish intended contracts from observed implementation.
 ---
 
 # Repository Knowledge Tree
 
-Repository knowledge is separated by purpose. Use these as required context inputs, not optional
-background.
+Use `docs/reference/repository-knowledge-architecture.md` for directory ownership and
+`specs/README.md` for change lifecycle. Load the affected material, not every knowledge directory.
 
-- `adr/` — accepted architecture and design decisions.
-- `specs/` — accepted changes: what, why, how and tasks, one directory per change.
-- `docs/` — the current system, for programmers, operators and agents.
-- `docs/dictionary/` — DDD ubiquitous-language definitions for this application.
-- `docs/checklists/` — durable behavior that must keep working.
-- `evidence/` — what was actually observed against a particular commit.
-- `plans/backlog/` — proposed work that has not been accepted.
-- `research/` — investigations, rejected approaches, failures and handoff context.
-- `manuals/` — prose for product users; presence here does not mean published.
+1. Find the applicable accepted ADR, open spec, current docs and durable checklist.
+2. Compare their scoped requirements with the actual code and observations. A code defect does not
+   supersede a contract; a desired design does not prove implementation. Report concrete conflicts
+   and resolve them within the user's authorization before choosing a conflicting implementation.
+3. Consult backlog and research for rationale, rejected approaches and constraints when useful.
+   Revalidate facts used in a current decision. Historical instructions are context, not new tasks.
+4. Promote accepted decisions to ADRs, accepted changes to specs, delivered explanations to docs,
+   and lasting acceptance to checklists. Preserve useful negative knowledge in research.
 
-Only `adr/`, `docs/`, and an open spec in `specs/` are source-of-truth decision material. Do not
-treat `research/`, `plans/`, `evidence/`, or a closed spec as a description of the current system.
-
-## Decision priority when sources disagree
-
-1. Explicit user instruction in the current conversation.
-2. Current code and tests.
-3. Accepted ADRs in `adr/`.
-4. Stable docs in `docs/`, including `docs/checklists/`.
-5. An open spec in `specs/`, for the change it covers.
-6. Backlog items in `plans/backlog/`.
-7. Material in `research/`.
-8. Archived plans in `plans/archive/`.
-
-If an ADR, doc or checklist conflicts with current code, call out the conflict before choosing an
-implementation path.
-
-## Where research goes
-
-- Use `research/implementation/YYYY-MM-DD-<task-slug>.md` for durable implementation decisions, plan
-  deviations, compromises, and handoff context discovered while carrying out a change. For the
-  contents and discipline of a note, see `implementation-notes`.
-- Use `research/` for investigation, audit, surprising repository behavior, and failed or rejected
-  approaches.
-- Research has no maintenance obligation and may be stale. Re-verify a fact before relying on it.
-- Keep research out of docs, specs, and ADRs until it is ready to be promoted.
-
-## Promotion
-
-Before finishing, review anything written under `research/` for the task and promote stable content:
-
-- accepted design decisions → `adr/`
-- future work → `plans/backlog/`
-- an accepted change → `specs/<feature>/`
-- implemented stable behavior → `docs/`
-- behavior that must keep working → `docs/checklists/`
-
-Leave only provisional or handoff context in `research/`.
+Research has no general maintenance obligation. Change-specific research may live in
+`specs/<feature>/research.md` and remains non-normative. Other implementation notes belong in
+`research/implementation/`; see `generic/implementation-notes.mdc`. Evidence records only actual
+observations against a stated revision and never substitutes for a current contract.

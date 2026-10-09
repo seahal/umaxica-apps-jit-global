@@ -5,7 +5,7 @@ evidence of a working screen. The Japanese text below is intended customer copy,
 exception to English repository prose.
 
 Use the [accepted contract](../adr/base-secret-core-contract-precedence.md) and
-[acceptance catalog](base-secret-core-acceptance.md) when connecting copy to UI states. Actual
+[acceptance catalog](../specs/base-secret-core-contract/checklists/acceptance.md) when connecting copy to UI states. Actual
 translation keys must follow the existing locale namespace; identifiers in the first column are
 semantic labels, not proposed replacement keys.
 

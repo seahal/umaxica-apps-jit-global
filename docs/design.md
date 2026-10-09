@@ -9,7 +9,8 @@ they do not share authorization, sessions, server props, or a new cross-stack co
 Start here, then follow the [host/view inventory](reference/ui-view-inventory.md),
 [DADS source ledger](reference/digital-agency-design-system.md), and
 [implementation/deviation record](reference/ui-normalization-ledger.md).
-The historical `DESIGN.md` and `docs/architecture/design.md` remain archival material.
+The [historical presentation notes](../research/historical-presentation-design.md) and
+`docs/architecture/design.md` remain archival material.
 DADS beta v2.18.0 informs these decisions; it is neither an installed library nor a product brand.
 
 ## Decision rules

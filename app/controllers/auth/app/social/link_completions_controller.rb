@@ -63,15 +63,30 @@ module Auth
           end
 
           candidate = IdentitySocialCeremonyCandidateStore.fetch!(reference)
+          grant = ClientSocialCeremonyTransaction.lock.find_by!(transaction_id: record.transaction_id)
+          validate_link_grant!(grant, candidate, token, now)
+
           ExternalAuthenticationLinkUseCase.call(
             principal: candidate.callback_result.principal,
             credential_candidate: candidate.callback_result.credential_candidate,
             user: current_client,
+            ceremony_started_at: grant.created_at,
           )
           record.consume!(
             now: now, error_class: IdentitySocialCeremonyContract::Error,
             not_found_message: "social link candidate unavailable", expired_message: "social link candidate expired",
           )
+          grant.expire!
+        end
+
+        def validate_link_grant!(grant, candidate, token, now)
+          return if grant.operation == "link" && grant.provider == candidate.provider &&
+            grant.actor_ref == current_client.public_id &&
+            grant.session_ref == token.device_session.public_id &&
+            grant.status == SocialCeremonyTransactionable::STATUS_PENDING &&
+            grant.consumed_at.nil? && grant.expires_at > now
+
+          raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
         end
       end
     end

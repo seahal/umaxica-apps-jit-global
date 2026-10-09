@@ -52,3 +52,8 @@ that vulnerabilities in the pinned revision cannot be detected by automated advi
   commit message so the exposure window of any later advisory can be established.
 - Revisit this decision before the 8.2 release if a critical Rails vulnerability is announced,
   or if the 8.2 release is delayed well beyond the team's expectation.
+
+## Current tracking
+
+The [risk record](../docs/risk-management/risks/git-sourced-dependency-advisories.md) tracks ownership,
+review triggers and the limits of this historical acceptance. It does not expand this decision.

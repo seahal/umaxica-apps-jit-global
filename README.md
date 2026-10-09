@@ -337,15 +337,17 @@ run in CI, not in the hooks.
 
 ## Repository Knowledge Base
 
-- `adr/` — accepted architecture and design decisions, with the tradeoffs behind them.
-- `docs/` — current, stable documentation of how the system works.
-- `research/` — exploratory field notes and rough analysis not yet stable enough for `docs/`,
-  `plans/`, `adr/`, or `research/`.
-- `research/` — non-authoritative implementation handoff and ADR-adjacent notes, candidates for
-  later promotion.
-- `plans/` — planning material not yet an implementation source of truth; GitHub issues remain the
-  source of truth for accepted active work.
-- `evidence/` — dated, flat records of completed tests, verifications, and audits.
+See [repository knowledge architecture](docs/reference/repository-knowledge-architecture.md) for
+ownership, authority and lifecycle.
+
+- [Specs](specs/README.md): accepted change contracts.
+- [ADRs](adr/repository-knowledge-and-agent-harness.md): accepted decisions and their rationale.
+- [Docs](docs/index.md): current engineering documentation and durable acceptance checklists.
+- [Research](research/README.md): non-authoritative institutional memory and rejected approaches.
+- [Plans](plans/README.md): unaccepted proposals and useful planning history.
+- `evidence/`: actual observations against a stated revision, not expectations.
+- [Manuals](manuals/README.md): user guidance; presence does not mean published.
+- `test/`, `gait/`, `e2e/`: Minitest, Vitest and Playwright respectively.
 
 ## Acknowledgement
 

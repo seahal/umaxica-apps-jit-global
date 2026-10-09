@@ -29,7 +29,8 @@ under which a question is worth reopening.
 
 ## Promotion
 
-Content that stops being provisional moves out:
+Promote accepted or current content into its owning artifact and link its provenance. Retain useful
+rejected reasoning and uncertainty here without creating a maintenance obligation:
 
 - an accepted decision → `adr/`
 - proposed future work → `plans/backlog/`

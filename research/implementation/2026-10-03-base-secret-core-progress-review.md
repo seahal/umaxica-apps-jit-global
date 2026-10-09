@@ -9,7 +9,7 @@ changed. No tests, runners, browser procedures, migrations, services, or recover
 executed. Existing test reports were read, not reproduced.
 
 The review uses the [integration analysis](../../research/base-secret-core-integration.md) and
-[acceptance catalog](../../research/base-secret-core-acceptance.md). Its purpose is to identify
+[acceptance catalog](../../specs/base-secret-core-contract/checklists/acceptance.md). Its purpose is to identify
 remaining evidence and coordination needs, not to add another active implementation ledger or infer
 progress percentages from file counts.
 

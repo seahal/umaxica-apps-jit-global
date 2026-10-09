@@ -27,6 +27,7 @@ class SocialAuthTypedCallbackBoundaryTest < ActiveSupport::TestCase
       principal: principal,
       credential_candidate: nil,
       sign_up_entry: false,
+      ceremony_started_at: Time.current,
     )
 
     assert_equal client, result.user

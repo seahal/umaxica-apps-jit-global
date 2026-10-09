@@ -7,6 +7,13 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
 
   fixtures :clients, :client_statuses, :client_email_statuses, :visitor_statuses, :operator_statuses
 
+  setup do
+    TurnstileVerifierStub.enabled = false
+    TurnstileVerifierStub.response = nil
+    TurnstileVerifierStub.challenge_enabled = false
+    TurnstileVerifierStub.challenge_response = nil
+  end
+
   teardown do
     TurnstileVerifierStub.enabled = false
     TurnstileVerifierStub.response = nil

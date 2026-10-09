@@ -3,9 +3,16 @@
 
 # Reference data (lookup / status tables) is normally owned by migrations, which insert the fixed
 # rows with `INSERT ... ON CONFLICT DO NOTHING` (see adr/reference-table-discipline.md). This file
-# also replays the current occurrence catalog and avatar lifecycle states after a schema-only load, because that database's
+# also replays fixed social Chronicle references after a schema-only load, because that database's
 # migration markers suppress the original data inserts. The remaining content is development/test
-# sample fixtures (sample Client / Operator and their email/secret), and is a no-op in production.
+# reference and sample data; production seeds only the social Chronicle references.
+
+ChronicleRecord.connected_to(role: :writing) do
+  ClientChronicleEvent.insert_missing_fixed_ids!(
+    [ClientChronicleEvent::SOCIAL_LINKED, ClientChronicleEvent::SOCIAL_UNLINKED],
+  )
+  ClientChronicleLevel.insert_missing_fixed_ids!([ClientChronicleLevel::NOTHING])
+end
 
 return if Rails.env.production?
 

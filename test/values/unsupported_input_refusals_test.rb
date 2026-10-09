@@ -84,9 +84,15 @@ class UnsupportedInputRefusalsTest < ActiveSupport::TestCase
       error =
         assert_raises(ArgumentError) do
           if use_case == ExternalAuthenticationLinkUseCase
-            use_case.new(principal: "not-verified", credential_candidate: nil, user: nil)
+            use_case.new(
+              principal: "not-verified", credential_candidate: nil, user: nil,
+              ceremony_started_at: Time.current,
+            )
           else
-            use_case.new(principal: "not-verified", credential_candidate: nil, birthdate: nil)
+            use_case.new(
+              principal: "not-verified", credential_candidate: nil, birthdate: nil,
+              ceremony_started_at: Time.current,
+            )
           end
         end
 

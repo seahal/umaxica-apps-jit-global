@@ -27,6 +27,7 @@ class ExternalAuthenticationLoginUseCaseTest < ActiveSupport::TestCase
       principal: principal,
       credential_candidate: nil,
       sign_up_entry: false,
+      ceremony_started_at: Time.current,
     )
 
     assert_instance_of ExternalAuthentication::LoginResult, result
@@ -51,6 +52,7 @@ class ExternalAuthenticationLoginUseCaseTest < ActiveSupport::TestCase
         principal: principal,
         credential_candidate: nil,
         sign_up_entry: true,
+        ceremony_started_at: Time.current,
       )
 
       assert_instance_of ExternalAuthentication::LoginResult, result
@@ -67,6 +69,7 @@ class ExternalAuthenticationLoginUseCaseTest < ActiveSupport::TestCase
         principal: { provider: "google", subject: "unverified" },
         credential_candidate: nil,
         sign_up_entry: false,
+        ceremony_started_at: Time.current,
       )
     end
   end
@@ -79,9 +82,46 @@ class ExternalAuthenticationLoginUseCaseTest < ActiveSupport::TestCase
     assert_no_difference("Client.count") do
       assert_no_difference("ClientExternalIdentity.count") do
         assert_raises(SocialAuth::UnauthorizedError) do
-          ExternalAuthenticationLoginUseCase.call(principal:, credential_candidate: nil, sign_up_entry: false)
+          ExternalAuthenticationLoginUseCase.call(
+            principal:, credential_candidate: nil, sign_up_entry: false, ceremony_started_at: Time.current,
+          )
         end
       end
     end
+  end
+
+  test "a login callback begun before release cannot authenticate a later subject owner" do
+    original = Client.create!(status_id: ClientStatus::ACTIVE, public_id: "login_old_#{SecureRandom.hex(4)}")
+    successor = Client.create!(status_id: ClientStatus::ACTIVE, public_id: "login_new_#{SecureRandom.hex(4)}")
+    subject = SecureRandom.uuid
+    identity = create_active_external_identity(client: original, provider: "google", subject: subject)
+    original.client_emails.create!(
+      address: "login-release-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    ).finalize_binding!
+    principal = ExternalAuthentication::VerifiedPrincipal.new(
+      provider: "google", subject: subject, issuer: identity.issuer, audience: identity.audience,
+      verified_at: Time.current, verification_authority: "provider-fixture",
+    )
+    stale_grant_at = Time.utc(2026, 1, 1)
+
+    assert_equal :unlinked, ExternalAuthenticationUnlinkUseCase.call(provider: "google", user: original).status
+    assert_equal :linked, ExternalAuthenticationLinkUseCase.call(
+      principal: principal, credential_candidate: nil, user: successor,
+      ceremony_started_at: Time.current,
+    ).status
+
+    assert_raises(SocialAuth::ConflictError) do
+      ExternalAuthenticationLoginUseCase.call(
+        principal: principal, credential_candidate: nil, sign_up_entry: false,
+        ceremony_started_at: stale_grant_at,
+      )
+    end
+    fresh = ExternalAuthenticationLoginUseCase.call(
+      principal: principal, credential_candidate: nil, sign_up_entry: false,
+      ceremony_started_at: Time.current,
+    )
+
+    assert_equal successor.id, fresh.user.id
   end
 end

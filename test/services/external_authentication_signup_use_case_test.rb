@@ -24,6 +24,7 @@ class ExternalAuthenticationSignupUseCaseTest < ActiveSupport::TestCase
           principal: principal,
           credential_candidate: nil,
           birthdate: "2000-01-01",
+          ceremony_started_at: Time.current,
         )
       end
     end
@@ -32,6 +33,28 @@ class ExternalAuthenticationSignupUseCaseTest < ActiveSupport::TestCase
     assert_equal :created, result.status
     assert_equal "signup-use-case-subject", result.identity.uid
     assert_equal result.user, result.identity.user
+    assert ClientSocialAuditOutbox.exists?(
+      owner_ref: result.user.public_id, identity_ref: result.identity.id.to_s, event_name: "linked",
+    )
+  end
+
+  test "Source audit failure rolls back a social signup and its binding" do
+    principal = ExternalAuthentication::VerifiedPrincipal.new(
+      provider: "apple", subject: SecureRandom.uuid, issuer: "https://appleid.apple.com",
+      audience: "apple-client-id", verified_at: Time.current,
+      verification_authority: "provider-fixture",
+    )
+
+    assert_no_difference(["Client.count", "ClientExternalIdentity.count", "ClientSocialAuditOutbox.count"]) do
+      ClientSocialAuditOutbox.stub(:create!, ->(*) { raise RuntimeError, "Source audit unavailable" }) do
+        assert_raises(RuntimeError) do
+          ExternalAuthenticationSignupUseCase.call(
+            principal: principal, credential_candidate: nil, birthdate: "2000-01-01",
+            ceremony_started_at: Time.current,
+          )
+        end
+      end
+    end
   end
 
   test "rejects a subject already bound to an account" do
@@ -51,7 +74,32 @@ class ExternalAuthenticationSignupUseCaseTest < ActiveSupport::TestCase
         principal: principal,
         credential_candidate: nil,
         birthdate: "2000-01-01",
+        ceremony_started_at: Time.current,
       )
+    end
+  end
+
+  test "an app signup grant begun before account termination cannot recreate its social binding" do
+    owner = Client.create!(status_id: ClientStatus::ACTIVE, public_id: "signup_old_#{SecureRandom.hex(4)}")
+    subject = SecureRandom.uuid
+    identity = create_active_external_identity(client: owner, provider: "google", subject: subject)
+    principal = ExternalAuthentication::VerifiedPrincipal.new(
+      provider: "google", subject: subject, issuer: identity.issuer,
+      audience: identity.audience, verified_at: Time.current,
+      verification_authority: "provider-fixture",
+    )
+    stale_grant_at = Time.utc(2026, 1, 1)
+    owner.update!(withdrawn_at: Time.current, terminated_at: Time.current)
+    WithdrawalPersonalDataAnonymizer.call(actor: owner)
+
+    assert_not ClientExternalIdentity.exists?(identity.id)
+    assert_no_difference(["Client.count", "ClientExternalIdentity.count"]) do
+      assert_raises(SocialAuth::ProviderError) do
+        ExternalAuthenticationSignupUseCase.call(
+          principal: principal, credential_candidate: nil, birthdate: "2000-01-01",
+          ceremony_started_at: stale_grant_at,
+        )
+      end
     end
   end
 end

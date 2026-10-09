@@ -1,212 +1,25 @@
 ---
 name: spec-driven-development
-description:
-  Writes a structured specification with acceptance criteria before any code. Use when starting a
-  new project, feature, or significant change with no specification yet, when requirements are
-  ambiguous or exist only as a vague idea, when the change touches multiple modules, or before an
-  architectural decision.
+description: Specify and deliver significant accepted changes with scoped acceptance, proportional plans and evidence. Use for high-risk or multi-session work; ordinary obvious edits need no spec.
 ---
 
-# Spec-Driven Development
+# Spec-driven development
 
-The spec is the shared source of truth between the agent and the engineer: what is being built, why,
-and how completion is recognized. Its value comes from forcing that clarity before code exists, when
-changing direction is still cheap.
+Read the repository's `AGENTS.md` routing and `specs/README.md`. Preserve established authorization;
+a workflow phase is not a new approval gate. Clarify only consequential missing requirements.
 
-**When NOT to use:** single-line fixes, typo corrections, or changes whose requirements are already
-unambiguous and self-contained.
+For a new accepted change, capture purpose, scope, exclusions and observable acceptance before
+implementation. Use [change specification](references/change-specification.md) when drafting. Keep
+research optional and explicitly non-normative. Record architectural decisions in the owning ADR.
 
-## The Gated Workflow
+Separate HOW and ordered tasks only when complexity warrants them. Each execution unit should leave
+a coherent implementation and state its relevant verification. Avoid fixed file-count limits,
+mandatory commits or whole-suite reruns for every slice. Preserve unrelated work, especially when
+other agents are writing. Commit only scoped changes when the task authorizes it.
 
-Spec-driven development has four phases. Do not advance to the next phase until the current one is
-validated.
+For behavior changes, reproduce a bug or define the expected public behavior before changing it;
+run the narrowest relevant tests and broaden for the affected risk. Environment/tooling construction
+is verified by running it and recording evidence, not by adding Minitest or Vitest setup tests.
 
-```
-SPECIFY ──→ PLAN ──→ TASKS ──→ IMPLEMENT
-   │          │        │          │
-   ▼          ▼        ▼          ▼
- Human      Human    Human      Human
- reviews    reviews  reviews    reviews
-```
-
-### Phase 1: Specify
-
-Start with a high-level vision. Ask the human clarifying questions until requirements are concrete.
-
-**Surface assumptions immediately.** Before writing any spec content, list what you're assuming:
-
-```
-ASSUMPTIONS I'M MAKING:
-1. This is a web application (not native mobile)
-2. Authentication uses session-based cookies (not JWT)
-3. The database is PostgreSQL (based on existing Prisma schema)
-4. We're targeting modern browsers only (no IE11)
-→ Correct me now or I'll proceed with these.
-```
-
-Don't silently fill in ambiguous requirements. The spec's entire purpose is to surface
-misunderstandings _before_ code gets written — assumptions are the most dangerous form of
-misunderstanding.
-
-**Write a spec document covering these six core areas:**
-
-1. **Objective** — What are we building and why? Who is the user? What does success look like?
-
-2. **Commands** — Full executable commands with flags, not just tool names.
-
-   ```
-   Build: npm run build
-   Test: npm test -- --coverage
-   Lint: npm run lint --fix
-   Dev: npm run dev
-   ```
-
-3. **Project Structure** — Where source code lives, where tests go, where docs belong.
-
-   ```
-   src/           → Application source code
-   src/components → React components
-   src/lib        → Shared utilities
-   tests/         → Unit and integration tests
-   e2e/           → End-to-end tests
-   docs/          → Documentation
-   ```
-
-4. **Code Style** — One real code snippet showing your style beats three paragraphs describing it.
-   Include naming conventions, formatting rules, and examples of good output.
-
-5. **Testing Strategy** — What framework, where tests live, coverage expectations, which test levels
-   for which concerns.
-
-6. **Boundaries** — Three-tier system:
-   - **Always do:** Run tests before commits, follow naming conventions, validate inputs
-   - **Ask first:** Database schema changes, adding dependencies, changing CI config
-   - **Never do:** Commit secrets, edit vendor directories, remove failing tests without approval
-
-**Spec template:**
-
-```markdown
-# Spec: [Project/Feature Name]
-
-## Objective
-
-[What we're building and why. User stories or acceptance criteria.]
-
-## Tech Stack
-
-[Framework, language, key dependencies with versions]
-
-## Commands
-
-[Build, test, lint, dev — full commands]
-
-## Project Structure
-
-[Directory layout with descriptions]
-
-## Code Style
-
-[Example snippet + key conventions]
-
-## Testing Strategy
-
-[Framework, test locations, coverage requirements, test levels]
-
-## Boundaries
-
-- Always: [...]
-- Ask first: [...]
-- Never: [...]
-
-## Success Criteria
-
-[How we'll know this is done — specific, testable conditions]
-
-## Open Questions
-
-[Anything unresolved that needs human input]
-```
-
-**Reframe instructions as success criteria.** When receiving vague requirements, translate them into
-concrete conditions:
-
-```
-REQUIREMENT: "Make the dashboard faster"
-
-REFRAMED SUCCESS CRITERIA:
-- Dashboard LCP < 2.5s on 4G connection
-- Initial data load completes in < 500ms
-- No layout shift during load (CLS < 0.1)
-→ Are these the right targets?
-```
-
-This lets you loop, retry, and problem-solve toward a clear goal rather than guessing what "faster"
-means.
-
-### Phase 2: Plan
-
-With the validated spec, generate a technical implementation plan:
-
-1. Identify the major components and their dependencies
-2. Determine the implementation order (what must be built first)
-3. Note risks and mitigation strategies
-4. Identify what can be built in parallel vs. what must be sequential
-5. Define verification checkpoints between phases
-
-The plan should be reviewable: the human should be able to read it and say "yes, that's the right
-approach" or "no, change X."
-
-### Phase 3: Tasks
-
-Break the plan into discrete, implementable tasks:
-
-- Each task should be completable in a single focused session
-- Each task has explicit acceptance criteria
-- Each task includes a verification step (test, build, manual check)
-- Tasks are ordered by dependency, not by perceived importance
-- No task should require changing more than ~5 files
-
-**Task template:**
-
-```markdown
-- [ ] Task: [Description]
-  - Acceptance: [What must be true when done]
-  - Verify: [How to confirm — test command, build, manual check]
-  - Files: [Which files will be touched]
-```
-
-### Phase 4: Implement
-
-Execute tasks one at a time following `skills/incremental-implementation/SKILL.md`
-(`incremental-implementation`) and `skills/test-driven-development/SKILL.md`
-(`test-driven-development`). Use `skills/context-engineering/SKILL.md` (`context-engineering`) to
-load the right spec sections and source files at each step rather than flooding the agent with the
-entire spec.
-
-## Keeping the Spec Alive
-
-The spec is a living document, not a one-time artifact:
-
-- **Update when decisions change** — If you discover the data model needs to change, update the spec
-  first, then implement.
-- **Update when scope changes** — Features added or cut should be reflected in the spec.
-- **Commit the spec** — The spec belongs in version control alongside the code.
-- **Reference the spec in PRs** — Link back to the spec section that each PR implements.
-
-## Red Flags
-
-- Starting to write code without any written requirements
-- Asking "should I just start building?" before clarifying what "done" means
-- Implementing features not mentioned in any spec or task list
-- Making architectural decisions without documenting them
-- Skipping the spec because "it's obvious what to build"
-
-## Verification
-
-Before proceeding to implementation, confirm:
-
-- [ ] The spec covers all six core areas
-- [ ] The human has reviewed and approved the spec
-- [ ] Success criteria are specific and testable
-- [ ] Boundaries (Always/Ask First/Never) are defined
-- [ ] The spec is saved to a file in the repository
+When finishing, use [closure](references/closure.md). A completed implementation and an unverified
+runtime claim are different outcomes. Keep incomplete acceptance open and report the limitation.

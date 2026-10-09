@@ -1,7 +1,7 @@
 # Browser verification procedures for Base, app Secret, and Core
 
 Prepared on 2026-10-03 (UTC). These procedures have NOT_RUN status. They operationalize the
-[acceptance catalog](base-secret-core-acceptance.md); they do not replace automated tests or prove
+[acceptance catalog](../specs/base-secret-core-contract/checklists/acceptance.md); they do not replace automated tests or prove
 deployed behavior.
 
 ## Setup and recording

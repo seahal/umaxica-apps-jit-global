@@ -19,7 +19,8 @@ Write a note when a non-trivial task involves any of:
 - a compatibility, lifecycle, or security-boundary constraint that is easy to miss
 - a rejected alternative future maintainers are likely to revisit
 
-When in doubt, prefer a short note over losing durable context.
+Use an existing owning spec or ADR when it already records the decision. Add a research note only
+when it preserves useful provisional or rejected reasoning without duplicating that source.
 
 ## What to include
 

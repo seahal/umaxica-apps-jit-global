@@ -40,6 +40,7 @@ the remaining entries matching the task.
 - Controllers or endpoints: `generic/controllers.mdc`, `generic/routing.mdc`,
   `project/surfaces.mdc`, `project/controller-inheritance.mdc`, `project/browser-rp-contract.mdc`,
   `generic/authentication-boundaries.mdc`, `docs/architecture/controller-lifecycle.md`
+- React components and hooks: `docs/reference/react.md`, `docs/design.md`
 - JSON API endpoints, error responses, or API versioning: `docs/reference/api-design-standards.md`
 - Minitest or behavior changes: `generic/testing.mdc`, `generic/no-test-only-code.mdc`,
   `project/static-invariant-guards.mdc`
@@ -83,7 +84,7 @@ the remaining entries matching the task.
 - Google, Apple, or Microsoft Entra ID sign-in buttons and provider branding:
   `docs/reference/third-party-sign-in-button-requirements.md`
 - External technical sources: `generic/source-policy.mdc`
-- Documentation, ADRs, plans, notes, memos, harnesses, comments, or test names:
+- Documentation, ADRs, plans, research, harnesses, comments, or test names:
   `generic/repository-language.mdc`
 - `README.md` changes: `project/readme-authoring.mdc`, `generic/repository-language.mdc`
 - Logging, audit records, telemetry, or analytics: `adr/application-logging-boundary.md`,
@@ -100,133 +101,40 @@ or service-layer work, use `project/repository-knowledge-tree.mdc` to load and p
 under `research/`, `adr/`, `specs/`, `plans/`, and `docs/`. Surface conflicts between current code
 and an accepted ADR before choosing an implementation path.
 
-## Governing Principles
+## Governing Principles and Constraints
 
-We sustain this codebase by creating value for people.
+Security bounds our ability to create value. Within that boundary, performance, experience,
+documentation, longevity and observability are coequal. Category order is not priority.
+**MUST**, **SHOULD**, and **MAY** follow BCP 14; express requirements positively.
 
-**Security preserves our ability to continue that work.** Security defines the boundary within which
-implementation proceeds and preserves both safety and the system's ability to deliver value.
-
-Five coequal virtues guide implementation within that boundary:
-
-- **Performance:** measure material behavior rather than assuming it.
-- **Experience:** preserve responsiveness, usability, accessibility, and interaction quality.
-- **Documentation:** preserve intent, decisions, plans, and evidence in natural language that humans
-  and AI agents can reason from.
-- **Longevity:** keep the system understandable, replaceable, maintainable, and safe to change over
-  time.
-- **Observability:** make runtime behavior explainable from the metrics, logs, traces, and profiles
-  the system emits, keeping every emitted signal within the disclosure protections of rule (A).
-
-## Implementation Rules
-
-**MUST**, **SHOULD**, and **MAY** use the normative meanings defined by BCP 14 (RFC 2119 and RFC
-8174). Use positive formulations that state the behavior, invariant, or protection to preserve.
-
-Category labels are identifiers only. Category order carries no priority. Rules are independent
-constraints rather than scores or weights, and rule counts are never additive. Resolve genuine
-conflicts through the governing principles above.
-
-- **(A) Security and Trust Boundaries**
-
-  - **MUST:** preserve separation between the `app`, `org`, `com`, `dev`, and `net` surfaces and
-    their applicable trust, session, state, routing, and ownership boundaries.
-  - **MUST:** preserve applicable authentication, authorization, verification, CSRF, rate-limit,
-    input-validation, and equivalent security controls throughout every affected path, including the
-    relative order in which those controls run when that order is itself security-relevant.
-  - **MUST:** prevent SQL injection (SQLi) and cross-site scripting (XSS) through parameterized data
-    access, context-appropriate output escaping or encoding, appropriate sanitization, and strict
-    separation of untrusted data from executable SQL or browser content.
-  - **MUST:** protect credentials, secrets, tokens, cookies, authorization data, and sensitive
-    request data from unintended disclosure, including in logs, error messages, and diagnostic
-    output.
-  - **MUST:** protect people, users, operators, and other affected parties from foreseeable harm
-    caused by the implementation or operation of the system.
-
-- **(B) Responsibility and State**
-
-  - **MUST:** place behavior with the component that owns its responsibility, keeping orchestration,
-    authorization, domain behavior, persistence, and presentation distinguishable.
-  - **MUST:** keep request-scoped state explicitly scoped and propagated through appropriate objects
-    or interfaces, rather than through shared mutable state such as class variables, global
-    variables, or `Thread.current`.
-  - **SHOULD:** keep dependencies, ownership, state transitions, method visibility, and failure
-    behavior explicit where they materially affect understanding or maintenance.
-
-- **(C) Failure and Runtime Behavior**
-
-  - **MUST:** make missing required configuration, invalid state, failed prerequisites, unsupported
-    workflows, and migration assumptions explicit and observable.
-  - **MUST:** read environment variables without a code-side default, in every Ruby file including
-    tests: one-argument `ENV.fetch("NAME")` for a variable the code needs, `ENV["NAME"]` with an
-    explicit `nil` branch for an optional one. `ENV.fetch("NAME", default)`, a block default, and
-    `ENV["NAME"] || default` are defects even where existing code uses them.
-  - **MUST:** keep production behavior independent of requirements that exist only for tests.
-  - **MUST:** preserve externally visible behavioral contracts when the task leaves those contracts
-    unchanged.
-  - **SHOULD:** make failure modes diagnosable from their observable behavior and recorded context.
-
-- **(D) Data and Records**
-
-  - **MUST:** persist authoritative audit, security, compliance, and purchase events as data when
-    the system depends on them as records of fact.
-  - **MUST:** preserve persistent data, identity state, security state, and audit history except
-    when an explicitly authorized operation requires their transition.
-  - **MUST:** obtain explicit approval of the risk and the recovery or migration plan before any
-    destructive or irreversible persistence operation, including but not limited to dropping or
-    truncating tables, bulk deletes or updates, and irreversible schema or migration changes.
-  - **SHOULD:** keep persistent data ownership and lifecycle explicit when modifying schemas,
-    storage, or state transitions.
-
-- **(E) Scope and Design**
-
-  - **SHOULD:** make the smallest coherent change that completely solves the current problem.
-  - **SHOULD:** build for current requirements and keep abstractions proportional to demonstrated
-    need.
-  - **SHOULD:** use established, actively maintained libraries or abstractions when they solve the
-    required problem while preserving repository boundaries.
-  - **SHOULD:** remove directly encountered accidental complexity, obsolete structure, and technical
-    debt when the cleanup remains within the same coherent change.
-  - **MAY:** refactor directly adjacent code when the refactor is required to leave the resulting
-    implementation coherent.
-
-- **(F) Documentation and Knowledge**
-
-  - **SHOULD:** preserve non-obvious reasoning in the appropriate ADR, plan, evidence record, note,
-    documentation, or comment so another human or AI agent can recover the intent.
-  - **SHOULD:** put each kind of knowledge in the artifact that owns it, following Takuto Wada's
-    (t_wada) formulation: code states _how_, test code states _what_, the commit log states _why_,
-    and code comments state _why not_.
-  - **SHOULD:** limit code comments to _why not_ by default: the alternative that was rejected, the
-    constraint that rules out the obvious approach, or the reason a tempting simplification is
-    wrong. Leave _how_ to the code, _what_ to the tests, and _why_ to the commit message instead of
-    restating them in a comment.
-  - **SHOULD:** update or remove documentation and comments when their assumptions cease to match
-    the implementation.
-  - **SHOULD:** explain why a change exists in its commit message rather than only what changed,
-    because the commit log is the only place that _why_ is recorded.
-
-- **(G) Evolution and Compatibility**
-
-  - **SHOULD:** preserve replaceability and clear ownership when extending existing components.
-  - **SHOULD:** keep transitional mechanisms bounded to the requirement that makes them necessary.
-  - **MAY:** use transitional compatibility mechanisms when safe deployment or migration requires a
-    temporary compatibility boundary.
-
-- **(H) Tests**
-
-  - **MUST:** when a public contract includes a range, limit, format, or classification, verify each
-    identified boundary at the nearest representable value immediately below it, at the boundary,
-    and immediately above it. When a neighboring value is not representable, valid, or reachable,
-    use the nearest available value and record that exception in the test name or a comment on that
-    test.
-  - **SHOULD:** take one representative value from each equivalence partition. Add further points
-    inside a partition only when the contract distinguishes values inside that partition.
-  - **MUST:** verify sentinel and edge inputs that can reach the tested public interface, using
-    values that belong to that interface's types (missing, empty, zero, and other type-appropriate
-    sentinels). Do not import sentinels from another language's type system.
-  - **SHOULD:** make the required technique, boundary, partition, and any boundary exception
-    recoverable from the test name and assertion, without a separate traceability matrix.
+- **MUST:** preserve surface trust, ownership, session and state boundaries, and applicable
+  authentication, authorization, CSRF, verification, rate limits and security-relevant control order.
+- **MUST:** prevent SQL injection and XSS through parameterized access, contextual escaping and
+  appropriate sanitization; keep untrusted data separate from executable content.
+- **MUST:** protect people from foreseeable harm and protect credentials, tokens, cookies,
+  authorization data and sensitive request data from disclosure, including diagnostic output.
+- **MUST:** keep orchestration, authorization, domain behavior, persistence and presentation with
+  their owners. Keep request state explicit, not in class variables, globals or `Thread.current`.
+- **MUST:** make invalid state, unsupported workflows, failed prerequisites and missing required
+  configuration explicit and observable. Keep production independent of test-only requirements.
+- **MUST:** read required Ruby environment variables with one-argument `ENV.fetch("NAME")`; read
+  optional variables with `ENV["NAME"]` and an explicit nil branch. Code-side defaults are defects.
+- **MUST:** preserve unchanged external contracts, persistent data, identity/security state and
+  audit history. Persist authoritative audit, security, compliance and purchase events as records.
+- **MUST:** obtain explicit risk and recovery-plan approval before destructive or irreversible
+  persistence operations, including bulk updates/deletes and irreversible migrations.
+- **SHOULD:** make ownership, visibility, dependencies and failures explicit; implement the smallest
+  coherent solution. Adjacent cleanup belongs only within the authorized change.
+- **SHOULD:** preserve replaceability and proportional abstractions. **MAY:** use bounded transitional
+  mechanisms when safe deployment or migration requires them; record their exit conditions.
+- **SHOULD:** code states how, tests state what, commit messages state why, and comments state why
+  not. Preserve non-obvious decisions in their owning knowledge artifacts. Maintain affected current
+  documentation; historical research has no general maintenance obligation.
+- **MUST:** test public contract boundaries immediately below, at and above each range, limit,
+  format or classification boundary. Use the nearest valid/reachable value when necessary and
+  explain the exception in the test name or comment. Cover type-appropriate missing, empty, zero
+  and other reachable sentinel inputs. **SHOULD:** use one representative per equivalence partition
+  unless the contract distinguishes more, and make the technique recoverable from names/assertions.
 
 ## Repository Content
 
@@ -270,7 +178,10 @@ execution outweighs re-establishing context.
 
 ## Spec Driven Development
 
-<!-- Details pending; Evidence is filed under this section as its first subsection. -->
+Use `specs/README.md` for scope, lifecycle and traceability, and the `spec-driven-development`
+Skill when a significant accepted change needs a workflow. Small obvious edits remain lightweight.
+Current knowledge ownership is defined in `docs/reference/repository-knowledge-architecture.md`.
+Closed specs preserve change history; current behavior belongs in docs and durable checklists.
 
 ### Evidence
 

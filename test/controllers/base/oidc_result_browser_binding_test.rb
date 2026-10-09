@@ -79,15 +79,47 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
       auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
       auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
       csrf = auth.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      other_auth = open_session
+      other_auth.host!(auth_host)
+      other_auth.https!
+      other_auth.get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
+      other_csrf = other_auth.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
       auth.post(
         "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
                               headers: auth_headers,
       )
+      attached_session_id = binding.reload.auth_ceremony_session_id
+      other_auth.post(
+        "/ceremony_bindings",
+        params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: other_csrf },
+        headers: auth_headers,
+      )
+
+      assert_equal [400, nil, attached_session_id],
+                   [other_auth.response.status, other_auth.response.location,
+                    binding.reload.auth_ceremony_session_id,]
       confirmation = URI.parse(auth.response.location)
+      other_base = open_session
+      other_base.host!(base_host)
+      other_base.https!
+      other_base.get("/oauth/authorize", params: parameters)
+      other_base_csrf = other_base.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      other_base.post(confirmation.request_uri, params: { authenticity_token: other_base_csrf }, headers:)
+
+      assert_equal [400, nil, nil],
+                   [other_base.response.status, other_base.response.location, binding.reload.base_confirmed_at]
       owner.get(confirmation.request_uri)
       csrf = owner.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
       owner.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers:)
       entry = URI.parse(owner.response.location)
+      other_auth.post(
+        "/sign/in",
+        params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: other_csrf },
+        headers: auth_headers,
+      )
+
+      assert_equal [400, nil, nil],
+                   [other_auth.response.status, other_auth.response.location, binding.reload.redeemed_at]
       auth.get(entry.request_uri)
       csrf = auth.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
       auth.post(

@@ -23,7 +23,8 @@ Adding a new email address to an existing account:
 1. **Step-up required on the existing session.** Adding an email is a sensitive operation; require a
    successful step-up (step-up) before the add is accepted. Reuses the existing step-up pipeline —
    see [`adr/step-up-authentication-redesign.md`](../../adr/step-up-authentication-redesign.md) and
-   [`specs/step-up-authentication-rebuild.md`](../active/step-up-authentication-rebuild.md).
+   `plans/active/step-up-authentication-rebuild.md` (historical source unavailable;
+   re-establish its contract before relying on it).
 2. **New email verification is immediate.** The newly added address may be verified right away
    (normal OTP / verification link). Verification proves control of the mailbox; it does **not** by
    itself confer account trust.
@@ -46,10 +47,10 @@ Adding a new email address to an existing account:
 - **Where trust state lives.** Need a persisted per-email field such as `trusted_at` /
   `usable_for_recovery_from` rather than a class/thread/global flag (per AGENTS.md non-negotiables).
   Coordinate with
-  [`plans/backlog/customer-email-telephone-encryption-plan.md`](customer-email-telephone-encryption-plan.md)
+  `plans/backlog/customer-email-telephone-encryption-plan.md` (historical source unavailable)
   and the contact-actor restoration work
-  ([`restoration-e1-contact-actor-context.md`](restoration-e1-contact-actor-context.md),
-  [`restoration-e2-contact-customer-canonicalization.md`](restoration-e2-contact-customer-canonicalization.md)).
+  (`restoration-e1-contact-actor-context.md` (historical source unavailable),
+  `restoration-e2-contact-customer-canonicalization.md` (historical source unavailable)).
 - **Last-factor edge case.** If the account currently has no other trusted email/factor, define
   behavior — does the first email get a cooldown, or is bootstrap (sign-up) exempt while only
   _additional_ emails are gated?
@@ -62,7 +63,7 @@ Adding a new email address to an existing account:
 ## Relationship to Existing Work
 
 - Step-up dependency: `adr/step-up-authentication-redesign.md`,
-  `specs/step-up-authentication-rebuild.md`.
+  the unavailable historical step-up rebuild plan; its requirements are not reconstructed here.
 - Contact/email model and encryption: `restoration-e1-contact-actor-context.md`,
   `restoration-e2-contact-customer-canonicalization.md`,
   `customer-email-telephone-encryption-plan.md`.
