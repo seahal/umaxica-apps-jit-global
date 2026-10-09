@@ -129,7 +129,7 @@
       }
     },
     {
-      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx", "spec/**/*"],
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx", "gait/**/*"],
       "plugins": [
         "import",
         "promise",
@@ -163,7 +163,7 @@
                 "message": "A page belongs to one surface's Inertia application, which resolves it through its own import.meta.glob. Import the feature component the page re-exports instead."
               },
               {
-                "group": ["**/spec/**"],
+                "group": ["**/gait/**"],
                 "message": "Application code that imports a spec ships the spec."
               }
             ]

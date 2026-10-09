@@ -7,28 +7,28 @@ const srcRoot = fileURLToPath(new URL("./src", import.meta.url));
 // Files whose behavior does not depend on a DOM: pure logic, and React components exercised only
 // through `renderToStaticMarkup`. Kept as an explicit list so the unit project stays DOM-free.
 const nodeSpecs = [
-  "spec/lib/payload.test.ts",
-  "spec/entrypoints/application.test.ts",
-  "spec/entrypoints/bootstrap_entrypoints.test.ts",
-  "spec/controllers/webauthn_utils.test.ts",
-  "spec/features/auth/passkeys/messages.test.ts",
-  "spec/features/landing/surface_root_landing.test.tsx",
-  "spec/pages/base/app/groups/index.test.tsx",
-  "spec/features/preferences/preference_index.test.tsx",
-  "spec/features/landing/root_landing.test.tsx",
-  "spec/features/auth/auth_com_screens.test.tsx",
-  "spec/pages/base/app/identity/identity_pages.test.tsx",
-  "spec/features/dashboards/warp_dashboard.test.tsx",
-  "spec/features/base_com/base_com_identity_pages.test.tsx",
-  "spec/features/auth/session/sign_out_screens.test.tsx",
-  "spec/features/auth/dashboard/surface_dashboard.test.tsx",
-  "spec/features/identity/activity_index.test.tsx",
-  "spec/pages/auth/app/settings/settings_screens.test.tsx",
-  "spec/pages/palm/app/sign_outs/show.test.tsx",
-  "spec/features/preferences/preference_screens.test.tsx",
-  "spec/features/auth/signin/signin_screens.test.tsx",
-  "spec/features/auth/auth_com_signup_screens.test.tsx",
-  "spec/features/auth/verification/verification_screens.test.tsx",
+  "gait/lib/payload.test.ts",
+  "gait/entrypoints/application.test.ts",
+  "gait/entrypoints/bootstrap_entrypoints.test.ts",
+  "gait/controllers/webauthn_utils.test.ts",
+  "gait/features/auth/passkeys/messages.test.ts",
+  "gait/features/landing/surface_root_landing.test.tsx",
+  "gait/pages/base/app/groups/index.test.tsx",
+  "gait/features/preferences/preference_index.test.tsx",
+  "gait/features/landing/root_landing.test.tsx",
+  "gait/features/auth/auth_com_screens.test.tsx",
+  "gait/pages/base/app/identity/identity_pages.test.tsx",
+  "gait/features/dashboards/warp_dashboard.test.tsx",
+  "gait/features/base_com/base_com_identity_pages.test.tsx",
+  "gait/features/auth/session/sign_out_screens.test.tsx",
+  "gait/features/auth/dashboard/surface_dashboard.test.tsx",
+  "gait/features/identity/activity_index.test.tsx",
+  "gait/pages/auth/app/settings/settings_screens.test.tsx",
+  "gait/pages/palm/app/sign_outs/show.test.tsx",
+  "gait/features/preferences/preference_screens.test.tsx",
+  "gait/features/auth/signin/signin_screens.test.tsx",
+  "gait/features/auth/auth_com_signup_screens.test.tsx",
+  "gait/features/auth/verification/verification_screens.test.tsx",
 ].map((path) => fileURLToPath(new URL(`./${path}`, import.meta.url)));
 
 const sharedProjectDefaults = {
@@ -74,7 +74,7 @@ export default defineConfig({
     // Two projects: Node for pure/static-markup specs, jsdom for DOM-dependent specs. jsdom is
     // used instead of Vitest Browser Mode because several specs stub `window`/`location`, which
     // are non-configurable in a real Chromium tab. Cookie Store / matchMedia / scrollTo gaps are
-    // filled by spec/setup.ts.
+    // filled by gait/setup.ts.
     projects: [
       {
         extends: true,
@@ -92,9 +92,9 @@ export default defineConfig({
           ...sharedProjectDefaults,
           name: "component",
           environment: "jsdom",
-          include: ["spec/**/*.{test,spec}.{ts,tsx,js,jsx}"],
+          include: ["gait/**/*.{test,spec}.{ts,tsx,js,jsx}"],
           exclude: [...defaultExclude, ...nodeSpecs],
-          setupFiles: ["./spec/setup.ts"],
+          setupFiles: ["./gait/setup.ts"],
         },
       },
     ],

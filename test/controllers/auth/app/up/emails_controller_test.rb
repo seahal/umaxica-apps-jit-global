@@ -66,7 +66,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :success
     # The widget and its hidden response field are the React component's
-    # (spec/features/auth/signup/contact_sign_up_form.test.tsx); what the server owns is the
+    # (gait/features/auth/signup/contact_sign_up_form.test.tsx); what the server owns is the
     # visible-mode configuration it hands over.
     turnstile = inertia_props.fetch("turnstile")
 

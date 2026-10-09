@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // service worker for its origin. Importing them here verifies the wiring itself - that each
 // surface entrypoint actually calls the registration functions it depends on - without exercising
 // the real Turbo/service-worker machinery, which is unit-tested independently elsewhere (see
-// spec/pwa/register.test.ts, spec/controllers/index.test.js, spec/entrypoints/react_islands.test.ts).
+// gait/pwa/register.test.ts, gait/controllers/index.test.js, gait/entrypoints/react_islands.test.ts).
 
 const registerOfflineServiceWorker = vi.fn();
 

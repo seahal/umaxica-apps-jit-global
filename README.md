@@ -48,7 +48,7 @@ before inventing screen patterns. Start at
 
 - JavaScript entrypoints are bundled through Vite Rails from `src/entrypoints`.
 - Stimulus controllers live in `src/controllers`.
-- JavaScript tests live in `spec/` and run directly with Vitest.
+- JavaScript tests live in `gait/` and run directly with Vitest.
 - Browser CSS is one Vite stylesheet per surface under `src/styles/surfaces/`; each imports the
   shared token and base layers (`src/styles/theme.css`, `src/styles/base.css`).
 - Static non-browser assets are served by Propshaft.
@@ -284,7 +284,7 @@ bun run test:watch                            # Watch mode
 bun run test:coverage
 ```
 
-JavaScript tests are located in `spec/` and use Vitest. Coverage reports are written under
+JavaScript tests are located in `gait/` and use Vitest. Coverage reports are written under
 `coverage/vite/`.
 
 ## Security and Quality Checks

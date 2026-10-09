@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/knip/schema.json",
-  "entry": ["src/entrypoints/**/*.{ts,tsx}", "spec/**/*.{test,spec}.{ts,tsx}", "e2e/**/*.spec.ts"],
-  "project": ["src/**/*.{ts,tsx}", "spec/**/*.{ts,tsx}", "e2e/**/*.ts"],
+  "entry": ["src/entrypoints/**/*.{ts,tsx}", "gait/**/*.{test,spec}.{ts,tsx}", "e2e/**/*.spec.ts"],
+  "project": ["src/**/*.{ts,tsx}", "gait/**/*.{ts,tsx}", "e2e/**/*.ts"],
   "ignore": ["src/types/**"],
   "ignoreDependencies": [
     "tailwindcss",

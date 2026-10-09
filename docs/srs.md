@@ -72,18 +72,18 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
   are private. The Avatar image-delivery URL/API and CDN namespace remain undefined; no user-facing
   image route is currently provided. The opt-in RustFS profile supports explicit local storage
   integration checks.
-- **Surface mapping** (driven by ENV such as `TOP_CORPORATE_URL`, `ID_SERVICE_URL`, etc.): | Surface
-  | Host examples | Namespace | Responsibilites |
-  |---------|---------------|-----------|-----------------| | Top (marketing / preferences) |
-  `www.umaxica.com`, `www.umaxica.app`, `www.umaxica.org` | `Top::Com/App/Org` | Redirects to edge,
-  exposes `/health`, `/api/v0/health.json`, preference UIs (cookie/region/theme). | | Sign |
-  `log.umaxica.app`, `log.umaxica.org` | `Sign::App/Org` | Registration (email/phone), OTP,
-  passkeys, OAuth (Google/Apple), recovery, withdrawals. | | Help | `help.umaxica.com` |
-  `Help::Com/App/Org` | Contact forms, ticket intake (`ServiceSiteContact`), Turnstile enforcement.
-  | | Docs / News | `docs.umaxica.*`, `news.umaxica.*` | `Docs::*`, `News::*` |
-  Documentation/newsroom placeholders with health pages. | | BFF | `bff.umaxica.*` | `Bff::*` |
-  Non-auth preference/email endpoints for clients. | | API | `api.umaxica.*` | `Api::*` | JSON APIs
-  (`/v1/inquiry/valid_email_addresses`, `valid_telephone_numbers`, `health`). |
+- **Surface mapping** (driven by ENV such as `TOP_CORPORATE_URL`, `ID_SERVICE_URL`, etc.): |
+  Surface | Host examples | Namespace |
+  Responsibilites | |---------|---------------|-----------|-----------------| | Top (marketing /
+  preferences) | `www.umaxica.com`, `www.umaxica.app`, `www.umaxica.org` | `Top::Com/App/Org` |
+  Redirects to edge, exposes `/health`, `/api/v0/health.json`, preference UIs
+  (cookie/region/theme). | | Sign | `log.umaxica.app`, `log.umaxica.org` | `Sign::App/Org` |
+  Registration (email/phone), OTP, passkeys, OAuth (Google/Apple), recovery, withdrawals. | | Help |
+  `help.umaxica.com` | `Help::Com/App/Org` | Contact forms, ticket intake (`ServiceSiteContact`),
+  Turnstile enforcement. | | Docs / News | `docs.umaxica.*`, `news.umaxica.*` | `Docs::*`,
+  `News::*` | Documentation/newsroom placeholders with health pages. | | BFF | `bff.umaxica.*` |
+  `Bff::*` | Non-auth preference/email endpoints for clients. | | API | `api.umaxica.*` | `Api::*` |
+  JSON APIs (`/v1/inquiry/valid_email_addresses`, `valid_telephone_numbers`, `health`). |
 
 ---
 
@@ -272,7 +272,7 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 - Repository guides: `README.md`, `AGENTS.md`, `docs/checklist.md`
 - Infrastructure: `compose.yaml`, `Procfile.dev`
 - Security: `SECURITY.md`, `CODE_OF_CONDUCT.md`
-- Testing assets: `test/`, `spec/`, `rswag` configuration
+- Testing assets: `test/`, `gait/`, `rswag` configuration
 - Change log: tracked via Git history and PR descriptions
 
 > **Note:** This SRS is internal-facing and must be updated whenever routes, data stores, or

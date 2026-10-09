@@ -420,7 +420,7 @@ describe("Org passkey ceremony pages", () => {
   };
 
   // The panel itself is mocked here; that it renders no identifier field for a
-  // null one is covered in spec/features/auth/passkeys/passkey_panels.test.tsx.
+  // null one is covered in gait/features/auth/passkeys/passkey_panels.test.tsx.
   it("renders operator passkey sign-in without a permanent-secret fallback", () => {
     const screen = mount(
       <OrgPasskeySignInPage

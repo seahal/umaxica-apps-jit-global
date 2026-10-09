@@ -74,7 +74,7 @@ public/vite-test
 
 # Test and coverage
 test/
-spec/
+gait/
 coverage/
 .simplecov
 

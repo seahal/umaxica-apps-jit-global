@@ -1,7 +1,7 @@
 // The theme radio group on the surfaces that do not boot React.
 //
 // The mapping, the cookie parsing, the DOM application and both HTTP calls live in `@/lib/theme`
-// and are covered by spec/lib/theme.test.ts. What belongs here is what the controller itself
+// and are covered by gait/lib/theme.test.ts. What belongs here is what the controller itself
 // decides: which radio is checked, that a colour change waits for the server to accept the write,
 // that the visitor's own choice outranks a slower stored-preference read, and that an unreachable
 // server falls back to the cookie the first paint already used.

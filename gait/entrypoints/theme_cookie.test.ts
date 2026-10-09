@@ -11,7 +11,7 @@ const systemPrefersDark = { matches: false };
 const mediaListeners = new Set<MediaListener>();
 
 function installMatchMedia() {
-  // Prefer replacing `window.matchMedia` over `vi.stubGlobal`: spec/setup.ts already defines
+  // Prefer replacing `window.matchMedia` over `vi.stubGlobal`: gait/setup.ts already defines
   // that own-property, and a global stub does not replace it in jsdom.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,

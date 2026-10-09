@@ -1210,7 +1210,7 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     # The provider buttons keep posting to the ceremony endpoints; the button markup and its
-    # CSRF field are covered by spec/features/auth/signup/social_provider_button.test.tsx.
+    # CSRF field are covered by gait/features/auth/signup/social_provider_button.test.tsx.
     providers = inertia_props.fetch("social_providers")
 
     assert_equal(

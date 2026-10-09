@@ -252,7 +252,7 @@ class InertiaPageContractTest < ActionDispatch::IntegrationTest
   # Inertia.js 3 reads the initial page from a JSON <script> element keyed by the root element id.
   # The older form, a `data-page` attribute on the root element, is not read by the client at all.
   # The root element id is the inertia_rails default, and `createInertiaApp` is booted without an
-  # `id` override (spec/entrypoints/inertia.test.ts), so both sides meet on the upstream default.
+  # `id` override (gait/entrypoints/inertia.test.ts), so both sides meet on the upstream default.
   test "initial response carries the page in a script element and leaves the root element bare" do
     http_headers_9 =
       begin
