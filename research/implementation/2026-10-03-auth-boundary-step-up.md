@@ -67,7 +67,7 @@ concurrent root-finalization races remain outstanding.
 
 On 2026-10-03 the user directed the OTP delivery-event/DEBUG disclosure to be escalated and resolved
 comprehensively. The previously isolated logging proposal is deferred to the mandatory
-[active remediation plan](../../plans/active/otp-observability-secret-exposure-remediation.md) and
+[active remediation plan](../../specs/otp-observability-secret-exposure-remediation/plan.md) and
 [accepted handling ADR](../../adr/otp-observability-secret-exposure-remediation.md). The user
 explicitly excluded OTP logging remediation from this implementation and will perform browser
 verification separately. The remediation remains open; no logging format change is authorized.

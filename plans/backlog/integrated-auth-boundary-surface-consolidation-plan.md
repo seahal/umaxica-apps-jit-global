@@ -99,11 +99,11 @@ against that successful baseline.
 
 The canonical plan is tracked at
 `plans/backlog/integrated-auth-boundary-surface-consolidation-plan.md`; `plans/README.md` places
-proposed future work in `plans/backlog/` and says not to recreate `plans/active/`. The current
-worktree includes user-owned edits to Base identity/session controllers and presenters, OIDC/session
-tests, other route/security tests, and one deleted result file. Those changes are not part of this
-plan correction and must be preserved. Source inspection confirms no new change to OIDC routes,
-token exchange, schema, Valkey topology, host routing, or Edit ownership in the inspected diffs.
+proposed future work in `plans/backlog/` and says not to recreate `specs/`. The current worktree
+includes user-owned edits to Base identity/session controllers and presenters, OIDC/session tests,
+other route/security tests, and one deleted result file. Those changes are not part of this plan
+correction and must be preserved. Source inspection confirms no new change to OIDC routes, token
+exchange, schema, Valkey topology, host routing, or Edit ownership in the inspected diffs.
 `docs/security/social-callback-boundary.md` keeps OmniAuth callbacks outside
 `authorize!`/`authorized_scope`: sign-in/sign-up have no authenticated record, and link intent is
 bound to the signed-in resource through state, provider verification, and session binding. Preserve

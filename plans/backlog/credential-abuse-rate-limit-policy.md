@@ -4,7 +4,7 @@
 
 This is a design capture for rate limits, cooldowns, and inventory caps around authentication,
 credential management, outbound delivery, and sessions. Do not implement from this file until it is
-promoted to `plans/active/` or backed by an accepted ADR.
+promoted to `specs/` or backed by an accepted ADR.
 
 ## Motivation
 
@@ -116,7 +116,7 @@ If accepted, split this proposal into:
 
 1. An ADR for product-level rate-limit and credential-inventory decisions.
 2. `docs/security/credential-rate-limits.md` for current behavior after implementation.
-3. An implementation plan under `plans/active/` with per-surface rollout and tests.
+3. An implementation plan under `specs/` with per-surface rollout and tests.
 
 ## Open Questions
 

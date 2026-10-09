@@ -28,11 +28,11 @@ This ADR replaces both with one substrate — **Unified Enforcement** — while 
 kinds (account-wide access, one authentication method, one identifier value) as distinct,
 independently-combinable rows rather than collapsing them into a single state or boolean.
 
-A read-only audit preceded this decision (recorded as `plans/active/...` audit history and the
-Decision Log below) and found that the superseded ADR contains three factual errors about the
-repository: it claims a session-attribution column exists that does not, claims credential foreign
-keys cascade on delete when none do, and miscounts the orphaned trigger functions. These are
-corrected here and in `adr/database-trigger-usage-boundary.md`.
+A read-only audit preceded this decision (recorded as `specs/...` audit history and the Decision Log
+below) and found that the superseded ADR contains three factual errors about the repository: it
+claims a session-attribution column exists that does not, claims credential foreign keys cascade on
+delete when none do, and miscounts the orphaned trigger functions. These are corrected here and in
+`adr/database-trigger-usage-boundary.md`.
 
 ## Goals
 
@@ -111,10 +111,10 @@ this ADR's authoring session). Load-bearing facts:
 - `AccountAccessEvent` (chronicle DB) has NOT NULL, two-valued `previous_access_state` /
   `next_access_state` columns and cannot carry enforcement event types without a schema change, and
   already carries a cross-DB `account_id :bigint` that must not be repeated.
-- `ClientTotpCredential` and `ClientExternalIdentity` have neither `discard_at` nor `purge_eligible_at`
-  and are absent from `RetentionPurgeJob::RETAINABLE_MODELS`; `ClientExternalIdentity` is being
-  actively rewritten in the working tree behind a `IdentityRepositoryFactory.common_storage?`
-  runtime branch.
+- `ClientTotpCredential` and `ClientExternalIdentity` have neither `discard_at` nor
+  `purge_eligible_at` and are absent from `RetentionPurgeJob::RETAINABLE_MODELS`;
+  `ClientExternalIdentity` is being actively rewritten in the working tree behind a
+  `IdentityRepositoryFactory.common_storage?` runtime branch.
 - `clients.visibility_id` → `ClientVisibility` (`NOTHING/USER/STAFF/BOTH`) is an existing, reusable
   profile-visibility mechanism.
 - A per-subject retention hold mechanism already blocks purge
@@ -721,8 +721,8 @@ and shipping one would be a silent fallback forbidden by
 trigger and are available for `google` / `apple` from v1.
 
 `client_totp_credentials` and `client_external_identities` have neither `discard_at` nor
-`purge_eligible_at` and are absent from `RETAINABLE_MODELS`, so no `delete_all` route reaches them; their
-trigger's justification rests on `dependent: :destroy` and direct SQL only, weaker than the
+`purge_eligible_at` and are absent from `RETAINABLE_MODELS`, so no `delete_all` route reaches them;
+their trigger's justification rests on `dependent: :destroy` and direct SQL only, weaker than the
 justification for the other fourteen tables.
 
 ### Correction to `adr/database-trigger-usage-boundary.md`

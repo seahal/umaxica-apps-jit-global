@@ -40,5 +40,5 @@ Phase 1 was the minimal engine bootstrap:
 
 ## Consequences
 
-- Phase 1 can leave `plans/active/`.
+- Phase 1 can leave `specs/`.
 - The parent issue `#553` stays open because later engine-extraction phases remain.

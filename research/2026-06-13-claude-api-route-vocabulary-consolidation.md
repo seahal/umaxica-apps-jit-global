@@ -120,5 +120,5 @@ Not automatically part of the consolidation; keep outside `/api/v0` unless a lat
 ## Promotion Candidate
 
 The stable decision is recorded in `adr/api-route-vocabulary-consolidation.md`. When a migration is
-actually scheduled, promote the classification process and candidate inventory into a
-`plans/active/` plan (not created here, per task scope).
+actually scheduled, promote the classification process and candidate inventory into a `specs/` plan
+(not created here, per task scope).

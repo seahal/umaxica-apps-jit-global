@@ -6,9 +6,8 @@ Backlog. Deferred on 2026-05-19.
 
 ## Context
 
-`plans/active/token-rotation-concurrency-hardening.md` improved the safety baseline for auth and
-preference token rotation, but intentionally did not implement a legitimate parallel-refresh overlap
-window.
+`specs/token-rotation-concurrency-hardening.md` improved the safety baseline for auth and preference
+token rotation, but intentionally did not implement a legitimate parallel-refresh overlap window.
 
 The remaining problem is the high-throughput case where multiple legitimate requests present the
 same refresh token close together because of browser concurrency, retry, or a lost response. Redis /

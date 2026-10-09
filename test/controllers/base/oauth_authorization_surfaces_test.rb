@@ -134,7 +134,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     assert_equal "invalid_request", response.parsed_body.fetch("error")
   end
 
-  # Capacity (plans/active/sign-fqdn-integrated-plan.md section 5): 2048 bytes per parameter and
+  # Capacity (specs/sign-fqdn-integrated-plan/plan.md section 5): 2048 bytes per parameter and
   # 8192 bytes per query, refused with 400 before any transaction is allocated. Values use only
   # unreserved characters so the byte counts are exact on the wire.
   test "authorize accepts a 2048-byte parameter and refuses 2049 bytes before allocating state" do

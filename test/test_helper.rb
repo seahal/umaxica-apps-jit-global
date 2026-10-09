@@ -134,7 +134,7 @@ module AuthenticationHarness
   end
 
   # A protected Base page is not a Sign entry: it points the browser at Base's own passive GET /sign
-  # on the same host and issues no admission (plans/active/sign-fqdn-integrated-plan.md section 5).
+  # on the same host and issues no admission (specs/sign-fqdn-integrated-plan/plan.md section 5).
   def assert_base_sign_entry_redirect(location, surface:)
     uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)

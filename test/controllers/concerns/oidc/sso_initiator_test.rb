@@ -87,7 +87,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
   end
 
   # A protected page is not a Sign entry: it points at the passive GET /sign on the same host and
-  # starts no OIDC flow (plans/active/sign-fqdn-integrated-plan.md section 5).
+  # starts no OIDC flow (specs/sign-fqdn-integrated-plan/plan.md section 5).
   test "authenticate! sends an unauthenticated html request to the passive sign entry without a flow" do
     io = StringIO.new
     logger = Logger.new(io)

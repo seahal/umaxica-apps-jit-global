@@ -6,24 +6,25 @@ Accepted (2026-10-02)
 
 Amends `adr/logout-ceremony-boundary.md` for RP-initiated logout target selection. Supersedes the
 logged-in direct-entry redirect described in `app/controllers/auth/app/sign/ups_controller.rb` and
-the context-free Auth-to-Base bridge (`app/controllers/concerns/auth_ceremony_admission.rb`) once the
-P3 migration in `plans/active/sign-fqdn-integrated-plan.md` lands; until then the current code is
+the context-free Auth-to-Base bridge (`app/controllers/concerns/auth_ceremony_admission.rb`) once
+the P3 migration in `specs/sign-fqdn-integrated-plan/plan.md` lands; until then the current code is
 the state being migrated from, not a competing contract.
 
 ## Context
 
-RP entry, Auth, and Base each decided differently what an already-authenticated browser gets when
-it starts a new Sign: a dashboard redirect, 403 with fixed text, 409, or a silently issued
+RP entry, Auth, and Base each decided differently what an already-authenticated browser gets when it
+starts a new Sign: a dashboard redirect, 403 with fixed text, 409, or a silently issued
 authorization code. Separately, Base RP-initiated logout took the `sid` from a verified
 `id_token_hint` as the session to revoke even when the browser presenting it had no session; a test
-confirmed that this ended another subject's session (D1, `evidence/2026-10-02-sign-p0-baseline-d1-T5N3.md`).
+confirmed that this ended another subject's session (D1,
+`evidence/2026-10-02-sign-p0-baseline-d1-T5N3.md`).
 
 ## Decision
 
-1. The normal entry is the neutral `GET /sign` (display only) and `POST /sign` (start). RPs offer
-   no Sign in / Sign up choice and send no `intent=sign_up`, `screen_hint=signup`, or
-   `prompt=create` on a normal start. Auth opens on `/sign/in`; registration is reached inside Auth
-   where offered. Base owns eligibility, result receipt, and session issuance.
+1. The normal entry is the neutral `GET /sign` (display only) and `POST /sign` (start). RPs offer no
+   Sign in / Sign up choice and send no `intent=sign_up`, `screen_hint=signup`, or `prompt=create`
+   on a normal start. Auth opens on `/sign/in`; registration is reached inside Auth where offered.
+   Base owns eligibility, result receipt, and session issuance.
 2. A new Sign from a browser that the RP or Base can verify as authenticated is refused with shared
    i18n `403 text/plain` and `Cache-Control: no-store`, without `Location`, links, logout guidance,
    retry, or any change to the existing session. This applies at Base as well as at RPs: a browser
@@ -50,15 +51,15 @@ confirmed that this ended another subject's session (D1, `evidence/2026-10-02-si
   Base SSO code-issuing branch, and the automatic OIDC start from protected pages and failed RP
   callbacks were removed on 2026-10-02. RP callbacks moved from `/sign/callback` to
   `/oidc/callback`.
-- The decision table, migration table, and P3 gate are in `plans/active/sign-fqdn-integrated-plan.md`.
+- The decision table, migration table, and P3 gate are in `specs/sign-fqdn-integrated-plan/plan.md`.
 
 ## Unified implementation amendment (2026-10-06)
 
-The Unified Implementation Plan partially supersedes item 2's blanket prohibition on an SSO
-success branch for Base. Base's Browser Session is legitimate OP login state. `/oauth/authorize`
-may issue a code to a registered RP from that session without creating a new Browser Session when
-the request's `prompt` and `max_age` conditions are satisfied. `prompt=none` without sufficient
-state returns `login_required`; `prompt=login` or an unmet `max_age` starts the Auth ceremony.
+The Unified Implementation Plan partially supersedes item 2's blanket prohibition on an SSO success
+branch for Base. Base's Browser Session is legitimate OP login state. `/oauth/authorize` may issue a
+code to a registered RP from that session without creating a new Browser Session when the request's
+`prompt` and `max_age` conditions are satisfied. `prompt=none` without sufficient state returns
+`login_required`; `prompt=login` or an unmet `max_age` starts the Auth ceremony.
 
 The neutral RP `/sign` entry remains a separate self-RP action and still refuses a browser that is
 already authenticated for that RP. A plain authorization GET does not mint a browser admission

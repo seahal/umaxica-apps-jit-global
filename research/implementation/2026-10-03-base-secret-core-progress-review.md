@@ -64,10 +64,10 @@ from this note or overwrite a concurrently maintained work ledger.
 
 ## Documentation reconciliation found during reading
 
-- The OTP ADR and implementation note link a new document under `plans/active/`, while
-  `plans/README.md` prohibits a parallel active implementation backlog. Preserve the concurrently
-  edited files; their owner should reconcile placement and links under the existing issue/plan
-  policy without losing mandatory remediation tracking.
+- The OTP ADR and implementation note link a new document under `specs/`, while `plans/README.md`
+  prohibits a parallel active implementation backlog. Preserve the concurrently edited files; their
+  owner should reconcile placement and links under the existing issue/plan policy without losing
+  mandatory remediation tracking.
 - The historical integrated backlog contains earlier verification snapshots. Use dated evidence for
   the exact checkout, and do not substitute an older green run for the recorded later failure or the
   current unverified working tree.

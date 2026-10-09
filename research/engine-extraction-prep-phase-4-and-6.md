@@ -33,4 +33,4 @@ investigation step only. No code was deleted based on the report.
 ## Consequences
 
 - The remaining prep work is complete.
-- The prep plan can stay out of `plans/active/` and the result is preserved here for traceability.
+- The prep plan can stay out of `specs/` and the result is preserved here for traceability.

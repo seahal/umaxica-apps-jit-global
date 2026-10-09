@@ -1,6 +1,6 @@
 # Rails Jump contract freeze
 
-The accepted plan is `plans/active/rails-jump-directed-handoff-rollout.md`; the decision is
+The accepted plan is `specs/rails-jump-directed-handoff-rollout/plan.md`; the decision is
 `adr/jump-directed-rails-handoff-contract.md`.
 
 The 2026-10-02 instruction supersedes the earlier development blanket gate, Edit issuer retention

@@ -32,5 +32,5 @@ The spec tracked three concrete areas:
 
 ## Consequences
 
-- The hardening memo can leave `plans/active/`.
+- The hardening memo can leave `specs/`.
 - The callback integration test plan remains active and should continue separately.

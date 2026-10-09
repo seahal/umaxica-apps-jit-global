@@ -37,4 +37,10 @@ State the status at the top of `spec.md`: `accepted`, `implementing`, `verified`
 Number acceptance criteria within the spec (`AC-1`, `AC-2`, …) so tests and evidence can name them.
 There is no repository-wide requirement register.
 
+## Changes carried over from `plans/active/`
+
+Four directories hold only a `plan.md`. They were open implementation plans under the former
+`plans/active/`, each tied to an accepted ADR that states the what and why. They are kept as plans
+rather than given a reconstructed `spec.md`; a new change starts with `spec.md`.
+
 Vitest tests live in `gait/`, not here.

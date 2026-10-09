@@ -203,7 +203,7 @@ in question.
 ## Detailed Implementation Plan
 
 This ADR decides direction only. The detailed implementation sequence is intentionally deferred and
-will be authored in a separate plan under `plans/active/` before execution begins.
+will be authored in a separate plan under `specs/` before execution begins.
 
 Existing plans that presuppose the wrapper apps architecture are marked superseded so that
 implementers do not follow conflicting guidance:

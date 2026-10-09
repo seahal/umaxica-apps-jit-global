@@ -3,7 +3,7 @@
 
 # Bounds an authorization request before any transaction is allocated: each query parameter must be
 # a plain string of at most MAX_PARAMETER_BYTES, and the whole query at most MAX_QUERY_BYTES. The
-# limits were decided for the Sign capacity table (plans/active/sign-fqdn-integrated-plan.md
+# limits were decided for the Sign capacity table (specs/sign-fqdn-integrated-plan/plan.md
 # section 5). The including controller opts in with its own `before_action`.
 module OauthAuthorizeRequestSizeLimit
   extend ActiveSupport::Concern

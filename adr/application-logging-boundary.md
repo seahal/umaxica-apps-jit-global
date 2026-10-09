@@ -17,10 +17,10 @@ pipeline even though they have different purposes.
 ## Decision
 
 OTP message disclosure through delivery events and DEBUG output is an open, mandatory remediation
-item. The [2026-10-03 escalation decision](otp-observability-secret-exposure-remediation.md)
-and [active remediation plan](../plans/active/otp-observability-secret-exposure-remediation.md)
-record the finding, comprehensive scope, and required closure evidence. This does not change the
-logging ownership below or claim that secret protection has been implemented.
+item. The [2026-10-03 escalation decision](otp-observability-secret-exposure-remediation.md) and
+[active remediation plan](../specs/otp-observability-secret-exposure-remediation/plan.md) record the
+finding, comprehensive scope, and required closure evidence. This does not change the logging
+ownership below or claim that secret protection has been implemented.
 
 Access logs stay on Lograge. Lograge owns request-completion logging and emits one normalized JSON
 object per request.
@@ -71,10 +71,10 @@ Notification enqueue, provider acceptance, delivery outcome, retry, and permanen
 different facts. The existing SMS boundary records enqueue, provider acceptance, and provider
 failure facts in Chronicle without recipient or message content. The OTP email adapters record
 successful enqueue and enqueue failure, bound to the email record as the Chronicle subject and
-without recipient or message content; an enqueue failure retains the original delivery exception
-for the caller. An audit-write failure after a successful enqueue is logged diagnostically and does
-not turn one queued email into a caller-visible delivery failure that could cause a duplicate.
-No delivery success is inferred from an enqueue result, and email provider receipts or a generic
+without recipient or message content; an enqueue failure retains the original delivery exception for
+the caller. An audit-write failure after a successful enqueue is logged diagnostically and does not
+turn one queued email into a caller-visible delivery failure that could cause a duplicate. No
+delivery success is inferred from an enqueue result, and email provider receipts or a generic
 provider receipt ledger are not introduced until their owner, provider contract, and retention
 policy are approved.
 

@@ -5,7 +5,7 @@ Implementation date: 2026-10-01.
 The 2026-10-02 contract freeze supersedes the development blanket gate, Edit issuer retention and
 legacy production Host Authorization retention recorded below. See
 `research/implementation/2026-10-02-rails-jump-contract-freeze.md` and the amended directed handoff
-ADR. Plan: `plans/active/rails-jump-directed-handoff-rollout.md`. Decision:
+ADR. Plan: `specs/rails-jump-directed-handoff-rollout/plan.md`. Decision:
 `adr/jump-directed-rails-handoff-contract.md`. Results:
 `evidence/2026-10-01-rails-directed-jump-handoffs-R8J4.md`.
 

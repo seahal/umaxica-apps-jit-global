@@ -28,5 +28,5 @@ The plan tracked a migration away from controller `any_instance.stub` usage in f
 
 ## Consequences
 
-- The migration can leave `plans/active/`.
+- The migration can leave `specs/`.
 - Future tests should avoid reintroducing controller-wide `any_instance.stub` patterns.

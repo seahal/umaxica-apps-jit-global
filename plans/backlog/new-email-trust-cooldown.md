@@ -3,7 +3,7 @@
 **Status: PROPOSAL — NOT STARTED. Not yet an accepted decision.**
 
 This is an idea capture, not an active plan. Do not implement from this file until it is promoted to
-`plans/active/` or backed by an accepted ADR.
+`specs/` or backed by an accepted ADR.
 
 ## Motivation
 
@@ -23,7 +23,7 @@ Adding a new email address to an existing account:
 1. **Step-up required on the existing session.** Adding an email is a sensitive operation; require a
    successful step-up (step-up) before the add is accepted. Reuses the existing step-up pipeline —
    see [`adr/step-up-authentication-redesign.md`](../../adr/step-up-authentication-redesign.md) and
-   [`plans/active/step-up-authentication-rebuild.md`](../active/step-up-authentication-rebuild.md).
+   [`specs/step-up-authentication-rebuild.md`](../active/step-up-authentication-rebuild.md).
 2. **New email verification is immediate.** The newly added address may be verified right away
    (normal OTP / verification link). Verification proves control of the mailbox; it does **not** by
    itself confer account trust.
@@ -62,7 +62,7 @@ Adding a new email address to an existing account:
 ## Relationship to Existing Work
 
 - Step-up dependency: `adr/step-up-authentication-redesign.md`,
-  `plans/active/step-up-authentication-rebuild.md`.
+  `specs/step-up-authentication-rebuild.md`.
 - Contact/email model and encryption: `restoration-e1-contact-actor-context.md`,
   `restoration-e2-contact-customer-canonicalization.md`,
   `customer-email-telephone-encryption-plan.md`.
@@ -71,4 +71,4 @@ Adding a new email address to an existing account:
 ## Next Step
 
 When prioritized: answer the open questions, capture the trust-state model as an ADR (sensitive
-auth/account-recovery decision), then move an implementation plan into `plans/active/`.
+auth/account-recovery decision), then move an implementation plan into `specs/`.

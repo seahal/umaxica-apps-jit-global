@@ -29,7 +29,7 @@ module OidcSsoInitiator
 
   # A protected page, a failed callback, or an expired session is not a Sign entry of its own: the
   # browser is pointed at this surface's passive GET /sign, and only the user's POST there starts an
-  # OIDC flow (plans/active/sign-fqdn-integrated-plan.md section 5).
+  # OIDC flow (specs/sign-fqdn-integrated-plan/plan.md section 5).
   # Every first-party browser RP serves its neutral entry at GET /sign on its own host
   # (test/integration/routes/neutral_rp_entry_contract_test.rb).
   def sign_in_url_with_pt(pt)

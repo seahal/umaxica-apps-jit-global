@@ -10,8 +10,8 @@ make `rpl` a required `"reuse"`. Amended a third time on 2026-10-02 to make
 canonical issuer origin: the Rails environment name never selects a Jump identity. Amended a fourth
 time on 2026-10-02 to reject `PRIVATE_JUMP_GATEWAY_URL` at boot instead of ignoring it. Amended a
 fifth time on 2026-10-02 to move the Palm native entry from `/sign/in` to the neutral `GET /sign`
-page and `POST /sign` starter shared by every first-party RP FQDN. Supersedes
-the Palm authorization-launcher restriction in `adr/acme-sign-core-base-port-boundary.md` and the
+page and `POST /sign` starter shared by every first-party RP FQDN. Supersedes the Palm
+authorization-launcher restriction in `adr/acme-sign-core-base-port-boundary.md` and the
 issuer/return-policy portion of the remaining steps in `adr/core-canonical-public-host.md`. Their
 persistence and API ownership boundaries remain.
 
@@ -81,8 +81,9 @@ neutral page and the CSRF-protected `POST /sign` starts the flow. Palm's `GET /s
 native request and carries it to `POST /sign` as form fields; it creates no browser state. The
 `POST` records the pending flow and issues the Jump handoff to Base. Palm has no `/sign/in` route.
 The page is an interim, minimal confirmation step while the Palm launch UX is undecided; it keeps
-the path and method contract aligned with the other RPs in the meantime. Existing `app-ios-rp` and `app-android-rp` stay public clients with `palm-api` audience;
-their Base redirect URI is now Palm's HTTPS `/oidc/callback`.
+the path and method contract aligned with the other RPs in the meantime. Existing `app-ios-rp` and
+`app-android-rp` stay public clients with `palm-api` audience; their Base redirect URI is now Palm's
+HTTPS `/oidc/callback`.
 
 Palm holds only bounded, temporary browser continuity in the existing encrypted Rails session. The
 callback requires a Base-sourced, Jump-verified response and matching browser state before one-time
@@ -267,4 +268,4 @@ Edit remains an OIDC RP with its client registration, assertion keys and callbac
 no Jump surface issuer, surface JWKS route or approved Jump edge. Its existing same-site OIDC
 admission remains direct; an attempted Edit Jump handoff raises `JumpRtConfigurationError`. Graph
 inclusion and general issuer-side destination least privilege require separate review. Rollout and
-rollback gates are in `plans/active/rails-jump-directed-handoff-rollout.md`.
+rollback gates are in `specs/rails-jump-directed-handoff-rollout/plan.md`.

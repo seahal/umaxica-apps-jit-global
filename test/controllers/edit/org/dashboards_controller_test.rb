@@ -55,7 +55,7 @@ class Edit::Org::DashboardsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # The protected page is not a second Sign entry: it points the browser at the passive GET /sign and
-  # starts no OIDC flow itself (plans/active/sign-fqdn-integrated-plan.md section 5).
+  # starts no OIDC flow itself (specs/sign-fqdn-integrated-plan/plan.md section 5).
   test "an unauthenticated HTML request is sent to the passive sign entry without starting a flow" do
     get edit_org_dashboard_path(ri: "jp")
 

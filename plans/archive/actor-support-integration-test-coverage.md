@@ -5,8 +5,8 @@
 Do not implement this backlog note as originally written. Reuse only the lifecycle coverage ideas
 that match the accepted `Actor.tld`, `Actor.authentication`, and `Actor.preference` API.
 
-The surviving work is tracked by `plans/active/actor-current-context-api-cleanup.md`. Current
-coverage already includes `test/integration/actor_support_lifecycle_test.rb`,
+The surviving work is tracked by `specs/actor-current-context-api-cleanup.md`. Current coverage
+already includes `test/integration/actor_support_lifecycle_test.rb`,
 `test/unit/current/actor_support_test.rb`, and
 `test/controllers/concerns/actor_support_included_do_test.rb`.
 

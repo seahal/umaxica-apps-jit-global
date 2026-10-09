@@ -36,5 +36,5 @@ real callback behavior for the Acme surfaces first.
 
 ## Consequences
 
-- Acme callback integration coverage is complete enough to leave `plans/active/`.
+- Acme callback integration coverage is complete enough to leave `specs/`.
 - The same helper can be reused when Core and Docs callback coverage becomes the next target.

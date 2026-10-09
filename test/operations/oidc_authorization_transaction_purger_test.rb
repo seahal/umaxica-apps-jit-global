@@ -4,7 +4,7 @@
 require "test_helper"
 
 # Expired authorization transactions are removed once their retention has passed
-# (plans/active/sign-fqdn-integrated-plan.md section 5). BVA at the cutoff, now - RETENTION_PERIOD:
+# (specs/sign-fqdn-integrated-plan/plan.md section 5). BVA at the cutoff, now - RETENTION_PERIOD:
 # one second before and exactly at the cutoff are removed, one second after is kept.
 class OidcAuthorizationTransactionPurgerTest < ActiveSupport::TestCase
   SURFACES = {

@@ -4,7 +4,7 @@
 
 This plan implements the accepted decision in `adr/session-token-hardening-baseline.md`. Do not
 start the remaining implementation until the current large-scale edits settle and this plan is
-promoted to `plans/active/`. This file changes no code by itself.
+promoted to `specs/`. This file changes no code by itself.
 
 ## Goal
 
