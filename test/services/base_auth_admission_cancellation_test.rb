@@ -57,7 +57,7 @@ class BaseAuthAdmissionCancellationTest < ActiveSupport::TestCase
   end
 
   test "base browser marker map keeps separate transaction entries behind one opaque locator" do
-    store = Valkey::AuthState::BaseStepUpMarkerStore.new
+    store = BaseStepUpMarkerAdapter.new
     locator = SecureRandom.urlsafe_base64(32, padding: false)
     first_ref = SecureRandom.uuid
     second_ref = SecureRandom.uuid

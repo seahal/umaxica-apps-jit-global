@@ -3,11 +3,8 @@
 
 require "test_helper"
 
-# A social login for an account that has not finished sign-up must not sign the
-# person in: the completion endpoint hands it to the sign-up guard instead, after
-# binding a pending sign-up ticket to the identity. That branch of
-# Base::App::Social::Authentication::CompletionsController had no test, so a
-# regression would have signed a half-registered account straight in.
+# Legacy signed LOGIN results carry no admission binding and cannot establish Root
+# authority. LINK results remain management inputs on Auth, never Base login inputs.
 class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
   fixtures :clients
 
@@ -36,26 +33,58 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
     ActionController::Base.allow_forgery_protection = @original_forgery_protection
   end
 
-  test "a login for an account without a birthdate is handed to the sign-up guard" do
+  test "a legacy login result for an incomplete account cannot bypass admission" do
     travel_to(@now) do
       result_token = issue_login_result
 
-      assert_difference -> { ClientSignUpFlow.where(principal_id: @client.id).count }, 1 do
-        complete_staged_result!(result_token: result_token, provider: "google")
+      assert_no_difference [-> { ClientSignUpFlow.where(principal_id: @client.id).count }, "ClientToken.count"] do
+        begin
+          fv5017 = result_token
+          fv5016 = "google"
+          fv5015 = SocialCeremonyResultAdapter.new.issue!(
+            token: fv5017,
+            expires_at: @now + 1.minute,
+            now: @now,
+          )
+          host!(@base_host)
+          https!
+          get(
+            base_app_social_authentication_completion_path(
+              id: fv5016,
+              result_ref: fv5015,
+              ri: "jp",
+            ),
+          )
+
+          assert_response :success
+
+          fv5013 = response.parsed_body.at_css("form")
+
+          assert fv5013
+          fv5012 =
+            fv5013.css("input[name]").to_h { |fv5014|
+              [fv5014["name"], fv5014["value"]]
+            }
+          post(
+            fv5013["action"],
+            params: fv5012,
+            headers: {
+              "Host" => @base_host,
+              "Origin" => "https://#{@base_host}",
+              "Sec-Fetch-Site" => "same-origin",
+            },
+          )
+        end
       end
 
-      assert_response :redirect
-      gateway = URI.parse(response.location)
+      assert_response :unprocessable_content
+      assert_nil response.headers["Location"]
+      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+      transaction = ClientSocialCeremonyTransaction.order(:created_at).last
 
-      assert_equal "jump.umaxica.net", gateway.host
-      payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-
-      assert_equal "https://auth.umaxica.app/sign/up/guard/google", payload.fetch("url").split("?").first
-
-      cycle = ClientSignUpFlow.where(principal_id: @client.id).recent_first.first
-
-      assert_equal "google", cycle.social_provider
-      assert_equal "social_identity", cycle.pending_contact_type
+      assert_nil transaction.consumed_at
+      assert_equal @client.id, ClientGoogleIdentity.find_by!(uid: @uid).user_id
     end
   end
 
@@ -65,7 +94,43 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
   test "a link completion posted to the login endpoint is sent back to settings" do
     travel_to(@now) do
       assert_no_difference -> { ClientSignUpFlow.where(principal_id: @client.id).count } do
-        complete_staged_result!(result_token: issue_link_result, provider: "google")
+        begin
+          fv5011 = issue_link_result
+          fv5010 = "google"
+          fv5009 = SocialCeremonyResultAdapter.new.issue!(
+            token: fv5011,
+            expires_at: @now + 1.minute,
+            now: @now,
+          )
+          host!(@base_host)
+          https!
+          get(
+            base_app_social_authentication_completion_path(
+              id: fv5010,
+              result_ref: fv5009,
+              ri: "jp",
+            ),
+          )
+
+          assert_response :success
+
+          fv5007 = response.parsed_body.at_css("form")
+
+          assert fv5007
+          fv5006 =
+            fv5007.css("input[name]").to_h { |fv5008|
+              [fv5008["name"], fv5008["value"]]
+            }
+          post(
+            fv5007["action"],
+            params: fv5006,
+            headers: {
+              "Host" => @base_host,
+              "Origin" => "https://#{@base_host}",
+              "Sec-Fetch-Site" => "same-origin",
+            },
+          )
+        end
       end
 
       assert_response :see_other
@@ -80,7 +145,41 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
 
   test "an apple link completion is sent back to the apple settings page" do
     travel_to(@now) do
-      complete_staged_result!(result_token: issue_link_result(provider: "apple"), provider: "apple")
+      begin
+        fv5005 = issue_link_result(provider: "apple")
+        fv5004 = "apple"
+        fv5003 = SocialCeremonyResultAdapter.new.issue!(
+          token: fv5005,
+          expires_at: @now + 1.minute,
+          now: @now,
+        )
+        host!(@base_host)
+        https!
+        get(
+          base_app_social_authentication_completion_path(
+            id: fv5004, result_ref: fv5003, ri: "jp",
+          ),
+        )
+
+        assert_response :success
+
+        fv5001 = response.parsed_body.at_css("form")
+
+        assert fv5001
+        fv5000 =
+          fv5001.css("input[name]").to_h { |fv5002|
+            [fv5002["name"], fv5002["value"]]
+          }
+        post(
+          fv5001["action"],
+          params: fv5000,
+          headers: {
+            "Host" => @base_host,
+            "Origin" => "https://#{@base_host}",
+            "Sec-Fetch-Site" => "same-origin",
+          },
+        )
+      end
 
       assert_response :see_other
       gateway = URI.parse(response.location)
@@ -93,37 +192,6 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
   end
 
   private
-
-  def complete_staged_result!(result_token:, provider:)
-    reference = Valkey::AuthState::SocialCeremonyResultStore.new.issue!(
-      token: result_token,
-      expires_at: @now + 1.minute,
-      now: @now,
-    )
-    host!(@base_host)
-    https!
-    get(
-      base_app_social_authentication_completion_path(
-        id: provider, result_ref: reference, ri: "jp",
-      ),
-    )
-
-    assert_response :success
-
-    form = response.parsed_body.at_css("form")
-
-    assert form
-    params = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    post(
-      form["action"],
-      params: params,
-      headers: {
-        "Host" => @base_host,
-        "Origin" => "https://#{@base_host}",
-        "Sec-Fetch-Site" => "same-origin",
-      },
-    )
-  end
 
   def issue_link_result(provider: "google")
     grant = IdentitySocialCeremonyGrantIssuer.issue!(

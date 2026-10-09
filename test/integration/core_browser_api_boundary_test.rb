@@ -4,7 +4,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
-  HOST = ENV.fetch("PUBLIC_CORE_SERVICE_URL", ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost"))
+  HOST = ENV.fetch("PUBLIC_CORE_SERVICE_URL")
 
   setup do
     @previous_flag = ENV["CORE_BROWSER_JWT_COOKIE_ENABLED"]
@@ -307,6 +307,7 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     post "/api/v0/token/refresh",
          headers: json_headers.merge(
            "X-CSRF-Token" => csrf_token,
+           "Origin" => "https://#{HOST}",
            "Authorization" => "Bearer #{oidc_access_token_for(clients(:one))}",
          )
 
@@ -334,7 +335,10 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     refresh = rp_session.issue_refresh_token!(expires_at: absolute_expiry)
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = refresh
 
-    post "/api/v0/token/refresh", headers: json_headers.merge("X-CSRF-Token" => csrf_token)
+    post "/api/v0/token/refresh", headers: json_headers.merge(
+      "X-CSRF-Token" => csrf_token,
+      "Origin" => "https://#{HOST}",
+    )
 
     # The rotated credentials travel as `Set-Cookie`; there is no representation to return
     # (RFC 9110 15.3.5), so there is no body that could leak one.
@@ -655,7 +659,8 @@ class CoreBrowserApiBoundaryTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,
@@ -738,7 +743,7 @@ class CoreBrowserApiBoundaryTest
   def browser_headers
     csrf_token = csrf_token_value
     cookies["csrf_token"] = csrf_token if respond_to?(:cookies, true)
-    host_headers.merge("X-CSRF-Token" => csrf_token)
+    host_headers.merge("X-CSRF-Token" => csrf_token, "Origin" => "https://#{HOST}")
   end
 
   def ensure_visitor_reference_records!

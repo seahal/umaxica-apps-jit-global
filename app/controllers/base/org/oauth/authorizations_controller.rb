@@ -99,7 +99,7 @@ module Base
           )
 
           if result.success?
-            redirect_to_jump_url(result.redirect_url)
+            redirect_to_jump_url(result.redirect_url, status: request.post? ? :see_other : :found)
           else
             render json: { error: result.error, error_description: result.error_description },
                    status: :bad_request
@@ -213,6 +213,7 @@ module Base
               require_totp_check: false,
               audit_context: { oidc_client_id: transaction.client_id },
               authentication_event_at: transaction.authenticated_at,
+              authentication_context: AuthenticationContextValue::NORMAL_KEY,
               established_authentication_method: established_authentication_method_for(transaction.auth_method),
               oidc_authorization_transaction: transaction,
             )

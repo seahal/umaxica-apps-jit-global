@@ -9,6 +9,14 @@ afterEach(() => {
   cleanup();
 });
 
+// jsdom has no Screen Orientation API; React Aria reads it when installing keyboard listeners.
+if (typeof window !== "undefined" && typeof window.screen.orientation === "undefined") {
+  Object.defineProperty(window.screen, "orientation", {
+    value: Object.assign(new EventTarget(), { angle: 0, type: "landscape-primary" }),
+    configurable: true,
+  });
+}
+
 // jsdom implements no scrolling at all, so `Element.prototype.scrollTo` is simply absent. React
 // Aria calls it to bring the focused collection item into view, which throws out of an animation
 // frame — outside any test's call stack, where it surfaces as an unhandled error rather than a

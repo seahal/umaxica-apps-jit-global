@@ -8,7 +8,7 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
   fixtures :operators, :operator_statuses
 
   test "renders the control-plane root for a regional request" do
-    host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
     get base_org_root_url(ri: "jp")
 
     assert_response :success
@@ -17,7 +17,7 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "renders the control-plane root for the us region" do
-    host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
     get base_org_root_url(ri: "us")
 
     assert_response :success
@@ -25,7 +25,7 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "keeps extra request context on the control-plane root instead of leaving the host" do
-    host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
     get base_org_root_url(ri: "jp", ct: "dr", lx: "en", tz: "asia/tokyo")
 
     assert_response :success
@@ -33,7 +33,7 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "renders Home for an unknown region without redirect" do
-    host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
     get base_org_root_url(ri: "xx")
 
     assert_response :success
@@ -42,7 +42,7 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "renders Home for a missing region without redirect" do
-    host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
     get "/"
 
     assert_response :success
@@ -51,7 +51,7 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "renders the control-plane root when extra preference params are supplied" do
-    host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
     get base_org_root_url(ct: "dr", lx: "en", ri: "us", tz: "asia/tokyo")
 
     assert_response :success
@@ -59,11 +59,70 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "authenticated Home returns 404 without redirect" do
-    host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
     staff = operators(:one)
 
+    http_headers_1 =
+      begin
+        rp_headers = as_staff_headers(staff, host: ENV.fetch("PUBLIC_BASE_STAFF_URL"))
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get base_org_root_url(ri: "jp"),
-        headers: as_staff_headers(staff, host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"))
+        headers: http_headers_1
 
     assert_not_equal 301, response.status
     assert_not_equal "https://jp.umaxica.org/", response.location
@@ -71,11 +130,72 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_nil response.location
   end
   test "authenticated Home answers 404 as a rendered response, not a raised exception" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! host
     controller_exception =
       capture_controller_exception do
-        get(base_org_root_url(ri: "jp"), headers: as_staff_headers(operators(:one), host: host))
+        http_headers_0 =
+          begin
+            rp_headers = as_staff_headers(operators(:one), host: host)
+            rp_host = rp_headers["Host"]
+            rp_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+              rp_client_id =
+                case rp_family
+                when "base" then "base-#{rp_surface}-ww"
+                when "edit" then "edit-org"
+                else "#{rp_family}-#{rp_surface}"
+                end
+              rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              rp_client = OidcClientRegistry.find!(rp_client_id)
+              rp_key = [rp_client.client_id, rp_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                  !(rp_token.device_session_id && OperatorRpSession.exists?(
+                    device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                  ))
+                rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                rp_now = Time.current
+                rp_session = OperatorRpSession.create!(
+                  operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                  refresh_token_expires_at: rp_now + 10.minutes,
+                )
+                rp_access = AuthenticationTokenService.encode(
+                  rp_token.staff, host: rp_host, resource_type: "operator",
+                                  session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                  oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                  expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                  issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                  subject: OidcSubject.for(
+                                    rp_token.staff,
+                                    resource_type: "operator",
+                                  ), client_id: rp_client.client_id,
+                )
+                @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[rp_key]
+                rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+                rp_cookie = [
+                  rp_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                ].join("; ")
+                rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+              end
+            end
+            rp_headers
+          end
+        get(
+          base_org_root_url(ri: "jp"), headers: http_headers_0,
+        )
       end
 
     assert_response :not_found

@@ -80,15 +80,14 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
          headers: rp_session_headers(user, token)
 
     # The continuation hop must not start a second RP ceremony; it only clears this host and
-    # renders the approved POST handoff to Base's authoritative end-session endpoint.
-    assert_response :success
-    handoff = css_select("form#sign-out-handoff-form").first
-    location = URI.parse(handoff["action"])
+    # redirects to the passive receiver on Base's authoritative end-session endpoint.
+    assert_response :see_other
+    location = URI.parse(response.location)
 
     assert_equal @base_host, location.host
     assert_equal "/oidc/logout", location.path
     assert_equal transaction.logout_challenge,
-                 handoff.css('input[name="logout_challenge"]').first["value"]
+                 Rack::Utils.parse_query(location.query).fetch("logout_challenge")
     assert_predicate token.reload, :currently_usable?
   end
 

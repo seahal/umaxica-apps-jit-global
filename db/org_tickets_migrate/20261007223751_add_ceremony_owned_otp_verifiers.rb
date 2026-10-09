@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# Each realm loads this migration in its own database context; the class is not shared at runtime.
+# rubocop:disable Lint/DuplicateMethods
 class AddCeremonyOwnedOtpVerifiers < ActiveRecord::Migration[8.2]
   public
 
@@ -24,3 +26,5 @@ class AddCeremonyOwnedOtpVerifiers < ActiveRecord::Migration[8.2]
     end
   end
 end
+
+# rubocop:enable Lint/DuplicateMethods

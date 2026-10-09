@@ -269,10 +269,13 @@ module SessionLimitResolutionTransactionable
           raise FlowInvalidTransition, "selected session is not owned by the actor"
         end
 
-        result = AuthenticationSelectedSessionRevoker.call(
-          owner: actor, token: token, reason: "session_limit_selected_revoke",
-        )
-        raise FlowInvalidTransition, "selected session could not be revoked" unless result.success?
+        device = token.device_session
+        raise FlowInvalidTransition, "selected session device is missing" unless device
+
+        device.with_lock do
+          device.revoke!(reason: "session_limit_selected_revoke", now: self.class.database_now)
+          self.class.resolution_token_class.where(device_session_id: device.id).find_each(&:revoke!)
+        end
       end
 
       # two.md 4.2 folds finalization into this transition; there is no later finalize step.

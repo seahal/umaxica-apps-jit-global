@@ -37,7 +37,7 @@ class ClientTotpCredentialEnrollmentConcurrencyTest < ActiveSupport::TestCase
 
     errors = results.grep(ClientTotpCredential::SlotLimitExceeded)
 
-    assert_equal 1, errors.length
+    assert_equal 1, errors.length, results.map { |result| result.class.name }.inspect
     assert_equal ClientTotpCredential::MAX_TOTP_SLOTS,
                  ClientTotpCredential.slot_consuming.where(user_id: @user.id).count
   end
@@ -47,12 +47,13 @@ class ClientTotpCredentialEnrollmentConcurrencyTest < ActiveSupport::TestCase
   def concurrently(count)
     ready = Queue.new
     release = Queue.new
+    ActiveRecord::Base.connection_handler.clear_active_connections!
     threads =
       Array.new(count) do
         Thread.new do
           ready << true
           release.pop
-          Client.connection_pool.with_connection { yield }
+          Client.connection_pool.with_connection(prevent_permanent_checkout: true) { yield }
         rescue StandardError => e
           e
         end

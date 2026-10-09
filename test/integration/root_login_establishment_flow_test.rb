@@ -330,6 +330,8 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       assert_predicate cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s, :present?
       transport.verify_stubbed_calls
     end
+    get base_app_selector_path(ri: "jp")
+    follow_redirect! if response.redirect?
     get base_app_dashboard_path(ri: "jp")
 
     assert_response :success
@@ -1035,206 +1037,208 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
 
   # Independent final attempts cover the exact cooldown and its nearest microsecond above.
   # rubocop:disable Minitest/MultipleAssertions
-  [30, 30.000001].each do |final_elapsed|
+  [30, Rational(30_000_001, 1_000_000)].each do |final_elapsed|
     test "Base cooldown after logout preserves the anchor and admits at #{final_elapsed} seconds" do
       anchor = Time.current.change(usec: 0)
       first = nil
       previous_email = @email
-      ClientSignInFlow.stub(:database_now, -> { Time.current }) do
-        ClientAuthCeremonySession.stub(:database_now, -> { Time.current }) do
-          [0, 10, 29.999999, final_elapsed].each do |elapsed|
-            travel_to(anchor + elapsed, with_usec: true)
-            # Independent contacts keep Email delivery cooldown from masking the Root
-            # cooldown boundary; release does not reset the previous contact's OTP facts.
-            attempt_email =
-              if elapsed.zero?
-                @email
-              else
-                previous_facts = previous_email.reload.attributes.except("binding_released_at", "updated_at")
-                previous_email.release_binding!(at: Time.current)
-                # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator -- Do not disclose retained contact proof.
-                assert previous_email.reload.attributes.except("binding_released_at", "updated_at") == previous_facts
-                # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
-                @user.client_emails.create!(
-                  address: "cooldown-#{SecureRandom.hex(4)}@example.com",
-                  user_email_status_id: ClientEmailStatus::VERIFIED, binding_finalized_at: Time.current,
-                )
-              end
-            previous_email = attempt_email
-            base = self
-            auth = open_session
-            base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-            auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-            base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-            auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
-            base.host!(base_host)
-            base.https!
-            base.get("/sign", params: { ri: "jp" })
+      ClientToken.stub(:database_now, -> { Time.current }) do
+        ClientSignInFlow.stub(:database_now, -> { Time.current }) do
+          ClientAuthCeremonySession.stub(:database_now, -> { Time.current }) do
+            [0, 10, Rational(29_999_999, 1_000_000), final_elapsed].each do |elapsed|
+              travel_to(anchor + elapsed, with_usec: true)
+              # Independent contacts keep Email delivery cooldown from masking the Root
+              # cooldown boundary; release does not reset the previous contact's OTP facts.
+              attempt_email =
+                if elapsed.zero?
+                  @email
+                else
+                  previous_facts = previous_email.reload.attributes.except("binding_released_at", "updated_at")
+                  previous_email.release_binding!(at: Time.current)
+                  # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator -- Do not disclose retained contact proof.
+                  assert previous_email.reload.attributes.except("binding_released_at", "updated_at") == previous_facts
+                  # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+                  @user.client_emails.create!(
+                    address: "cooldown-#{SecureRandom.hex(4)}@example.com",
+                    user_email_status_id: ClientEmailStatus::VERIFIED, binding_finalized_at: Time.current,
+                  )
+                end
+              previous_email = attempt_email
+              base = self
+              auth = open_session
+              base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+              auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+              base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+              auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+              base.host!(base_host)
+              base.https!
+              base.get("/sign", params: { ri: "jp" })
 
-            assert_equal 200, base.response.status
-            entry_form = Nokogiri::HTML(base.response.body).at_css("form")
-            entry_fields = entry_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-            base.post(entry_form["action"], params: entry_fields, headers: base_headers)
+              assert_equal 200, base.response.status
+              entry_form = Nokogiri::HTML(base.response.body).at_css("form")
+              entry_fields = entry_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+              base.post(entry_form["action"], params: entry_fields, headers: base_headers)
 
-            assert_equal 303, base.response.status
-            issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-            rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-            payload, = JWT.decode(
-              rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-              algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-              verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-            )
-            target = URI.parse(payload.fetch("url"))
-
-            assert_equal base_host, target.host
-            base.get(target.request_uri)
-            authorization_form = Nokogiri::HTML(base.response.body).at_css("form#base-authorization-ceremony-start-form")
-            authorization_fields =
-              authorization_form.css("input[name]").to_h { |input|
-                [input["name"], input["value"]]
-              }
-            base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
-
-            assert_equal 303, base.response.status
-            # There is no local-parent HTTP issuer; its public API remains the fixture seam,
-            # while attachment, Base confirmation and redemption retain all browser protections.
-            nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
-            issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-              surface: "app", intent: "sign_in",
-              base_browser_nonce: base.session.fetch(BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY),
-              base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
-            )
-            flow = issuance.transaction
-            SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
-            session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-            session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
-            session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
-            encoded_session = session_cookie_jar[session_key]
-            base.cookies.delete(session_key)
-            base.cookies.merge( # rubocop:disable Lint/Void
-              "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
-            )
-            binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-              surface: "app",
-              reference: issuance.reference,
-            )
-            auth.host!(auth_host)
-            auth.https!
-            auth.get(auth_app_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" })
-
-            assert_equal 200, auth.response.status
-            csrf = nil
-            3.times do |admission_index|
-              browser = (admission_index == 1) ? base : auth
-              form = Nokogiri::HTML(browser.response.body).at_css("form")
-
-              assert_not_nil form, "Admission step #{admission_index} must render its real continuation"
-              fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-              csrf = fields.fetch("authenticity_token") if admission_index == 2
-              assert_nil binding.reload.base_confirmed_at if admission_index == 1
-              browser.post(
-                form["action"], params: fields,
-                                headers: (admission_index == 1) ? base_headers : auth_headers,
+              assert_equal 303, base.response.status
+              issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+              rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
+              payload, = JWT.decode(
+                rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+                algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
               )
+              target = URI.parse(payload.fetch("url"))
 
-              assert_equal 303, browser.response.status
-              assert_not_nil binding.reload.base_confirmed_at if admission_index == 1
-              next if admission_index == 2
+              assert_equal base_host, target.host
+              base.get(target.request_uri)
+              authorization_form = Nokogiri::HTML(base.response.body).at_css("form#base-authorization-ceremony-start-form")
+              authorization_fields =
+                authorization_form.css("input[name]").to_h { |input|
+                  [input["name"], input["value"]]
+                }
+              base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
 
-              target = URI.parse(browser.response.location)
-              receiver = admission_index.zero? ? base : auth
+              assert_equal 303, base.response.status
+              # There is no local-parent HTTP issuer; its public API remains the fixture seam,
+              # while attachment, Base confirmation and redemption retain all browser protections.
+              nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
+              issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+                surface: "app", intent: "sign_in",
+                base_browser_nonce: base.session.fetch(BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY),
+                base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
+              )
+              flow = issuance.transaction
+              SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
+              session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+              session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
+              session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
+              encoded_session = session_cookie_jar[session_key]
+              base.cookies.delete(session_key)
+              base.cookies.merge( # rubocop:disable Lint/Void
+                "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
+              )
+              binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+                surface: "app",
+                reference: issuance.reference,
+              )
+              auth.host!(auth_host)
+              auth.https!
+              auth.get(auth_app_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" })
 
-              assert_equal(admission_index.zero? ? base_host : auth_host, target.host)
-              receiver.get(target.request_uri)
-            end
+              assert_equal 200, auth.response.status
+              csrf = nil
+              3.times do |admission_index|
+                browser = (admission_index == 1) ? base : auth
+                form = Nokogiri::HTML(browser.response.body).at_css("form")
 
-            assert_predicate binding.reload, :redeemed?
-            auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
-            auth_browser = auth
-            auth_browser.post(
-              auth_app_sign_in_email_path,
-              params: { :user_email => { address: attempt_email.address },
-                        "cf-turnstile-response" => "t",
-                        :ri => "jp", },
-              headers: auth_headers,
-            )
-            delivery_job = enqueued_jobs.reverse.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
+                assert_not_nil form, "Admission step #{admission_index} must render its real continuation"
+                fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+                csrf = fields.fetch("authenticity_token") if admission_index == 2
+                assert_nil binding.reload.base_confirmed_at if admission_index == 1
+                browser.post(
+                  form["action"], params: fields,
+                                  headers: (admission_index == 1) ? base_headers : auth_headers,
+                )
 
-            assert_not_nil delivery_job
-            delivery = ActiveJob::Arguments.deserialize(delivery_job.fetch(:args)).last.fetch(:params).symbolize_keys
-            ceremony = ClientAuthCeremonySession.find(delivery.fetch(:auth_ceremony_session_ref))
-            context = ceremony.email_otp_context
-            code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+                assert_equal 303, browser.response.status
+                assert_not_nil binding.reload.base_confirmed_at if admission_index == 1
+                next if admission_index == 2
 
-            # assert_match would disclose the delivered secret on failure.
-            # rubocop:disable Minitest/AssertMatch
-            assert code.match?(/\A[0-9]{6}\z/), "Delivery must contain one six-digit code"
-            # rubocop:enable Minitest/AssertMatch
-            assert_equal "sign_in", delivery.fetch(:purpose)
-            assert_equal "app", context.fetch("surface")
-            assert_equal "authentication", context.fetch("purpose")
-            assert_equal "local_sign_in", context.fetch("parent_kind")
-            assert_equal "real", context.fetch("mode")
-            # Boolean comparisons keep ceremony bindings and keyed proof out of failure output.
-            # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-            assert context.fetch("parent_ref") == flow.public_id
-            assert context.fetch("contact_ref") == attempt_email.public_id
-            assert context.fetch("owner_ref") == @user.public_id
-            assert context.fetch("sid_digest") == ceremony.sid_digest
-            assert context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
-            # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
-            assert_nil context.fetch("verified_at")
-            assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
-            audit_count = ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
-            assert_no_difference(-> { ClientToken.where(user_id: @user.id).count }) do
-              auth_browser.patch(
+                target = URI.parse(browser.response.location)
+                receiver = admission_index.zero? ? base : auth
+
+                assert_equal(admission_index.zero? ? base_host : auth_host, target.host)
+                receiver.get(target.request_uri)
+              end
+
+              assert_predicate binding.reload, :redeemed?
+              auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
+              auth_browser = auth
+              auth_browser.post(
                 auth_app_sign_in_email_path,
-                params: { :user_email => { pass_code: code },
+                params: { :user_email => { address: attempt_email.address },
                           "cf-turnstile-response" => "t",
                           :ri => "jp", },
                 headers: auth_headers,
               )
-              auth_browser.follow_redirect!
-              auth_browser.follow_redirect!
-              auth_browser.post(auth_app_sign_handoff_path, params: { ri: "jp" }, headers: auth_headers)
-            end
+              delivery_job = enqueued_jobs.reverse.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
 
-            assert_equal 303, auth_browser.response.status
-            assert_nil auth_browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-            assert_nil auth_browser.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
-            assert_equal audit_count,
-                         ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
-            get URI.parse(auth_browser.response.redirect_url).request_uri
+              assert_not_nil delivery_job
+              delivery = ActiveJob::Arguments.deserialize(delivery_job.fetch(:args)).last.fetch(:params).symbolize_keys
+              ceremony = ClientAuthCeremonySession.find(delivery.fetch(:auth_ceremony_session_ref))
+              context = ceremony.email_otp_context
+              code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
-            assert_response :success
-            completion_form = response.parsed_body.at_css("form")
-            completion_params = completion_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
-            count_before = ClientToken.where(user_id: @user.id).count
-            post base_app_sign_completion_path,
-                 params: completion_params,
-                 headers: base_headers
-            if elapsed.zero?
-              assert_response :see_other
-              first = flow.reload.token
+              # assert_match would disclose the delivered secret on failure.
+              # rubocop:disable Minitest/AssertMatch
+              assert code.match?(/\A[0-9]{6}\z/), "Delivery must contain one six-digit code"
+              # rubocop:enable Minitest/AssertMatch
+              assert_equal "sign_in", delivery.fetch(:purpose)
+              assert_equal "app", context.fetch("surface")
+              assert_equal "authentication", context.fetch("purpose")
+              assert_equal "local_sign_in", context.fetch("parent_kind")
+              assert_equal "real", context.fetch("mode")
+              # Boolean comparisons keep ceremony bindings and keyed proof out of failure output.
+              # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
+              assert context.fetch("parent_ref") == flow.public_id
+              assert context.fetch("contact_ref") == attempt_email.public_id
+              assert context.fetch("owner_ref") == @user.public_id
+              assert context.fetch("sid_digest") == ceremony.sid_digest
+              assert context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
+              # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+              assert_nil context.fetch("verified_at")
+              assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
+              audit_count = ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
+              assert_no_difference(-> { ClientToken.where(user_id: @user.id).count }) do
+                auth_browser.patch(
+                  auth_app_sign_in_email_path,
+                  params: { :user_email => { pass_code: code },
+                            "cf-turnstile-response" => "t",
+                            :ri => "jp", },
+                  headers: auth_headers,
+                )
+                auth_browser.follow_redirect!
+                auth_browser.follow_redirect!
+                auth_browser.post(auth_app_sign_handoff_path, params: { ri: "jp" }, headers: auth_headers)
+              end
 
-              assert_equal anchor, first.root_login_established_at
-              AuthenticationLogoutCurrentSession.call(resource: @user, token: first, reason: "user_logout")
-              cookies.delete(AuthenticationBase::ACCESS_COOKIE_KEY)
-              cookies.delete(AuthenticationBase::REFRESH_COOKIE_KEY)
-            elsif elapsed < 30
-              assert_response :too_many_requests
-              assert_equal "30", response.headers["Retry-After"]
-              assert_equal "no-store", response.headers["Cache-Control"]
-              assert_equal count_before, ClientToken.where(user_id: @user.id).count
-              assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-              assert_nil flow.reload.token_id
-              assert_equal anchor, first.reload.root_login_established_at
-              assert_equal anchor, ClientToken.where(user_id: @user.id).maximum(:root_login_established_at)
-            else
-              assert_response :see_other
-              assert_equal count_before + 1, ClientToken.where(user_id: @user.id).count
-              assert_equal (anchor + elapsed).iso8601(6), flow.reload.token.root_login_established_at.iso8601(6)
-              assert_predicate first.reload, :revoked?
+              assert_equal 303, auth_browser.response.status
+              assert_nil auth_browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+              assert_nil auth_browser.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+              assert_equal audit_count,
+                           ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
+              get URI.parse(auth_browser.response.redirect_url).request_uri
+
+              assert_response :success
+              completion_form = response.parsed_body.at_css("form")
+              completion_params = completion_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
+              count_before = ClientToken.where(user_id: @user.id).count
+              post base_app_sign_completion_path,
+                   params: completion_params,
+                   headers: base_headers
+              if elapsed.zero?
+                assert_response :see_other
+                first = flow.reload.token
+
+                assert_equal anchor, first.root_login_established_at
+                AuthenticationLogoutCurrentSession.call(resource: @user, token: first, reason: "user_logout")
+                cookies.delete(AuthenticationBase::ACCESS_COOKIE_KEY)
+                cookies.delete(AuthenticationBase::REFRESH_COOKIE_KEY)
+              elsif elapsed < 30
+                assert_response :too_many_requests
+                assert_equal "30", response.headers["Retry-After"]
+                assert_equal "no-store", response.headers["Cache-Control"]
+                assert_equal count_before, ClientToken.where(user_id: @user.id).count
+                assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+                assert_nil flow.reload.token_id
+                assert_equal anchor, first.reload.root_login_established_at
+                assert_equal anchor, ClientToken.where(user_id: @user.id).maximum(:root_login_established_at)
+              else
+                assert_response :see_other
+                assert_equal count_before + 1, ClientToken.where(user_id: @user.id).count
+                assert_equal (anchor + elapsed).iso8601(6), flow.reload.token.root_login_established_at.iso8601(6)
+                assert_predicate first.reload, :revoked?
+              end
             end
           end
         end

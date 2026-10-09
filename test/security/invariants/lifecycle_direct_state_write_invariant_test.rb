@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "prism"
 
 class LifecycleDirectStateWriteInvariantTest < ActiveSupport::TestCase
   LIFECYCLE_CARRIERS = %w(
@@ -33,7 +34,26 @@ class LifecycleDirectStateWriteInvariantTest < ActiveSupport::TestCase
       next unless LIFECYCLE_CARRIERS.any? { |carrier| source.include?(carrier) }
       next unless source.match?(STATE_WRITERS)
 
-      offenders << relative_path
+      pending = [[Prism.parse(source).value, nil]]
+      forbidden_writer = false
+      until pending.empty?
+        node, owner = pending.pop
+        owner = node.constant_path.full_name if node.is_a?(Prism::ClassNode)
+        pending.concat(node.child_nodes.compact.map { |child| [child, owner] })
+        next unless node.is_a?(Prism::CallNode) && node.location.slice.match?(STATE_WRITERS)
+        next unless %i(update! update_columns update_all assign_attributes write_attribute).include?(node.name)
+
+        # ClientStatus belongs to the principal; a referenced signup flow does not own that status.
+        domain_status_write = owner == "Client" && node.receiver.nil? && node.name == :update! &&
+          node.arguments&.arguments&.one? &&
+          node.arguments.arguments.first.is_a?(Prism::KeywordHashNode) &&
+          node.arguments.arguments.first.elements.one? &&
+          node.arguments.arguments.first.elements.first.is_a?(Prism::AssocNode) &&
+          node.arguments.arguments.first.elements.first.key.location.slice == "status_id:" &&
+          node.arguments.arguments.first.elements.first.value.location.slice.start_with?("ClientStatus::")
+        forbidden_writer = true unless domain_status_write
+      end
+      offenders << relative_path if forbidden_writer
     end
 
     assert_empty offenders, "lifecycle state writers escaped transition concerns:\n#{offenders.join("\n")}"

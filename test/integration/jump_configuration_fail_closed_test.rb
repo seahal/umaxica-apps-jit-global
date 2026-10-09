@@ -30,12 +30,16 @@ class JumpConfigurationFailClosedTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "an invalid issuer identity raises instead of downgrading to a same-host redirect" do
+  test "runtime host mutation refuses the sign handoff without changing authority" do
     host!("www.umaxica.app")
     https!
 
     ENV["PUBLIC_BASE_SERVICE_URL"] = "base.app.localhost"
-    assert_raises(JumpRtConfigurationError) { post(base_app_sign_show_path(ri: "jp")) }
+    post(base_app_sign_show_path(ri: "jp"))
+
+    assert_response :unprocessable_content
+    assert_nil response.location
+    assert_equal I18n.t("errors.messages.invalid_request"), response.body
   ensure
     ENV["PUBLIC_BASE_SERVICE_URL"] = @original_base_service_url
   end

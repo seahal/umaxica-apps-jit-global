@@ -7,21 +7,21 @@ require "test_helper"
 class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
   SURFACES = [
     {
-      host: ENV.fetch("PUBLIC_CORE_SERVICE_URL", ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")),
+      host: ENV.fetch("PUBLIC_CORE_SERVICE_URL"),
       client_id: "core-app",
-      acme_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"),
+      acme_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
       resource: -> { clients(:one) },
     },
     {
-      host: ENV.fetch("PUBLIC_CORE_STAFF_URL", ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost")),
+      host: ENV.fetch("PUBLIC_CORE_STAFF_URL"),
       client_id: "core-org",
-      acme_host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "www.org.localhost"),
+      acme_host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
       resource: -> { operators(:one) },
     },
     {
-      host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost")),
+      host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL"),
       client_id: "core-com",
-      acme_host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "www.com.localhost"),
+      acme_host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
       resource: -> { create_visitor! },
     },
   ].freeze
@@ -48,15 +48,12 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
     expectations = {
       ENV.fetch(
         "PUBLIC_CORE_SERVICE_URL",
-        ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost"),
       ) => "core/app/oidc/callbacks",
       ENV.fetch(
         "PUBLIC_CORE_CORPORATE_URL",
-        ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost"),
       ) => "core/com/oidc/callbacks",
       ENV.fetch(
         "PUBLIC_CORE_STAFF_URL",
-        ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost"),
       ) => "core/org/oidc/callbacks",
     }
 
@@ -398,7 +395,8 @@ class CoreRpBrowserFlowTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,

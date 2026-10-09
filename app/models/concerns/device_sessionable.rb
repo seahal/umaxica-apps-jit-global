@@ -35,13 +35,14 @@ module DeviceSessionable
     !dbsc_bound?
   end
 
-  def revoke!(reason: "user_logout")
-    now = Time.current
-    update!(
-      status_id: STATUS_REVOKED,
-      revoked_at: revoked_at || now,
-      revoke_reason: reason,
-    )
+  def revoke!(reason: "user_logout", now: nil)
+    with_lock do
+      return self if status_id == STATUS_REVOKED
+
+      decision_time = now || self.class.database_now
+      update!(status_id: STATUS_REVOKED, revoked_at: revoked_at || decision_time, revoke_reason: reason)
+      self
+    end
   end
 
   def bind_dbsc!(session_id:, public_key_thumbprint: nil)

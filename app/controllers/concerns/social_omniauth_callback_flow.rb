@@ -42,7 +42,6 @@ module SocialOmniauthCallbackFlow
     Rails.logger.error(JitLogEvent.format(social_omniauth_missing_auth_event))
     redirect_to(
       social_auth_failure_redirect_path,
-      alert: I18n.t(social_omniauth_failure_i18n_key),
     )
   end
 

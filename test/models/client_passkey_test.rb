@@ -248,10 +248,11 @@ class ClientPasskeyTest < ActiveSupport::TestCase
     assert_not_empty @passkey.errors[:sign_count]
   end
 
-  test "association deletion: destroys when user is destroyed" do
+  test "recoverable owner destruction refuses erasure and preserves its passkey" do
     @passkey.save!
-    @user.destroy
-    assert_raise(ActiveRecord::RecordNotFound) { @passkey.reload }
+    assert_raises(ActiveRecord::RecordNotDestroyed) { @user.destroy! }
+    assert_not_predicate @passkey.reload, :destroyed?
+    assert Client.exists?(@user.id)
   end
 
   test "is valid on create when user has no verified recovery identity" do

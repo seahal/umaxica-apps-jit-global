@@ -11,11 +11,15 @@ module BaseStepUpCancellation
   def show
     apply_base_browser_continuation_headers!
     authorize!(cancellation_actor, to: :show?)
-    handoff = cancellation_handoff_param
     lookup_reference = cancellation_lookup_reference_param
     reference = transaction_reference_param
-    transaction, = BaseAuthAdmissionCoordinator.validate_cancellation_handoff!(
-      handoff:, surface: cancellation_surface, transaction_ref: reference,
+    transaction = cancellation_step_up_transaction(reference)
+    validate_cancellation_transaction_binding!(
+      transaction: transaction, lookup_reference: lookup_reference, surface: cancellation_surface,
+      actor: cancellation_actor, token: cancellation_token,
+    )
+    BaseAuthAdmissionCoordinator.validate_cancellation_handoff!(
+      handoff: transaction.cancellation_handoff_ciphertext, surface: cancellation_surface, transaction_ref: reference,
     )
     unless base_step_up_transaction_marker(
       reference:, surface: cancellation_surface, actor: cancellation_actor,
@@ -39,11 +43,11 @@ module BaseStepUpCancellation
 
     render "base/shared/cancellation_continuation", layout: false,
                                                     locals: { action_url: request.path,
-                                                              cancellation_handoff: handoff,
                                                               transaction_ref: reference,
                                                               cancellation_ref: lookup_reference,
                                                               ri: params[:ri], }
-  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError, KeyError
+  rescue BaseAuthAdmissionCoordinator::Denied, IdentityStepUpCeremonyContract::Error,
+         ActiveRecord::RecordNotFound, ArgumentError, KeyError
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   end
 
@@ -51,7 +55,6 @@ module BaseStepUpCancellation
 
   def cancel_step_up_ceremony!(surface:, actor:, token:, destination:)
     transaction = nil
-    handoff = cancellation_handoff_param
     lookup_reference = cancellation_lookup_reference_param
     reference = transaction_reference_param
     marker = base_step_up_transaction_marker(reference:, surface:, actor:, token:)
@@ -66,6 +69,7 @@ module BaseStepUpCancellation
       transaction:, lookup_reference:, surface:, actor:, token:,
     )
 
+    handoff = transaction.cancellation_handoff_ciphertext
     BaseAuthAdmissionCoordinator.read_cancellation_handoff!(
       handoff:, surface:, transaction_ref: reference,
     )
@@ -96,13 +100,6 @@ module BaseStepUpCancellation
     render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
   end
 
-  def cancellation_handoff_param
-    value = params[:cancellation_handoff]
-    raise ActionController::BadRequest unless value.is_a?(String) && value.present?
-
-    value
-  end
-
   def transaction_reference_param
     value = params[:transaction_ref]
     raise ActionController::BadRequest unless value.is_a?(String) && value.present?
@@ -118,6 +115,11 @@ module BaseStepUpCancellation
   end
 
   def validate_cancellation_transaction_binding!(transaction:, lookup_reference:, surface:, actor:, token:)
+    if params.key?(:cancellation_handoff)
+      raise IdentityStepUpCeremonyContract::Error.new(
+        "client-supplied cancellation evidence is unsupported", code: "invalid_result",
+      )
+    end
     unless transaction.cancellation_handoff_ref == lookup_reference
       raise IdentityStepUpCeremonyContract::Error.new(
         "Base cancellation lookup mismatch", code: "return_binding_mismatch",

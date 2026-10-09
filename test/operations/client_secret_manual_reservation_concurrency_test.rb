@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "concurrent/executor/simple_executor_service"
 require "timeout"
 
 class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
@@ -48,7 +49,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
       ActiveRecord::Base.connection_handler.clear_active_connections!
       futures =
         tokens.each_with_index.map do |token, index|
-          Concurrent::Future.execute do
+          Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
             AppZenithRecord.connected_to(role: :writing) do
               AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
                 AppZenithRecord.transaction do
@@ -85,7 +86,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
             ready << e
             raise
           ensure
-            # Leases taken on this pooled thread outlive the future unless released here.
+            # Release model-clock leases before the dedicated worker exits.
             ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         end
@@ -174,7 +175,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
     ActiveRecord::Base.connection_handler.clear_active_connections!
     futures =
       2.times.map do |index|
-        Concurrent::Future.execute do
+        Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
           AppZenithRecord.connected_to(role: :writing) do
             AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
               AppZenithRecord.transaction do
@@ -206,7 +207,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
           ready << e
           raise
         ensure
-          # Leases taken on this pooled thread outlive the future unless released here.
+          # Release model-clock leases before the dedicated worker exits.
           ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end
@@ -279,7 +280,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
     ActiveRecord::Base.connection_handler.clear_active_connections!
     futures =
       tokens.each_with_index.map do |token, index|
-        Concurrent::Future.execute do
+        Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
           AppZenithRecord.connected_to(role: :writing) do
             AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
               AppZenithRecord.transaction do
@@ -312,7 +313,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
           ready << e
           raise
         ensure
-          # Leases taken on this pooled thread outlive the future unless released here.
+          # Release model-clock leases before the dedicated worker exits.
           ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end

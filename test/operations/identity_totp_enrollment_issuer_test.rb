@@ -12,7 +12,7 @@ class IdentityTotpEnrollmentIssuerTest < ActiveSupport::TestCase
     token = ClientToken.create!(user: actor)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
-      required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
+      required_scope: "settings_totp", step_up_required: false, allowed_methods: ["totp"],
     )
     record = ClientStepUpSession.create!(
       user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
@@ -36,21 +36,21 @@ class IdentityTotpEnrollmentIssuerTest < ActiveSupport::TestCase
     assert_equal 1, ClientTotpCeremonyTransaction.where(
       step_up_ceremony_transaction_ref: transaction.transaction_id,
     ).count
-    transaction.update!(status: "canceled", canceled_at: ClientStepUpCeremonyTransaction.database_now)
+    transaction.commit_cancellation!(now: ClientStepUpCeremonyTransaction.database_now)
 
     assert_raises(IdentityTotpCeremonyContract::Error) do
       IdentityTotpEnrollmentIssuer.call!(actor: actor, token: token, transaction: transaction)
     end
   end
 
-  test "enrollment rejects the deadline and its next microsecond but accepts the previous microsecond" do
+  test "enrollment accepts expiry one microsecond after the database clock and rejects at or before it" do
     actor = clients(:one)
     token = ClientToken.create!(user: actor)
     now = ClientStepUpCeremonyTransaction.database_now + 1.second
     [-1, 0, 1].each do |microseconds|
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
         actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
-        required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
+        required_scope: "settings_totp", step_up_required: false, allowed_methods: ["totp"],
         expires_at: now + Rational(microseconds, 1_000_000),
       )
       record = ClientStepUpSession.find_or_initialize_by(user_token: token)

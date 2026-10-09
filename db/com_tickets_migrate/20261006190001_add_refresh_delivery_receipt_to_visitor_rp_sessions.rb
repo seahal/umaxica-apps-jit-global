@@ -3,10 +3,10 @@
 class AddRefreshDeliveryReceiptToVisitorRpSessions < ActiveRecord::Migration[8.2]
   def up
     safety_assured do
-      add_column :visitor_rp_sessions, :refresh_generation, :bigint, null: false, default: 0, if_not_exists: true
-      add_column :visitor_rp_sessions, :refresh_delivery_ciphertext, :text, if_not_exists: true
-      add_column :visitor_rp_sessions, :refresh_delivery_predecessor_digest, :string, if_not_exists: true
-      add_column :visitor_rp_sessions, :refresh_delivery_expires_at, :datetime, if_not_exists: true
+      add_column(:visitor_rp_sessions, :refresh_generation, :bigint, null: false, default: 0, if_not_exists: true)
+      add_column(:visitor_rp_sessions, :refresh_delivery_ciphertext, :text, if_not_exists: true)
+      add_column(:visitor_rp_sessions, :refresh_delivery_predecessor_digest, :string, if_not_exists: true)
+      add_column(:visitor_rp_sessions, :refresh_delivery_expires_at, :datetime, if_not_exists: true)
     end
 
     unless check_constraint_exists?(:visitor_rp_sessions, name: "chk_visitor_rp_sessions_refresh_delivery_all_or_none")
@@ -25,10 +25,10 @@ class AddRefreshDeliveryReceiptToVisitorRpSessions < ActiveRecord::Migration[8.2
   end
 
   def down
-    remove_check_constraint :visitor_rp_sessions, name: "chk_visitor_rp_sessions_refresh_delivery_all_or_none"
-    remove_column :visitor_rp_sessions, :refresh_delivery_expires_at
-    remove_column :visitor_rp_sessions, :refresh_delivery_predecessor_digest
-    remove_column :visitor_rp_sessions, :refresh_delivery_ciphertext
-    remove_column :visitor_rp_sessions, :refresh_generation
+    remove_check_constraint(:visitor_rp_sessions, name: "chk_visitor_rp_sessions_refresh_delivery_all_or_none")
+    remove_column(:visitor_rp_sessions, :refresh_delivery_expires_at)
+    remove_column(:visitor_rp_sessions, :refresh_delivery_predecessor_digest)
+    remove_column(:visitor_rp_sessions, :refresh_delivery_ciphertext)
+    remove_column(:visitor_rp_sessions, :refresh_generation)
   end
 end

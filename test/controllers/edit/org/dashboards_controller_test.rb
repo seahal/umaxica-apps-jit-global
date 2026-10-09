@@ -6,13 +6,45 @@ class Edit::Org::DashboardsControllerTest < ActionDispatch::IntegrationTest
   fixtures :operators, :operator_statuses
 
   setup do
-    @host = ENV.fetch("PUBLIC_EDIT_STAFF_URL", "edit.org.localhost")
+    @host = ENV.fetch("PUBLIC_EDIT_STAFF_URL")
     host! @host
     @staff = operators(:one)
   end
 
   test "shows a link to each publishing cell for a signed-in operator" do
-    authenticate_rp!
+    begin
+      fv5001 = OidcClientRegistry.find!("edit-org")
+      fv5002 = OperatorToken.create!(
+        staff: @staff,
+        staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      )
+      fv5000 = OperatorRpSession.create!(
+        operator_token: fv5002,
+        oidc_client_id: fv5001.client_id,
+        oidc_scope: "openid profile",
+        oidc_jti: SecureRandom.uuid,
+        oidc_nonce: SecureRandom.hex(16),
+        oidc_auth_time: 1.minute.ago,
+        refresh_token_expires_at: 10.minutes.from_now,
+      )
+      cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
+        @staff,
+        host: @host,
+        resource_type: "operator",
+        session_public_id: fv5002.public_id,
+        base_session_public_id: fv5002.public_id,
+        oidc_sid: fv5000.public_id,
+        oidc_jti: fv5000.oidc_jti,
+        expires_at: 10.minutes.from_now,
+        scopes: %w(openid profile),
+        issuer: OidcIssuer.for_client(fv5001),
+        audiences: [fv5001.aud],
+        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5001),
+        subject: OidcSubject.for(@staff, resource_type: "operator"),
+        client_id: fv5001.client_id,
+      )
+      cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = fv5000.issue_refresh_token!
+    end
     get edit_org_dashboard_path(ri: "jp")
 
     assert_response :success
@@ -45,35 +77,4 @@ class Edit::Org::DashboardsControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
-
-  def authenticate_rp!
-    client = OidcClientRegistry.find!("edit-org")
-    token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
-    rp_session = OperatorRpSession.create!(
-      operator_token: token,
-      oidc_client_id: client.client_id,
-      oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid,
-      oidc_nonce: SecureRandom.hex(16),
-      oidc_auth_time: 1.minute.ago,
-      refresh_token_expires_at: 10.minutes.from_now,
-    )
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
-      @staff,
-      host: @host,
-      resource_type: "operator",
-      session_public_id: token.public_id,
-      base_session_public_id: token.public_id,
-      oidc_sid: rp_session.public_id,
-      oidc_jti: rp_session.oidc_jti,
-      expires_at: 10.minutes.from_now,
-      scopes: %w(openid profile),
-      issuer: OidcIssuer.for_client(client),
-      audiences: [client.aud],
-      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
-      subject: OidcSubject.for(@staff, resource_type: "operator"),
-      client_id: client.client_id,
-    )
-    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = rp_session.issue_refresh_token!
-  end
 end

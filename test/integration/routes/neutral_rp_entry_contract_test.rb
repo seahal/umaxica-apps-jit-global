@@ -10,56 +10,111 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
 
   RP_ROUTES = [
     {
-      host: -> { ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost") },
+      host: -> { ENV.fetch("PUBLIC_CORE_SERVICE_URL") },
       controller: "core/app/sign/entries",
       callback_controller: "core/app/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost") },
+      host: -> { ENV.fetch("PUBLIC_CORE_CORPORATE_URL") },
       controller: "core/com/sign/entries",
       callback_controller: "core/com/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost") },
+      host: -> { ENV.fetch("PUBLIC_CORE_STAFF_URL") },
       controller: "core/org/sign/entries",
       callback_controller: "core/org/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_WARP_SERVICE_URL", "warp.app.localhost") },
+      host: -> { ENV.fetch("PUBLIC_WARP_SERVICE_URL") },
       controller: "warp/app/sign/entries",
       callback_controller: "warp/app/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_WARP_CORPORATE_URL", "warp.com.localhost") },
+      host: -> { ENV.fetch("PUBLIC_WARP_CORPORATE_URL") },
       controller: "warp/com/sign/entries",
       callback_controller: "warp/com/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_WARP_STAFF_URL", "warp.org.localhost") },
+      host: -> { ENV.fetch("PUBLIC_WARP_STAFF_URL") },
       controller: "warp/org/sign/entries",
       callback_controller: "warp/org/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_EDIT_STAFF_URL", "edit.org.localhost") },
+      host: -> { ENV.fetch("PUBLIC_EDIT_STAFF_URL") },
       controller: "edit/org/sign/entries",
       callback_controller: "edit/org/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost") },
+      host: -> { ENV.fetch("PUBLIC_BASE_SERVICE_URL") },
       controller: "base/app/sign/entries",
       callback_controller: "base/app/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost") },
+      host: -> { ENV.fetch("PUBLIC_BASE_CORPORATE_URL") },
       controller: "base/com/sign/entries",
       callback_controller: "base/com/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost") },
+      host: -> { ENV.fetch("PUBLIC_BASE_STAFF_URL") },
       controller: "base/org/sign/entries",
       callback_controller: "base/org/oidc/callbacks",
     },
   ].freeze
+
+  test "a revoked RP credential can start the neutral entry and preserves Root authority on every surface" do
+    RP_ROUTES.each do |route|
+      family, surface = route.fetch(:controller).split("/")
+      model, owner_class, root_class, owner_key, root_key, resource_type = {
+        "app" => [ClientRpSession, Client, ClientToken, :user, :client_token, "client"],
+        "com" => [VisitorRpSession, Visitor, VisitorToken, :visitor, :visitor_token, "visitor"],
+        "org" => [OperatorRpSession, Operator, OperatorToken, :staff, :operator_token, "operator"],
+      }.fetch(surface)
+      actor = owner_class.create!
+      root = root_class.create!(owner_key => actor)
+      rp_client_id =
+        case family
+        when "base" then "base-#{surface}-ww"
+        when "edit" then "edit-org"
+        else "#{family}-#{surface}"
+        end
+      registered = OidcClientRegistry.find!(rp_client_id)
+      rp_session = model.create!(
+        root_key => root, :oidc_client_id => registered.client_id, :oidc_scope => "openid profile",
+        :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
+        :refresh_token_expires_at => 10.minutes.from_now,
+      )
+      host = route.fetch(:host).call
+      access = AuthenticationTokenService.encode(
+        actor, host: host, resource_type: resource_type, session_public_id: root.public_id,
+               base_session_public_id: root.public_id, oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+               expires_at: 5.minutes.from_now, scopes: %w(openid profile), issuer: OidcIssuer.for_client(registered),
+               audiences: [registered.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(registered),
+               subject: OidcSubject.for(actor, resource_type: resource_type), client_id: registered.client_id,
+      )
+      rp_session.revoke!(status: "success")
+      root_before = root.attributes
+      reset!
+      https!
+      host! host
+      cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access
+      destination = nil
+      JumpRtIssuer.stub(:call, ->(**arguments) { destination = arguments.fetch(:url); "opaque-jump" }) do
+        RedirectsJumpGatewayUrl.stub(
+          :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
+        ) do
+          assert_no_difference -> { root_class.count } do
+            post "/sign", params: { ri: "jp" }
+          end
+        end
+      end
+
+      assert_response :see_other, route.fetch(:controller)
+      assert_predicate rp_session.reload, :revoked?
+      assert_equal root_before, root.reload.attributes
+      assert_predicate cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s, :empty?
+      assert_equal "/oauth/authorize", URI.parse(destination || response.location).path
+    end
+  end
 
   test "every first-party browser RP has neutral GET and POST sign entry routes" do
     RP_ROUTES.each do |rp|
@@ -218,7 +273,65 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     host = RP_ROUTES.first.fetch(:host).call
     host!(host)
 
-    authenticated_headers = as_user_headers(clients(:one), host: host)
+    authenticated_headers =
+      begin
+        rp_headers = as_user_headers(clients(:one), host: host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && ClientRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = ClientRpSession.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.user, host: rp_host, resource_type: "client",
+                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                             subject: OidcSubject.for(
+                               rp_token.user,
+                               resource_type: "client",
+                             ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     session_public_id = authenticated_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
     access_token = AuthenticationToken.encode(
       clients(:one),
@@ -242,7 +355,12 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     host!(host)
     client = clients(:one)
     oidc_client = OidcClientRegistry.find!("core-app")
-    ensure_user_token_reference_records!
+    begin
+      ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
+      ClientTokenStatus.find_or_create_by!(id: ClientTokenStatus::ACTIVE)
+      ClientTokenBindingMethod.find_or_create_by!(id: ClientTokenBindingMethod::LEGACY)
+      ClientTokenDbscStatus.find_or_create_by!(id: ClientTokenDbscStatus::NOTHING)
+    end
     root_token = ClientToken.create!(
       user: client,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
@@ -335,12 +453,5 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     end
     ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
-  end
-
-  def ensure_user_token_reference_records!
-    ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
-    ClientTokenStatus.find_or_create_by!(id: ClientTokenStatus::ACTIVE)
-    ClientTokenBindingMethod.find_or_create_by!(id: ClientTokenBindingMethod::LEGACY)
-    ClientTokenDbscStatus.find_or_create_by!(id: ClientTokenDbscStatus::NOTHING)
   end
 end

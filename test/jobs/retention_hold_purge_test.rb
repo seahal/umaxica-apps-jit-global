@@ -18,6 +18,7 @@ class RetentionHoldPurgeTest < ActiveJob::TestCase
       mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
     client.update_columns(
+      created_at: 41.days.ago,
       withdrawal_started_at: 40.days.ago,
       deactivated_at: 39.days.ago,
       discard_at: 39.days.ago,
@@ -49,6 +50,7 @@ class RetentionHoldPurgeTest < ActiveJob::TestCase
       mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
     client.update_columns(
+      created_at: 41.days.ago,
       withdrawal_started_at: 40.days.ago,
       deactivated_at: 39.days.ago,
       discard_at: 39.days.ago,

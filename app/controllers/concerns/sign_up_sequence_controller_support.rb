@@ -735,6 +735,12 @@ module SignUpSequenceControllerSupport
 
   def issue_sign_up_recovery_passcodes!(surface:, actor:)
     config = sign_up_recovery_passcode_config(surface)
+    existing = IdentityOneTimeReveal.resume_for_operation!(
+      actor: actor, session_nonce: actor.public_id, purpose: config.fetch(:reveal_purpose),
+      operation_ref: @sign_up_ticket.public_id,
+    )
+    return config.fetch(:reveal_url).call(existing.token) if existing
+
     top_up = RecoveryPasscodeTopUp.call(
       actor: actor,
       credential_class: config.fetch(:credential_class),
@@ -747,7 +753,9 @@ module SignUpSequenceControllerSupport
       session_nonce: actor.public_id,
       value: top_up.raw_values,
       purpose: config.fetch(:reveal_purpose),
-      metadata: { surface: surface.to_s, issued_count: top_up.issued_count },
+      metadata: { surface: surface.to_s,
+                  issued_count: top_up.issued_count,
+                  delivery_operation_ref: @sign_up_ticket.public_id, },
     )
 
     config.fetch(:reveal_url).call(reveal.token)
@@ -760,10 +768,7 @@ module SignUpSequenceControllerSupport
         credential_class: VisitorSecretCredential,
         reveal_purpose: "visitor.recovery_secret_credential",
         reveal_url: ->(token) {
-          base_com_identity_recovery_secret_url(
-            ri: params[:ri], token: token,
-            host: ENV.fetch("PRIVATE_BASE_CORPORATE_URL"),
-          )
+          base_com_identity_recovery_secret_path(ri: params[:ri], token: token)
         },
       }
     else

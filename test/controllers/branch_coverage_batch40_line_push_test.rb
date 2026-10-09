@@ -9,6 +9,8 @@ class BranchCoverageBatch40LinePushTest < ActiveSupport::TestCase
 
   test "Edit::Org HelperMethods delegates execute when signed out" do
     controller = Edit::Org::ApplicationController.new
+    controller.request = ActionDispatch::TestRequest.create
+    controller.response = ActionDispatch::TestResponse.new
     controller.define_singleton_method(:current_resource) { nil }
     proxy = Object.new
     proxy.define_singleton_method(:controller) { controller }
@@ -28,6 +30,8 @@ class BranchCoverageBatch40LinePushTest < ActiveSupport::TestCase
       Warp::Org::ApplicationController,
     ].each do |klass|
       controller = klass.new
+      controller.request = ActionDispatch::TestRequest.create
+      controller.response = ActionDispatch::TestResponse.new
       controller.define_singleton_method(:current_resource) { nil }
       proxy = Object.new
       proxy.define_singleton_method(:controller) { controller }

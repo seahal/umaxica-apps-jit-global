@@ -4,7 +4,8 @@
     <meta charset="utf-8">
     <meta name="robots" content="noindex,nofollow">
     <meta name="referrer" content="no-referrer">
-    <title>Verification already in progress</title>
+    <%= display_meta_tags site: "#{ENV.fetch("BRAND_NAME").upcase} (#{controller.class.name.split("::").fetch(1).upcase})",
+                          title: "Verification already in progress", separator: "—", reverse: true %>
   </head>
   <body>
     <main>

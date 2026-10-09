@@ -15,6 +15,31 @@ class SignAppLayoutTest < ActionDispatch::IntegrationTest
     default_headers.merge("X-TEST-CURRENT-USER" => user.id.to_s)
   end
 
+  setup do
+    nonce = SecureRandom.urlsafe_base64(32)
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_up", base_browser_nonce: nonce, base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(
+      base_token: nil, browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref: issuance.reference, nonce: nonce,
+      ),
+    )
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: issuance.reference, surface: "app", expected_intent: "sign_up", binding: binding,
+      raw_auth_sid: raw_sid,
+    )
+    admitted, admitted_sid = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "local_sign_up", previous_raw_sid: raw_sid,
+      local_sign_in_flow_ref: issuance.transaction.public_id,
+    )
+    binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
+    cookies[JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"] = admitted_sid
+  end
+
   test "the shared auth header exposes no sign-in or sign-up navigation" do
     get new_auth_app_sign_up_email_url(ri: "jp"), headers: default_headers
 

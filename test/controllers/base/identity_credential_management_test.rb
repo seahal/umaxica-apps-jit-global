@@ -69,16 +69,98 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
       last_step_up_full_reauthentication: false,
     )
-    install_base_browser_rp_credentials!(surface: "com", host: host, actor: visitor, token: token)
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = host
+          rp_token = token
+          rp_client = OidcClientRegistry.find!("base-com-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && VisitorRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = VisitorRpSession.create!(
+                visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                visitor, host: rp_host, resource_type: "visitor",
+                         session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                         subject: OidcSubject.for(visitor, resource_type: "visitor"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
+    end
     access_token = AuthenticationToken.encode(
       visitor, host: host, session_public_id: token.public_id,
                resource_type: "visitor", jwt_issuer_id: "surface:BASE_COM",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
     # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
-    install_base_browser_rp_credentials!(
-      surface: "com", host: host, actor: visitor, token: token,
-    )
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = host
+          rp_token = token
+          rp_client = OidcClientRegistry.find!("base-com-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && VisitorRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = VisitorRpSession.create!(
+                visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                visitor, host: rp_host, resource_type: "visitor",
+                         session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                         subject: OidcSubject.for(visitor, resource_type: "visitor"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
+    end
     post base_com_identity_secret_removal_url(removable.public_id, ri: "jp", host: host),
          headers: {
            "Authorization" => "Bearer #{access_token}",
@@ -130,16 +212,98 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
       last_step_up_full_reauthentication: false,
     )
-    install_base_browser_rp_credentials!(surface: "org", host: host, actor: operator, token: token)
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = host
+          rp_token = token
+          rp_client = OidcClientRegistry.find!("base-org-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && OperatorRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = OperatorRpSession.create!(
+                operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                operator, host: rp_host, resource_type: "operator",
+                          session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                          oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                          expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                          issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                          subject: OidcSubject.for(operator, resource_type: "operator"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
+    end
     access_token = AuthenticationToken.encode(
       operator, host: host, session_public_id: token.public_id,
                 resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
     # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
-    install_base_browser_rp_credentials!(
-      surface: "org", host: host, actor: operator, token: token,
-    )
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = host
+          rp_token = token
+          rp_client = OidcClientRegistry.find!("base-org-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && OperatorRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = OperatorRpSession.create!(
+                operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                operator, host: rp_host, resource_type: "operator",
+                          session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                          oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                          expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                          issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                          subject: OidcSubject.for(operator, resource_type: "operator"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
+    end
 
     post base_org_identity_secret_removal_url(removable.public_id, ri: "jp", host: host),
          headers: {
@@ -164,7 +328,49 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
-    install_base_browser_rp_credentials!(surface: "app", host: host, actor: client, token: token)
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = host
+          rp_token = token
+          rp_client = OidcClientRegistry.find!("base-app-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = ClientRpSession.create!(
+                client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                client, host: rp_host, resource_type: "client",
+                        session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                        oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                        expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                        issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                        subject: OidcSubject.for(client, resource_type: "client"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
+    end
     _verification, raw_verification = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_verification
     token.update!(
@@ -181,9 +387,49 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
     # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
-    install_base_browser_rp_credentials!(
-      surface: "app", host: host, actor: client, token: token,
-    )
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = host
+          rp_token = token
+          rp_client = OidcClientRegistry.find!("base-app-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = ClientRpSession.create!(
+                client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                client, host: rp_host, resource_type: "client",
+                        session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                        oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                        expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                        issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                        subject: OidcSubject.for(client, resource_type: "client"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
+    end
 
     get base_app_identity_mfa_challenge_url(ri: "jp", host: host),
         headers: {

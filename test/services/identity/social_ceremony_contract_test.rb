@@ -8,7 +8,7 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
-    @now = Time.zone.parse("2026-06-03 12:00:00")
+    @now = ClientSocialCeremonyTransaction.database_now.change(usec: 0)
   end
 
   teardown do
@@ -106,6 +106,42 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
       assert_not_nil IdentitySocialCeremonyCandidate.find_by!(ref: candidate.ref).consumed_at
       assert_social_ceremony_error("candidate is not found") do
         IdentitySocialCeremonyCandidateStore.fetch!(candidate.ref)
+      end
+    end
+  end
+
+  [-1, 0, 1].each do |offset|
+    test "candidate fetch and consume enforce the deadline at #{offset} microseconds" do
+      deadline = (IdentitySocialCeremonyCandidate.database_now + 5.minutes).change(usec: 500_000)
+      now = deadline + Rational(offset, 1_000_000)
+      principal = ExternalAuthentication::VerifiedPrincipal.new(
+        provider: "google", subject: "candidate-boundary-#{SecureRandom.hex(8)}",
+        issuer: "https://accounts.google.com", audience: "google-client-id",
+        verified_at: IdentitySocialCeremonyCandidate.database_now,
+        verification_authority: "test-provider-contract",
+      )
+      stored = IdentitySocialCeremonyCandidateStore.store!(
+        surface: "app", actor_ref: "anonymous", session_ref: "candidate-boundary-session",
+        transaction_id: SecureRandom.uuid, operation: "login", provider: "google",
+        callback_result: ExternalAuthentication::CallbackResult.verified(principal:, credential_candidate: nil),
+        expires_at: deadline,
+      )
+      arguments = {
+        now: now,
+        error_class: IdentitySocialCeremonyContract::Error,
+        not_found_message: "candidate unavailable",
+        expired_message: "candidate expired",
+      }
+      record = IdentitySocialCeremonyCandidate.find_by!(ref: stored.ref)
+      if offset.negative?
+        assert_equal record.id, IdentitySocialCeremonyCandidate.find_active_by_ref!(stored.ref, **arguments).id
+        assert_equal now, record.consume!(**arguments).consumed_at
+      else
+        assert_raises(IdentitySocialCeremonyContract::Error) do
+          IdentitySocialCeremonyCandidate.find_active_by_ref!(stored.ref, **arguments)
+        end
+        assert_raises(IdentitySocialCeremonyContract::Error) { record.consume!(**arguments) }
+        assert_nil record.reload.consumed_at
       end
     end
   end

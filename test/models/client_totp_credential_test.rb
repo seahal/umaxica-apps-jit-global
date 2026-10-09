@@ -248,9 +248,10 @@ class ClientTotpCredentialTest < ActiveSupport::TestCase
     end
   end
 
-  test "association deletion: destroys when user is destroyed" do
+  test "an active owner cannot erase a TOTP credential through association destruction" do
     record = ClientTotpCredential.create!(user: @user)
-    @user.destroy
-    assert_raise(ActiveRecord::RecordNotFound) { record.reload }
+    assert_raises(ActiveRecord::RecordNotDestroyed) { @user.reload.destroy! }
+    assert ClientTotpCredential.exists?(record.id)
+    assert Client.exists?(@user.id)
   end
 end

@@ -3,7 +3,7 @@
 # Reissues the initiating Base self-RP credentials after a committed ceremony. The root token is
 # intentionally outside this operation for ordinary step-up: only the RP Session's OIDC claims
 # change, and the shared OIDC token authority performs rotation and delivery coalescing.
-class BaseSelfRpCredentialReissuer
+class BaseSelfRpCredentialIssuer
   class CredentialUnavailable < StandardError; end
 
   class DependencyError < StandardError; end

@@ -27,17 +27,18 @@ class Auth::App::Sign::Up::Check::Google::BirthdatesControllerTest < ActionDispa
     Rails.configuration.x.rate_limit.fetch(:store).clear
   end
 
-  test "update without a sign-up ticket restarts sign-up instead of a dead-end error body" do
+  test "update without an original sign-up binding refuses continuation" do
     user = clients(:one)
 
     patch auth_app_sign_up_check_google_birthdate_url(ri: "jp"),
           headers: as_user_headers(user, host: @host)
 
-    assert_response :see_other
-    assert_redirected_to auth_app_sign_up_path(ri: "jp")
+    assert_response :conflict
+    assert_nil response.location
+    assert_equal I18n.t("errors.messages.phase_violation_refused", locale: :ja), response.body
   end
 
-  test "reloading the google birthdate step after the ticket expires restarts sign-up" do
+  test "an expired unbound google ticket cannot authorize a birthdate continuation" do
     ClientSignUpFlowStatus.ensure_defaults!
     flow = ClientSignUpFlow.create!(
       principal_id: nil,
@@ -53,8 +54,9 @@ class Auth::App::Sign::Up::Check::Google::BirthdatesControllerTest < ActionDispa
 
     get auth_app_sign_up_check_google_birthdate_url(ri: "jp", pt: nil)
 
-    assert_response :see_other
-    assert_redirected_to auth_app_sign_up_path(ri: "jp")
+    assert_response :conflict
+    assert_nil response.location
+    assert_equal I18n.t("errors.messages.phase_violation_refused", locale: :ja), response.body
     assert_predicate flow.reload, :expired?
   end
 

@@ -130,6 +130,18 @@ module SocialCeremonyTransactionable
     raise IdentitySocialCeremonyContract::Error, "result_jti has already been consumed: #{e.message}"
   end
 
+  public
+
+  def expire!
+    self.class.connection_owner.connected_to(role: :writing) do
+      with_lock do
+        now = self.class.database_now
+        update!(expires_at: now) if expires_at > now
+        self
+      end
+    end
+  end
+
   private
 
   def surface_matches_transaction_class

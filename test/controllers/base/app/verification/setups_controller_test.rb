@@ -22,7 +22,49 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
-    install_base_browser_rp_credentials!(surface: "app", host: @host, actor: @user, token: @token)
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = @host
+          rp_token = @token
+          rp_client = OidcClientRegistry.find!("base-app-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = ClientRpSession.create!(
+                client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                @user, host: rp_host, resource_type: "client",
+                       session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                       subject: OidcSubject.for(@user, resource_type: "client"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
+    end
     access_token = AuthenticationToken.encode(
       @user, host: @host, session_public_id: @token.public_id,
              resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
@@ -122,7 +164,12 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
          params: { scope: "settings_telephone", pt: @pt, registration_method: "totp" }, headers: @headers
 
     assert_response :see_other
-    transaction = latest_bootstrap_transaction
+    transaction =
+      begin
+        ClientStepUpCeremonyTransaction.where(
+          actor_ref: @user.public_id, session_ref: @token.public_id, purpose: "bootstrap",
+        ).order(id: :desc).first!
+      end
 
     assert_equal "bootstrap", transaction.purpose
     assert_equal ["totp"], transaction.allowed_methods_array
@@ -139,7 +186,53 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     auth = open_session
     auth.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
     auth.https!
-    complete_admission_binding!(auth:, entry_ref:)
+    begin
+      fv5001 = auth
+      fv5004 = entry_ref
+      fv5001.get(
+        new_auth_app_verification_setup_path(
+          ri: "jp",
+          entry_ref: fv5004,
+        ),
+      )
+      fv5001.assert_response :success
+      fv5003 = fv5001.response.parsed_body.at_css("form")
+
+      fv5001.post(
+        fv5003["action"],
+        params: {
+          entry_ref: fv5003.at_css('input[name="entry_ref"]')["value"],
+          authenticity_token: fv5003.at_css('input[name="authenticity_token"]')["value"],
+        },
+      )
+      fv5001.assert_response :see_other
+
+      get(fv5001.response.location, headers: @headers)
+
+      assert_response :success
+      fv5002 = response.parsed_body.at_css("form")
+      post(
+        fv5002["action"],
+        params: {
+          authenticity_token: fv5002.at_css('input[name="authenticity_token"]')["value"],
+          ri: fv5002.at_css('input[name="ri"]')["value"],
+        },
+        headers: @headers,
+      )
+
+      assert_response :see_other
+
+      fv5001.get(URI.parse(response.location).request_uri)
+      fv5001.assert_response :success
+      fv5000 = fv5001.response.parsed_body.at_css("form")
+      fv5001.post(
+        fv5000["action"],
+        params: {
+          entry_ref: fv5000.at_css('input[name="entry_ref"]')["value"],
+          authenticity_token: fv5000.at_css('input[name="authenticity_token"]')["value"],
+        },
+      )
+    end
 
     auth.assert_response :see_other
 
@@ -186,7 +279,12 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
 
     assert_response :see_other
     assert_equal new_base_app_identity_emails_registration_path, URI.parse(response.location).path
-    bootstrap = latest_bootstrap_transaction
+    bootstrap =
+      begin
+        ClientStepUpCeremonyTransaction.where(
+          actor_ref: @user.public_id, session_ref: @token.public_id, purpose: "bootstrap",
+        ).order(id: :desc).first!
+      end
 
     assert_equal "bootstrap", bootstrap.purpose
     assert_equal ["email_otp"], bootstrap.allowed_methods_array
@@ -240,7 +338,12 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     post base_app_verification_path(ri: "jp"), params: { scope: "settings_telephone", pt: @pt }, headers: @headers
 
     assert_response :see_other
-    verification = latest_step_up_transaction
+    verification =
+      begin
+        ClientStepUpCeremonyTransaction.where(
+          actor_ref: @user.public_id, session_ref: @token.public_id, purpose: "step_up",
+        ).order(id: :desc).first!
+      end
 
     assert_not_equal bootstrap.transaction_id, verification.transaction_id
     assert_equal "step_up", verification.purpose
@@ -252,7 +355,12 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
   test "a wrong email code leaves the bootstrap pending" do
     post base_app_verification_setup_path(ri: "jp"),
          params: { scope: "settings_telephone", pt: @pt, registration_method: "email_otp" }, headers: @headers
-    bootstrap = latest_bootstrap_transaction
+    bootstrap =
+      begin
+        ClientStepUpCeremonyTransaction.where(
+          actor_ref: @user.public_id, session_ref: @token.public_id, purpose: "bootstrap",
+        ).order(id: :desc).first!
+      end
     clear_enqueued_jobs
     post base_app_identity_emails_registration_path(ri: "jp"),
          params: { user_email: { raw_address: "wrong-code-#{SecureRandom.hex(4)}@example.com" } }, headers: @headers
@@ -282,53 +390,4 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
   end
 
   private
-
-  def latest_bootstrap_transaction
-    ClientStepUpCeremonyTransaction.where(
-      actor_ref: @user.public_id, session_ref: @token.public_id, purpose: "bootstrap",
-    ).order(id: :desc).first!
-  end
-
-  def latest_step_up_transaction
-    ClientStepUpCeremonyTransaction.where(
-      actor_ref: @user.public_id, session_ref: @token.public_id, purpose: "step_up",
-    ).order(id: :desc).first!
-  end
-
-  def complete_admission_binding!(auth:, entry_ref:)
-    auth.get(new_auth_app_verification_setup_path(ri: "jp", entry_ref: entry_ref))
-    auth.assert_response :success
-    continuation = auth.response.parsed_body.at_css("form")
-
-    auth.post(
-      continuation["action"], params: {
-        entry_ref: continuation.at_css('input[name="entry_ref"]')["value"],
-        authenticity_token: continuation.at_css('input[name="authenticity_token"]')["value"],
-      },
-    )
-    auth.assert_response :see_other
-
-    get(auth.response.location, headers: @headers)
-
-    assert_response :success
-    confirmation = response.parsed_body.at_css("form")
-    post(
-      confirmation["action"], params: {
-        authenticity_token: confirmation.at_css('input[name="authenticity_token"]')["value"],
-        ri: confirmation.at_css('input[name="ri"]')["value"],
-      }, headers: @headers,
-    )
-
-    assert_response :see_other
-
-    auth.get(URI.parse(response.location).request_uri)
-    auth.assert_response :success
-    admitted = auth.response.parsed_body.at_css("form")
-    auth.post(
-      admitted["action"], params: {
-        entry_ref: admitted.at_css('input[name="entry_ref"]')["value"],
-        authenticity_token: admitted.at_css('input[name="authenticity_token"]')["value"],
-      },
-    )
-  end
 end

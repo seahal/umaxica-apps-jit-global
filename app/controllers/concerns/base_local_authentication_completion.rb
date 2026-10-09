@@ -55,7 +55,7 @@ module BaseLocalAuthenticationCompletion
 
   def result_reference_param
     value = params[:result_ref]
-    raise ActionController::BadRequest unless value.is_a?(String) && value.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN)
+    raise ActionController::BadRequest unless value.is_a?(String) && value.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
 
     value
   end

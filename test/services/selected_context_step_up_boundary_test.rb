@@ -36,8 +36,13 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
-      pending = issue_base_step_up_admission!(
-        actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+      pending = BaseStepUpAdmissionIssuer.call!(
+        actor: actor,
+        token: token,
+        requirement: requirement,
+        return_to: "/identity/birthdate",
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: token,
       ).transaction
       continuity, = ceremony_model.rotate_and_admit!(
         admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: pending.transaction_id,
@@ -55,8 +60,13 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
       assert_predicate token, :currently_usable?
       assert_predicate token, :selected_actor_context?
 
-      pending = issue_base_step_up_admission!(
-        actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+      pending = BaseStepUpAdmissionIssuer.call!(
+        actor: actor,
+        token: token,
+        requirement: requirement,
+        return_to: "/identity/birthdate",
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: token,
       ).transaction
       continuity, = ceremony_model.rotate_and_admit!(
         admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: pending.transaction_id,
@@ -116,8 +126,13 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
       session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
       actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
-    proof = issue_base_step_up_admission!(
-      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    proof = BaseStepUpAdmissionIssuer.call!(
+      actor: actor,
+      token: token,
+      requirement: requirement,
+      return_to: "/identity/birthdate",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: token,
     ).transaction
     # This is a stored-evidence lifecycle test, not proof of a credential assertion.
     proof.record_verification!(

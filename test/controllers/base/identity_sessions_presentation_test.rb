@@ -34,15 +34,8 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
       user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
-    BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
-    BaseSelectorAuthority.prepare(surface: :app, principal: user, session: token)
-    credential = AuthenticationToken.encode(
-      user, host: host, session_public_id: token.public_id,
-            resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
-    )
-    headers = { "Host" => host,
-                "Authorization" => "Bearer #{credential}",
-                "Client-Agent" => "Mozilla/5.0", }
+    credential = authenticate_session(:app, user, token, host, "client")
+    headers = request_headers(host, token, credential)
 
     get base_app_sessions_url(ri: "jp", host: host), headers: headers
 
@@ -157,17 +150,16 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
   end
 
   def assert_expired_session_cannot_authenticate(surface)
-    travel_to(Time.utc(2026, 9, 13, 9, 0))
+    travel_to(ClientToken.database_now)
     principal, token, host, resource_type = create_actor_session_token(surface)
     token.update!(discard_at: 1.hour.from_now)
     absolute_expiry = token.discard_at
-    BaseSelectorBootstrapAuthority.call(surface: surface, principal: principal)
-    BaseSelectorAuthority.prepare(surface: surface, principal: principal, session: token)
-    access_token = AuthenticationToken.encode(
-      principal, host: host, session_public_id: token.public_id, resource_type: resource_type,
-                 jwt_issuer_id: "surface:BASE_#{surface.to_s.upcase}", expires_at: 2.hours.from_now,
-                 authentication_context: (surface == :org) ? token.authentication_context : nil,
-    )
+    access_token = authenticate_session(surface, principal, token, host, resource_type)
+    open_session do |test_session|
+      test_session.get(sessions_path(surface, host), headers: request_headers(host, token, access_token))
+
+      assert_equal 200, test_session.response.status
+    end
     payload = JWT.decode(access_token, nil, false).first
 
     assert_operator Time.zone.at(payload.fetch("exp")), :>, absolute_expiry
@@ -244,9 +236,26 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
   def authenticate_session(surface, principal, token, host, resource_type)
     BaseSelectorBootstrapAuthority.call(surface: surface, principal: principal)
     BaseSelectorAuthority.prepare(surface: surface, principal: principal, session: token)
-    AuthenticationToken.encode(
-      principal, host: host, session_public_id: token.public_id, resource_type: resource_type,
-                 jwt_issuer_id: "surface:BASE_#{surface.to_s.upcase}",
+    token.rotate_refresh_token!
+    client = OidcClientRegistry.find!("base-#{surface}-ww")
+    rp_class, owner_key =
+      case surface
+      when :app then [ClientRpSession, :client_token]
+      when :com then [VisitorRpSession, :visitor_token]
+      when :org then [OperatorRpSession, :operator_token]
+      end
+    now = rp_class.database_now
+    rp = rp_class.create!(
+      owner_key => token, :oidc_client_id => client.client_id, :oidc_scope => "openid profile",
+      :oidc_jti => SecureRandom.uuid, :oidc_nonce => SecureRandom.hex(16), :oidc_auth_time => now,
+      :refresh_token_expires_at => now + 2.hours,
+    )
+    AuthenticationTokenService.encode(
+      principal, host: host, resource_type: resource_type, session_public_id: token.public_id,
+                 base_session_public_id: token.public_id, oidc_sid: rp.public_id, oidc_jti: rp.oidc_jti,
+                 expires_at: 2.hours.from_now, scopes: %w(openid profile), issuer: OidcIssuer.for_client(client),
+                 audiences: [client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
+                 subject: OidcSubject.for(principal, resource_type: resource_type), client_id: client.client_id,
                  authentication_context: (surface == :org) ? token.authentication_context : nil,
     )
   end
@@ -254,6 +263,7 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
   def request_headers(host, token, access_token)
     {
       "Authorization" => "Bearer #{access_token}",
+      "Cookie" => "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access_token)}",
       "Client-Agent" => "Mozilla/5.0",
       "Host" => host,
       "X-TEST-SESSION-PUBLIC-ID" => token.public_id,

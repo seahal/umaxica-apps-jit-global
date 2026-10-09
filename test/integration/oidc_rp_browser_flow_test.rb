@@ -10,21 +10,21 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   COOKIE_NAME = AuthenticationBase::ACCESS_COOKIE_KEY
 
   SURFACES = [
-    { host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
+    { host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
       client_id: "core-app",
-      acme_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
+      acme_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
       resource: -> {
         clients(:one)
       }, },
-    { host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
+    { host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
       client_id: "core-org",
-      acme_host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
+      acme_host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
       resource: -> {
         operators(:one)
       }, },
-    { host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
+    { host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
       client_id: "core-com",
-      acme_host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
+      acme_host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
       resource: -> {
         create_visitor!
       }, },
@@ -60,7 +60,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
   test "acme app session-limit limitation revokes one session and resumes authorization" do
     with_core_oidc_client_key do
-      acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+      acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
       client = OidcClientRegistry.find!("core-app")
       code_verifier = SecureRandom.urlsafe_base64(48)
       user = clients(:one)
@@ -200,9 +200,9 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     with_core_oidc_client_key do
       TurnstileVerifierStub.challenge_enabled = true
-      acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+      acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
       sign_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-      core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")
+      core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL")
       user = clients(:one)
       ClientToken.where(user_id: user.id).delete_all
       email = user.client_emails.create!(address: "oidc_email_limit_#{SecureRandom.hex(4)}@example.com")
@@ -530,7 +530,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "acme app session-limit limitation rejects another actor session" do
-    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
     other = clients(:two)
     ClientToken.where(user_id: [user.id, other.id]).delete_all
@@ -630,7 +630,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "acme app session-limit limitation stays on page when capacity is still full after revoke" do
-    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     token = ClientToken.create!(
@@ -728,7 +728,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "acme app session-limit limitation rejects tampered challenge without revoking" do
-    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     token = ClientToken.create!(
@@ -752,7 +752,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   # The retired signed social_resolution URL token is not a grant: without this browser's pending
   # flow or an OIDC resolution challenge, nothing is listed, revoked, or issued.
   test "acme app session-limit limitation ignores a social_resolution token in the request" do
-    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     token = ClientToken.create!(user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
@@ -778,7 +778,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "acme app session-limit limitation rejects missing payload" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
 
     get acme_app_sign_in_limitation_path(ri: "jp"), headers: browser_headers
 
@@ -786,7 +786,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "acme app session-limit limitation cancel does not issue login or consume oidc transaction" do
-    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
@@ -873,7 +873,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "acme app session-limit limitation cancel from an inertia visit leaves the app via inertia location" do
-    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
@@ -1390,7 +1390,8 @@ class OidcRpBrowserFlowTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,

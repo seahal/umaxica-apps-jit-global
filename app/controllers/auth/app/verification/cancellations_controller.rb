@@ -21,7 +21,7 @@ class Auth::App::Verification::CancellationsController < Auth::App::ApplicationC
     )
     redirect_to(
       base_app_verification_cancellation_url(
-        cancellation_handoff: issuance.handoff, cancellation_ref: issuance.reference,
+        cancellation_ref: issuance.reference,
         transaction_ref: @step_up_ceremony_transaction.transaction_id, ri: params[:ri],
         host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https",
       ), status: :see_other, allow_other_host: true,

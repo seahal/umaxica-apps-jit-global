@@ -93,7 +93,10 @@ class CoreBrowserApiSurfacesTest < ActionDispatch::IntegrationTest
     get "/api/v0/session", headers: json_probe_headers
     csrf_token = response.parsed_body.fetch("csrf_token")
 
-    post "/api/v0/token/refresh", headers: json_probe_headers.merge("X-CSRF-Token" => csrf_token)
+    post "/api/v0/token/refresh", headers: json_probe_headers.merge(
+      "X-CSRF-Token" => csrf_token,
+      "Origin" => "https://#{request.host}",
+    )
 
     assert_response :unauthorized
     assert_equal "application/problem+json", response.media_type
@@ -107,7 +110,10 @@ class CoreBrowserApiSurfacesTest < ActionDispatch::IntegrationTest
     cookies[CoreBrowserCredentialContract::REFRESH_COOKIE] =
       "rt_#{SecureRandom.alphanumeric(21)}.#{SecureRandom.hex(16)}"
 
-    post "/api/v0/token/refresh", headers: json_probe_headers.merge("X-CSRF-Token" => csrf_token)
+    post "/api/v0/token/refresh", headers: json_probe_headers.merge(
+      "X-CSRF-Token" => csrf_token,
+      "Origin" => "https://#{request.host}",
+    )
 
     assert_response :unauthorized
     assert_equal "application/problem+json", response.media_type
@@ -119,7 +125,10 @@ class CoreBrowserApiSurfacesTest < ActionDispatch::IntegrationTest
     get "/api/v0/session", headers: json_probe_headers
     csrf_token = response.parsed_body.fetch("csrf_token")
 
-    post "/api/v0/token/refresh", headers: json_probe_headers.merge("X-CSRF-Token" => csrf_token)
+    post "/api/v0/token/refresh", headers: json_probe_headers.merge(
+      "X-CSRF-Token" => csrf_token,
+      "Origin" => "https://#{request.host}",
+    )
 
     assert_response :unauthorized
     assert_equal "application/problem+json", response.media_type

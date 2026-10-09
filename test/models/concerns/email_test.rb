@@ -334,8 +334,11 @@ class EmailTest < ActiveSupport::TestCase
     assert_nil @otp_transaction.reload.otp_consumed_at
   end
 
-  test "own Email form refuses a missing active verifier" do
-    @otp_transaction.update!(otp_verifier: nil)
+  test "own Email form refuses canceled proof because the database forbids a missing active verifier" do
+    assert_raises(ActiveRecord::StatementInvalid) do
+      ClientEmailCeremonyTransaction.transaction(requires_new: true) { @otp_transaction.update!(otp_verifier: nil) }
+    end
+    @otp_transaction.reload.cancel_email_otp!
 
     assert_not EmailCredentialRegistrationOtpFormQuery.call(
       actor: @otp_actor, token: @otp_token, email: @otp_email, transaction: @otp_transaction,

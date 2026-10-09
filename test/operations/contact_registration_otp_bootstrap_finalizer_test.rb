@@ -112,6 +112,10 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
           )
           foreign_token.rotate_refresh_token!
           foreign_requirement = StepUpRequirement.new(
+            step_up_required: true,
+            phishing_resistant_required: false,
+            user_verification_required: false,
+            full_reauthentication_required: false,
             **bootstrap_requirement.to_h.merge(
               actor_ref: foreign_actor.public_id, session_binding: foreign_token.public_id,
               token_binding: foreign_token.public_id,
@@ -152,7 +156,13 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
         when :revoked_root
           token.revoke!
         when :changed_policy
-          arguments[:requirement] = StepUpRequirement.new(**requirement.to_h.merge(allowed_methods: [:email_otp]))
+          arguments[:requirement] = StepUpRequirement.new(
+            step_up_required: true,
+            phishing_resistant_required: false,
+            user_verification_required: false,
+            full_reauthentication_required: false,
+            **requirement.to_h.merge(allowed_methods: [:email_otp]),
+          )
         when :foreign_return_target
           parent.update_columns(return_to: "https://foreign.example.test/identity/emails")
         when :wrong_scope_target
@@ -223,7 +233,13 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
             ), "Committed Source is not a replacement for the original bootstrap permission"
             assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(
               **arguments.merge(
-                requirement: StepUpRequirement.new(**requirement.to_h.merge(allowed_methods: [:email_otp])),
+                requirement: StepUpRequirement.new(
+                  step_up_required: true,
+                  phishing_resistant_required: false,
+                  user_verification_required: false,
+                  full_reauthentication_required: false,
+                  **requirement.to_h.merge(allowed_methods: [:email_otp]),
+                ),
               ),
             ), "A changed operation policy cannot recover the committed Source receipt"
           end

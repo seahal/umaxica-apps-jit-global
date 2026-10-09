@@ -10,6 +10,8 @@ module Base
       include ::BaseSignOutDestination
       include ::SurfaceInertiaPage
 
+      prepend_before_action :apply_default_no_store
+
       AUTHENTICATION_MODE = :open
       skip_before_action :set_preferences_cookie, only: %i(new edit)
       # `reject_oidc_logout_challenge!` still renders the shared `auth/shared/sign_outs/unavailable`

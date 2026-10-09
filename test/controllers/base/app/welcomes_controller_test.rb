@@ -6,7 +6,7 @@ require "test_helper"
 
 class Base::App::WelcomesControllerTest < ActionDispatch::IntegrationTest
   setup do
-    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
     @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
   end
@@ -15,8 +15,67 @@ class Base::App::WelcomesControllerTest < ActionDispatch::IntegrationTest
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
 
+    http_headers_0 =
+      begin
+        rp_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && ClientRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = ClientRpSession.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.user, host: rp_host, resource_type: "client",
+                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                             subject: OidcSubject.for(
+                               rp_token.user,
+                               resource_type: "client",
+                             ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get base_app_welcome_url(ri: "jp", host: @host),
-        headers: as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+        headers: http_headers_0
 
     assert_redirected_to base_app_dashboard_path(ri: "jp")
   end
@@ -65,15 +124,51 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
   SESSION_NONCE = "welcome-return-target-nonce"
 
   setup do
-    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
     @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
     @request.host = @host
-    browser_rp_cookie_pairs(
-      client_id: "base-app-ww", surface: "app", host: @host, actor: @user, token: @token,
-    ).each do |pair|
+    begin
+      rp_host = @host
+      rp_token = @token
+      rp_client = OidcClientRegistry.find!("base-app-ww")
+      rp_key = [rp_client.client_id, rp_token.public_id]
+      @base_browser_rp_credentials ||= {}
+      if @base_browser_rp_credentials[rp_key] ||
+          (rp_token.currently_usable? &&
+            !(rp_token.device_session_id && ClientRpSession.exists?(
+              device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+            )))
+        unless @base_browser_rp_credentials[rp_key]
+          rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+          rp_now = Time.current
+          rp_session = ClientRpSession.create!(
+            client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+            oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+            refresh_token_expires_at: rp_now + 10.minutes,
+          )
+          rp_access = AuthenticationTokenService.encode(
+            @user, host: rp_host, resource_type: "client",
+                   session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                   oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                   expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                   issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                   subject: OidcSubject.for(@user, resource_type: "client"), client_id: rp_client.client_id,
+          )
+          @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+        end
+        rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+        [
+          "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+          "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+        ]
+      else
+        []
+      end
+    end.each do |pair|
       name, value = pair.split("=", 2)
       @request.cookies[name] = Rack::Utils.unescape(value)
     end
@@ -89,80 +184,295 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
   end
 
   test "Next returns to the verified pre-sign-in page" do
-    get :show, params: { ri: "jp", pt: path_target("/identity?ri=jp") }
+    get :show, params: { ri: "jp",
+                         pt: begin
+                           fv5046 = "/identity?ri=jp"
+                           fv5048 = "app"
+                           fv5049 = "authentication"
+                           fv5047 = SESSION_NONCE
+                           fv5045 = 5.minutes
+                           ActiveSupport::MessageVerifier.new(
+                             Rails.application.key_generator.generate_key(
+                               AuthenticationRedirects::PATH_TARGET_TOKEN_SALT,
+                               32,
+                             ),
+                             digest: "SHA256", serializer: JSON, url_safe: true,
+                           ).generate(
+                             {
+                               "flow" => fv5049,
+                               "surface" => fv5048,
+                               "session_nonce" => fv5047,
+                               "pt" => fv5046,
+                             },
+                             purpose: AuthenticationRedirects::PATH_TARGET_TOKEN_PURPOSE,
+                             expires_in: fv5045,
+                           )
+                         end, }
 
     assert_response :success
-    assert_equal "/identity?ri=jp", next_href
+    assert_equal "/identity?ri=jp", begin
+      response.parsed_body.dig("props", "next_link", "href")
+    end
   end
 
   test "Next goes to the Dashboard when no return target was carried" do
     get :show, params: { ri: "jp" }
 
     assert_response :success
-    assert_equal DASHBOARD, next_href
+    assert_equal DASHBOARD, begin
+      response.parsed_body.dig("props", "next_link", "href")
+    end
   end
 
   test "a tampered return target is ignored" do
-    token = path_target("/identity?ri=jp")
+    token =
+      begin
+        fv5041 = "/identity?ri=jp"
+        fv5043 = "app"
+        fv5044 = "authentication"
+        fv5042 = SESSION_NONCE
+        fv5040 = 5.minutes
+        ActiveSupport::MessageVerifier.new(
+          Rails.application.key_generator.generate_key(AuthenticationRedirects::PATH_TARGET_TOKEN_SALT, 32),
+          digest: "SHA256", serializer: JSON, url_safe: true,
+        ).generate(
+          {
+            "flow" => fv5044,
+            "surface" => fv5043,
+            "session_nonce" => fv5042,
+            "pt" => fv5041,
+          },
+          purpose: AuthenticationRedirects::PATH_TARGET_TOKEN_PURPOSE, expires_in: fv5040,
+        )
+      end
 
     get :show, params: { ri: "jp", pt: "#{token[0...-2]}xx" }
 
-    assert_equal DASHBOARD, next_href
+    assert_equal DASHBOARD, begin
+      response.parsed_body.dig("props", "next_link", "href")
+    end
   end
 
   test "a return target issued for another surface is ignored" do
-    get :show, params: { ri: "jp", pt: path_target("/identity?ri=jp", surface: "com") }
+    get :show, params: { ri: "jp",
+                         pt: begin
+                           fv5036 = "/identity?ri=jp"
+                           fv5038 = "com"
+                           fv5039 = "authentication"
+                           fv5037 = SESSION_NONCE
+                           fv5035 = 5.minutes
+                           ActiveSupport::MessageVerifier.new(
+                             Rails.application.key_generator.generate_key(
+                               AuthenticationRedirects::PATH_TARGET_TOKEN_SALT,
+                               32,
+                             ),
+                             digest: "SHA256", serializer: JSON, url_safe: true,
+                           ).generate(
+                             {
+                               "flow" => fv5039,
+                               "surface" => fv5038,
+                               "session_nonce" => fv5037,
+                               "pt" => fv5036,
+                             },
+                             purpose: AuthenticationRedirects::PATH_TARGET_TOKEN_PURPOSE,
+                             expires_in: fv5035,
+                           )
+                         end, }
 
-    assert_equal DASHBOARD, next_href
+    assert_equal DASHBOARD, begin
+      response.parsed_body.dig("props", "next_link", "href")
+    end
   end
 
   test "a return target issued for another flow is ignored" do
-    get :show, params: { ri: "jp", pt: path_target("/identity?ri=jp", flow: "step_up") }
+    get :show, params: { ri: "jp",
+                         pt: begin
+                           fv5031 = "/identity?ri=jp"
+                           fv5033 = "app"
+                           fv5034 = "step_up"
+                           fv5032 = SESSION_NONCE
+                           fv5030 = 5.minutes
+                           ActiveSupport::MessageVerifier.new(
+                             Rails.application.key_generator.generate_key(
+                               AuthenticationRedirects::PATH_TARGET_TOKEN_SALT,
+                               32,
+                             ),
+                             digest: "SHA256", serializer: JSON, url_safe: true,
+                           ).generate(
+                             {
+                               "flow" => fv5034,
+                               "surface" => fv5033,
+                               "session_nonce" => fv5032,
+                               "pt" => fv5031,
+                             },
+                             purpose: AuthenticationRedirects::PATH_TARGET_TOKEN_PURPOSE,
+                             expires_in: fv5030,
+                           )
+                         end, }
 
-    assert_equal DASHBOARD, next_href
+    assert_equal DASHBOARD, begin
+      response.parsed_body.dig("props", "next_link", "href")
+    end
   end
 
   test "a return target bound to another browser session is ignored" do
-    get :show, params: { ri: "jp", pt: path_target("/identity?ri=jp", session_nonce: "another-browser") }
+    get :show, params: { ri: "jp",
+                         pt: begin
+                           fv5026 = "/identity?ri=jp"
+                           fv5028 = "app"
+                           fv5029 = "authentication"
+                           fv5027 = "another-browser"
+                           fv5025 = 5.minutes
+                           ActiveSupport::MessageVerifier.new(
+                             Rails.application.key_generator.generate_key(
+                               AuthenticationRedirects::PATH_TARGET_TOKEN_SALT,
+                               32,
+                             ),
+                             digest: "SHA256", serializer: JSON, url_safe: true,
+                           ).generate(
+                             {
+                               "flow" => fv5029,
+                               "surface" => fv5028,
+                               "session_nonce" => fv5027,
+                               "pt" => fv5026,
+                             },
+                             purpose: AuthenticationRedirects::PATH_TARGET_TOKEN_PURPOSE,
+                             expires_in: fv5025,
+                           )
+                         end, }
 
-    assert_equal DASHBOARD, next_href
+    assert_equal DASHBOARD, begin
+      response.parsed_body.dig("props", "next_link", "href")
+    end
   end
 
   test "a return target is ignored when this browser session carries no nonce" do
-    token = path_target("/identity?ri=jp")
+    token =
+      begin
+        fv5021 = "/identity?ri=jp"
+        fv5023 = "app"
+        fv5024 = "authentication"
+        fv5022 = SESSION_NONCE
+        fv5020 = 5.minutes
+        ActiveSupport::MessageVerifier.new(
+          Rails.application.key_generator.generate_key(AuthenticationRedirects::PATH_TARGET_TOKEN_SALT, 32),
+          digest: "SHA256", serializer: JSON, url_safe: true,
+        ).generate(
+          {
+            "flow" => fv5024,
+            "surface" => fv5023,
+            "session_nonce" => fv5022,
+            "pt" => fv5021,
+          },
+          purpose: AuthenticationRedirects::PATH_TARGET_TOKEN_PURPOSE, expires_in: fv5020,
+        )
+      end
     @request.session.delete(:authentication_pt_nonce)
 
     get :show, params: { ri: "jp", pt: token }
 
-    assert_equal DASHBOARD, next_href
+    assert_equal DASHBOARD, begin
+      response.parsed_body.dig("props", "next_link", "href")
+    end
   end
 
   # MessageVerifier accepts a token strictly before its expiry instant.
   [[-1, "/identity?ri=jp"], [0, DASHBOARD], [1, DASHBOARD]].each do |offset, expected|
     test "a return target #{offset} second(s) from its expiry resolves to #{expected}" do
       freeze_time
-      token = path_target("/identity?ri=jp", expires_in: 60.seconds)
+      token =
+        begin
+          fv5016 = "/identity?ri=jp"
+          fv5018 = "app"
+          fv5019 = "authentication"
+          fv5017 = SESSION_NONCE
+          fv5015 = 60.seconds
+          ActiveSupport::MessageVerifier.new(
+            Rails.application.key_generator.generate_key(AuthenticationRedirects::PATH_TARGET_TOKEN_SALT, 32),
+            digest: "SHA256", serializer: JSON, url_safe: true,
+          ).generate(
+            {
+              "flow" => fv5019,
+              "surface" => fv5018,
+              "session_nonce" => fv5017,
+              "pt" => fv5016,
+            },
+            purpose: AuthenticationRedirects::PATH_TARGET_TOKEN_PURPOSE, expires_in: fv5015,
+          )
+        end
       travel 60.seconds + offset.seconds
 
       get :show, params: { ri: "jp", pt: token }
 
-      assert_equal expected, next_href
+      assert_equal expected, begin
+        response.parsed_body.dig("props", "next_link", "href")
+      end
     end
   end
 
   ["/welcome?ri=jp", "/sign?ri=jp", "/sign/out?ri=jp"].each do |destination|
     test "a return target of #{destination} cannot make Next loop" do
-      get :show, params: { ri: "jp", pt: path_target(destination) }
+      get :show, params: { ri: "jp",
+                           pt: begin
+                             fv5011 = destination
+                             fv5013 = "app"
+                             fv5014 = "authentication"
+                             fv5012 = SESSION_NONCE
+                             fv5010 = 5.minutes
+                             ActiveSupport::MessageVerifier.new(
+                               Rails.application.key_generator.generate_key(
+                                 AuthenticationRedirects::PATH_TARGET_TOKEN_SALT,
+                                 32,
+                               ),
+                               digest: "SHA256", serializer: JSON, url_safe: true,
+                             ).generate(
+                               {
+                                 "flow" => fv5014,
+                                 "surface" => fv5013,
+                                 "session_nonce" => fv5012,
+                                 "pt" => fv5011,
+                               },
+                               purpose: AuthenticationRedirects::PATH_TARGET_TOKEN_PURPOSE,
+                               expires_in: fv5010,
+                             )
+                           end, }
 
-      assert_equal DASHBOARD, next_href
+      assert_equal DASHBOARD, begin
+        response.parsed_body.dig("props", "next_link", "href")
+      end
     end
   end
 
   ["https://evil.example/", "//evil.example/x", "/\\evil.example", "", " ", "/a\u0000b"].each do |destination|
     test "a signed return target of #{destination.inspect} is not an internal path" do
-      get :show, params: { ri: "jp", pt: path_target(destination) }
+      get :show, params: { ri: "jp",
+                           pt: begin
+                             fv5006 = destination
+                             fv5008 = "app"
+                             fv5009 = "authentication"
+                             fv5007 = SESSION_NONCE
+                             fv5005 = 5.minutes
+                             ActiveSupport::MessageVerifier.new(
+                               Rails.application.key_generator.generate_key(
+                                 AuthenticationRedirects::PATH_TARGET_TOKEN_SALT,
+                                 32,
+                               ),
+                               digest: "SHA256", serializer: JSON, url_safe: true,
+                             ).generate(
+                               {
+                                 "flow" => fv5009,
+                                 "surface" => fv5008,
+                                 "session_nonce" => fv5007,
+                                 "pt" => fv5006,
+                               },
+                               purpose: AuthenticationRedirects::PATH_TARGET_TOKEN_PURPOSE,
+                               expires_in: fv5005,
+                             )
+                           end, }
 
-      assert_equal DASHBOARD, next_href
+      assert_equal DASHBOARD, begin
+        response.parsed_body.dig("props", "next_link", "href")
+      end
     end
   end
 
@@ -171,14 +481,39 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
       get :show, params: { ri: "jp", pt: value }
 
       assert_response :success
-      assert_equal DASHBOARD, next_href
+      assert_equal DASHBOARD, begin
+        response.parsed_body.dig("props", "next_link", "href")
+      end
     end
   end
 
   test "without the gate the page is skipped and no return target is followed" do
     @request.session.delete(:app_sign_in_welcome)
 
-    get :show, params: { ri: "jp", pt: path_target("/identity?ri=jp") }
+    get :show, params: { ri: "jp",
+                         pt: begin
+                           fv5001 = "/identity?ri=jp"
+                           fv5003 = "app"
+                           fv5004 = "authentication"
+                           fv5002 = SESSION_NONCE
+                           fv5000 = 5.minutes
+                           ActiveSupport::MessageVerifier.new(
+                             Rails.application.key_generator.generate_key(
+                               AuthenticationRedirects::PATH_TARGET_TOKEN_SALT,
+                               32,
+                             ),
+                             digest: "SHA256", serializer: JSON, url_safe: true,
+                           ).generate(
+                             {
+                               "flow" => fv5004,
+                               "surface" => fv5003,
+                               "session_nonce" => fv5002,
+                               "pt" => fv5001,
+                             },
+                             purpose: AuthenticationRedirects::PATH_TARGET_TOKEN_PURPOSE,
+                             expires_in: fv5000,
+                           )
+                         end, }
 
     assert_redirected_to "/dashboard?ri=jp"
   end
@@ -190,21 +525,6 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
   end
 
   private
-
-  def next_href
-    response.parsed_body.dig("props", "next_link", "href")
-  end
-
-  def path_target(destination, surface: "app", flow: "authentication", session_nonce: SESSION_NONCE,
-                  expires_in: 5.minutes)
-    ActiveSupport::MessageVerifier.new(
-      Rails.application.key_generator.generate_key(AuthenticationRedirects::PATH_TARGET_TOKEN_SALT, 32),
-      digest: "SHA256", serializer: JSON, url_safe: true,
-    ).generate(
-      { "flow" => flow, "surface" => surface, "session_nonce" => session_nonce, "pt" => destination },
-      purpose: AuthenticationRedirects::PATH_TARGET_TOKEN_PURPOSE, expires_in: expires_in,
-    )
-  end
 end
 
 # DAMP auth header helpers for this test class.

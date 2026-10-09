@@ -45,7 +45,7 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
       assert_empty telephone_history.where(owner_key => owner.id)
     end
 
-    test "#{realm} cross-database cleanup failure preserves Identity and history for an identical retry" do
+    test "#{realm} database transport failure preserves Identity and history for an identical retry" do
       owner_model, email_history, owner_key =
         case realm
         when "app" then [Client, ClientEmailHistory, :user_id]
@@ -56,15 +56,13 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
         owner_key => owner.id, :fingerprint => "retry-history", :attached_at => 3.days.ago,
         :detached_at => 2.days.ago, :created_at => 2.days.ago,
       )
-      cleanup = RetentionCrossDatabaseChildPurge.method(:call)
-      # Inject failure after actual child cleanup; retention/hold admission is never mocked.
-      RetentionCrossDatabaseChildPurge.stub(
-        :call, lambda { |actor:|
-          cleanup.call(actor: actor)
-          raise IOError, "cross-database cleanup failed"
-        },
-      ) do
-        assert_raises(IOError) { owner.destroy! }
+      # Only the database write fails; admission and transaction rollback stay real.
+      email_history.connection_class_for_self.connected_to(role: :writing) do
+        email_history.connection.stub(
+          :delete, ->(*) { raise ActiveRecord::StatementInvalid, "erasure transport unavailable" },
+        ) do
+          assert_raises(ActiveRecord::StatementInvalid) { owner.destroy! }
+        end
       end
 
       assert owner_model.exists?(owner.id)

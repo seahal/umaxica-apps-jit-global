@@ -36,8 +36,7 @@ The discussion behind this plan is in
 ## Experience item to add before the Preference port: Web Push
 
 Requested by the user on 2026-10-06. Open question; no design is accepted yet. The questions are
-listed in `adr/xper-phase-zero-bootstrap.md` under "Open item before the Preference port: Web
-Push".
+listed in `adr/xper-phase-zero-bootstrap.md` under "Open item before the Preference port: Web Push".
 
 1. Decide how the Web Push feature should work: what the Experience item represents, who owns the
    opt-in, the push subscription, and delivery, which origin and Service Worker register the
@@ -49,6 +48,11 @@ Push".
    the Preference port does not start before the Web Push item is defined.
 
 ## Current-cycle prohibition
+
+Related deferred investigation:
+[Lightweight Reauthentication and Access Reconfirmation](lightweight-reauthentication-and-access-reconfirmation.md).
+It records candidate Social Login/Email OTP confirmation use cases and open assurance, authority,
+and session questions without accepting a workflow or transient-capability design.
 
 Do not modify Auth or Xper implementation as part of the current Base/RP refactor solely to advance
 this plan. Do not opportunistically merge their concerns into the shared RP layer.

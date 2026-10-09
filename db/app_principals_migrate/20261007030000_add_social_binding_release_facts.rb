@@ -13,10 +13,14 @@ class AddSocialBindingReleaseFacts < ActiveRecord::Migration[8.2]
       reject_existing_conflicts!
       remove_index(TABLE, name: CLIENT_PROVIDER_INDEX, algorithm: :concurrently)
       remove_index(TABLE, name: ISSUER_SUBJECT_INDEX, algorithm: :concurrently)
-      add_index(TABLE, :client_id, unique: true, where: "released_at IS NULL",
-                name: CLIENT_PROVIDER_INDEX, algorithm: :concurrently)
-      add_index(TABLE, %i(issuer subject), unique: true, where: "released_at IS NULL",
-                name: ISSUER_SUBJECT_INDEX, algorithm: :concurrently)
+      add_index(
+        TABLE, :client_id, unique: true, where: "released_at IS NULL",
+                           name: CLIENT_PROVIDER_INDEX, algorithm: :concurrently,
+      )
+      add_index(
+        TABLE, %i(issuer subject), unique: true, where: "released_at IS NULL",
+                                   name: ISSUER_SUBJECT_INDEX, algorithm: :concurrently,
+      )
       add_release_trigger!
     end
   end
@@ -26,10 +30,14 @@ class AddSocialBindingReleaseFacts < ActiveRecord::Migration[8.2]
       remove_release_trigger!
       remove_index(TABLE, name: CLIENT_PROVIDER_INDEX, algorithm: :concurrently, if_exists: true)
       remove_index(TABLE, name: ISSUER_SUBJECT_INDEX, algorithm: :concurrently, if_exists: true)
-      add_index(TABLE, %i(issuer subject), unique: true, name: ISSUER_SUBJECT_INDEX,
-                algorithm: :concurrently, if_not_exists: true)
-      add_index(TABLE, %i(client_id provider), unique: true, name: CLIENT_PROVIDER_INDEX,
-                algorithm: :concurrently, if_not_exists: true)
+      add_index(
+        TABLE, %i(issuer subject), unique: true, name: ISSUER_SUBJECT_INDEX,
+                                   algorithm: :concurrently, if_not_exists: true,
+      )
+      add_index(
+        TABLE, %i(client_id provider), unique: true, name: CLIENT_PROVIDER_INDEX,
+                                       algorithm: :concurrently, if_not_exists: true,
+      )
       remove_column(TABLE, :released_at)
     end
   end
@@ -37,7 +45,7 @@ class AddSocialBindingReleaseFacts < ActiveRecord::Migration[8.2]
   private
 
   def reject_existing_conflicts!
-    conflicts = connection.select_values(<<~SQL)
+    conflicts = connection.select_values(<<~SQL.squish)
       SELECT string_agg(id::text, ',' ORDER BY id)
         FROM client_external_identities
        WHERE released_at IS NULL
@@ -53,11 +61,11 @@ class AddSocialBindingReleaseFacts < ActiveRecord::Migration[8.2]
     return if conflicts.empty?
 
     raise ActiveRecord::MigrationError,
-          "client_external_identities has unresolved active binding conflicts: rows=#{conflicts.join(';')}"
+          "client_external_identities has unresolved active binding conflicts: rows=#{conflicts.join(";")}"
   end
 
   def add_release_trigger!
-    execute <<~SQL
+    execute(<<~SQL.squish)
       CREATE OR REPLACE FUNCTION enforce_client_external_identity_binding_facts() RETURNS trigger
       LANGUAGE plpgsql AS $$
       BEGIN
@@ -75,7 +83,7 @@ class AddSocialBindingReleaseFacts < ActiveRecord::Migration[8.2]
       END;
       $$;
     SQL
-    execute <<~SQL
+    execute(<<~SQL.squish)
       CREATE TRIGGER client_external_identities_binding_facts_trigger
       BEFORE UPDATE ON client_external_identities
       FOR EACH ROW EXECUTE FUNCTION enforce_client_external_identity_binding_facts();
@@ -83,7 +91,7 @@ class AddSocialBindingReleaseFacts < ActiveRecord::Migration[8.2]
   end
 
   def remove_release_trigger!
-    execute "DROP TRIGGER IF EXISTS client_external_identities_binding_facts_trigger ON client_external_identities"
-    execute "DROP FUNCTION IF EXISTS enforce_client_external_identity_binding_facts()"
+    execute("DROP TRIGGER IF EXISTS client_external_identities_binding_facts_trigger ON client_external_identities")
+    execute("DROP FUNCTION IF EXISTS enforce_client_external_identity_binding_facts()")
   end
 end

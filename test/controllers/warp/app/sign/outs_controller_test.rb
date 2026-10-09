@@ -51,7 +51,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal "warp", transaction.origin_surface
 
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), location.host
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), location.host
     assert_equal "/oidc/logout", location.path
     assert_equal "jp", query["ri"]
     assert_predicate query["logout_challenge"], :present?
@@ -69,7 +69,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), location.host
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), location.host
     assert_equal "/oidc/logout", location.path
     assert_equal "us", query["ri"]
     assert_predicate query["logout_challenge"], :present?
@@ -124,9 +124,9 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     location = URI.parse(response.location)
 
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), location.host
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), location.host
     assert_equal "/oidc/logout", location.path
-    assert_not_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), location.host
+    assert_not_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), location.host
   end
 
   private
@@ -398,7 +398,8 @@ class Warp::App::Sign::OutsControllerTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,

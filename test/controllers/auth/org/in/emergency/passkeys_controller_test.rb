@@ -19,7 +19,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
            :operator_token_dbsc_statuses
 
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
+    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
     TurnstileVerifierStub.challenge_enabled = true
@@ -38,23 +38,35 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
       status_id: OperatorPasskeyStatus::ACTIVE,
     )
 
-    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    destination = nil
-    JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
-      RedirectsJumpGatewayUrl.stub(
-        :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
-      ) do
-        post base_org_sign_show_path, params: { ri: "jp" }
-      end
-    end
-
-    assert_response :see_other
-    entry_ref = Rack::Utils.parse_nested_query(URI.parse(destination).query).fetch("entry_ref")
-    @flow = OperatorSignInFlow.find_by!(public_id: entry_ref)
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "org",
+      intent: "sign_in",
+      nonce_digest: OperatorSignInFlow.digest_nonce("nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"),
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: issuance.reference)
+    auth_session, raw_sid = binding.class.auth_admission_session_class.issue!
+    binding.attach_auth_session!(auth_session: auth_session, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(
+      base_token: nil,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "org", entry_ref: issuance.reference, nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      ),
+    )
+    https!
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    get auth_org_sign_in_path, params: { entry_ref: entry_ref, ri: "jp" }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_org_sign_in_path, params: { entry_ref: entry_ref, authenticity_token: csrf, ri: "jp" }
+    cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    cookies.merge( # rubocop:disable Lint/Void
+      "#{cookie_name}=#{Rack::Utils.escape(raw_sid)}", URI.parse("https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}/"),
+    )
+    get auth_org_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" }
+    form = response.parsed_body.at_css("form")
+    fields = form.css("input[type='hidden']").to_h { |input| [input["name"], input["value"]] }
+    post form["action"], params: fields, headers: {
+      "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}", "Sec-Fetch-Site" => "same-origin",
+    }
+    @flow = binding.sign_in_flow
 
     assert_response :see_other
   end
@@ -130,14 +142,29 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     assert_response :success
     post auth_org_sign_handoff_path, params: { ri: "jp" }
 
-    assert_response :success
-    result = response.parsed_body.at_css('input[name="result"]')["value"]
+    assert_response :see_other
+    completion = URI.parse(response.location)
 
+    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), completion.host
     assert_equal 0, OperatorToken.where(staff_id: @staff.id).count
-    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    post base_org_sign_completion_path,
-         params: { result: result, transaction_ref: @flow.public_id, ri: "jp" },
-         headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}", "Sec-Fetch-Site" => "same-site" }
+    host! completion.host
+    get completion.request_uri
+
+    assert_response :success
+    session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] = "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+    SignInCycleLocator.new(session, surface: :org).issue!(@flow, nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn")
+    session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+    jar = ActionDispatch::Cookies::CookieJar.build(request, request.cookies)
+    jar.encrypted[session_key] = { value: session.to_hash.stringify_keys }
+    cookies.delete(session_key)
+    cookies.merge( # rubocop:disable Lint/Void
+      "#{session_key}=#{Rack::Utils.escape(jar[session_key])}", URI.parse("https://#{completion.host}/"),
+    )
+    form = response.parsed_body.at_css("form")
+    fields = form.css("input[type='hidden']").to_h { |input| [input["name"], input["value"]] }
+    post form["action"], params: fields, headers: {
+      "Origin" => "https://#{completion.host}", "Sec-Fetch-Site" => "same-origin",
+    }
 
     assert_response :see_other
     token = @flow.reload.token
@@ -157,7 +184,52 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
   end
 
   test "a normal sign-in challenge is rejected by the emergency verifier" do
-    complete_org_entra_first_stage!(@staff)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
+    end
     post auth_org_sign_in_passkey_options_url(ri: "jp"), params: {}
 
     assert_response :ok
@@ -173,7 +245,52 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
 
   test "an emergency challenge is rejected by the normal verifier" do
     emergency_challenge_id = issue_emergency_challenge!
-    complete_org_entra_first_stage!(@staff)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
+    end
 
     post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(emergency_challenge_id)
 
@@ -183,7 +300,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
   end
 
   test "an operator who may not sign in is refused without becoming distinguishable at the options step" do
-    @staff.update!(status_id: OperatorStatus::ACTIVE, withdrawn_at: Time.current)
+    @staff.reload.update!(status_id: OperatorStatus::ACTIVE, withdrawn_at: Time.current)
 
     post auth_org_sign_in_emergency_passkey_options_url(ri: "jp"), params: { identifier: @staff.public_id }
 
@@ -207,7 +324,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
 
   test "an eligible operator loses emergency access the moment the policy stops allowing it" do
     challenge_id = issue_emergency_challenge!
-    @staff.update!(withdrawn_at: Time.current)
+    @staff.reload.update!(withdrawn_at: Time.current)
     verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
 
     Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
@@ -222,7 +339,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     staff = operators(:one)
 
     get new_auth_org_sign_in_emergency_passkey_url(ri: "jp"),
-        headers: as_staff_headers(staff, host: ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"))
+        headers: as_staff_headers(staff, host: ENV.fetch("PUBLIC_AUTH_STAFF_URL"))
 
     assert_response :forbidden
     assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
@@ -231,7 +348,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
 
   test "an authenticated operator cannot run the emergency ceremony endpoints" do
     staff = operators(:one)
-    headers = as_staff_headers(staff, host: ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"))
+    headers = as_staff_headers(staff, host: ENV.fetch("PUBLIC_AUTH_STAFF_URL"))
 
     post auth_org_sign_in_emergency_passkey_options_url(ri: "jp"),
          params: { identifier: staff.public_id }, headers: headers
@@ -264,7 +381,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
   def decoded_access_token(token)
     AuthenticationToken.decode(
       token,
-      host: ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"),
+      host: ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       resource_type: "operator",
       jwt_issuer_id: "surface:AUTH_ORG",
     )

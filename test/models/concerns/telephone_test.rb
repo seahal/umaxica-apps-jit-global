@@ -68,8 +68,11 @@ class TelephoneTest < ActiveSupport::TestCase
     )
   end
 
-  test "registration form refuses a missing ceremony verifier" do
-    @transaction.update!(otp_verifier: nil)
+  test "registration form refuses canceled proof because the database forbids a missing active verifier" do
+    assert_raises(ActiveRecord::StatementInvalid) do
+      OperatorTelephoneCeremonyTransaction.transaction(requires_new: true) { @transaction.update!(otp_verifier: nil) }
+    end
+    @transaction.reload.cancel_telephone_otp!
 
     assert_not TelephoneCredentialRegistrationOtpFormQuery.call(
       actor: @actor, token: @token, telephone: @telephone, transaction: @transaction,

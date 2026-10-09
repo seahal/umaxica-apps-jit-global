@@ -80,10 +80,13 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     app/controllers/auth/org/omniauth/omniauth_callbacks_controller.rb
     app/controllers/base/app/edge/v0/cookies_controller.rb
     app/controllers/base/app/oauth/authorizations_controller.rb
+    app/controllers/base/app/oidc/callbacks_controller.rb
     app/controllers/base/com/edge/v0/cookies_controller.rb
     app/controllers/base/com/oauth/authorizations_controller.rb
+    app/controllers/base/com/oidc/callbacks_controller.rb
     app/controllers/base/org/edge/v0/cookies_controller.rb
     app/controllers/base/org/oauth/authorizations_controller.rb
+    app/controllers/base/org/oidc/callbacks_controller.rb
     app/controllers/core/app/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/app/oidc/callbacks_controller.rb
     app/controllers/core/com/api/v0/preferences/dbsc_controller.rb

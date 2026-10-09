@@ -8,6 +8,8 @@
 module BrowserRpAuthentication
   extend ActiveSupport::Concern
 
+  include AuthenticationRedirects
+
   AccessState = Data.define(:status, :resource, :rp_session, :payload, :security_context)
   AccessPolicyContext = Data.define(
     :policy,

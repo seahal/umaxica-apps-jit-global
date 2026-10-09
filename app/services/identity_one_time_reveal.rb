@@ -22,9 +22,18 @@ class IdentityOneTimeReveal
     )
   end
 
+  def self.resume_for_operation!(actor:, session_nonce:, purpose:, operation_ref:)
+    new.resume_for_operation!(
+      actor: actor, session_nonce: session_nonce, purpose: purpose,
+      operation_ref: operation_ref,
+    )
+  end
+
   def self.consume!(actor:, session_nonce:, token:, purpose:)
     new.consume!(actor: actor, session_nonce: session_nonce, token: token, purpose: purpose)
   end
+
+  public_class_method :resume_for_operation!
 
   def issue!(actor:, session_nonce:, value:, purpose:, metadata:, expires_in:)
     raise ArgumentError, "actor is required" unless actor&.id
@@ -32,8 +41,24 @@ class IdentityOneTimeReveal
     raise ArgumentError, "value is required" if value.blank?
     raise ArgumentError, "purpose is required" if purpose.blank?
 
+    raise ArgumentError, "metadata must be a hash" unless metadata.is_a?(Hash)
+
+    metadata = metadata.stringify_keys
+    raise ArgumentError, "delivery token is server-owned" if metadata.key?("delivery_token")
+    if metadata.key?("delivery_operation_ref") &&
+        !(metadata["delivery_operation_ref"].is_a?(String) && metadata["delivery_operation_ref"].present?)
+      raise ArgumentError, "delivery operation is invalid"
+    end
+
     jti = SecureRandom.uuid
-    expires_at = Time.current + expires_in
+    expires_at = SecurityOneTimeReveal.database_now + expires_in
+    token = verifier.generate(
+      claims(actor: actor, session_nonce: session_nonce, purpose: purpose, jti: jti),
+      purpose: TOKEN_PURPOSE, expires_in: expires_in,
+    )
+    if metadata.key?("delivery_operation_ref")
+      metadata = metadata.merge("delivery_token" => token)
+    end
     SecurityOneTimeReveal.create!(
       jti_digest: digest(jti),
       actor_type: actor.class.name,
@@ -45,14 +70,38 @@ class IdentityOneTimeReveal
     )
 
     Result.new(
-      token: verifier.generate(
-        claims(actor: actor, session_nonce: session_nonce, purpose: purpose, jti: jti),
-        purpose: TOKEN_PURPOSE,
-        expires_in: expires_in,
-      ),
+      token: token,
       expires_at: expires_at,
     )
   end
+
+  def resume_for_operation!(actor:, session_nonce:, purpose:, operation_ref:)
+    raise ArgumentError, "reveal operation is required" unless actor&.id && session_nonce.present? &&
+      purpose.present? && operation_ref.is_a?(String) && operation_ref.present?
+
+    matches =
+      SecurityOneTimeReveal.where(
+        actor_type: actor.class.name, actor_id: actor.id, session_nonce_digest: digest(session_nonce),
+        purpose: purpose, consumed_at: nil,
+      ).where("expires_at > ?", SecurityOneTimeReveal.database_now).filter_map do |record|
+        metadata = decrypt_payload(record.encrypted_payload).fetch("metadata")
+        next unless metadata["delivery_operation_ref"] == operation_ref
+
+        token = metadata.fetch("delivery_token")
+        payload = verifier.verified(token, purpose: TOKEN_PURPOSE)
+        unless valid_claims?(payload, actor: actor, session_nonce: session_nonce, purpose: purpose) &&
+            digest(payload.fetch("jti")) == record.jti_digest
+          raise ArgumentError, "reveal delivery binding is invalid"
+        end
+
+        Result.new(token: token, expires_at: record.expires_at)
+      end
+    raise ArgumentError, "reveal operation has multiple deliveries" if matches.length > 1
+
+    matches.first
+  end
+
+  public :resume_for_operation!
 
   def consume!(actor:, session_nonce:, token:, purpose:)
     payload = verifier.verified(token.to_s, purpose: TOKEN_PURPOSE)
@@ -71,7 +120,13 @@ class IdentityOneTimeReveal
     return nil if encrypted.blank?
 
     decrypted = decrypt_payload(encrypted)
-    Payload.new(value: decrypted.fetch("value"), metadata: decrypted.fetch("metadata", {}))
+    Payload.new(
+      value: decrypted.fetch("value"),
+      metadata: decrypted.fetch("metadata", {}).except(
+        "delivery_operation_ref",
+        "delivery_token",
+      ),
+    )
   rescue ActiveSupport::MessageVerifier::InvalidSignature, ActiveSupport::MessageEncryptor::InvalidMessage,
          KeyError, JSON::ParserError
     nil

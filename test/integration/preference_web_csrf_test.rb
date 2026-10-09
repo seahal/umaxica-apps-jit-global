@@ -17,7 +17,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
                                               }, as: :json,
     )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
 
     patch(
       base_app_api_v0_preferences_cookie_path, params: { consented: true },
@@ -27,7 +27,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
                                                }, as: :json,
     )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -49,7 +49,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
                                               }, as: :json,
     )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
 
     patch(
       base_com_api_v0_preferences_cookie_path, params: { consented: true },
@@ -59,7 +59,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
                                                }, as: :json,
     )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -81,7 +81,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
                                               }, as: :json,
     )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
 
     patch(
       base_org_api_v0_preferences_cookie_path, params: { consented: true },
@@ -91,7 +91,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
                                                }, as: :json,
     )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -156,7 +156,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       Rails.configuration.action_controller.allow_forgery_protection
   end
 
-  test "same-site POST without an Origin is forbidden on base surfaces" do
+  test "standard Rails Fetch Metadata accepts same-site POST without an Origin on base surfaces" do
     ActionController::Base.allow_forgery_protection = true
 
     [
@@ -175,7 +175,8 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
         as: :json,
       )
 
-      assert_response :forbidden
+      assert_response :success
+      assert_equal "dr", response.parsed_body.fetch("theme")
     end
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
@@ -202,7 +203,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       as: :json,
     )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -238,7 +239,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
         as: :json,
       )
 
-      assert_response :forbidden, origin
+      assert_response :unprocessable_content, origin
     end
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
@@ -266,7 +267,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       as: :json,
     )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -297,6 +298,21 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       "X-TEST-SESSION-PUBLIC-ID" => session_record.public_id,
     }
 
+    registered_rp = OidcClientRegistry.find!("base-app-ww")
+    rp_session = ClientRpSession.create!(
+      client_token: session_record, oidc_client_id: registered_rp.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
+      user, host: host, resource_type: "client", session_public_id: session_record.public_id,
+            base_session_public_id: session_record.public_id, oidc_sid: rp_session.public_id,
+            oidc_jti: rp_session.oidc_jti, expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+            issuer: OidcIssuer.for_client(registered_rp), audiences: [registered_rp.aud],
+            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(registered_rp),
+            subject: OidcSubject.for(user, resource_type: "client"), client_id: registered_rp.client_id,
+    )
+
     get(base_app_identity_emails_path(ri: "jp"), headers: auth_headers)
 
     assert_response :success
@@ -317,7 +333,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       as: :json,
     )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -348,7 +364,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       as: :json,
     )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -378,6 +394,21 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       )}",
       "X-TEST-SESSION-PUBLIC-ID" => session_record.public_id,
     }
+
+    registered_rp = OidcClientRegistry.find!("base-app-ww")
+    rp_session = ClientRpSession.create!(
+      client_token: session_record, oidc_client_id: registered_rp.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
+      user, host: host, resource_type: "client", session_public_id: session_record.public_id,
+            base_session_public_id: session_record.public_id, oidc_sid: rp_session.public_id,
+            oidc_jti: rp_session.oidc_jti, expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+            issuer: OidcIssuer.for_client(registered_rp), audiences: [registered_rp.aud],
+            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(registered_rp),
+            subject: OidcSubject.for(user, resource_type: "client"), client_id: registered_rp.client_id,
+    )
 
     get(base_app_identity_emails_path(ri: "jp"), headers: auth_headers)
 
@@ -419,7 +450,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       as: :json,
     )
 
-    assert_equal 403, second_session.response.status
+    assert_equal 422, second_session.response.status
 
     patch(
       base_app_api_v0_preferences_theme_path(ri: "jp"),
@@ -435,7 +466,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       as: :json,
     )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
 
     patch(
       base_app_api_v0_preferences_theme_path(ri: "jp"),
@@ -450,7 +481,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       as: :json,
     )
 
-    assert_response :forbidden
+    assert_response :unprocessable_content
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest

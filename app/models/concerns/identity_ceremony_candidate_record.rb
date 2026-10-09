@@ -25,7 +25,7 @@ module IdentityCeremonyCandidateRecord
       connection_owner.connected_to(role: :writing) do
         record = find_by(ref: ref.to_s)
         raise error_class, not_found_message if record.blank? || record.consumed_at.present?
-        raise error_class, expired_message if record.expires_at.to_i <= now.to_i
+        raise error_class, expired_message if record.expires_at <= now
 
         record
       end
@@ -37,10 +37,22 @@ module IdentityCeremonyCandidateRecord
       self.class.transaction do
         locked = self.class.lock.find_by(ref: ref)
         raise error_class, not_found_message if locked.blank? || locked.consumed_at.present?
-        raise error_class, expired_message if locked.expires_at.to_i <= now.to_i
+        raise error_class, expired_message if locked.expires_at <= now
 
         locked.update!(consumed_at: now)
         locked
+      end
+    end
+  end
+
+  public
+
+  def expire!
+    self.class.connection_owner.connected_to(role: :writing) do
+      with_lock do
+        now = self.class.database_now
+        update!(expires_at: now) if expires_at > now
+        self
       end
     end
   end

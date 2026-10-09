@@ -137,11 +137,15 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
 
       result = OidcLogoutTokenCodec.decode(
         logout_token: token,
-        client_id: "core-app",
+        client_id: "warp-app",
         resource_type: "client",
       )
 
       assert_not_predicate result, :success?
+      assert_equal "invalid_logout_token", result.error
+      assert_predicate OidcLogoutTokenCodec.decode(
+        logout_token: token, client_id: "core-app", resource_type: "client",
+      ), :success?
     end
   end
 

@@ -5,17 +5,12 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class AuthenticationBaseExtraCoverageTest < ActiveSupport::TestCase
-  class FakeRequest
+  class FakeRequest < ActionDispatch::Request
     attr_accessor :headers, :format, :host, :original_url, :remote_ip, :user_agent, :request_id, :fullpath,
                   :request_method
 
     def get?
       request_method == "GET"
-    end
-
-    # This double stands for an ordinary document request, not an Inertia visit.
-    def inertia?
-      false
     end
 
     def filtered_parameters
@@ -56,7 +51,7 @@ class AuthenticationBaseExtraCoverageTest < ActiveSupport::TestCase
       super
       @session_hash = {}
       @headers = {}
-      @request_obj = FakeRequest.new
+      @request_obj = FakeRequest.new({})
       @request_obj.headers = @headers
       @request_obj.format = Struct.new(:json?).new(false)
       @request_obj.host = "localhost"

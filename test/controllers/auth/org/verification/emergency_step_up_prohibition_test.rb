@@ -45,9 +45,42 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
     passkey = @staff.staff_passkeys.create!(
       webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0,
     )
-    issuance = issue_confirmed_base_step_up_admission!(
-      actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
-    )
+    issuance =
+      begin
+        admission_issuance = BaseStepUpAdmissionIssuer.call!(
+          actor: @staff, token: @token,
+          requirement: @requirement, return_to: "/identity/passkeys",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+        )
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: @token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_issuance.transaction.surface,
+            entry_ref: admission_issuance.reference,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        admission_auth_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_issuance.transaction.surface)
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+          URI.parse("https://#{admission_auth_host}/"),
+        )
+        admission_issuance
+      end
     record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
     get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
@@ -85,12 +118,14 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
     form = response.parsed_body.at_css("form")
     post form["action"], params: { authenticity_token: form.at_css('input[name="authenticity_token"]')["value"] }
 
-    assert_response :success
+    assert_response :see_other
+    destination = URI.parse(response.location)
+    query = Rack::Utils.parse_nested_query(destination.query)
 
-    result_form = response.parsed_body.at_css("form")
-
-    assert_equal issuance.transaction.transaction_id, result_form.at_css('input[name="transaction_ref"]')["value"]
-    assert_not_empty result_form.at_css('input[name="result"]')["value"]
+    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), destination.host
+    assert_equal issuance.transaction.transaction_id, query.fetch("transaction_ref")
+    assert_match AuthAdmissionBinding::REFERENCE_PATTERN, query.fetch("result_ref")
+    assert_not query.key?("result")
     assert_nil cookies[AuthenticationCookieName.access]
     assert_nil cookies[AuthenticationCookieName.refresh]
   end
@@ -100,9 +135,41 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
 
     assert_no_difference ["OperatorStepUpCeremonyTransaction.count", "OperatorStepUpSession.count"] do
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-        issue_confirmed_base_step_up_admission!(
-          actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
-        )
+        begin
+          admission_issuance = BaseStepUpAdmissionIssuer.call!(
+            actor: @staff, token: @token,
+            requirement: @requirement, return_to: "/identity/passkeys",
+            base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
+          )
+          admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+            surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+          )
+          admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+          admission_binding.attach_auth_session!(
+            auth_session: admission_session,
+            confirmation_ref: SecureRandom.uuid,
+          )
+          admission_binding.confirm_base!(
+            base_token: @token,
+            browser_digest: AuthAdmissionBinding.browser_digest(
+              surface: admission_issuance.transaction.surface,
+              entry_ref: admission_issuance.reference,
+              nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            ),
+          )
+          admission_auth_host = {
+            "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+            "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+            "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+          }.fetch(admission_issuance.transaction.surface)
+          admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+          # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+          cookies.merge( # rubocop:disable Lint/Void
+            "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+            URI.parse("https://#{admission_auth_host}/"),
+          )
+          admission_issuance
+        end
       end
     end
     assert_nil @token.reload.last_step_up_at
@@ -151,9 +218,42 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
   end
 
   test "Base refuses verified evidence when the session becomes emergency before finalization" do
-    issuance = issue_confirmed_base_step_up_admission!(
-      actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
-    )
+    issuance =
+      begin
+        admission_issuance = BaseStepUpAdmissionIssuer.call!(
+          actor: @staff, token: @token,
+          requirement: @requirement, return_to: "/identity/passkeys",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+        )
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: @token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_issuance.transaction.surface,
+            entry_ref: admission_issuance.reference,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        admission_auth_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_issuance.transaction.surface)
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+          URI.parse("https://#{admission_auth_host}/"),
+        )
+        admission_issuance
+      end
     transaction = issuance.transaction
     transaction.record_verification!(
       method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: true,
@@ -180,9 +280,42 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
   end
 
   test "normal Base admission reaches Auth passkey selection without Auth root credentials" do
-    issuance = issue_confirmed_base_step_up_admission!(
-      actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
-    )
+    issuance =
+      begin
+        admission_issuance = BaseStepUpAdmissionIssuer.call!(
+          actor: @staff, token: @token,
+          requirement: @requirement, return_to: "/identity/passkeys",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+        )
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: @token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_issuance.transaction.surface,
+            entry_ref: admission_issuance.reference,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        admission_auth_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_issuance.transaction.surface)
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+          URI.parse("https://#{admission_auth_host}/"),
+        )
+        admission_issuance
+      end
     get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
 
     assert_response :success
@@ -207,9 +340,42 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
   end
 
   test "admitted Auth continuity refuses a session changed to emergency before passkey selection" do
-    issuance = issue_confirmed_base_step_up_admission!(
-      actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
-    )
+    issuance =
+      begin
+        admission_issuance = BaseStepUpAdmissionIssuer.call!(
+          actor: @staff, token: @token,
+          requirement: @requirement, return_to: "/identity/passkeys",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+        )
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: @token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_issuance.transaction.surface,
+            entry_ref: admission_issuance.reference,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        admission_auth_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_issuance.transaction.surface)
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+          URI.parse("https://#{admission_auth_host}/"),
+        )
+        admission_issuance
+      end
     get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     post auth_org_verification_path(ri: "jp"), params: {

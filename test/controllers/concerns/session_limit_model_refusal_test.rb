@@ -7,27 +7,8 @@ require "test_helper"
 # The capacity gate counts active sessions while the token model also enforces a total ceiling.
 # When the model refuses a login the gate allowed, nothing is issued: the login goes to the ordinary
 # session-limit resolution, never to the retired immediate 403 refusal.
-class SessionLimitModelRefusalTest < ActionDispatch::IntegrationTest
+class SessionLimitModelRefusalTest < ActiveSupport::TestCase
   fixtures :clients
-
-  class TestController < ApplicationController
-    include AuthenticationClient
-    include SessionLimitGate
-
-    declare_authentication_mode! :open
-
-    def dbsc_route_helper(*_helpers)
-      "/test/dbsc"
-    end
-
-    def create
-      user = Client.find(params[:user_id])
-      flow = ClientSignInFlow.find_by(id: params[:flow_id])
-      result = log_in(user, establishment: :root_login, require_totp_check: false, sign_in_flow: flow)
-
-      render json: { status: result.fetch(:status).to_s }, status: :ok
-    end
-  end
 
   setup do
     @original_login_cooldown = login_cooldown
@@ -46,14 +27,17 @@ class SessionLimitModelRefusalTest < ActionDispatch::IntegrationTest
       end
     end
 
-    Rails.application.routes.draw do
-      post "/test/model_refusal_login" => "session_limit_model_refusal_test/test#create"
-    end
+    @controller = Base::App::AuthorityController.new
+    request = ActionDispatch::TestRequest.create
+    request.host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    request.set_header("HTTPS", "on")
+    request.session = ActionController::TestSession.new
+    @controller.request = request
+    @controller.response = ActionDispatch::TestResponse.new
   end
 
   teardown do
     self.login_cooldown = @original_login_cooldown
-    Rails.application.reload_routes!
   end
 
   test "a login the token model refuses goes to session-limit resolution and issues nothing" do
@@ -64,12 +48,14 @@ class SessionLimitModelRefusalTest < ActionDispatch::IntegrationTest
     )
     before_count = ClientToken.where(user_id: @user.id).count
 
+    result = nil
     assert_difference(-> { ClientSessionLimitResolutionTransaction.open.where(sign_in_flow_id: flow.id).count }, 1) do
-      post "/test/model_refusal_login", params: { user_id: @user.id, flow_id: flow.id }, as: :json
+      result = @controller.log_in(
+        @user, establishment: :root_login, require_totp_check: false, sign_in_flow: flow,
+      )
     end
 
-    assert_response :ok
-    assert_equal "session_limit_pending", response.parsed_body.fetch("status")
+    assert_equal :session_limit_pending, result.fetch(:status)
     assert_equal before_count, ClientToken.where(user_id: @user.id).count
     assert_equal "SESSION_ISSUANCE_PENDING", flow.reload.state_name_for(flow.state_id)
   end
@@ -77,10 +63,9 @@ class SessionLimitModelRefusalTest < ActionDispatch::IntegrationTest
   test "a refused login without a sign-in flow has no resolution parent and issues nothing" do
     before_count = ClientToken.where(user_id: @user.id).count
 
-    post "/test/model_refusal_login", params: { user_id: @user.id }, as: :json
+    result = @controller.log_in(@user, establishment: :root_login, require_totp_check: false)
 
-    assert_response :ok
-    assert_equal "invalid_request", response.parsed_body.fetch("status")
+    assert_equal :invalid_request, result.fetch(:status)
     assert_equal before_count, ClientToken.where(user_id: @user.id).count
   end
 
@@ -92,10 +77,9 @@ class SessionLimitModelRefusalTest < ActionDispatch::IntegrationTest
       end
     tokens.first.device_session.revoke!(reason: "capacity-test")
 
-    post "/test/model_refusal_login", params: { user_id: @user.id }, as: :json
+    result = @controller.log_in(@user, establishment: :root_login, require_totp_check: false)
 
-    assert_response :ok
-    assert_equal "success", response.parsed_body.fetch("status")
+    assert_equal :success, result.fetch(:status)
     assert_equal ClientToken::MAX_SESSIONS_PER_USER + 1, ClientToken.where(user_id: @user.id).count
     assert_equal ClientToken::MAX_SESSIONS_PER_USER, ClientToken.where(user_id: @user.id).joins(:device_session)
       .where(client_device_sessions: { status_id: ClientDeviceSession::STATUS_ACTIVE, revoked_at: nil })

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "concurrent/executor/simple_executor_service"
 require "timeout"
 
 class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
@@ -45,7 +46,7 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
       actor.with_lock do
         source_pids << Client.lease_connection.select_value("SELECT pg_backend_pid()")
         future =
-          Concurrent::Future.execute do
+          Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
             AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
               connection.execute("SET lock_timeout = '10000'")
               ready << connection.select_value("SELECT pg_backend_pid()")
@@ -66,7 +67,7 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
               end
             end
           ensure
-            # Leases taken on this pooled thread outlive the future unless released here.
+            # Release model-clock leases before the dedicated worker exits.
             ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         worker_pid = Timeout.timeout(10) { ready.pop }
@@ -160,7 +161,7 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
         flow.lock!
         source_pids << Client.lease_connection.select_value("SELECT pg_backend_pid()")
         future =
-          Concurrent::Future.execute do
+          Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
             AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
               connection.execute("SET lock_timeout = '10000'")
               ready << connection.select_value("SELECT pg_backend_pid()")
@@ -186,7 +187,7 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
               end
             end
           ensure
-            # Leases taken on this pooled thread outlive the future unless released here.
+            # Release model-clock leases before the dedicated worker exits.
             ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         worker_pid = Timeout.timeout(10) { ready.pop }

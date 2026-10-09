@@ -70,4 +70,18 @@ class ExternalAuthenticationLoginUseCaseTest < ActiveSupport::TestCase
       )
     end
   end
+  test "an unknown subject at sign-in creates neither an account nor a signup candidate" do
+    principal = ExternalAuthentication::VerifiedPrincipal.new(
+      provider: "google", subject: "unknown-signin-#{SecureRandom.hex(8)}",
+      issuer: "https://accounts.google.com", audience: "google-client-id",
+      verified_at: Time.current, verification_authority: "provider-contract",
+    )
+    assert_no_difference("Client.count") do
+      assert_no_difference("ClientExternalIdentity.count") do
+        assert_raises(SocialAuth::UnauthorizedError) do
+          ExternalAuthenticationLoginUseCase.call(principal:, credential_candidate: nil, sign_up_entry: false)
+        end
+      end
+    end
+  end
 end

@@ -129,13 +129,30 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
   test "admission refuses an expired parent before burning opaque entry state" do
     issuance = OidcAuthorizationTransactionCoordinator.issue_with_handoff!(
       surface: "app", intent: "authentication", params: @params,
-      base_browser_nonce: "test-browser-nonce", base_token: nil,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
       surface: "app",
       reference: issuance.handoff.reference,
     )
-    _session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    _session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     store = Valkey::AuthState::OpaqueAdmissionStore.new
     payload = store.read_reference!(reference: binding.entry_ref)
     issuance.transaction.update!(login_challenge_expires_at: issuance.transaction.class.database_now - 1.second)
@@ -154,12 +171,29 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
     token = ClientToken.create!(user: @client, created_at: ClientToken.database_now - 1.minute)
     issuance = OidcAuthorizationTransactionCoordinator.issue_with_handoff!(
       surface: "app", intent: "authentication", params: @params,
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
       surface: "app", reference: issuance.handoff.reference,
     )
-    _session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: token)
+    _session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     store = Valkey::AuthState::OpaqueAdmissionStore.new
     payload = store.read_reference!(reference: binding.entry_ref)
     token.update!(discard_at: token.class.database_now - 1.second)
@@ -178,12 +212,29 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
     token = ClientToken.create!(user: @client)
     issuance = OidcAuthorizationTransactionCoordinator.issue_with_handoff!(
       surface: "app", intent: "authentication", params: @params,
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
       surface: "app", reference: issuance.handoff.reference,
     )
-    _session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: token)
+    _session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     store = Valkey::AuthState::OpaqueAdmissionStore.new
     payload = store.read_reference!(reference: binding.entry_ref)
     token.device_session.revoke!

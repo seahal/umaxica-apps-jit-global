@@ -44,9 +44,8 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
           prime_jump_jwks_cache
 
           https!
-          JumpRtReturnVerifier.stub(:call, verifier_success) do
-            get "#{app_origin}/", params: { rt: returned_rt }
-          end
+          prime_jump_jwks_cache
+          get "#{app_origin}/", params: { rt: returned_rt }
         end
       end
     end
@@ -61,13 +60,12 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
     https!
     token = sign_return_token(
       aud: app_origin,
-      src: "https://#{ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")}",
+      src: JumpRtSurface.issuer_origin("AUTH_APP"),
       url: "#{app_origin}/?ok=1",
     )
 
-    JumpRtReturnVerifier.stub(:call, verifier_success) do
-      get "#{app_origin}/", params: { ok: "1", rt: token }
-    end
+    prime_jump_jwks_cache
+    get "#{app_origin}/", params: { ok: "1", rt: token }
 
     assert_response :see_other
     assert_equal "#{app_origin}/?ok=1", response.location
@@ -206,13 +204,12 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
     https!
     token = sign_return_token(
       aud: sign_origin,
-      src: "https://www.app.localhost",
+      src: JumpRtSurface.issuer_origin("BASE_APP"),
       url: "#{sign_origin}/?ok=1",
     )
 
-    JumpRtReturnVerifier.stub(:call, sign_verifier_success(sign_origin)) do
-      get "#{sign_origin}/", params: { ok: "1", rt: token }
-    end
+    prime_jump_jwks_cache
+    get "#{sign_origin}/", params: { ok: "1", rt: token }
 
     assert_response :see_other
     assert_equal "#{sign_origin}/?ok=1", response.location
@@ -262,16 +259,6 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
   end
 
   private
-
-  def verifier_success
-    lambda do |token:, request_url:, request_base_url:|
-      assert_predicate token, :present?
-      assert_match(%r{\A#{Regexp.escape(acme_app_origin)}/\?(?:ok=1&)?rt=#{Regexp.escape(token)}\z}, request_url)
-      assert_equal acme_app_origin, request_base_url
-
-      JumpRtReturnVerifier::Result.new(success: true, payload: {}, error: nil)
-    end
-  end
 
   def stubbed_jump_location(rails_rt)
     rails_issuer = JumpRtSurface.issuer_origin("AUTH_APP")
@@ -327,7 +314,7 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
       nbf: iat,
       exp: iat + 30,
       jti: "jump-return-jti",
-      src: "https://#{ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")}",
+      src: JumpRtSurface.issuer_origin("AUTH_APP"),
       dst: "internal",
       rpl: "reuse",
       url: "https://www.app.localhost/",
@@ -337,21 +324,11 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
   end
 
   def acme_app_origin
-    "https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")}"
+    JumpRtSurface.issuer_origin("BASE_APP")
   end
 
   def sign_app_origin
-    "https://#{ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")}"
-  end
-
-  def sign_verifier_success(origin)
-    lambda do |token:, request_url:, request_base_url:|
-      assert_predicate token, :present?
-      assert_equal "#{origin}/?ok=1&rt=#{token}", request_url
-      assert_equal origin, request_base_url
-
-      JumpRtReturnVerifier::Result.new(success: true, payload: {}, error: nil)
-    end
+    JumpRtSurface.issuer_origin("AUTH_APP")
   end
 
   def with_env(values)

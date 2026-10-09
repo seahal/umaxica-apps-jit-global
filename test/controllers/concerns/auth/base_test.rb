@@ -30,9 +30,7 @@ module Auth
 
       include AuthenticationBase
 
-      # Production controllers get this from SessionLimitGate; this double has no open resolution.
-
-      def session_limit_resolution = nil
+      include SessionLimitGate
 
       attr_accessor :actor_type, :checkpoint_participant, :dashboard_participant,
                     :oidc_authorization_login_challenge
@@ -228,7 +226,7 @@ module Auth
           SignInParticipantResult.new(
             participant: :checkpoint,
             stack: [SignInParticipantItem.new(key: :blocked_for_test, blocking: true, cleared: false)],
-            next_status: "DASHBOARD_PENDING",
+            next_status: "SELECTOR_PENDING",
           )
         end
       end
@@ -287,7 +285,7 @@ module Auth
 
       harness.send(:continue_checkpoint_sequence_without_content!)
 
-      assert_predicate cycle.reload, :sign_in_dashboard_pending?
+      assert_predicate cycle.reload, :sign_in_selector_pending?
       redirected = URI.parse(harness.redirected.first)
 
       assert_equal "/welcome", redirected.path
@@ -307,7 +305,7 @@ module Auth
         harness.send(:continue_checkpoint_sequence_without_content!)
       end
 
-      assert_predicate cycle.reload, :sign_in_dashboard_pending?
+      assert_predicate cycle.reload, :sign_in_selector_pending?
       assert_equal "/welcome", URI.parse(harness.redirected.first).path
     end
 
@@ -321,7 +319,7 @@ module Auth
 
       harness.send(:continue_checkpoint_sequence_without_content!)
 
-      assert_predicate cycle.reload, :sign_in_dashboard_pending?
+      assert_predicate cycle.reload, :sign_in_selector_pending?
       redirected = URI.parse(harness.redirected.first)
 
       assert_equal "/welcome", redirected.path
@@ -344,30 +342,28 @@ module Auth
       assert_predicate cycle.reload, :sign_in_checkpoint_pending?
     end
 
-    test "dashboard continuation consumes db-backed return path before rendering welcome page" do
+    test "completed continuation redirects through the stored return path without rewriting it" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING")
-      harness = db_sequence_harness(user, token)
-      SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
-      harness.send(:issue_welcome_gate_and_path, pt: "/after", sequence_id: cycle.public_id)
+      cycle = db_sign_in_flow(user, token, status_name: "COMPLETED")
+      cycle.update!(return_to: "/after")
+      before = cycle.reload.attributes
+      root_before = token.reload.attributes
 
-      harness.send(:continue_dashboard_sequence_without_content!)
+      decision = PostAuthenticationRoutingResolver.call(flow: cycle, default_path: "/dashboard")
 
-      assert_nil harness.redirected
-      assert_equal "/after", harness.instance_variable_get(:@welcome_next_path)
-      assert_predicate cycle.reload, :sign_in_completed?
-      assert_nil cycle.return_to
-      assert_nil harness.session[:app_sign_in_welcome]
-      assert_nil harness.session[:app_sign_in_flow_locator]
+      assert_equal "/after", decision.target
+      assert_equal :signed_return, decision.kind
+      assert_equal before, cycle.reload.attributes
+      assert_equal root_before, token.reload.attributes
     end
 
-    test "dashboard continuation binds current session before dashboard policy" do
+    test "selector continuation redirects without issuing or binding a Root session" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
       cycle = ClientSignInFlow.create!(
         principal_id: user.id,
-        state_id: ClientSignInFlow.state_id_for("DASHBOARD_PENDING"),
+        state_id: ClientSignInFlow.state_id_for("SELECTOR_PENDING"),
         return_to: "/after",
         nonce_digest: ClientSignInFlow.digest_nonce("nonce"),
         issued_at: Time.current,
@@ -379,44 +375,42 @@ module Auth
 
       harness.send(:continue_dashboard_sequence_without_content!)
 
-      assert_nil harness.redirected
-      assert_equal token.id, cycle.reload.token_id
-      assert_predicate cycle, :sign_in_completed?
-      assert_equal "/after", harness.instance_variable_get(:@welcome_next_path)
+      assert_equal "/selector", URI.parse(harness.redirected.first).path
+      assert_nil cycle.reload.token_id
+      assert_predicate cycle, :sign_in_selector_pending?
+      assert_equal "/after", cycle.return_to
     end
 
     test "dashboard continuation falls back when persisted return path points to dashboard" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING")
+      cycle = db_sign_in_flow(user, token, status_name: "COMPLETED")
       cycle.update!(return_to: "/?ri=jp")
-      harness = db_sequence_harness(user, token)
-      SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
-      harness.send(:issue_welcome_gate_and_path, pt: cycle.return_to, sequence_id: cycle.public_id)
+      before = cycle.reload.attributes
+      root_before = token.reload.attributes
 
-      harness.send(:continue_dashboard_sequence_without_content!)
+      decision = PostAuthenticationRoutingResolver.call(flow: cycle, default_path: "/dashboard")
 
-      assert_nil harness.redirected
-      assert_equal "/?ri=jp", harness.instance_variable_get(:@welcome_next_path)
-      assert_predicate cycle.reload, :sign_in_completed?
-      assert_nil cycle.return_to
+      assert_equal "/?ri=jp", decision.target
+      assert_equal :signed_return, decision.kind
+      assert_equal before, cycle.reload.attributes
+      assert_equal root_before, token.reload.attributes
     end
 
-    test "dashboard continuation lands on Dashboard, never Home, when resolved return path is welcome" do
+    test "completed continuation preserves a validated stored welcome return path" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING")
+      cycle = db_sign_in_flow(user, token, status_name: "COMPLETED")
       cycle.update!(return_to: "/welcome?ri=jp")
-      harness = db_sequence_harness(user, token)
-      SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
-      harness.send(:issue_welcome_gate_and_path, pt: cycle.return_to, sequence_id: cycle.public_id)
+      before = cycle.reload.attributes
+      root_before = token.reload.attributes
 
-      harness.send(:continue_dashboard_sequence_without_content!)
+      decision = PostAuthenticationRoutingResolver.call(flow: cycle, default_path: "/dashboard")
 
-      assert_nil harness.redirected
-      assert_equal "/dashboard", harness.instance_variable_get(:@welcome_next_path)
-      assert_predicate cycle.reload, :sign_in_completed?
-      assert_nil cycle.return_to
+      assert_equal "/welcome?ri=jp", decision.target
+      assert_equal :signed_return, decision.kind
+      assert_equal before, cycle.reload.attributes
+      assert_equal root_before, token.reload.attributes
     end
 
     test "dashboard continuation redirects checkpoint-pending cycle back to checkpoint" do
@@ -436,33 +430,33 @@ module Auth
       assert_predicate cycle.reload, :sign_in_checkpoint_pending?
     end
 
-    test "dashboard continuation requires dashboard policy before advancing" do
+    test "checkpoint continuation requires checkpoint policy before advancing" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING")
+      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
-      harness.allowed_policy = { show_dashboard?: false }
+      harness.allowed_policy = { show_checkpoint?: false }
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
       harness.send(:issue_welcome_gate_and_path, pt: cycle.return_to, sequence_id: cycle.public_id)
 
-      assert_not harness.send(:continue_dashboard_sequence_without_content!)
+      assert_not harness.send(:continue_checkpoint_sequence_without_content!)
 
       assert_equal({ plain: I18n.t("errors.messages.not_authorized"), status: :bad_request }, harness.rendered)
-      assert_predicate cycle.reload, :sign_in_dashboard_pending?
+      assert_predicate cycle.reload, :sign_in_checkpoint_pending?
       assert_equal "/after", cycle.return_to
     end
 
     test "db-backed sequence rejects wrong participant without advancing" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING")
+      cycle = db_sign_in_flow(user, token, status_name: "SELECTOR_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
 
       assert_not harness.send(:continue_checkpoint_sequence_without_content!)
 
       assert_equal({ plain: I18n.t("errors.messages.not_authorized"), status: :bad_request }, harness.rendered)
-      assert_predicate cycle.reload, :sign_in_dashboard_pending?
+      assert_predicate cycle.reload, :sign_in_selector_pending?
     end
 
     test "checkpoint sequence participant rejects stale bulletin without sequence state" do
@@ -625,6 +619,7 @@ module Auth
         principal_id: user.id,
         token: token,
         state_id: ClientSignInFlow.state_id_for(status_name),
+        completed_at: (status_name == "COMPLETED") ? ClientSignInFlow.database_now : nil,
         return_to: "/after",
         nonce_digest: ClientSignInFlow.digest_nonce("nonce"),
         issued_at: Time.current,

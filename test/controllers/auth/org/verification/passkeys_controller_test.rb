@@ -10,15 +10,19 @@ class Auth::Org::Verification::PasskeysControllerTest < ActionDispatch::Integrat
   test "the admitted passkey page renders without creating a challenge" do
     actor = operators(:one)
     token = operator_tokens(:one)
-    issuance = issue_base_step_up_admission!(
-      actor: actor, token: token,
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor,
+      token: token,
       requirement: StepUpRequirement.new(
         step_up_required: true, scope: "settings_email", allowed_methods: [:passkey], purpose: "step_up",
         phishing_resistant_required: false, user_verification_required: false,
         full_reauthentication_required: false, ttl: 15.minutes,
         audience: "step_up:org", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-      ), return_to: "/identity/emails", base_browser_nonce: "test-browser-nonce", base_token: token,
+      ),
+      return_to: "/identity/emails",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: token,
     )
     record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
@@ -31,7 +35,7 @@ class Auth::Org::Verification::PasskeysControllerTest < ActionDispatch::Integrat
     binding.confirm_base!(
       base_token: token,
       browser_digest: AuthAdmissionBinding.browser_digest(
-        surface: "org", entry_ref: issuance.reference, nonce: "test-browser-nonce",
+        surface: "org", entry_ref: issuance.reference, nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
       ),
     )
     post auth_org_verification_path(ri: "jp"), params: {
@@ -50,15 +54,19 @@ class Auth::Org::Verification::PasskeysControllerTest < ActionDispatch::Integrat
   test "an assertion without an issued challenge is refused and keeps the ceremony pending" do
     actor = operators(:one)
     token = operator_tokens(:one)
-    issuance = issue_base_step_up_admission!(
-      actor: actor, token: token,
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor,
+      token: token,
       requirement: StepUpRequirement.new(
         step_up_required: true, scope: "settings_email", allowed_methods: [:passkey], purpose: "step_up",
         phishing_resistant_required: false, user_verification_required: false,
         full_reauthentication_required: false, ttl: 15.minutes,
         audience: "step_up:org", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-      ), return_to: "/identity/emails", base_browser_nonce: "test-browser-nonce", base_token: token,
+      ),
+      return_to: "/identity/emails",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: token,
     )
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
@@ -70,7 +78,7 @@ class Auth::Org::Verification::PasskeysControllerTest < ActionDispatch::Integrat
     binding.confirm_base!(
       base_token: token,
       browser_digest: AuthAdmissionBinding.browser_digest(
-        surface: "org", entry_ref: issuance.reference, nonce: "test-browser-nonce",
+        surface: "org", entry_ref: issuance.reference, nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
       ),
     )
     post auth_org_verification_path(ri: "jp"), params: {

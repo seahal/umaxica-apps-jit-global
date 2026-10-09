@@ -64,10 +64,10 @@ module BaseStepUpCompletion
       e, transaction: transaction, session_public_id: token.public_id, stage: "base_completion",
     )
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
-  rescue BaseSelfRpCredentialReissuer::DependencyError, Umaxica::Valkey::Unavailable,
+  rescue BaseSelfRpCredentialIssuer::DependencyError, Umaxica::Valkey::Unavailable,
          Umaxica::Valkey::OperationError
     render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
-  rescue BaseSelfRpCredentialReissuer::CredentialUnavailable
+  rescue BaseSelfRpCredentialIssuer::CredentialUnavailable
     render_browser_rp_unauthenticated! unless performed?
   end
 
@@ -84,7 +84,7 @@ module BaseStepUpCompletion
   def result_reference_param
     value = params[:result_ref]
     raise ActionController::BadRequest unless
-      value.is_a?(String) && value.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN)
+      value.is_a?(String) && value.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
 
     value
   end
@@ -132,7 +132,7 @@ module BaseStepUpCompletion
     raw_refresh_token = BrowserCredentialCookie.read(
       cookies, OidcRpBrowserCredentialContract::REFRESH_COOKIE,
     )
-    return true if BaseSelfRpCredentialReissuer.refreshable?(
+    return true if BaseSelfRpCredentialIssuer.refreshable?(
       resource: actor, rp_session:, raw_refresh_token:, client_id: browser_rp_client_id,
     )
 
@@ -149,7 +149,7 @@ module BaseStepUpCompletion
     raw_refresh_token = BrowserCredentialCookie.read(
       cookies, OidcRpBrowserCredentialContract::REFRESH_COOKIE,
     )
-    result = BaseSelfRpCredentialReissuer.call!(
+    result = BaseSelfRpCredentialIssuer.call!(
       resource: actor, rp_session:, raw_refresh_token:, client_id: browser_rp_client_id,
       authentication_event_at: transaction.verified_at,
       acr: transaction.aal,

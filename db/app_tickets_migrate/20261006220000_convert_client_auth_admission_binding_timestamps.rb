@@ -17,7 +17,7 @@ class ConvertClientAuthAdmissionBindingTimestamps < ActiveRecord::Migration[8.2]
   def convert_to_timestamptz
     COLUMNS.each do |column|
       safety_assured do
-        execute <<~SQL
+        execute(<<~SQL.squish)
           ALTER TABLE client_auth_admission_bindings
           ALTER COLUMN #{column} TYPE timestamptz
           USING #{column} AT TIME ZONE 'UTC'
@@ -29,7 +29,7 @@ class ConvertClientAuthAdmissionBindingTimestamps < ActiveRecord::Migration[8.2]
   def convert_to_timestamp
     COLUMNS.each do |column|
       safety_assured do
-        execute <<~SQL
+        execute(<<~SQL.squish)
           ALTER TABLE client_auth_admission_bindings
           ALTER COLUMN #{column} TYPE timestamp
           USING #{column} AT TIME ZONE 'UTC'

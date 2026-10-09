@@ -139,7 +139,7 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
   end
 
   test "base org preference region edit posts to base host" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! host
 
     get edit_base_org_preference_region_url(ri: "jp", host: host)
@@ -204,7 +204,7 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
   end
 
   test "base org preference timezone edit posts to base host" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! host
 
     get edit_base_org_preference_timezone_url(ri: "jp", host: host)
@@ -216,7 +216,7 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
   end
 
   test "base app preference timezone edit renders localized timezone option labels" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
 
     get edit_base_app_preference_timezone_url(ri: "us", lx: "ja", host: host)
@@ -239,7 +239,7 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
   end
 
   test "base preference timezone choices are ordered by ascending UTC offset" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
 
     get edit_base_app_preference_timezone_url(ri: "jp", host: host)
@@ -256,7 +256,7 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
   end
 
   test "base preference write updates app user preference" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
@@ -272,7 +272,7 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
   end
 
   test "base preference GET overlay does not overwrite signed in app preference" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
@@ -290,7 +290,7 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
   end
 
   test "base preference ignores JS readable theme cookie as canonical input" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
@@ -305,7 +305,7 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
   end
 
   test "base preference reset remains destructive and removes app user preference" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
@@ -328,10 +328,44 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
   end
 
   def session_headers(host, token, user)
-    bearer_headers(
-      jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client"),
-      host: host,
-    )
+    rp_cookie =
+      begin
+        fixture_root = token
+        fixture_actor = user
+        fixture_host = host
+        fixture_root.rotate_refresh_token! unless fixture_root.device_session.current_refresh_token_id
+        fixture_client = OidcClientRegistry.find!("base-app-ww")
+        @base_rp_fixture_credentials ||= {}
+        fixture_key = [fixture_client.client_id, fixture_root.public_id]
+        unless @base_rp_fixture_credentials[fixture_key]
+          fixture_now = ClientRpSession.database_now
+          fixture_rp = ClientRpSession.create!(
+            client_token: fixture_root, oidc_client_id: fixture_client.client_id,
+            oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+            oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fixture_now,
+            refresh_token_expires_at: fixture_now + 1.hour,
+          )
+          fixture_access = AuthenticationTokenService.encode(
+            fixture_actor, host: fixture_host, resource_type: "client",
+                           session_public_id: fixture_root.public_id, base_session_public_id: fixture_root.public_id,
+                           oidc_sid: fixture_rp.public_id, oidc_jti: fixture_rp.oidc_jti,
+                           expires_at: fixture_now + 1.hour, scopes: %w(openid profile),
+                           issuer: OidcIssuer.for_client(fixture_client), audiences: [fixture_client.aud],
+                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fixture_client),
+                           subject: OidcSubject.for(
+                             fixture_actor,
+                             resource_type: "client",
+                           ), client_id: fixture_client.client_id,
+          )
+          fixture_refresh = fixture_rp.issue_refresh_token!
+          @base_rp_fixture_credentials[fixture_key] = [
+            "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(fixture_access)}",
+            "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(fixture_refresh)}",
+          ].join("; ")
+        end
+        @base_rp_fixture_credentials.fetch(fixture_key)
+      end
+    host_headers(host).merge("Cookie" => rp_cookie)
   end
 
   def host_headers(host = nil)
@@ -349,9 +383,9 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
     base_hosts = {
-      "APP" => ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
-      "ORG" => ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
-      "COM" => ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
+      "APP" => ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+      "ORG" => ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+      "COM" => ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
     }
     return "surface:BASE_#{base_hosts.key(normalized)}" if base_hosts.value?(normalized)
 

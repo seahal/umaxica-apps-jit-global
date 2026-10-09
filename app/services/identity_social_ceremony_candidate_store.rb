@@ -23,6 +23,12 @@ class IdentitySocialCeremonyCandidateStore
     new.fetch!(ref)
   end
 
+  def self.fetch_consumed!(ref)
+    new.fetch_consumed!(ref)
+  end
+
+  public_class_method :fetch_consumed!
+
   def self.consume!(ref)
     new.consume!(ref)
   end
@@ -66,7 +72,7 @@ class IdentitySocialCeremonyCandidateStore
   def fetch!(ref)
     record = IdentitySocialCeremonyCandidate.find_active_by_ref!(
       ref,
-      now: Time.current,
+      now: IdentitySocialCeremonyCandidate.database_now,
       error_class: IdentitySocialCeremonyContract::Error,
       not_found_message: "social auth candidate is not found",
       expired_message: "social auth candidate is expired",
@@ -76,9 +82,20 @@ class IdentitySocialCeremonyCandidateStore
     raise IdentitySocialCeremonyContract::Error, "social auth candidate is invalid: #{e.message}"
   end
 
+  def fetch_consumed!(ref)
+    record = IdentitySocialCeremonyCandidate.find_by!(ref: ref.to_s)
+    unless record.consumed_at && record.expires_at > IdentitySocialCeremonyCandidate.database_now
+      raise IdentitySocialCeremonyContract::Error, "social completion candidate is unavailable"
+    end
+
+    candidate_from(record)
+  end
+
+  public :fetch_consumed!
+
   def consume!(ref)
     record = IdentitySocialCeremonyCandidate.new(ref: ref.to_s).consume!(
-      now: Time.current,
+      now: IdentitySocialCeremonyCandidate.database_now,
       error_class: IdentitySocialCeremonyContract::Error,
       not_found_message: "social auth candidate is not found",
       expired_message: "social auth candidate is expired",
@@ -91,7 +108,7 @@ class IdentitySocialCeremonyCandidateStore
   def delete(ref)
     IdentitySocialCeremonyCandidate.connection_owner.connected_to(role: :writing) do
       record = IdentitySocialCeremonyCandidate.find_by(ref: ref.to_s)
-      record&.update!(consumed_at: Time.current)
+      record&.update!(consumed_at: IdentitySocialCeremonyCandidate.database_now)
     end
   end
 

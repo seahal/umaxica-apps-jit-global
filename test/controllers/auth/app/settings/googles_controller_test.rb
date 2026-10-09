@@ -56,7 +56,7 @@ module Auth::App::Settings
 
       get verification_location, headers: @headers
 
-      assert_response :forbidden
+      assert_response :bad_request
       assert_nil response.headers["Location"]
     end
 
@@ -136,7 +136,7 @@ module Auth::App::Settings
     # Arriving at the link ceremony from the sign-up page makes it a sign-up entry, which
     # opens the pending sign-up ticket before handing off to the provider. Nothing exercised
     # SignSocialAuthenticationEndpoint#issue_sign_up_flow! before this.
-    test "create started from the sign-up page opens a sign-up ticket before the handoff" do
+    test "a sign-up marker cannot turn an authenticated link route into registration" do
       token = ClientToken.find_by!(public_id: @headers["X-TEST-SESSION-PUBLIC-ID"])
       satisfy_user_verification(token, scope: SocialAuth::SOCIAL_LINK_SCOPE)
       token.update!(
@@ -151,15 +151,14 @@ module Auth::App::Settings
         last_step_up_audience: "step_up:app",
       )
 
-      assert_difference -> { ClientSignUpFlow.count }, 1 do
+      assert_no_difference -> { ClientSignUpFlow.count } do
         post auth_app_settings_google_url(ri: "jp", entry: "auth_up"), headers: @headers
       end
 
       assert_response :redirect
-      cycle = ClientSignUpFlow.recent_first.first
-
-      assert_equal "google", cycle.social_provider
-      assert_nil cycle.principal_id
+      assert_equal 307, response.status
+      assert_equal "/social/google", URI.parse(response.location).path
+      assert_nil token.reload.root_login_established_at
     end
 
     test "create tolerates a referer that is not a parsable URI" do

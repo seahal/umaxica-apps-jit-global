@@ -13,11 +13,11 @@ class Auth::Org::Sign::In::CheckpointsControllerTest < ActionDispatch::Integrati
     @staff = operators(:one)
   end
 
-  test "show without login hands off to the Base admission entry" do
+  test "show without admission refuses to establish an Auth ceremony" do
     get auth_org_sign_in_check_url(ri: "jp"), headers: host_headers(@host)
 
-    assert_response :redirect
-    assert_base_sign_handoff_redirect(response.location, surface: :org)
+    assert_response :bad_request
+    assert_nil response.headers["Location"]
   end
 
   test "show without sign in sequence is rejected" do

@@ -1005,14 +1005,22 @@ en:
         add: "Add one Secret"
         capacity_conflict: "Secret capacity is full or another issuance is in progress."
         confirm: "I have saved the displayed Secret"
-        distribution_omitted: "You have the maximum of 20 active Secrets, so no new Secrets were distributed. Your saved Secrets remain usable."
-        distribution_one_confirmed: "You can hold at most 20 Secrets. To stay within the limit, this registration distributed one Secret instead of two."
-        distribution_one_present: "You can hold at most 20 Secrets. To stay within the limit, this registration will distribute one Secret instead of two."
+        distribution_omitted:
+          "You have the maximum of 20 active Secrets, so no new Secrets were distributed. Your saved
+          Secrets remain usable."
+        distribution_one_confirmed:
+          "You can hold at most 20 Secrets. To stay within the limit, this registration distributed
+          one Secret instead of two."
+        distribution_one_present:
+          "You can hold at most 20 Secrets. To stay within the limit, this registration will
+          distribute one Secret instead of two."
         payload_unavailable: "The Secret payload is unavailable. Start a new issuance explicitly."
         present: "Show the Secret once"
         rename: "Rename"
         revoke: "Revoke"
-        single_delivery: "Save this value now. It cannot be displayed again. This value cannot sign in until you confirm saving it."
+        single_delivery:
+          "Save this value now. It cannot be displayed again. This value cannot sign in until you
+          confirm saving it."
         title: "Secrets"
       avatars:
         already_assigned: You already have an avatar, so another one cannot be created.
@@ -1362,19 +1370,27 @@ en:
           incomplete: "Not confirmed"
           recovery_required: "Audit recovery required"
           failed_notice: "The operation failed. Nothing was reported as completed."
-          incomplete_notice: "The audit record of this operation is not complete. Check the target's current state before retrying."
+          incomplete_notice:
+            "The audit record of this operation is not complete. Check the target's current state
+            before retrying."
         errors:
           reason_code: "Choose a reason code from the list."
           ticket_id: "Ticket IDs are up to 64 letters, digits, dots, hyphens, or underscores."
           operation_id: "This confirmation screen is no longer valid. Open it again."
-          conflict: "This operation conflicts with one already recorded or with the target's current state. Reload and check the target."
-          audit_unavailable: "The audit record could not be written, so the operation was not started."
+          conflict:
+            "This operation conflicts with one already recorded or with the target's current state.
+            Reload and check the target."
+          audit_unavailable:
+            "The audit record could not be written, so the operation was not started."
           operator: "Enter the public ID of an existing, active operator."
           self_grant: "You cannot grant a capability to yourself."
           capability: "Choose a capability from the list."
           duration: "Choose a validity period from the list."
-          last_holder: "This is the last in-force holder of this capability, so it cannot be revoked."
-          break_glass_required: "This case needs a break-glass release with a second approver, which the console does not provide."
+          last_holder:
+            "This is the last in-force holder of this capability, so it cannot be revoked."
+          break_glass_required:
+            "This case needs a break-glass release with a second approver, which the console does
+            not provide."
           release_reason: "Choose a release reason from the list."
         fields:
           public_id: "Public ID"
@@ -1436,7 +1452,9 @@ en:
           action: "Revoke all sessions"
           new_title: "Revoke all sessions"
           show_title: "Session revocation result"
-          effect: "Every session this account has right now is ended. The account is not locked and may sign in again."
+          effect:
+            "Every session this account has right now is ended. The account is not locked and may
+            sign in again."
           acknowledgement: "I have checked the target account and the reason."
           submit: "Revoke sessions"
         enforcement:
@@ -1451,19 +1469,26 @@ en:
           approve_action: "Approve"
           approve_title: "Approve enforcement case"
           approve_effect: "Approving applies the case with the effect chosen here."
-          approve_acknowledgement: "I have reviewed this case independently of the operator who opened it."
+          approve_acknowledgement:
+            "I have reviewed this case independently of the operator who opened it."
           approve_submit: "Approve and apply"
           release_action: "Release"
           release_title: "Release enforcement case"
-          release_effect: "Ending this case restores access only if no other case still blocks the principal. Earlier sessions are not restored."
+          release_effect:
+            "Ending this case restores access only if no other case still blocks the principal.
+            Earlier sessions are not restored."
           release_acknowledgement: "I have checked why this case should end."
           release_submit: "Release case"
           appeal_review_action: "Review appeal"
           appeal_review_title: "Review appeal"
-          appeal_review_effect: "An approved appeal ends the case. A rejected appeal leaves it in force."
-          appeal_review_acknowledgement: "I have reviewed the appeal independently of the operators who opened and approved the case."
+          appeal_review_effect:
+            "An approved appeal ends the case. A rejected appeal leaves it in force."
+          appeal_review_acknowledgement:
+            "I have reviewed the appeal independently of the operators who opened and approved the
+            case."
           appeal_review_submit: "Record decision"
-          convergence_pending: "This case is active, but its side effects or audit event are still being completed."
+          convergence_pending:
+            "This case is active, but its side effects or audit event are still being completed."
         iam:
           title: "IAM"
           description: "Operator capability grants."
@@ -1479,7 +1504,8 @@ en:
           submit: "Grant"
           revoke_action: "Revoke"
           revoke_title: "Revoke grant"
-          revoke_effect: "Operations the operator starts after this are refused unless another grant covers them."
+          revoke_effect:
+            "Operations the operator starts after this are refused unless another grant covers them."
           revoke_acknowledgement: "I have checked this grant should end."
           revoke_submit: "Revoke grant"
           states:
@@ -2319,7 +2345,9 @@ en:
       invalid_request: Invalid request.
       less_than: must be less than %{count}
       less_than_or_equal_to: must be less than or equal to %{count}
-      login_cooldown_retry: "Sign-in is temporarily unavailable. Please wait a moment, then start again at %{restart_url}"
+      login_cooldown_retry:
+        "Sign-in is temporarily unavailable. Please wait a moment, then start again at
+        %{restart_url}"
       model_invalid: "Validation failed: %{errors}"
       not_a_number: is not a number
       not_an_integer: must be an integer
@@ -2406,7 +2434,8 @@ en:
         one: "%{count} error prohibited this %{model} from being saved"
         other: "%{count} errors prohibited this %{model} from being saved"
     webauthn:
-      passkey_limit_reached: "You have reached the maximum number of passkeys. Remove one before adding another."
+      passkey_limit_reached:
+        "You have reached the maximum number of passkeys. Remove one before adding another."
       challenge_id_required: Challenge ID is required
       challenge_invalid: Challenge is invalid or expired
       credential_already_registered: This passkey is already registered
@@ -3513,6 +3542,8 @@ en:
           sign_in_prompt: Already have an account?
           sign_in_text: Sign in
         new:
+          links:
+            sign_in: Sign in
           methods:
             email:
               cta: Sign up with email
@@ -3879,7 +3910,8 @@ en:
           submit: Continue
           title: Verification
         setup:
-          description: Please register a passkey, an authenticator app, or an email address before continuing.
+          description:
+            Please register a passkey, an authenticator app, or an email address before continuing.
           methods:
             email: Register email
             passkey: Register passkey
@@ -4149,6 +4181,7 @@ en:
           login_required: You need to sign in to manage sessions.
           no_sessions_selected: Please select sessions to revoke.
           promoted: Session promoted.
+          restricted_notice: The session limit has been reached. Manage your existing sessions.
           session_revoked: Session revoked.
           sessions_revoked: Sessions revoked.
       outs:

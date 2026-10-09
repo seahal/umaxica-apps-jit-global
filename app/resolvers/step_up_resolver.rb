@@ -158,7 +158,7 @@ class StepUpResolver
     expected = requirement.token_binding
     return false if expected.blank?
 
-    token.public_id.present? && ActiveSupport::SecurityUtils.secure_compare(token.public_id.to_s, expected.to_s)
+    token&.public_id.present? && ActiveSupport::SecurityUtils.secure_compare(token.public_id.to_s, expected.to_s)
   end
 
   def purpose_bound?

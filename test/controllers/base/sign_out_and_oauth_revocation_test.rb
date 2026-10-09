@@ -44,14 +44,16 @@ class BaseSignOutAndOauthRevocationTest < ActionDispatch::IntegrationTest
     assert_redirected_to edit_base_org_sign_out_path(ri: "jp")
   end
 
-  test "app sign-out mutation answers with no-store and redirects to Home" do
+  test "anonymous app sign-out mutation is refused without redirecting or changing sessions" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
 
-    post base_app_sign_out_url(ri: "jp", host: host), headers: { "Host" => host }
+    assert_no_difference("ClientToken.count") do
+      post base_app_sign_out_url(ri: "jp", host: host), headers: { "Host" => host }
+    end
 
-    assert_response :see_other
-    assert_equal base_app_root_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_response :unauthorized
+    assert_nil response.headers["Location"]
     assert_includes response.headers["Cache-Control"].to_s, "no-store"
   end
 

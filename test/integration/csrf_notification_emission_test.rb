@@ -31,11 +31,10 @@ class CsrfNotificationEmissionTest < ActionDispatch::IntegrationTest
   end
 
   test "the subscribed names match the names Rails 8.2 actually instruments" do
-    source = Rails.root.join(
-      "vendor/bundle/ruby/4.0.0/bundler/gems",
-    ).glob("rails-*/actionpack/lib/action_controller/metal/request_forgery_protection.rb").first
+    source = Pathname(Gem.loaded_specs.fetch("actionpack").full_gem_path)
+      .join("lib/action_controller/metal/request_forgery_protection.rb")
 
-    skip "Rails source is not vendored in this environment" if source.nil?
+    assert_predicate source, :file?
 
     instrumented = source.read.scan(/instrument_csrf_event\s+"([^"]+)"/).flatten.uniq
 

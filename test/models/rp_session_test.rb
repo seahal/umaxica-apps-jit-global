@@ -43,6 +43,41 @@ class RpSessionTest < ActiveSupport::TestCase
   ].freeze
 
   CASES.each do |rp_session_case|
+    [["one microsecond before", 1, true], ["at", 0, true],
+     ["one microsecond after", -1, false],].each do |label, offset, usable|
+      test "#{rp_session_case[:name]} RP parent idle window #{label} expiry preserves Root authority" do
+        root = rp_session_case[:root_builder].call
+        decision_time = rp_session_case[:model].database_now
+        root.update!(
+          last_used_at: decision_time - SecurityTokenLifetimes.idle_ttl_for(rp_session_case[:name]) + Rational(
+            offset,
+            1_000_000,
+          ),
+        )
+        session = rp_session_case[:model].create!(
+          rp_session_case[:parent_label] => root, :oidc_client_id => "core-app",
+          :refresh_token_expires_at => decision_time + 1.hour,
+        )
+        original_authority = root.attributes.slice(
+          "last_used_at",
+          "discard_at",
+          "root_login_established_at",
+          "refresh_token_generation",
+        )
+
+        assert_equal usable, session.parent_token_active?(decision_time)
+        assert_equal usable, session.active?(decision_time)
+        if usable
+          assert_predicate session.issue_refresh_token!(now: decision_time), :present?
+        else
+          assert_raises(RpSession::IssuanceRejected) { session.issue_refresh_token!(now: decision_time) }
+          assert_nil session.reload.refresh_token_digest
+        end
+
+        assert_equal original_authority, root.reload.attributes.slice(*original_authority.keys)
+      end
+    end
+
     test "#{rp_session_case[:name]} rp session generates a public id and validates parent and rp identity" do
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
@@ -235,7 +270,7 @@ class RpSessionTest < ActiveSupport::TestCase
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 2.days.from_now,
       )
-      database_time = 1.hour.from_now
+      database_time = 1.minute.from_now
 
       rp_session_case[:model].stub(:database_now, database_time) do
         session.issue_refresh_token!(expires_at: database_time + 1.day, now: nil)

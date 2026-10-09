@@ -293,7 +293,7 @@ class BaseStepUpAdmissionIssuer
     end
 
     def validate_restart_binding!(transaction:, binding:, purpose:, restart_of:, base_browser_nonce:, base_token:)
-      unless restart_of.is_a?(String) && restart_of.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN)
+      unless restart_of.is_a?(String) && restart_of.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
         deny!("step-up restart reference is invalid", "invalid_admission")
       end
 

@@ -24,15 +24,19 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_response :bad_request
     actor = Client.create!(id: 9_106_000_000_000, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = issue_base_step_up_admission!(
-      actor: actor, token: token,
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor,
+      token: token,
       requirement: StepUpRequirement.new(
         step_up_required: true, scope: "settings_birthdate", purpose: "step_up", allowed_methods: [:totp],
         phishing_resistant_required: false, user_verification_required: false,
         full_reauthentication_required: false, ttl: 15.minutes, audience: "step_up:app",
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-      ), return_to: "/identity/birthdate", base_browser_nonce: "test-browser-nonce", base_token: token,
+      ),
+      return_to: "/identity/birthdate",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: token,
     )
     get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
@@ -52,22 +56,60 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     original_protection = Auth::App::Verification::SetupsController.allow_forgery_protection
     actor = Client.create!(id: 9_106_000_000_001, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = issue_base_step_up_admission!(
-      actor: actor, token: token,
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor,
+      token: token,
       requirement: StepUpRequirement.new(
         scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
         phishing_resistant_required: false, user_verification_required: false,
         full_reauthentication_required: false, ttl: 15.minutes, allowed_methods: [:totp], audience: "step_up:app",
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-      ), return_to: "/identity/birthdate", base_browser_nonce: "test-browser-nonce", base_token: token,
+      ),
+      return_to: "/identity/birthdate",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: token,
     )
     Auth::App::Verification::SetupsController.allow_forgery_protection = true
     host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
     https!
-    install_confirmed_auth_admission_cookie!(
-      self, issuance: issuance, base_token: token, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-    )
+    begin
+      fv5104 = self
+      fv5110 = issuance
+      fv5108 = token
+      fv5043 = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+      fv5111 = "app"
+      fv5109 = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: fv5111,
+        reference: fv5110.reference,
+      )
+      _, fv5102 =
+        begin
+          fv5107 = fv5109
+          fv5106, fv5105 = fv5107.class.auth_admission_session_class.issue!
+          fv5107.attach_auth_session!(
+            auth_session: fv5106,
+            confirmation_ref: SecureRandom.uuid,
+          )
+          fv5107.confirm_base!(
+            base_token: fv5108,
+            browser_digest: AuthAdmissionBinding.browser_digest(
+              surface: fv5107.class.auth_admission_surface_name,
+              entry_ref: fv5107.entry_ref,
+              nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            ),
+          )
+          [fv5106,
+           fv5105,]
+        end
+      fv5103 = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+      fv5104.cookies.delete("auth_sid")
+      fv5104.cookies.delete("__Host-auth_sid")
+      fv5104.cookies.merge(
+        "#{fv5103}=#{Rack::Utils.escape(fv5102)}",
+        URI.parse("https://#{fv5043}/"),
+      )
+    end
     get(new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference))
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     assert_no_difference("ClientAuthCeremonySession.count") do
@@ -96,20 +138,58 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
   test "admitted bootstrap confirms a DB TOTP candidate without Auth root credentials or freshness" do
     actor = Client.create!(id: 9_106_000_000_002, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = issue_base_step_up_admission!(
-      actor: actor, token: token,
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor,
+      token: token,
       requirement: StepUpRequirement.new(
         scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
         phishing_resistant_required: false, user_verification_required: false,
         full_reauthentication_required: false, ttl: 15.minutes, allowed_methods: [:totp], audience: "step_up:app",
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-      ), return_to: "/identity/birthdate", base_browser_nonce: "test-browser-nonce", base_token: token,
+      ),
+      return_to: "/identity/birthdate",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: token,
     )
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    install_confirmed_auth_admission_cookie!(
-      self, issuance: issuance, base_token: token, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-    )
+    begin
+      fv5094 = self
+      fv5100 = issuance
+      fv5098 = token
+      fv5091 = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+      fv5101 = "app"
+      fv5099 = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: fv5101,
+        reference: fv5100.reference,
+      )
+      _, fv5092 =
+        begin
+          fv5097 = fv5099
+          fv5096, fv5095 = fv5097.class.auth_admission_session_class.issue!
+          fv5097.attach_auth_session!(
+            auth_session: fv5096,
+            confirmation_ref: SecureRandom.uuid,
+          )
+          fv5097.confirm_base!(
+            base_token: fv5098,
+            browser_digest: AuthAdmissionBinding.browser_digest(
+              surface: fv5097.class.auth_admission_surface_name,
+              entry_ref: fv5097.entry_ref,
+              nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            ),
+          )
+          [fv5096,
+           fv5095,]
+        end
+      fv5093 = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+      fv5094.cookies.delete("auth_sid")
+      fv5094.cookies.delete("__Host-auth_sid")
+      fv5094.cookies.merge(
+        "#{fv5093}=#{Rack::Utils.escape(fv5092)}",
+        URI.parse("https://#{fv5091}/"),
+      )
+    end
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
 
     assert_response :success
@@ -195,8 +275,9 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
         cancel_path = auth_org_verification_cancellation_path(ri: "jp")
         base_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
       end
-      issuance = issue_base_step_up_admission!(
-        actor: actor, token: token,
+      issuance = BaseStepUpAdmissionIssuer.call!(
+        actor: actor,
+        token: token,
         requirement: StepUpRequirement.new(
           scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
           phishing_resistant_required: false, user_verification_required: false,
@@ -204,13 +285,50 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
           audience: "step_up:#{surface}",
           session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
           actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-        ), return_to: "/identity/birthdate", base_browser_nonce: "test-browser-nonce", base_token: token,
+        ),
+        return_to: "/identity/birthdate",
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: token,
       )
       browser = open_session
       browser.host!(auth_host)
-      install_confirmed_auth_admission_cookie!(
-        browser, issuance: issuance, base_token: token, host: auth_host, surface: surface,
-      )
+      begin
+        fv5023 = browser
+        fv5089 = issuance
+        fv5087 = token
+        fv5081 = auth_host
+        fv5090 = surface
+        fv5088 = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: fv5090,
+          reference: fv5089.reference,
+        )
+        _, fv5082 =
+          begin
+            fv5086 = fv5088
+            fv5085, fv5084 = fv5086.class.auth_admission_session_class.issue!
+            fv5086.attach_auth_session!(
+              auth_session: fv5085,
+              confirmation_ref: SecureRandom.uuid,
+            )
+            fv5086.confirm_base!(
+              base_token: fv5087,
+              browser_digest: AuthAdmissionBinding.browser_digest(
+                surface: fv5086.class.auth_admission_surface_name,
+                entry_ref: fv5086.entry_ref,
+                nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+              ),
+            )
+            [fv5085,
+             fv5084,]
+          end
+        fv5083 = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        fv5023.cookies.delete("auth_sid")
+        fv5023.cookies.delete("__Host-auth_sid")
+        fv5023.cookies.merge(
+          "#{fv5083}=#{Rack::Utils.escape(fv5082)}",
+          URI.parse("https://#{fv5081}/"),
+        )
+      end
       browser.get(display_path, params: { entry_ref: issuance.reference })
       csrf = Nokogiri::HTML(browser.response.body).at_css('input[name="authenticity_token"]')["value"]
       browser.post(create_path, params: { entry_ref: issuance.reference, authenticity_token: csrf })
@@ -257,20 +375,58 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
   test "GET and repeated start preserve enrollment deadline and failures while cancel closes the permission" do
     actor = Client.create!(id: 9_106_000_000_003, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = issue_base_step_up_admission!(
-      actor: actor, token: token,
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor,
+      token: token,
       requirement: StepUpRequirement.new(
         scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
         phishing_resistant_required: false, user_verification_required: false,
         full_reauthentication_required: false, ttl: 15.minutes, allowed_methods: [:totp], audience: "step_up:app",
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
-      ), return_to: "/identity/birthdate", base_browser_nonce: "test-browser-nonce", base_token: token,
+      ),
+      return_to: "/identity/birthdate",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: token,
     )
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    install_confirmed_auth_admission_cookie!(
-      self, issuance: issuance, base_token: token, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-    )
+    begin
+      fv5073 = self
+      fv5079 = issuance
+      fv5077 = token
+      fv5070 = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+      fv5080 = "app"
+      fv5078 = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: fv5080,
+        reference: fv5079.reference,
+      )
+      _, fv5071 =
+        begin
+          fv5076 = fv5078
+          fv5075, fv5074 = fv5076.class.auth_admission_session_class.issue!
+          fv5076.attach_auth_session!(
+            auth_session: fv5075,
+            confirmation_ref: SecureRandom.uuid,
+          )
+          fv5076.confirm_base!(
+            base_token: fv5077,
+            browser_digest: AuthAdmissionBinding.browser_digest(
+              surface: fv5076.class.auth_admission_surface_name,
+              entry_ref: fv5076.entry_ref,
+              nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            ),
+          )
+          [fv5075,
+           fv5074,]
+        end
+      fv5072 = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+      fv5073.cookies.delete("auth_sid")
+      fv5073.cookies.delete("__Host-auth_sid")
+      fv5073.cookies.merge(
+        "#{fv5072}=#{Rack::Utils.escape(fv5071)}",
+        URI.parse("https://#{fv5070}/"),
+      )
+    end
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
@@ -365,7 +521,64 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     https!
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = rp_access_token
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = rp_session.issue_refresh_token!
-    root_access_token = as_user_headers(actor, host: base_host, session_public_id: token.public_id)
+    root_access_token = begin
+      rp_headers = as_user_headers(actor, host: base_host, session_public_id: token.public_id)
+      rp_host = rp_headers["Host"]
+      rp_route =
+        begin
+          Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+        rescue ActionController::RoutingError
+          nil
+        end
+      rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+      if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+        rp_client_id =
+          case rp_family
+          when "base" then "base-#{rp_surface}-ww"
+          when "edit" then "edit-org"
+          else "#{rp_family}-#{rp_surface}"
+          end
+        rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+        rp_client = OidcClientRegistry.find!(rp_client_id)
+        rp_key = [rp_client.client_id, rp_token.public_id]
+        @base_browser_rp_credentials ||= {}
+        if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+            !(rp_token.device_session_id && ClientRpSession.exists?(
+              device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+            ))
+          rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+          rp_now = Time.current
+          rp_session = ClientRpSession.create!(
+            client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+            oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+            refresh_token_expires_at: rp_now + 10.minutes,
+          )
+          rp_access = AuthenticationTokenService.encode(
+            rp_token.user, host: rp_host, resource_type: "client",
+                           session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                           oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                           expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                           issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                           subject: OidcSubject.for(
+                             rp_token.user,
+                             resource_type: "client",
+                           ), client_id: rp_client.client_id,
+          )
+          @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+        end
+        if @base_browser_rp_credentials[rp_key]
+          rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+          rp_cookie = [
+            rp_headers.fetch("Cookie"),
+            "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+            "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+          ].join("; ")
+          rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+        end
+      end
+      rp_headers
+    end
       .fetch("Authorization").delete_prefix("Bearer ")
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = root_access_token
     get base_app_identity_birthdate_path(ri: "jp")
@@ -409,7 +622,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
         [input["name"], input["value"]]
       end
     continuation_token = continuation_hidden.delete("authenticity_token")
-    auth.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] = "test-browser-nonce"
+    auth.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] = "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
     auth.post(
       continuation["action"],
       params: continuation_hidden.merge("authenticity_token" => continuation_token), headers: auth_headers,
@@ -420,7 +633,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     )
     host! binding_uri.host
     https!
-    session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||= "test-browser-nonce"
+    session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||= "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
     base_headers = {
       "Host" => binding_uri.host, "Origin" => "https://#{binding_uri.host}", "Sec-Fetch-Site" => "same-origin",
     }
@@ -437,7 +650,39 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
       confirmation["action"],
       params: confirmation_hidden.merge("authenticity_token" => confirmation_token), headers: base_headers,
     )
-    sync_response_cookie!(self, "session")
+    begin
+      fv5064 = self
+      fv5066 = "session"
+      fv5065 = fv5064.response.cookies[fv5066]
+      if fv5065.nil?
+        fv5069 = fv5064.response.headers["Set-Cookie"] || fv5064.response.headers["set-cookie"]
+        fv5068 =
+          if fv5069.is_a?(String) && fv5069.start_with?("[")
+            JSON.parse(fv5069)
+          else
+            Array(fv5069)
+          end
+        fv5067 =
+          fv5068.flat_map { |cookie_entry| cookie_entry.to_s.split("\n") }.find do |cookie_entry|
+            cookie_entry.split(";", 2).first.to_s.start_with?("#{fv5066}=")
+          end
+        if fv5067
+
+          _, fv5065 = fv5067.split(";", 2).first.to_s.split("=", 2)
+          fv5065 = Rack::Utils.unescape(fv5065.to_s)
+        end
+      end
+
+      unless fv5065.nil?
+        fv5064.cookies.delete(fv5066)
+        # Rack::Test's []= uses its default host. The current request may target a
+        # different surface, so install the cookie against the browser's active host.
+        fv5064.cookies.merge( # rubocop:disable Lint/Void
+          "#{fv5066}=#{Rack::Utils.escape(fv5065)}",
+          URI.parse("https://#{fv5064.host}/"),
+        )
+      end
+    end
     auth_uri = URI.parse(response.location)
     auth_query = Rack::Utils.parse_nested_query(auth_uri.query.to_s)
     auth_query["ri"] ||= "jp"
@@ -536,15 +781,201 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_nil token.reload.last_step_up_at
     assert_nil auth.cookies[AuthenticationCookieName.access]
     entry = Rack::Utils.parse_nested_query(URI.parse(destination).query).fetch("entry_ref")
-    redeem_auth_ceremony_session!(
-      auth,
-      auth_app_verification_path(ri: "jp"),
-      reference: entry,
-      params: { ri: "jp" },
-      headers: auth_headers,
-      confirm_via_http: true,
-      base_browser: self,
-    )
+    begin
+      fv5063 = auth
+      fv5062 = auth_app_verification_path(ri: "jp")
+      fv5061 = entry
+      fv5060 = :entry_ref
+      fv5059 = { ri: "jp" }
+      fv5058 = auth_headers
+      fv5057 = true
+      fv5056 = self
+      begin
+        fv5004 = fv5063
+        fv5011 = fv5062
+        fv5054 = fv5061
+        fv5055 = fv5060
+        fv5020 = fv5059
+        fv5013 = fv5058
+        fv5042 = fv5057
+        fv5041 = fv5056
+        fv5016 = nil
+        fv5010 = fv5020.merge(fv5055 => fv5054)
+        fv5004.get(fv5011, params: fv5010, headers: fv5013)
+        fv5048 =
+          begin
+            fv5053 = fv5004.response.body
+            fv5052 = true
+            fv5051 = Nokogiri::HTML(fv5053).at_css("form")
+            if fv5051.nil? && fv5052
+              nil
+            else
+              raise RuntimeError, "Auth continuation form is missing" unless fv5051
+
+              fv5050 = fv5051.at_css("input[name='authenticity_token']")&.[]("value")
+              raise RuntimeError,
+                    "Auth continuation is missing its CSRF token" if fv5050.blank?
+
+              fv5049 = fv5051.css("input[type='hidden']").to_h do |input|
+                [input["name"], input["value"]]
+              end.except("authenticity_token")
+              [fv5051["action"], fv5050, fv5049]
+            end
+          end
+        if fv5048
+
+          fv5047, fv5045, fv5046 = fv5048
+
+          fv5004.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
+            "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+          fv5004.post(fv5047, params: fv5046.merge(authenticity_token: fv5045), headers: fv5013)
+          fv5044 = fv5004.response.location
+          if fv5044.present?
+
+            fv5040 = URI.parse(fv5044)
+            fv5039 = fv5040.host
+            fv5015 =
+              begin
+                fv5043 = fv5039
+                {
+                  ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
+                  ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
+                  ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                }.fetch(fv5043)
+              end
+            fv5014 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
+              surface: fv5015, reference: fv5040.path.split("/").fetch(-2),
+            )
+
+            if fv5042
+              fv5022 = fv5041 || fv5004
+              fv5022.host!(fv5039)
+              fv5022.https!
+              fv5022.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
+                "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+              fv5038 = fv5040.request_uri
+              fv5029 = fv5013.merge(
+                "Host" => fv5039,
+                "Origin" => "https://#{fv5039}",
+                "Sec-Fetch-Site" => "same-origin",
+              )
+              fv5022.get(fv5038, headers: fv5029)
+              fv5032, fv5030, fv5031 =
+                begin
+                  fv5037 = fv5022.response.body
+                  fv5036 = false
+                  fv5035 = Nokogiri::HTML(fv5037).at_css("form")
+                  if fv5035.nil? && fv5036
+                    nil
+                  else
+                    raise RuntimeError, "Auth continuation form is missing" unless fv5035
+
+                    fv5034 = fv5035.at_css("input[name='authenticity_token']")&.[]("value")
+                    raise RuntimeError,
+                          "Auth continuation is missing its CSRF token" if fv5034.blank?
+
+                    fv5033 = fv5035.css("input[type='hidden']").to_h do |input|
+                      [input["name"], input["value"]]
+                    end.except("authenticity_token")
+                    [fv5035["action"], fv5034, fv5033]
+                  end
+                end
+              fv5022.post(
+                fv5032,
+                params: fv5031.merge(authenticity_token: fv5030),
+                headers: fv5029,
+              )
+              begin
+                fv5023 = fv5022
+                fv5025 = "session"
+                fv5024 = fv5023.response.cookies[fv5025]
+                if fv5024.nil?
+                  fv5028 = fv5023.response.headers["Set-Cookie"] || fv5023.response.headers["set-cookie"]
+                  fv5027 =
+                    if fv5028.is_a?(String) && fv5028.start_with?("[")
+                      JSON.parse(fv5028)
+                    else
+                      Array(fv5028)
+                    end
+                  fv5026 =
+                    fv5027.flat_map { |cookie_entry| cookie_entry.to_s.split("\n") }.find do |cookie_entry|
+                      cookie_entry.split(";", 2).first.to_s.start_with?("#{fv5025}=")
+                    end
+                  if fv5026
+
+                    _, fv5024 = fv5026.split(";", 2).first.to_s.split("=", 2)
+                    fv5024 = Rack::Utils.unescape(fv5024.to_s)
+                  end
+                end
+
+                unless fv5024.nil?
+                  fv5023.cookies.delete(fv5025)
+                  # Rack::Test's []= uses its default host. The current request may target a
+                  # different surface, so install the cookie against the browser's active host.
+                  fv5023.cookies.merge( # rubocop:disable Lint/Void
+                    "#{fv5025}=#{Rack::Utils.escape(fv5024)}",
+                    URI.parse("https://#{fv5023.host}/"),
+                  )
+                end
+              end
+              fv5021 = fv5022.response.location
+              raise RuntimeError, "Base confirmation did not return to Auth" if fv5021.blank?
+
+              fv5018 = URI.parse(fv5021)
+              if fv5020[:ri].present?
+                fv5019 = Rack::Utils.parse_nested_query(fv5018.query.to_s)
+                fv5019["ri"] ||= fv5020[:ri].to_s
+                fv5018.query = URI.encode_www_form(fv5019)
+              end
+              fv5004.host!(fv5018.host)
+              fv5004.https!
+              fv5017 = fv5018.request_uri
+              fv5000 = fv5013.merge("Host" => fv5018.host)
+              fv5004.get(fv5017, headers: fv5000)
+            else
+              fv5014.confirm_base!(
+                base_token: fv5016,
+                browser_digest: AuthAdmissionBinding.browser_digest(
+                  surface: fv5015,
+                  entry_ref: fv5014.entry_ref,
+                  nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+                ),
+              )
+              fv5012 = fv5004.host
+              fv5004.host!(fv5012)
+              fv5004.https!
+              fv5000 = fv5013.merge("Host" => fv5012)
+              fv5004.get(fv5011, params: fv5010, headers: fv5000)
+            end
+            fv5003, fv5001, fv5002 =
+              begin
+                fv5009 = fv5004.response.body
+                fv5008 = false
+                fv5007 = Nokogiri::HTML(fv5009).at_css("form")
+                if fv5007.nil? && fv5008
+                  nil
+                else
+                  raise RuntimeError, "Auth continuation form is missing" unless fv5007
+
+                  fv5006 = fv5007.at_css("input[name='authenticity_token']")&.[]("value")
+                  raise RuntimeError,
+                        "Auth continuation is missing its CSRF token" if fv5006.blank?
+
+                  fv5005 = fv5007.css("input[type='hidden']").to_h do |input|
+                    [input["name"], input["value"]]
+                  end.except("authenticity_token")
+                  [fv5007["action"], fv5006, fv5005]
+                end
+              end
+            fv5004.post(
+              fv5003,
+              params: fv5002.merge(authenticity_token: fv5001),
+              headers: fv5000,
+            )
+          end
+        end
+      end
+    end
 
     assert_equal 303, auth.response.status
     auth.get(new_auth_app_verification_totp_path(ri: "jp"))
@@ -593,15 +1024,4 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
   # rubocop:enable Minitest/MultipleAssertions
 
   private
-
-  def install_confirmed_auth_admission_cookie!(browser, issuance:, base_token:, host:, surface: "app")
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
-    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: base_token)
-    cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-    browser.cookies.delete("auth_sid")
-    browser.cookies.delete("__Host-auth_sid")
-    browser.cookies.merge(
-      "#{cookie_name}=#{Rack::Utils.escape(raw_sid)}", URI.parse("https://#{host}/"),
-    )
-  end
 end

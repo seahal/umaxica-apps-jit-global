@@ -8,7 +8,7 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
   fixtures :operators, :operator_token_kinds
 
   setup do
-    @host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     @staff = operators(:one)
     host! @host
     # Completion redirects through the jump gateway, which needs signing keys loaded.
@@ -48,38 +48,76 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
   end
 
-  test "successful sign out redirects to anonymous Home and clears history" do
+  test "receiver-local logout revokes authority before one-shot completion and Home" do
     token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
-
-    post base_org_sign_out_url(host: @host, ri: "jp"), headers: session_headers(token)
-
-    assert_response :see_other
-    assert_predicate token.reload, :revoked?
-    assert_equal base_org_root_path(ri: "jp"), URI.parse(response.location).request_uri
-
-    get response.location
-
-    assert_response :success
-    assert_equal "base/org/roots/index", inertia_component
-    assert inertia_page.fetch("clearHistory")
-
-    get base_org_dashboard_url(host: @host, ri: "jp"), headers: session_headers(token)
-
-    # Anonymous Dashboard now uses the passive local Sign entry, including after logout.
-    assert_response :found
-    assert_equal @host, URI.parse(response.location).host
-    assert_equal "/sign?ri=jp", URI.parse(response.location).request_uri
-    assert_predicate token.reload, :revoked?
-  end
-
-  test "sign out without a resolved session returns to Home" do
+    https!
+    rp_headers = session_headers(token)
+    rp_headers.fetch("Cookie").split("; ").each do |pair|
+      name, value = pair.split("=", 2)
+      cookies[name] = Rack::Utils.unescape(value)
+    end
     post base_org_sign_out_url(host: @host, ri: "jp")
 
     assert_response :see_other
-    assert_equal base_org_root_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_predicate token.reload, :currently_usable?
+    authority = URI.parse(response.location)
 
-    get response.location
+    assert_equal @host, authority.host
+    assert_equal "/oidc/logout", authority.path
+    get authority.request_uri
+
+    assert_response :success
+    assert_predicate token.reload, :currently_usable?
+    form = response.parsed_body.at_css("form")
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    post form["action"], params: fields, headers: { "Origin" => "https://#{@host}" }
+
+    assert_response :see_other
+    assert_predicate token.reload, :revoked?
+    origin = URI.parse(response.location)
+    get origin.request_uri
+
+    assert_response :success
+    assert_equal "base/org/sign_outs/edit", inertia_component
+    challenge = Rack::Utils.parse_nested_query(origin.query.to_s).fetch("logout_challenge")
+    post inertia_props.fetch("form").fetch("action"),
+         params: { logout_challenge: challenge, ri: "jp" }, headers: { "Origin" => "https://#{@host}" }
+
+    assert_response :see_other
+    completion = response.location
+    get completion
+
+    assert_response :success
+    assert_equal "base/org/sign_outs/edit", inertia_component
+    assert inertia_page.fetch("clearHistory")
+    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
+    assert_equal base_org_root_path(ri: "jp"), inertia_props.dig("home_link", "href")
+    get completion
+
+    assert_response :not_found
+    get base_org_root_url(host: @host, ri: "jp")
+
+    assert_response :success
+    assert_equal "base/org/roots/index", inertia_component
+    get base_org_dashboard_url(host: @host, ri: "jp"), headers: rp_headers
+
+    assert_response :found
+    destination = URI.parse(response.location)
+
+    assert_equal @host, destination.host
+    assert_equal "/sign", destination.path
+    assert_equal "jp", Rack::Utils.parse_nested_query(destination.query.to_s).fetch("ri")
+    assert_predicate token.reload, :revoked?
+  end
+
+  test "sign out without an RP session refuses authority mutation" do
+    before = AcmeLogoutTransaction.count
+    post base_org_sign_out_url(host: @host, ri: "jp")
+
+    assert_response :unauthorized
+    assert_nil response.location
+    assert_equal before, AcmeLogoutTransaction.count
+    get base_org_root_url(host: @host, ri: "jp")
 
     assert_response :success
     assert_equal "base/org/roots/index", inertia_component
@@ -88,16 +126,44 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
   private
 
   def session_headers(token)
-    access_token = jwt_access_token_for(
-      @staff, host: @host, session_public_id: token.public_id, resource_type: "operator",
-    )
-    set_access_cookie(access_token)
-    {
-      "Host" => @host,
-      "X-TEST-CURRENT-STAFF" => @staff.id.to_s,
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-      "Cookie" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
-    }
+    rp_cookie =
+      begin
+        fixture_root = token
+        fixture_actor = @staff
+        fixture_host = @host
+        fixture_root.rotate_refresh_token! unless fixture_root.device_session.current_refresh_token_id
+        fixture_client = OidcClientRegistry.find!("base-org-ww")
+        @base_rp_fixture_credentials ||= {}
+        fixture_key = [fixture_client.client_id, fixture_root.public_id]
+        unless @base_rp_fixture_credentials[fixture_key]
+          fixture_now = OperatorRpSession.database_now
+          fixture_rp = OperatorRpSession.create!(
+            operator_token: fixture_root, oidc_client_id: fixture_client.client_id,
+            oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+            oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fixture_now,
+            refresh_token_expires_at: fixture_now + 1.hour,
+          )
+          fixture_access = AuthenticationTokenService.encode(
+            fixture_actor, host: fixture_host, resource_type: "operator",
+                           session_public_id: fixture_root.public_id, base_session_public_id: fixture_root.public_id,
+                           oidc_sid: fixture_rp.public_id, oidc_jti: fixture_rp.oidc_jti,
+                           expires_at: fixture_now + 1.hour, scopes: %w(openid profile),
+                           issuer: OidcIssuer.for_client(fixture_client), audiences: [fixture_client.aud],
+                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fixture_client),
+                           subject: OidcSubject.for(
+                             fixture_actor,
+                             resource_type: "operator",
+                           ), client_id: fixture_client.client_id,
+          )
+          fixture_refresh = fixture_rp.issue_refresh_token!
+          @base_rp_fixture_credentials[fixture_key] = [
+            "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(fixture_access)}",
+            "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(fixture_refresh)}",
+          ].join("; ")
+        end
+        @base_rp_fixture_credentials.fetch(fixture_key)
+      end
+    { "Host" => @host, "Cookie" => rp_cookie, "X-TEST-SESSION-PUBLIC-ID" => token.public_id }
   end
 end
 

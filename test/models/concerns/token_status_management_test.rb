@@ -28,8 +28,13 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
           resource_ref: nil, tenant_ref: nil, purpose: "step_up", audience: "step_up:#{surface}",
           session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
         )
-        parent = issue_base_step_up_admission!(
-          actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+        parent = BaseStepUpAdmissionIssuer.call!(
+          actor: actor,
+          token: token,
+          requirement: requirement,
+          return_to: "/identity/birthdate",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: token,
         ).transaction
         continuity, = ceremony_model.rotate_and_admit!(
           admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: parent.transaction_id, ttl: 1.second,

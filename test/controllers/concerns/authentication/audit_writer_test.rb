@@ -66,7 +66,9 @@ module Authentication
 
     test "write recreates missing user chronicle event and level references" do
       ChronicleRecord.connected_to(role: :writing) do
-        ClientChronicle.where(event_id: ClientChronicleEvent::LOGGED_IN).delete_all
+        ClientChronicle.where(event_id: ClientChronicleEvent::LOGGED_IN).or(
+          ClientChronicle.where(level_id: ClientChronicleLevel::NOTHING),
+        ).delete_all
         ClientChronicleEvent.where(id: ClientChronicleEvent::LOGGED_IN).delete_all
         ClientChronicleLevel.where(id: ClientChronicleLevel::NOTHING).delete_all
       end

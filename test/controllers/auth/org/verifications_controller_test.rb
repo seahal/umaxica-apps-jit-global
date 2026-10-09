@@ -8,17 +8,52 @@ class Auth::Org::VerificationsControllerTest < ActionDispatch::IntegrationTest
   test "POST redeems the admission and the entry page offers the operator's passkey only" do
     actor = operators(:one)
     token = operator_tokens(:one)
-    issuance = issue_confirmed_base_step_up_admission!(
-      actor: actor, token: token,
-      requirement: StepUpRequirement.new(
-        step_up_required: true, scope: "settings_email", allowed_methods: [:passkey],
-        phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-        audience: "step_up:org", session_binding: token.public_id, token_binding: token.public_id,
-        require_session_binding: true,
-      ), return_to: "/identity/emails",
-    )
+    issuance =
+      begin
+        admission_issuance = BaseStepUpAdmissionIssuer.call!(
+          actor: actor,
+          token: token,
+          requirement: StepUpRequirement.new(
+            step_up_required: true, scope: "settings_email", allowed_methods: [:passkey],
+            phishing_resistant_required: false, user_verification_required: false,
+            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
+            audience: "step_up:org", session_binding: token.public_id, token_binding: token.public_id,
+            require_session_binding: true,
+          ),
+          return_to: "/identity/emails",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: token,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+        )
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_issuance.transaction.surface,
+            entry_ref: admission_issuance.reference,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        admission_auth_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_issuance.transaction.surface)
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+          URI.parse("https://#{admission_auth_host}/"),
+        )
+        admission_issuance
+      end
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
@@ -69,17 +104,52 @@ class Auth::Org::VerificationsControllerTest < ActionDispatch::IntegrationTest
   test "an admission issued for the org surface is refused on the app host" do
     actor = operators(:one)
     token = operator_tokens(:one)
-    issuance = issue_confirmed_base_step_up_admission!(
-      actor: actor, token: token,
-      requirement: StepUpRequirement.new(
-        step_up_required: true, scope: "settings_email", allowed_methods: [:passkey],
-        phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-        audience: "step_up:org", session_binding: token.public_id, token_binding: token.public_id,
-        require_session_binding: true,
-      ), return_to: "/identity/emails",
-    )
+    issuance =
+      begin
+        admission_issuance = BaseStepUpAdmissionIssuer.call!(
+          actor: actor,
+          token: token,
+          requirement: StepUpRequirement.new(
+            step_up_required: true, scope: "settings_email", allowed_methods: [:passkey],
+            phishing_resistant_required: false, user_verification_required: false,
+            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
+            audience: "step_up:org", session_binding: token.public_id, token_binding: token.public_id,
+            require_session_binding: true,
+          ),
+          return_to: "/identity/emails",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: token,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+        )
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_issuance.transaction.surface,
+            entry_ref: admission_issuance.reference,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        admission_auth_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_issuance.transaction.surface)
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+          URI.parse("https://#{admission_auth_host}/"),
+        )
+        admission_issuance
+      end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
 
     post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }

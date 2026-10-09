@@ -56,7 +56,7 @@ module Auth::App::Settings
 
       get verification_location, headers: @headers
 
-      assert_response :forbidden
+      assert_response :bad_request
       assert_nil response.headers["Location"]
     end
 

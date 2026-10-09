@@ -84,7 +84,56 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     test "#{surface}: an access cookie naming a session that does not exist is detached" do
       host! ENV.fetch(config[:host_env])
       resource = surface_resource(surface)
-      cookies[ACCESS] = jwt_access_token_for(resource, host: host, session_public_id: "missing#{SecureRandom.hex(6)}")
+      cookies[ACCESS] =
+        begin
+          rc8_actor = resource
+          rc8_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc8_actor.class)
+          rc8_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc8_type)
+          rc8_root_model = {
+            "client" => ClientToken,
+            "visitor" => VisitorToken,
+            "operator" => OperatorToken,
+          }.fetch(rc8_type)
+          rc8_root = rc8_root_model.find_by(public_id: "missing#{SecureRandom.hex(6)}") || surface_token(
+            rc8_realm.to_sym,
+            rc8_actor,
+          )
+          rc8_registered = OidcClientRegistry.find!(
+            {
+              "app" => "base-app-ww",
+              "com" => "base-com-ww",
+              "org" => "base-org-ww",
+            }.fetch(rc8_realm),
+          )
+          rc8_rp_model = {
+            "client" => ClientRpSession,
+            "visitor" => VisitorRpSession,
+            "operator" => OperatorRpSession,
+          }.fetch(rc8_type)
+          rc8_fk = {
+            "client" => :client_token_id,
+            "visitor" => :visitor_token_id,
+            "operator" => :operator_token_id,
+          }.fetch(rc8_type)
+          rc8_rp = rc8_rp_model.create!(
+            rc8_fk => rc8_root.id, :device_session_id => rc8_root.device_session_id,
+            :oidc_client_id => rc8_registered.client_id, :oidc_scope => "openid profile",
+            :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
+            :refresh_token_expires_at => 10.minutes.from_now,
+          )
+          AuthenticationTokenService.encode(
+            rc8_actor, host: host, resource_type: rc8_type,
+                       session_public_id: rc8_root.public_id, base_session_public_id: rc8_root.public_id,
+                       oidc_sid: "missing#{SecureRandom.hex(6)}", oidc_jti: rc8_rp.oidc_jti,
+                       expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+                       issuer: OidcIssuer.for_resource_type(rc8_type), audiences: [rc8_registered.aud],
+                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rc8_registered),
+                       subject: OidcSubject.for(
+                         rc8_actor,
+                         resource_type: rc8_type,
+                       ), client_id: rc8_registered.client_id,
+          )
+        end
 
       get "/?ri=jp"
 
@@ -96,7 +145,56 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
       host! ENV.fetch(config[:host_env])
       resource = surface_resource(surface)
       token = surface_token(surface, resource)
-      cookies[ACCESS] = jwt_access_token_for(resource, host: host, session_public_id: token.public_id)
+      cookies[ACCESS] =
+        begin
+          rc7_actor = resource
+          rc7_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc7_actor.class)
+          rc7_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc7_type)
+          rc7_root_model = {
+            "client" => ClientToken,
+            "visitor" => VisitorToken,
+            "operator" => OperatorToken,
+          }.fetch(rc7_type)
+          rc7_root = rc7_root_model.find_by(public_id: token.public_id) || surface_token(
+            rc7_realm.to_sym,
+            rc7_actor,
+          )
+          rc7_registered = OidcClientRegistry.find!(
+            {
+              "app" => "base-app-ww",
+              "com" => "base-com-ww",
+              "org" => "base-org-ww",
+            }.fetch(rc7_realm),
+          )
+          rc7_rp_model = {
+            "client" => ClientRpSession,
+            "visitor" => VisitorRpSession,
+            "operator" => OperatorRpSession,
+          }.fetch(rc7_type)
+          rc7_fk = {
+            "client" => :client_token_id,
+            "visitor" => :visitor_token_id,
+            "operator" => :operator_token_id,
+          }.fetch(rc7_type)
+          rc7_rp = rc7_rp_model.create!(
+            rc7_fk => rc7_root.id, :device_session_id => rc7_root.device_session_id,
+            :oidc_client_id => rc7_registered.client_id, :oidc_scope => "openid profile",
+            :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
+            :refresh_token_expires_at => 10.minutes.from_now,
+          )
+          AuthenticationTokenService.encode(
+            rc7_actor, host: host, resource_type: rc7_type,
+                       session_public_id: rc7_root.public_id, base_session_public_id: rc7_root.public_id,
+                       oidc_sid: rc7_rp.public_id, oidc_jti: rc7_rp.oidc_jti,
+                       expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+                       issuer: OidcIssuer.for_resource_type(rc7_type), audiences: [rc7_registered.aud],
+                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rc7_registered),
+                       subject: OidcSubject.for(
+                         rc7_actor,
+                         resource_type: rc7_type,
+                       ), client_id: rc7_registered.client_id,
+          )
+        end
       token.update_columns(discard_at: 1.second.ago)
 
       get "/?ri=jp"
@@ -109,7 +207,56 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
       host! ENV.fetch(config[:host_env])
       resource = surface_resource(surface)
       token = surface_token(surface, resource)
-      cookies[ACCESS] = jwt_access_token_for(resource, host: host, session_public_id: token.public_id)
+      cookies[ACCESS] =
+        begin
+          rc6_actor = resource
+          rc6_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc6_actor.class)
+          rc6_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc6_type)
+          rc6_root_model = {
+            "client" => ClientToken,
+            "visitor" => VisitorToken,
+            "operator" => OperatorToken,
+          }.fetch(rc6_type)
+          rc6_root = rc6_root_model.find_by(public_id: token.public_id) || surface_token(
+            rc6_realm.to_sym,
+            rc6_actor,
+          )
+          rc6_registered = OidcClientRegistry.find!(
+            {
+              "app" => "base-app-ww",
+              "com" => "base-com-ww",
+              "org" => "base-org-ww",
+            }.fetch(rc6_realm),
+          )
+          rc6_rp_model = {
+            "client" => ClientRpSession,
+            "visitor" => VisitorRpSession,
+            "operator" => OperatorRpSession,
+          }.fetch(rc6_type)
+          rc6_fk = {
+            "client" => :client_token_id,
+            "visitor" => :visitor_token_id,
+            "operator" => :operator_token_id,
+          }.fetch(rc6_type)
+          rc6_rp = rc6_rp_model.create!(
+            rc6_fk => rc6_root.id, :device_session_id => rc6_root.device_session_id,
+            :oidc_client_id => rc6_registered.client_id, :oidc_scope => "openid profile",
+            :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
+            :refresh_token_expires_at => 10.minutes.from_now,
+          )
+          AuthenticationTokenService.encode(
+            rc6_actor, host: host, resource_type: rc6_type,
+                       session_public_id: rc6_root.public_id, base_session_public_id: rc6_root.public_id,
+                       oidc_sid: rc6_rp.public_id, oidc_jti: rc6_rp.oidc_jti,
+                       expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+                       issuer: OidcIssuer.for_resource_type(rc6_type), audiences: [rc6_registered.aud],
+                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rc6_registered),
+                       subject: OidcSubject.for(
+                         rc6_actor,
+                         resource_type: rc6_type,
+                       ), client_id: rc6_registered.client_id,
+          )
+        end
 
       # Home 404s for a member, so the kept credential is observed on the authenticated Dashboard.
       get "/dashboard?ri=jp"
@@ -163,7 +310,49 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     resource = clients(:one)
     token = ClientToken.create!(user: resource)
-    cookies[ACCESS] = jwt_access_token_for(resource, host: host, session_public_id: token.public_id)[0...-8]
+    cookies[ACCESS] = begin
+      rc5_actor = resource
+      rc5_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc5_actor.class)
+      rc5_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc5_type)
+      rc5_root_model = {
+        "client" => ClientToken,
+        "visitor" => VisitorToken,
+        "operator" => OperatorToken,
+      }.fetch(rc5_type)
+      rc5_root = rc5_root_model.find_by(public_id: token.public_id) || surface_token(rc5_realm.to_sym, rc5_actor)
+      rc5_registered = OidcClientRegistry.find!(
+        {
+          "app" => "base-app-ww",
+          "com" => "base-com-ww",
+          "org" => "base-org-ww",
+        }.fetch(rc5_realm),
+      )
+      rc5_rp_model = {
+        "client" => ClientRpSession,
+        "visitor" => VisitorRpSession,
+        "operator" => OperatorRpSession,
+      }.fetch(rc5_type)
+      rc5_fk = {
+        "client" => :client_token_id,
+        "visitor" => :visitor_token_id,
+        "operator" => :operator_token_id,
+      }.fetch(rc5_type)
+      rc5_rp = rc5_rp_model.create!(
+        rc5_fk => rc5_root.id, :device_session_id => rc5_root.device_session_id,
+        :oidc_client_id => rc5_registered.client_id, :oidc_scope => "openid profile",
+        :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
+        :refresh_token_expires_at => 10.minutes.from_now,
+      )
+      AuthenticationTokenService.encode(
+        rc5_actor, host: host, resource_type: rc5_type,
+                   session_public_id: rc5_root.public_id, base_session_public_id: rc5_root.public_id,
+                   oidc_sid: rc5_rp.public_id, oidc_jti: rc5_rp.oidc_jti,
+                   expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+                   issuer: OidcIssuer.for_resource_type(rc5_type), audiences: [rc5_registered.aud],
+                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rc5_registered),
+                   subject: OidcSubject.for(rc5_actor, resource_type: rc5_type), client_id: rc5_registered.client_id,
+      )
+    end[0...-8]
 
     get "/?ri=jp"
 
@@ -184,10 +373,56 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
       token = ClientToken.create!(user: resource)
       freeze_time
       expires_at = 5.minutes.from_now
-      cookies[ACCESS] = AuthenticationToken.encode(
-        resource, host: host, session_public_id: token.public_id, resource_type: "client",
-                  expires_at: expires_at, jwt_issuer_id: jwt_issuer_id_for_test_host(host, "client"),
-      )
+      cookies[ACCESS] =
+        begin
+          rc4_actor = resource
+          rc4_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc4_actor.class)
+          rc4_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc4_type)
+          rc4_root_model = {
+            "client" => ClientToken,
+            "visitor" => VisitorToken,
+            "operator" => OperatorToken,
+          }.fetch(rc4_type)
+          rc4_root = rc4_root_model.find_by(public_id: token.public_id) || surface_token(
+            rc4_realm.to_sym,
+            rc4_actor,
+          )
+          rc4_registered = OidcClientRegistry.find!(
+            {
+              "app" => "base-app-ww",
+              "com" => "base-com-ww",
+              "org" => "base-org-ww",
+            }.fetch(rc4_realm),
+          )
+          rc4_rp_model = {
+            "client" => ClientRpSession,
+            "visitor" => VisitorRpSession,
+            "operator" => OperatorRpSession,
+          }.fetch(rc4_type)
+          rc4_fk = {
+            "client" => :client_token_id,
+            "visitor" => :visitor_token_id,
+            "operator" => :operator_token_id,
+          }.fetch(rc4_type)
+          rc4_rp = rc4_rp_model.create!(
+            rc4_fk => rc4_root.id, :device_session_id => rc4_root.device_session_id,
+            :oidc_client_id => rc4_registered.client_id, :oidc_scope => "openid profile",
+            :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
+            :refresh_token_expires_at => 10.minutes.from_now,
+          )
+          AuthenticationTokenService.encode(
+            rc4_actor, host: host, resource_type: rc4_type,
+                       session_public_id: rc4_root.public_id, base_session_public_id: rc4_root.public_id,
+                       oidc_sid: rc4_rp.public_id, oidc_jti: rc4_rp.oidc_jti,
+                       expires_at: expires_at, scopes: %w(openid profile),
+                       issuer: OidcIssuer.for_resource_type(rc4_type), audiences: [rc4_registered.aud],
+                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rc4_registered),
+                       subject: OidcSubject.for(
+                         rc4_actor,
+                         resource_type: rc4_type,
+                       ), client_id: rc4_registered.client_id,
+          )
+        end
       travel_to(expires_at + AuthenticationJwtConfiguration.leeway_seconds.seconds + offset.seconds)
 
       # A kept credential reaches Dashboard; a detached one falls back to anonymous Home.
@@ -202,22 +437,64 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     resource = clients(:one)
     token = ClientToken.create!(user: resource)
-    cookies[ACCESS] = jwt_access_token_for(resource, host: host, session_public_id: token.public_id)
+    cookies[ACCESS] =
+      begin
+        rc3_actor = resource
+        rc3_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc3_actor.class)
+        rc3_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc3_type)
+        rc3_root_model = {
+          "client" => ClientToken,
+          "visitor" => VisitorToken,
+          "operator" => OperatorToken,
+        }.fetch(rc3_type)
+        rc3_root = rc3_root_model.find_by(public_id: token.public_id) || surface_token(rc3_realm.to_sym, rc3_actor)
+        rc3_registered = OidcClientRegistry.find!(
+          {
+            "app" => "base-app-ww",
+            "com" => "base-com-ww",
+            "org" => "base-org-ww",
+          }.fetch(rc3_realm),
+        )
+        rc3_rp_model = {
+          "client" => ClientRpSession,
+          "visitor" => VisitorRpSession,
+          "operator" => OperatorRpSession,
+        }.fetch(rc3_type)
+        rc3_fk = {
+          "client" => :client_token_id,
+          "visitor" => :visitor_token_id,
+          "operator" => :operator_token_id,
+        }.fetch(rc3_type)
+        rc3_rp = rc3_rp_model.create!(
+          rc3_fk => rc3_root.id, :device_session_id => rc3_root.device_session_id,
+          :oidc_client_id => rc3_registered.client_id, :oidc_scope => "openid profile",
+          :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
+          :refresh_token_expires_at => 10.minutes.from_now,
+        )
+        AuthenticationTokenService.encode(
+          rc3_actor, host: host, resource_type: rc3_type,
+                     session_public_id: rc3_root.public_id, base_session_public_id: rc3_root.public_id,
+                     oidc_sid: rc3_rp.public_id, oidc_jti: rc3_rp.oidc_jti,
+                     expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+                     issuer: OidcIssuer.for_resource_type(rc3_type), audiences: [rc3_registered.aud],
+                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rc3_registered),
+                     subject: OidcSubject.for(rc3_actor, resource_type: rc3_type), client_id: rc3_registered.client_id,
+        )
+      end
     token.update_columns(last_used_at: SecurityTokenLifetimes::CLIENT_IDLE_TTL.ago - 1.minute)
 
     logs = capture_logs { get("/?ri=jp") }
 
     assert_response :success
     assert_cookie_deleted(ACCESS)
-    event = auth_rejection_events(logs).sole
-
-    assert_equal %w(access_cookie idle_timeout lifecycle),
-                 event.values_at("credential_kind", "reason", "category")
+    assert_not_predicate rc3_rp.reload, :active?
+    assert_predicate token.reload, :currently_usable?
+    assert_empty auth_rejection_events(logs)
   end
 
   test "app: a JSON request with a malformed access cookie keeps the existing 401 contract" do
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    cookies[ACCESS] = "malformed"
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = "malformed"
 
     get "/edge/v0/token/check", headers: { "Accept" => "application/json" }, as: :json
 
@@ -232,12 +509,56 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
+    token = ClientToken.create!(user: user)
+    cookies[ACCESS] =
+      begin
+        rc2_actor = user
+        rc2_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc2_actor.class)
+        rc2_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc2_type)
+        rc2_root_model = {
+          "client" => ClientToken,
+          "visitor" => VisitorToken,
+          "operator" => OperatorToken,
+        }.fetch(rc2_type)
+        rc2_root = rc2_root_model.find_by(public_id: token.public_id) || surface_token(rc2_realm.to_sym, rc2_actor)
+        rc2_registered = OidcClientRegistry.find!(
+          {
+            "app" => "base-app-ww",
+            "com" => "base-com-ww",
+            "org" => "base-org-ww",
+          }.fetch(rc2_realm),
+        )
+        rc2_rp_model = {
+          "client" => ClientRpSession,
+          "visitor" => VisitorRpSession,
+          "operator" => OperatorRpSession,
+        }.fetch(rc2_type)
+        rc2_fk = {
+          "client" => :client_token_id,
+          "visitor" => :visitor_token_id,
+          "operator" => :operator_token_id,
+        }.fetch(rc2_type)
+        rc2_rp = rc2_rp_model.create!(
+          rc2_fk => rc2_root.id, :device_session_id => rc2_root.device_session_id,
+          :oidc_client_id => rc2_registered.client_id, :oidc_scope => "openid profile",
+          :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
+          :refresh_token_expires_at => 10.minutes.from_now,
+        )
+        AuthenticationTokenService.encode(
+          rc2_actor, host: host, resource_type: rc2_type,
+                     session_public_id: rc2_root.public_id, base_session_public_id: rc2_root.public_id,
+                     oidc_sid: rc2_rp.public_id, oidc_jti: rc2_rp.oidc_jti,
+                     expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+                     issuer: OidcIssuer.for_resource_type(rc2_type), audiences: [rc2_registered.aud],
+                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rc2_registered),
+                     subject: OidcSubject.for(rc2_actor, resource_type: rc2_type), client_id: rc2_registered.client_id,
+        )
+      end
+
     user.update!(
       withdrawal_started_at: 1.day.ago, deactivated_at: Time.current, discard_at: Time.current,
       purge_eligible_at: 31.days.from_now,
     )
-    token = ClientToken.create!(user: user)
-    cookies[ACCESS] = jwt_access_token_for(user, host: host, session_public_id: token.public_id)
 
     logs = capture_logs { get("/dashboard?ri=jp") }
 
@@ -252,7 +573,53 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     visitor = surface_resource(:com)
     com_token = surface_token(:com, visitor)
-    com_access = jwt_access_token_for(visitor, host: com_host, session_public_id: com_token.public_id)
+    com_access =
+      begin
+        rc1_actor = visitor
+        rc1_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc1_actor.class)
+        rc1_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc1_type)
+        rc1_root_model = {
+          "client" => ClientToken,
+          "visitor" => VisitorToken,
+          "operator" => OperatorToken,
+        }.fetch(rc1_type)
+        rc1_root = rc1_root_model.find_by(public_id: com_token.public_id) || surface_token(
+          rc1_realm.to_sym,
+          rc1_actor,
+        )
+        rc1_registered = OidcClientRegistry.find!(
+          {
+            "app" => "base-app-ww",
+            "com" => "base-com-ww",
+            "org" => "base-org-ww",
+          }.fetch(rc1_realm),
+        )
+        rc1_rp_model = {
+          "client" => ClientRpSession,
+          "visitor" => VisitorRpSession,
+          "operator" => OperatorRpSession,
+        }.fetch(rc1_type)
+        rc1_fk = {
+          "client" => :client_token_id,
+          "visitor" => :visitor_token_id,
+          "operator" => :operator_token_id,
+        }.fetch(rc1_type)
+        rc1_rp = rc1_rp_model.create!(
+          rc1_fk => rc1_root.id, :device_session_id => rc1_root.device_session_id,
+          :oidc_client_id => rc1_registered.client_id, :oidc_scope => "openid profile",
+          :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
+          :refresh_token_expires_at => 10.minutes.from_now,
+        )
+        AuthenticationTokenService.encode(
+          rc1_actor, host: com_host, resource_type: rc1_type,
+                     session_public_id: rc1_root.public_id, base_session_public_id: rc1_root.public_id,
+                     oidc_sid: rc1_rp.public_id, oidc_jti: rc1_rp.oidc_jti,
+                     expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+                     issuer: OidcIssuer.for_resource_type(rc1_type), audiences: [rc1_registered.aud],
+                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rc1_registered),
+                     subject: OidcSubject.for(rc1_actor, resource_type: rc1_type), client_id: rc1_registered.client_id,
+        )
+      end
 
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     get "/?ri=jp", headers: { "Cookie" => "#{ACCESS}=malformed" }
@@ -278,13 +645,18 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     post_refresh(refresh_plain)
 
     assert_response :success
-    issued = { ACCESS => assert_cookie_issued(ACCESS), REFRESH => assert_cookie_issued(REFRESH) }
+    issued = {
+      AuthenticationBase::ACCESS_COOKIE_KEY => assert_cookie_issued(AuthenticationBase::ACCESS_COOKIE_KEY),
+      REFRESH => assert_cookie_issued(REFRESH),
+    }
 
     forged = "#{token.public_id}.#{SecureRandom.urlsafe_base64(32)}"
     post "/edge/v0/token/refresh",
          headers: {
            "Accept" => "application/json",
-           "Cookie" => "#{ACCESS}=#{issued[ACCESS][:value]}; #{REFRESH}=#{Rack::Utils.escape(forged)}",
+           "Cookie" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=" \
+                       "#{issued[AuthenticationBase::ACCESS_COOKIE_KEY][:value]}; " \
+                       "#{REFRESH}=#{Rack::Utils.escape(forged)}",
          },
          as: :json
 
@@ -399,16 +771,60 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
 
   # --- System failures are not credential refusals -----------------------------------------------
 
-  test "a database failure while resolving the access cookie propagates instead of becoming anonymous" do
+  test "a database failure while resolving the RP access cookie returns 503 and preserves credentials" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     resource = clients(:one)
     token = ClientToken.create!(user: resource)
-    cookies[ACCESS] = jwt_access_token_for(resource, host: host, session_public_id: token.public_id)
+    cookies[ACCESS] =
+      begin
+        rc0_actor = resource
+        rc0_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc0_actor.class)
+        rc0_realm = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(rc0_type)
+        rc0_root_model = {
+          "client" => ClientToken,
+          "visitor" => VisitorToken,
+          "operator" => OperatorToken,
+        }.fetch(rc0_type)
+        rc0_root = rc0_root_model.find_by(public_id: token.public_id) || surface_token(rc0_realm.to_sym, rc0_actor)
+        rc0_registered = OidcClientRegistry.find!(
+          {
+            "app" => "base-app-ww",
+            "com" => "base-com-ww",
+            "org" => "base-org-ww",
+          }.fetch(rc0_realm),
+        )
+        rc0_rp_model = {
+          "client" => ClientRpSession,
+          "visitor" => VisitorRpSession,
+          "operator" => OperatorRpSession,
+        }.fetch(rc0_type)
+        rc0_fk = {
+          "client" => :client_token_id,
+          "visitor" => :visitor_token_id,
+          "operator" => :operator_token_id,
+        }.fetch(rc0_type)
+        rc0_rp = rc0_rp_model.create!(
+          rc0_fk => rc0_root.id, :device_session_id => rc0_root.device_session_id,
+          :oidc_client_id => rc0_registered.client_id, :oidc_scope => "openid profile",
+          :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
+          :refresh_token_expires_at => 10.minutes.from_now,
+        )
+        AuthenticationTokenService.encode(
+          rc0_actor, host: host, resource_type: rc0_type,
+                     session_public_id: rc0_root.public_id, base_session_public_id: rc0_root.public_id,
+                     oidc_sid: rc0_rp.public_id, oidc_jti: rc0_rp.oidc_jti,
+                     expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+                     issuer: OidcIssuer.for_resource_type(rc0_type), audiences: [rc0_registered.aud],
+                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rc0_registered),
+                     subject: OidcSubject.for(rc0_actor, resource_type: rc0_type), client_id: rc0_registered.client_id,
+        )
+      end
 
-    AuthenticationCurrentResourceResolver.stub(:new, ->(**) { raise ActiveRecord::ConnectionNotEstablished }) do
-      error = assert_raises(ActorSupport::ResolutionError) { get("/?ri=jp") }
+    ClientRpSession.stub(:find_by, ->(**) { raise ActiveRecord::ConnectionNotEstablished }) do
+      get("/?ri=jp")
 
-      assert_kind_of ActiveRecord::ConnectionNotEstablished, error.cause
+      assert_response :service_unavailable
+      assert_no_set_cookie(ACCESS)
     end
   end
 

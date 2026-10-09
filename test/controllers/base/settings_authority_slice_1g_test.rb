@@ -175,10 +175,29 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
   end
 
   def app_session_headers(host, token, user)
-    bearer_headers(
-      jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client"),
-      host: host,
+    headers = as_user_headers(user, host: host, session_public_id: token.public_id)
+    rp_client = OidcClientRegistry.find!("base-app-ww")
+    token.rotate_refresh_token! unless token.device_session.current_refresh_token_id
+    rp_session = ClientRpSession.create!(
+      client_token: token, oidc_client_id: rp_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.current, refresh_token_expires_at: 10.minutes.from_now,
     )
+    rp_access = AuthenticationTokenService.encode(
+      user, host: host, resource_type: "client", session_public_id: token.public_id,
+            base_session_public_id: token.public_id, oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+            expires_at: 10.minutes.from_now, scopes: %w(openid profile), issuer: OidcIssuer.for_client(rp_client),
+            audiences: [rp_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+            subject: OidcSubject.for(user, resource_type: "client"), client_id: rp_client.client_id,
+    )
+    rp_cookie = [headers.fetch("Cookie"),
+                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(
+                   rp_session
+                                      .issue_refresh_token!,
+                 )}",].join("; ")
+    headers = headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+    headers
   end
 
   def host_headers(host = nil)

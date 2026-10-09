@@ -32,7 +32,7 @@ module OidcRpLogoutLauncher
   # for that continuation; it must not turn an ordinary stale credential into an authenticated
   # request.
   def browser_rp_invalid_credentials_are_ignored?
-    return true if params[:logout_challenge].present?
+    return true if browser_rp_logout_transaction_for_origin
 
     super
   end
@@ -181,6 +181,7 @@ module OidcRpLogoutLauncher
     transaction = AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: challenge)
     return unless transaction.browser_rp_workflow?
     return unless transaction.origin_surface == logout_origin_surface
+    return unless transaction.initiating_client_id == oidc_client_id
     return if transaction.expired? && !transaction.finalized?
 
     transaction

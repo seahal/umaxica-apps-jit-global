@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "webauthn/fake_client"
 require "minitest/mock"
 require "base64"
 
@@ -18,7 +19,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   fixtures :operators, :operator_statuses, :operator_passkeys, :operator_passkey_statuses
 
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
+    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
     TurnstileVerifierStub.challenge_enabled = true
@@ -28,11 +29,13 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     @staff.update!(status_id: OperatorStatus::ACTIVE)
     OperatorToken.where(staff_id: @staff.id).delete_all
 
+    @fake = WebAuthn::FakeClient.new("https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}")
+    @registration = WebAuthn::Credential.from_create(@fake.create(user_verified: true))
     @staff_passkey = OperatorPasskey.create!(
       staff: @staff,
-      webauthn_id: Base64.urlsafe_encode64("staff_login_id_bytes_12345", padding: false),
+      webauthn_id: @registration.id,
       external_id: SecureRandom.uuid,
-      public_key: "staff_login_key",
+      public_key: @registration.public_key,
       description: "Staff Login Key",
       status_id: OperatorPasskeyStatus::ACTIVE,
     )
@@ -46,14 +49,104 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "the entra callback establishes no session and hands the browser to the passkey stage" do
-    complete_org_entra_first_stage!(@staff)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
+    end
 
     assert_redirected_to new_auth_org_sign_in_passkey_path(ri: "jp")
     assert_equal 0, OperatorToken.where(staff_id: @staff.id).count
   end
 
   test "should get new" do
-    complete_org_entra_first_stage!(@staff)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
+    end
 
     get new_auth_org_sign_in_passkey_url(ri: "jp")
 
@@ -95,7 +188,52 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   test "options bind the challenge to the entra-selected operator and ignore a submitted identifier" do
     other_staff = operators(:two)
     other_staff.update!(status_id: OperatorStatus::ACTIVE)
-    complete_org_entra_first_stage!(@staff)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
+    end
 
     post auth_org_sign_in_passkey_options_url(ri: "jp"), params: { identifier: other_staff.public_id }
 
@@ -112,7 +250,52 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "verification returns error if challenge_id blank" do
-    complete_org_entra_first_stage!(@staff)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
+    end
 
     post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: { challenge_id: "" }
 
@@ -121,7 +304,52 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "verification returns error if challenge invalid" do
-    complete_org_entra_first_stage!(@staff)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
+    end
 
     post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: { challenge_id: "invalid_challenge" }
 
@@ -130,7 +358,52 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "verification returns bad request on challenge purpose mismatch" do
-    complete_org_entra_first_stage!(@staff)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
+    end
     challenge_id = issue_challenge!
     mismatch_error = Webauthn::ChallengeStore::ChallengePurposeMismatchError.new("purpose mismatch")
 
@@ -154,18 +427,60 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "verification records evidence without establishing an Auth session" do
-    complete_org_entra_first_stage!(@staff)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
+    end
     challenge_id = issue_challenge!
 
-    verified_at = Time.current
-    verification_context = Struct.new(:sign_count, :verified_at).new(1, verified_at)
+    Time.current
 
-    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post(
-        auth_org_sign_in_passkey_verification_url(ri: "jp", pt: "/settings/passkeys"),
-        params: verification_params(challenge_id),
-      )
-    end
+    post(
+      auth_org_sign_in_passkey_verification_url(ri: "jp", pt: "/settings/passkeys"),
+      params: verification_params(challenge_id),
+    )
 
     assert_response :ok
     json = response.parsed_body
@@ -183,13 +498,55 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "the pending transaction is one-shot: a replayed second stage has nothing to continue" do
-    complete_org_entra_first_stage!(@staff)
-    challenge_id = issue_challenge!
-    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
 
-    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
     end
+    challenge_id = issue_challenge!
+
+    post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
 
     assert_response :ok
 
@@ -203,7 +560,52 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "a credential belonging to another operator is refused after the entra stage" do
-    complete_org_entra_first_stage!(@staff)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
+    end
     challenge_id = issue_challenge!
 
     other_staff = operators(:two)
@@ -227,7 +629,52 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "verification returns unauthorized for credential mismatch" do
-    complete_org_entra_first_stage!(@staff)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
+    end
     challenge_id = issue_challenge!
 
     post auth_org_sign_in_passkey_verification_url(ri: "jp"),
@@ -241,9 +688,53 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "verification returns 422 when login result status is unknown" do
-    complete_org_entra_first_stage!(@staff)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
+    end
     challenge_id = issue_challenge!
-    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
 
     original_method = Auth::Org::Sign::In::Passkey::VerificationsController.instance_method(:perform_passkey_sign_in)
     Auth::Org::Sign::In::Passkey::VerificationsController.define_method(:perform_passkey_sign_in) do |*_args|
@@ -251,9 +742,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     end
 
     begin
-      Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-        post(auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id))
-      end
+      post(auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id))
     ensure
       Auth::Org::Sign::In::Passkey::VerificationsController.define_method(:perform_passkey_sign_in, original_method)
     end
@@ -263,28 +752,147 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "verification for staff with mfa enabled succeeds (MFA not enforced for staff)" do
-    @staff.update!(mfa_level_enabled: true)
-    complete_org_entra_first_stage!(@staff)
-    challenge_id = issue_challenge!
-    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
+    @staff.reload.update!(mfa_level_enabled: true)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
 
-    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
     end
+    challenge_id = issue_challenge!
+
+    post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
 
     assert_response :ok
     assert_equal "ok", response.parsed_body["status"]
   end
 
   test "verification hands an at-limit local result to Base for durable resolution" do
-    create_rotated_active_staff_session(@staff, rotations: 4)
-    complete_org_entra_first_stage!(@staff)
-    challenge_id = issue_challenge!
-    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
+    base_browser = open_session
+    base_browser.host!(ENV.fetch("PUBLIC_BASE_STAFF_URL"))
+    base_browser.https!
+    base_browser.post("/sign", params: { ri: "jp" })
+    issuer = JitSecurityJwtRegistry.surface("BASE_ORG")
+    rt = Rack::Utils.parse_query(URI.parse(base_browser.response.location).query).fetch("rt")
+    payload, = JWT.decode(
+      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{ENV.fetch("PUBLIC_BASE_STAFF_URL")}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    base_browser.get(URI.parse(payload.fetch("url")).request_uri)
+    authorization_form = base_browser.response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    fields = authorization_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    base_browser.post(
+      authorization_form["action"], params: fields,
+                                    headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_BASE_STAFF_URL")}" },
+    )
 
-    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
+    assert_equal 303, base_browser.response.status
+    original_base_nonce = base_browser.session.fetch(BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY)
+    base_request = base_browser.request
+    base_session = base_browser.session.to_hash
+    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+    create_rotated_active_staff_session(@staff, rotations: 4)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = original_base_nonce
+        flow_nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+          nonce_digest: OperatorSignInFlow.digest_nonce(flow_nonce),
+        )
+        SignInCycleLocator.new(base_session, surface: "org").issue!(admission.transaction, nonce: flow_nonce)
+        session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+        jar = ActionDispatch::Cookies::CookieJar.build(base_request, base_request.cookies)
+        jar.encrypted[session_key] = { value: base_session.stringify_keys }
+        base_browser.cookies.delete(session_key)
+        _merged_cookies = base_browser.cookies.merge(
+          "#{session_key}=#{Rack::Utils.escape(jar[session_key])}",
+          URI.parse("https://#{ENV.fetch("PUBLIC_BASE_STAFF_URL")}/"),
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
     end
+    challenge_id = issue_challenge!
+
+    post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
 
     assert_response :ok
     json = response.parsed_body
@@ -295,18 +903,26 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     get json.fetch("redirect_url")
     follow_redirect! if response.redirect?
     post auth_org_sign_handoff_path(ri: "jp"), params: { ri: "jp" }
-    result_form = response.parsed_body.at_css("form")
-    result = result_form.at_css('input[name="result"]')["value"]
-    transaction_ref = result_form.at_css('input[name="transaction_ref"]')["value"]
-    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    post base_org_sign_completion_path,
-         params: { result: result, transaction_ref: transaction_ref, ri: "jp" },
-         headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}",
-                    "Sec-Fetch-Site" => "same-site", }
-    follow_redirect! if response.redirect?
 
-    assert_response :success
-    assert_equal "base/org/sign/in/limitations/show", inertia_component
+    assert_response :see_other
+    base_uri = URI.parse(response.location)
+    base_browser.get(base_uri.request_uri)
+
+    assert_equal 200, base_browser.response.status
+    result_form = base_browser.response.parsed_body.at_css("form")
+    result_fields = result_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
+    base_browser.post(
+      result_form["action"], params: result_fields,
+                             headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_BASE_STAFF_URL")}" },
+    )
+
+    assert_equal 303, base_browser.response.status
+    base_browser.get(base_browser.response.location)
+
+    assert_equal 200, base_browser.response.status
+    page = JSON.parse(base_browser.response.parsed_body.at_css("script[data-page='app']").text)
+
+    assert_equal "base/org/sign/in/limitations/show", page.fetch("component")
     flow = OperatorSignInFlow.where(principal_id: @staff.id).order(created_at: :desc).first
 
     assert_predicate flow, :sign_in_session_issuance_pending?
@@ -314,7 +930,52 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "verification returns unauthorized for malformed credential payload" do
-    complete_org_entra_first_stage!(@staff)
+    begin
+      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
+      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+        admission_nonce = SecureRandom.urlsafe_base64(32)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: "org",
+          reference: admission.reference,
+        )
+        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
+        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: "org",
+            entry_ref: admission.reference,
+            nonce: admission_nonce,
+          ),
+        )
+        host!(admission_host)
+        https!
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        cookies.delete("auth_sid")
+        cookies.delete("__Host-auth_sid")
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
+        )
+        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+        admission_form = response.parsed_body.at_css("form")
+        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
+
+        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
+        post admission_form["action"], params: admission_fields,
+                                       headers: {
+                                         "Origin" => "https://#{admission_host}",
+                                         "Sec-Fetch-Site" => "same-origin",
+                                       }
+
+        assert_response :see_other
+      end
+      complete_org_entra_first_stage!(@staff)
+    end
     challenge_id = issue_challenge!
 
     post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: {
@@ -332,17 +993,14 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     post(auth_org_sign_in_passkey_options_url(ri: "jp"), params: {})
 
     assert_response :ok
+    @challenge = response.parsed_body.fetch("options").fetch("challenge")
     response.parsed_body.fetch("challenge_id")
   end
 
   def verification_params(challenge_id, credential_id: @staff_passkey.webauthn_id)
-    {
-      challenge_id: challenge_id,
-      credential: {
-        id: credential_id,
-        response: { clientDataJSON: "e30=", authenticatorData: "e30=", signature: "sig", userHandle: "h" },
-      },
-    }
+    assertion = @fake.get(challenge: @challenge, user_verified: true, sign_count: @staff_passkey.reload.sign_count + 1)
+    assertion["id"] = credential_id
+    { challenge_id: challenge_id, credential: assertion }
   end
 
   def create_rotated_active_staff_session(staff, rotations:)

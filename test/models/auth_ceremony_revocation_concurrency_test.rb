@@ -29,7 +29,10 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         actor = actors.create!
         token = tokens.create!(token_key => actor.id, :id => 9_920_000_000_010)
         flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
-          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+          surface: surface.to_s,
+          intent: "sign_in",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: nil,
         ).transaction
         flow.update!(principal_id: actor.id)
         ceremony, = ceremonies.rotate_and_admit!(
@@ -139,7 +142,10 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "unknown-uv-key")
           credentials =
             Array.new(2) do
-              model.create!(owner_key => actor.id, :user_identity_totp_credential_status_id => ClientTotpCredentialStatus::ACTIVE)
+              model.create!(
+                owner_key => actor.id,
+                :user_identity_totp_credential_status_id => ClientTotpCredentialStatus::ACTIVE,
+              )
             end
         else
           credentials =
@@ -182,7 +188,10 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         assert_equal 1, results.count(false), surface.to_s
         remaining =
           if surface == :totp
-            model.where(owner_key => actor.id, :user_identity_totp_credential_status_id => ClientTotpCredentialStatus::ACTIVE)
+            model.where(
+              owner_key => actor.id,
+              :user_identity_totp_credential_status_id => ClientTotpCredentialStatus::ACTIVE,
+            )
           else
             model.active.where(owner_key => actor.id)
           end
@@ -492,8 +501,13 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       )
-      parent = issue_base_step_up_admission!(
-        actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+      parent = BaseStepUpAdmissionIssuer.call!(
+        actor: actor,
+        token: token,
+        requirement: requirement,
+        return_to: "/identity/birthdate",
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: token,
       ).transaction
       # Synthetic evidence isolates finalization and logout, not WebAuthn signature verification.
       parent.record_verification!(
@@ -621,8 +635,13 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       )
-      parent = issue_base_step_up_admission!(
-        actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+      parent = BaseStepUpAdmissionIssuer.call!(
+        actor: actor,
+        token: token,
+        requirement: requirement,
+        return_to: "/identity/birthdate",
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: token,
       ).transaction
       # Synthetic evidence isolates finalization and credential revocation, not WebAuthn signature verification.
       parent.record_verification!(
@@ -653,7 +672,8 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
                       raw_result: issuance.code,
                     )
                     :finalized
-                  rescue IdentityStepUpCeremonyContract::Error, BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound
+                  rescue IdentityStepUpCeremonyContract::Error,
+                         BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound
                     :finalization_refused
                   end
                 else
@@ -770,8 +790,13 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       )
-      parent = issue_base_step_up_admission!(
-        actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+      parent = BaseStepUpAdmissionIssuer.call!(
+        actor: actor,
+        token: token,
+        requirement: requirement,
+        return_to: "/identity/birthdate",
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: token,
       ).transaction
       # Synthetic evidence isolates finalization and cancellation, not WebAuthn signature verification.
       parent.record_verification!(

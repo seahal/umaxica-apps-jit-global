@@ -12,6 +12,7 @@ module Auth
 
               prepend_before_action :require_sign_in_ceremony_admission!
               ensure_fqdn_gate_first!
+              prepend_before_action :apply_default_no_store
 
               def create
                 result = SignInOtpResender.new(

@@ -244,7 +244,7 @@ module Auth::App::Up
 
       assert_response :created
 
-      auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+      auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       get auth_app_root_url(ri: "jp", host: auth_host)
 
       assert_response :success
@@ -362,7 +362,88 @@ module Auth::App::Up
       now = Client.database_now.in_time_zone("Asia/Tokyo")
       sixteenth_birthday = now.to_date - 16.years
       travel_to now do
-        telephone, cycle = advance_telephone_signup_to_birthdate_checkpoint!("under16")
+        telephone, cycle =
+          begin
+            fv5023 = "under16"
+            fv5017 = verify_telephone_via_otp!
+            fv5016 = current_sign_up_flow(fv5017)
+
+            post(auth_app_sign_up_check_telephone_passkey_url(ri: "jp", fb: @signup_flow_binding))
+            fv5024 = response.parsed_body["challenge_id"]
+
+            fv5025 = Object.new
+            fv5025.define_singleton_method(:id) { "#{fv5023}_webauthn_id" }
+            fv5025.define_singleton_method(:public_key) {
+              "#{fv5023}_public_key"
+            }
+            fv5025.define_singleton_method(:sign_count) { 1 }
+            fv5025.define_singleton_method(:verify) { |_nf2001__challenge| true }
+
+            fv5026 = Struct.new(
+              :webauthn_id, :sign_count, :aaguid, :transports,
+              :backup_eligible, :backup_state, :authenticator_attachment,
+            ).new(
+              "#{fv5023}_webauthn_id", 1,
+            )
+            Webauthn::RegistrationVerifier.stub(:verify!, fv5026) do
+              WebAuthn::Credential.stub(:from_create, fv5025) do
+                patch(
+                  auth_app_sign_up_check_telephone_passkey_url(ri: "jp", fb: @signup_flow_binding), params: {
+                    challenge_id: fv5024,
+                    checkpoint_version: fv5016.checkpoint_version,
+                    credential: {
+                      id: "#{fv5023}_webauthn_id",
+                      response: { clientDataJSON: "e30=", attestationObject: "e30=" },
+                    },
+                    description: "Signup Passkey",
+                  },
+                )
+              end
+            end
+
+            assert_response :created
+            assert_equal auth_app_sign_up_check_telephone_secret_path(ri: "jp", fb: @signup_flow_binding),
+                         response.parsed_body["redirect_url"]
+            assert_not fv5016.reload.requirement_cleared?(:passkey)
+
+            begin
+              fv5018 = fv5016
+              fv5020 = auth_app_sign_up_check_telephone_secret_path(
+                ri: "jp",
+                fb: @signup_flow_binding,
+              )
+              get(fv5020)
+
+              assert_response :success
+              fv5022 = ClientSecretIssuance.find_by!(sign_up_flow_ref: fv5018.public_id)
+              fv5021 = []
+
+              if fv5022.planned_count.positive?
+                post(fv5020)
+
+                assert_response :success
+                fv5021 = response.parsed_body.css("[data-secret-value] code").map(&:text)
+
+                assert_equal fv5022.planned_count,
+                             fv5021.length
+              end
+
+              fv5019 = { checkpoint_version: fv5018.reload.checkpoint_version }
+              fv5019[:stored] = "1" if fv5021.any?
+              patch(fv5020, params: fv5019)
+
+              assert_response :see_other
+              assert_equal auth_app_sign_up_check_telephone_birthdate_path(ri: "jp", fb: @signup_flow_binding),
+                           URI.parse(response.location).request_uri
+              assert fv5018.reload.requirement_cleared?(:passkey)
+            end
+
+            get(auth_app_sign_up_check_telephone_birthdate_url(ri: "jp", fb: @signup_flow_binding))
+
+            assert_response :success
+
+            [fv5017, fv5016]
+          end
 
         patch auth_app_sign_up_check_telephone_birthdate_url(ri: "jp", fb: @signup_flow_binding), params: {
           requirement: "birthdate",
@@ -383,7 +464,88 @@ module Auth::App::Up
       now = Client.database_now.in_time_zone("Asia/Tokyo")
       sixteenth_birthday = now.to_date - 16.years
       travel_to now do
-        telephone, cycle = advance_telephone_signup_to_birthdate_checkpoint!("sixteen")
+        telephone, cycle =
+          begin
+            fv5012 = "sixteen"
+            fv5006 = verify_telephone_via_otp!
+            fv5005 = current_sign_up_flow(fv5006)
+
+            post(auth_app_sign_up_check_telephone_passkey_url(ri: "jp", fb: @signup_flow_binding))
+            fv5013 = response.parsed_body["challenge_id"]
+
+            fv5014 = Object.new
+            fv5014.define_singleton_method(:id) { "#{fv5012}_webauthn_id" }
+            fv5014.define_singleton_method(:public_key) {
+              "#{fv5012}_public_key"
+            }
+            fv5014.define_singleton_method(:sign_count) { 1 }
+            fv5014.define_singleton_method(:verify) { |_nf2000__challenge| true }
+
+            fv5015 = Struct.new(
+              :webauthn_id, :sign_count, :aaguid, :transports,
+              :backup_eligible, :backup_state, :authenticator_attachment,
+            ).new(
+              "#{fv5012}_webauthn_id", 1,
+            )
+            Webauthn::RegistrationVerifier.stub(:verify!, fv5015) do
+              WebAuthn::Credential.stub(:from_create, fv5014) do
+                patch(
+                  auth_app_sign_up_check_telephone_passkey_url(ri: "jp", fb: @signup_flow_binding), params: {
+                    challenge_id: fv5013,
+                    checkpoint_version: fv5005.checkpoint_version,
+                    credential: {
+                      id: "#{fv5012}_webauthn_id",
+                      response: { clientDataJSON: "e30=", attestationObject: "e30=" },
+                    },
+                    description: "Signup Passkey",
+                  },
+                )
+              end
+            end
+
+            assert_response :created
+            assert_equal auth_app_sign_up_check_telephone_secret_path(ri: "jp", fb: @signup_flow_binding),
+                         response.parsed_body["redirect_url"]
+            assert_not fv5005.reload.requirement_cleared?(:passkey)
+
+            begin
+              fv5007 = fv5005
+              fv5009 = auth_app_sign_up_check_telephone_secret_path(
+                ri: "jp",
+                fb: @signup_flow_binding,
+              )
+              get(fv5009)
+
+              assert_response :success
+              fv5011 = ClientSecretIssuance.find_by!(sign_up_flow_ref: fv5007.public_id)
+              fv5010 = []
+
+              if fv5011.planned_count.positive?
+                post(fv5009)
+
+                assert_response :success
+                fv5010 = response.parsed_body.css("[data-secret-value] code").map(&:text)
+
+                assert_equal fv5011.planned_count,
+                             fv5010.length
+              end
+
+              fv5008 = { checkpoint_version: fv5007.reload.checkpoint_version }
+              fv5008[:stored] = "1" if fv5010.any?
+              patch(fv5009, params: fv5008)
+
+              assert_response :see_other
+              assert_equal auth_app_sign_up_check_telephone_birthdate_path(ri: "jp", fb: @signup_flow_binding),
+                           URI.parse(response.location).request_uri
+              assert fv5007.reload.requirement_cleared?(:passkey)
+            end
+
+            get(auth_app_sign_up_check_telephone_birthdate_url(ri: "jp", fb: @signup_flow_binding))
+
+            assert_response :success
+
+            [fv5006, fv5005]
+          end
 
         patch auth_app_sign_up_check_telephone_birthdate_url(ri: "jp", fb: @signup_flow_binding), params: {
           requirement: "birthdate",
@@ -432,7 +594,37 @@ module Auth::App::Up
 
       assert_response :created
 
-      complete_secret_requirement!(cycle)
+      begin
+        fv5000 = cycle
+        fv5002 = auth_app_sign_up_check_telephone_secret_path(
+          ri: "jp",
+          fb: @signup_flow_binding,
+        )
+        get(fv5002)
+
+        assert_response :success
+        fv5004 = ClientSecretIssuance.find_by!(sign_up_flow_ref: fv5000.public_id)
+        fv5003 = []
+
+        if fv5004.planned_count.positive?
+          post(fv5002)
+
+          assert_response :success
+          fv5003 = response.parsed_body.css("[data-secret-value] code").map(&:text)
+
+          assert_equal fv5004.planned_count,
+                       fv5003.length
+        end
+
+        fv5001 = { checkpoint_version: fv5000.reload.checkpoint_version }
+        fv5001[:stored] = "1" if fv5003.any?
+        patch(fv5002, params: fv5001)
+
+        assert_response :see_other
+        assert_equal auth_app_sign_up_check_telephone_birthdate_path(ri: "jp", fb: @signup_flow_binding),
+                     URI.parse(response.location).request_uri
+        assert fv5000.reload.requirement_cleared?(:passkey)
+      end
 
       user = telephone.user
 
@@ -550,82 +742,6 @@ module Auth::App::Up
         pending_contact_type: "telephone",
         pending_contact_id: telephone.id,
       )
-    end
-
-    def advance_telephone_signup_to_birthdate_checkpoint!(webauthn_suffix)
-      telephone = verify_telephone_via_otp!
-      cycle = current_sign_up_flow(telephone)
-
-      post(auth_app_sign_up_check_telephone_passkey_url(ri: "jp", fb: @signup_flow_binding))
-      challenge_id = response.parsed_body["challenge_id"]
-
-      mock_credential = Object.new
-      mock_credential.define_singleton_method(:id) { "#{webauthn_suffix}_webauthn_id" }
-      mock_credential.define_singleton_method(:public_key) { "#{webauthn_suffix}_public_key" }
-      mock_credential.define_singleton_method(:sign_count) { 1 }
-      mock_credential.define_singleton_method(:verify) { |_challenge| true }
-
-      registration_context = Struct.new(
-        :webauthn_id, :sign_count, :aaguid, :transports,
-        :backup_eligible, :backup_state, :authenticator_attachment,
-      ).new(
-        "#{webauthn_suffix}_webauthn_id", 1,
-      )
-      Webauthn::RegistrationVerifier.stub(:verify!, registration_context) do
-        WebAuthn::Credential.stub(:from_create, mock_credential) do
-          patch(
-            auth_app_sign_up_check_telephone_passkey_url(ri: "jp", fb: @signup_flow_binding), params: {
-              challenge_id: challenge_id,
-              checkpoint_version: cycle.checkpoint_version,
-              credential: {
-                id: "#{webauthn_suffix}_webauthn_id",
-                response: { clientDataJSON: "e30=", attestationObject: "e30=" },
-              },
-              description: "Signup Passkey",
-            },
-          )
-        end
-      end
-
-      assert_response :created
-      assert_equal auth_app_sign_up_check_telephone_secret_path(ri: "jp", fb: @signup_flow_binding),
-                   response.parsed_body["redirect_url"]
-      assert_not cycle.reload.requirement_cleared?(:passkey)
-
-      complete_secret_requirement!(cycle)
-
-      get(auth_app_sign_up_check_telephone_birthdate_url(ri: "jp", fb: @signup_flow_binding))
-
-      assert_response :success
-
-      [telephone, cycle]
-    end
-
-    def complete_secret_requirement!(cycle)
-      secret_path = auth_app_sign_up_check_telephone_secret_path(ri: "jp", fb: @signup_flow_binding)
-      get(secret_path)
-
-      assert_response :success
-      issuance = ClientSecretIssuance.find_by!(sign_up_flow_ref: cycle.public_id)
-      values = []
-
-      if issuance.planned_count.positive?
-        post(secret_path)
-
-        assert_response :success
-        values = response.parsed_body.css("[data-secret-value] code").map(&:text)
-
-        assert_equal issuance.planned_count, values.length
-      end
-
-      params = { checkpoint_version: cycle.reload.checkpoint_version }
-      params[:stored] = "1" if values.any?
-      patch(secret_path, params: params)
-
-      assert_response :see_other
-      assert_equal auth_app_sign_up_check_telephone_birthdate_path(ri: "jp", fb: @signup_flow_binding),
-                   URI.parse(response.location).request_uri
-      assert cycle.reload.requirement_cleared?(:passkey)
     end
 
     def registration_telephone

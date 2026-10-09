@@ -73,7 +73,7 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
       credential_candidate: nil,
       repository: repository,
       provider: principal.provider,
-      uid: principal.subject,
+      uid: principal.subject, sign_up_entry: true,
     )
 
     assert result[:pending_social_signup]
@@ -102,7 +102,7 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
       credential_candidate: nil,
       repository: repository,
       provider: principal.provider,
-      uid: principal.subject,
+      uid: principal.subject, sign_up_entry: true,
     )
 
     assert result[:pending_social_signup]

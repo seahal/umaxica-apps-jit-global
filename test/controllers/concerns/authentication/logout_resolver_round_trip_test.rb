@@ -54,8 +54,8 @@ class AuthenticationLogoutResolverRoundTripTest < ActiveSupport::TestCase
     token = ClientToken.find_by(public_id: headers["X-TEST-SESSION-PUBLIC-ID"])
     device_session = token.device_session
 
-    # A fallback (non-DBSC) session legitimately has no current refresh token.
-    # Sign-out must still revoke it.
+    device_session.update!(current_refresh_token_id: nil)
+
     assert_not_nil device_session
     assert_nil device_session.current_refresh_token_id
 

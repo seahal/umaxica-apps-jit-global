@@ -16,7 +16,7 @@ module OidcAuthorizationResultPost
     result_reference = params[:result_ref]
     transaction_reference = params[:transaction_ref]
     unless result_reference.is_a?(String) &&
-        result_reference.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN) &&
+        result_reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN) &&
         transaction_reference.is_a?(String) && transaction_reference.present?
       raise ArgumentError, "invalid authorization result reference"
     end
@@ -81,7 +81,7 @@ module OidcAuthorizationResultPost
 
   def complete_authorization_from_post!
     raise ArgumentError unless params[:result_ref].is_a?(String) &&
-      params.expect(:result_ref).match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN) &&
+      params.expect(:result_ref).match?(AuthAdmissionBinding::REFERENCE_PATTERN) &&
       params[:transaction_ref].is_a?(String) && params[:transaction_ref].present? && params[:result].blank?
 
     transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(

@@ -34,6 +34,7 @@ module Core
                     :current_session, :logged_in?
       before_action :authenticate_browser_rp_safe_request!
       prepend_before_action :authenticate_browser_rp_unsafe_request!
+      ensure_fqdn_gate_first!
 
       layout "core/org/application"
 

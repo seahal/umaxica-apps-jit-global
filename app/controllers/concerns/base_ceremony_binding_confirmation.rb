@@ -15,7 +15,10 @@ module BaseCeremonyBindingConfirmation
     binding = load_ceremony_binding!
     validate_binding_base_context!(binding)
     render "base/shared/ceremony_binding_confirmation", layout: false,
-                                                        locals: { binding_ref: params[:binding_ref] }
+                                                        locals: {
+                                                          binding_ref: params[:binding_ref],
+                                                          lx: normalized_locale(params[:lx]),
+                                                        }
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
          AuthAdmissionBinding::InvalidTransition
     render_invalid_binding!
@@ -46,7 +49,7 @@ module BaseCeremonyBindingConfirmation
 
     reference = params[:binding_ref]
     raise ArgumentError unless reference.is_a?(String) &&
-      reference.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN)
+      reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
 
     BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
       surface: self.class.base_admission_surface_name, reference: reference,
@@ -120,7 +123,7 @@ module BaseCeremonyBindingConfirmation
   end
 
   def auth_binding_entry_url(binding)
-    query = { entry_ref: binding.entry_ref, ri: params[:ri] }.compact
+    query = { entry_ref: binding.entry_ref, ri: params[:ri], lx: normalized_locale(params[:lx]) }.compact
     case self.class.base_admission_surface_name
     when "app"
       app_auth_binding_entry_url(binding, **query, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), protocol: "https")

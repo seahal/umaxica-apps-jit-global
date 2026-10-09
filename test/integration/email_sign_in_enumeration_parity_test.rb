@@ -22,7 +22,10 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
           address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
         ).finalize_binding!
       else
-        owner = Visitor.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE)
+        owner = Visitor.create!(
+          id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
+          status_id: VisitorStatus::ACTIVE,
+        )
         owner.visitor_emails.create!(
           address: address, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
         ).finalize_binding!
@@ -32,7 +35,55 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
       paths = {}
       [["real", address], ["fake", "expiry-fake-#{SecureRandom.hex(8)}@example.test"]].each do |mode, destination|
         browser = open_session
-        admit_auth_local_entry!(surface: surface, browser: browser)
+        begin
+          admission_browser = browser
+          admission_surface = surface
+          admission_intent = "sign_in"
+          admission_host = {
+            "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+            "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+            "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+          }.fetch(admission_surface)
+          admission_browser.host!(admission_host)
+          admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+            surface: admission_surface, intent: admission_intent,
+            base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+          )
+          admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+          admission_browser.get(
+            admission_path,
+            params: { entry_ref: admission_issuance.reference, ri: "jp" },
+          )
+          admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+          admission_browser.post(
+            "/ceremony_bindings",
+            params: { entry_ref: admission_issuance.reference,
+                      authenticity_token: admission_csrf,
+                      ri: "jp", },
+          )
+
+          assert_equal 303, admission_browser.response.status
+          admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+            surface: admission_surface, reference: admission_issuance.reference,
+          )
+          admission_binding.reload.confirm_base!(
+            base_token: nil,
+            browser_digest: admission_binding.base_browser_digest,
+          )
+          admission_browser.get(
+            admission_path,
+            params: { entry_ref: admission_issuance.reference, ri: "jp" },
+          )
+          admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+          admission_browser.post(
+            admission_path,
+            params: { entry_ref: admission_issuance.reference,
+                      authenticity_token: admission_csrf,
+                      ri: "jp", },
+          )
+
+          assert_equal 303, admission_browser.response.status
+        end
         browser.post(
           "/sign/in/email", params: {
             :user_email => { address: destination }, "cf-turnstile-response" => "test",
@@ -83,8 +134,96 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
       real = open_session
       dummy = open_session
       source_generation = contact.attributes.slice("otp_private_key", "otp_counter", "otp_expires_at")
-      admit_auth_local_entry!(surface: surface, browser: real)
-      admit_auth_local_entry!(surface: surface, browser: dummy)
+      begin
+        admission_browser = real
+        admission_surface = surface
+        admission_intent = "sign_in"
+        admission_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_surface)
+        admission_browser.host!(admission_host)
+        admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: admission_surface, intent: admission_intent,
+          base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+        )
+        admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+        admission_browser.get(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, ri: "jp" },
+        )
+        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        admission_browser.post(
+          "/ceremony_bindings",
+          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+        )
+
+        assert_equal 303, admission_browser.response.status
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_surface, reference: admission_issuance.reference,
+        )
+        admission_binding.reload.confirm_base!(
+          base_token: nil,
+          browser_digest: admission_binding.base_browser_digest,
+        )
+        admission_browser.get(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, ri: "jp" },
+        )
+        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        admission_browser.post(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+        )
+
+        assert_equal 303, admission_browser.response.status
+      end
+      begin
+        admission_browser = dummy
+        admission_surface = surface
+        admission_intent = "sign_in"
+        admission_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_surface)
+        admission_browser.host!(admission_host)
+        admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: admission_surface, intent: admission_intent,
+          base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+        )
+        admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+        admission_browser.get(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, ri: "jp" },
+        )
+        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        admission_browser.post(
+          "/ceremony_bindings",
+          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+        )
+
+        assert_equal 303, admission_browser.response.status
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_surface, reference: admission_issuance.reference,
+        )
+        admission_binding.reload.confirm_base!(
+          base_token: nil,
+          browser_digest: admission_binding.base_browser_digest,
+        )
+        admission_browser.get(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, ri: "jp" },
+        )
+        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        admission_browser.post(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+        )
+
+        assert_equal 303, admission_browser.response.status
+      end
       paths = []
       # Equal-length input isolates binding-existence leakage from the caller-known address length.
       [[real, address], [dummy, "parity-fake-#{SecureRandom.hex(8)}@example.test"]].each do |browser, destination|
@@ -103,8 +242,22 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         assert_equal 200, browser.response.status
       end
       assert_equal paths.first, paths.last
-      real_props = page_props(real)
-      dummy_props = page_props(dummy)
+      real_props =
+        begin
+          fv5009 = real
+          fv5008 = fv5009.response.parsed_body.at_css('script[data-page="app"]')
+
+          assert fv5008, "expected a rendered Inertia page"
+          JSON.parse(fv5008.text).fetch("props")
+        end
+      dummy_props =
+        begin
+          fv5007 = dummy
+          fv5006 = fv5007.response.parsed_body.at_css('script[data-page="app"]')
+
+          assert fv5006, "expected a rendered Inertia page"
+          JSON.parse(fv5006.text).fetch("props")
+        end
       resend_key = (surface == "app") ? "otp_resend" : "resend"
 
       assert_equal real_props.fetch(resend_key).fetch("state").bytesize,
@@ -114,7 +267,13 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
       assert_equal real_props.fetch(resend_key).except("state"), dummy_props.fetch(resend_key).except("state")
 
       [real, dummy].each do |browser|
-        state = page_props(browser).fetch(resend_key).fetch("state")
+        state = begin
+          fv5005 = browser
+          fv5004 = fv5005.response.parsed_body.at_css('script[data-page="app"]')
+
+          assert fv5004, "expected a rendered Inertia page"
+          JSON.parse(fv5004.text).fetch("props")
+        end.fetch(resend_key).fetch("state")
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         browser.post("/web/v0/in/email/otp", params: { state: state }, as: :json)
 
@@ -138,8 +297,22 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         assert_equal 422, browser.response.status
         assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :>=, 0.1
       end
-      real_refusal = page_props(real)
-      dummy_refusal = page_props(dummy)
+      real_refusal =
+        begin
+          fv5003 = real
+          fv5002 = fv5003.response.parsed_body.at_css('script[data-page="app"]')
+
+          assert fv5002, "expected a rendered Inertia page"
+          JSON.parse(fv5002.text).fetch("props")
+        end
+      dummy_refusal =
+        begin
+          fv5001 = dummy
+          fv5000 = fv5001.response.parsed_body.at_css('script[data-page="app"]')
+
+          assert fv5000, "expected a rendered Inertia page"
+          JSON.parse(fv5000.text).fetch("props")
+        end
 
       assert_equal real_refusal.except(resend_key, "authenticity_token"),
                    dummy_refusal.except(resend_key, "authenticity_token")
@@ -154,11 +327,4 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
   end
 
   private
-
-  def page_props(browser)
-    page = browser.response.parsed_body.at_css('script[data-page="app"]')
-
-    assert page, "expected a rendered Inertia page"
-    JSON.parse(page.text).fetch("props")
-  end
 end

@@ -18,7 +18,7 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
       audience: "step_up:app", session_binding: @token.public_id, token_binding: @token.public_id,
       require_session_binding: true, actor_ref: @actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
-    @transaction = issue_base_step_up_admission!(
+    @transaction = BaseStepUpAdmissionIssuer.call!(
       actor: @actor, token: @token, requirement: @requirement, return_to: "/identity/birthdate",
       base_browser_nonce: SecureRandom.urlsafe_base64, base_token: @token,
     ).transaction
@@ -112,6 +112,10 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
                    [transaction.reload.status, token.reload.rotated_at.present?, replacement.id != token.id,
                     ceremony.reload.completed?,]
       retry_requirement = StepUpRequirement.new(
+        step_up_required: true,
+        phishing_resistant_required: false,
+        user_verification_required: false,
+        full_reauthentication_required: false,
         **requirement.to_h.merge(session_binding: replacement.public_id, token_binding: replacement.public_id),
       )
       assert_no_difference -> { token.class.count } do
@@ -272,7 +276,7 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
       audience: "step_up:app", session_binding: @token.public_id, token_binding: @token.public_id,
       require_session_binding: true, actor_ref: @actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
-    transaction = issue_base_step_up_admission!(
+    transaction = BaseStepUpAdmissionIssuer.call!(
       actor: @actor, token: @token, requirement: requirement, return_to: "/identity/birthdate",
       base_browser_nonce: SecureRandom.urlsafe_base64, base_token: @token,
     ).transaction

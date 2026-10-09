@@ -56,7 +56,34 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     )
     @refresh_token = @rp_session.issue_refresh_token!
     @request.host = "core.app.localhost"
-    @access_token = access_token_for(expires_at: 5.minutes.from_now)
+    @access_token =
+      begin
+        fv5116 = { expires_at: 5.minutes.from_now }
+        fv5113 = fv5116.fetch(:expires_at)
+        fv5112 = fv5116.fetch(:issuer) { nil }
+        fv5111 = fv5116.fetch(:audiences) { nil }
+        fv5109 = fv5116.fetch(:client_id) { nil }
+        fv5110 = fv5116.fetch(:subject) { nil }
+        fv5115 = fv5116.fetch(:base_session_public_id) { nil }
+        fv5114 = fv5116.fetch(:oidc_sid) { nil }
+        fv5108 = OidcClientRegistry.find!("core-app")
+        AuthenticationTokenService.encode(
+          @client,
+          host: request.host,
+          resource_type: "client",
+          session_public_id: @root_token.public_id,
+          base_session_public_id: fv5115 || @root_token.public_id,
+          oidc_sid: fv5114 || @rp_session.public_id,
+          oidc_jti: @rp_session.oidc_jti,
+          expires_at: fv5113,
+          scopes: %w(openid profile),
+          issuer: fv5112 || OidcIssuer.for_resource_type("client"),
+          audiences: fv5111 || [fv5108.aud],
+          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5108),
+          subject: fv5110 || OidcSubject.for(@client, resource_type: "client"),
+          client_id: fv5109 || fv5108.client_id,
+        )
+      end
   end
 
   test "a valid RP access cookie authenticates without reading refresh authority" do
@@ -72,9 +99,63 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
   end
 
   test "an expired access cookie refreshes independently and replaces both RP cookies" do
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token_for(expires_at: 1.minute.ago)
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+      begin
+        fv5107 = { expires_at: 1.minute.ago }
+        fv5104 = fv5107.fetch(:expires_at)
+        fv5103 = fv5107.fetch(:issuer) { nil }
+        fv5102 = fv5107.fetch(:audiences) { nil }
+        fv5100 = fv5107.fetch(:client_id) { nil }
+        fv5101 = fv5107.fetch(:subject) { nil }
+        fv5106 = fv5107.fetch(:base_session_public_id) { nil }
+        fv5105 = fv5107.fetch(:oidc_sid) { nil }
+        fv5099 = OidcClientRegistry.find!("core-app")
+        AuthenticationTokenService.encode(
+          @client,
+          host: request.host,
+          resource_type: "client",
+          session_public_id: @root_token.public_id,
+          base_session_public_id: fv5106 || @root_token.public_id,
+          oidc_sid: fv5105 || @rp_session.public_id,
+          oidc_jti: @rp_session.oidc_jti,
+          expires_at: fv5104,
+          scopes: %w(openid profile),
+          issuer: fv5103 || OidcIssuer.for_resource_type("client"),
+          audiences: fv5102 || [fv5099.aud],
+          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5099),
+          subject: fv5101 || OidcSubject.for(@client, resource_type: "client"),
+          client_id: fv5100 || fv5099.client_id,
+        )
+      end
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = @refresh_token
-    response_access = access_token_for(expires_at: 5.minutes.from_now)
+    response_access =
+      begin
+        fv5098 = { expires_at: 5.minutes.from_now }
+        fv5095 = fv5098.fetch(:expires_at)
+        fv5094 = fv5098.fetch(:issuer) { nil }
+        fv5093 = fv5098.fetch(:audiences) { nil }
+        fv5091 = fv5098.fetch(:client_id) { nil }
+        fv5092 = fv5098.fetch(:subject) { nil }
+        fv5097 = fv5098.fetch(:base_session_public_id) { nil }
+        fv5096 = fv5098.fetch(:oidc_sid) { nil }
+        fv5090 = OidcClientRegistry.find!("core-app")
+        AuthenticationTokenService.encode(
+          @client,
+          host: request.host,
+          resource_type: "client",
+          session_public_id: @root_token.public_id,
+          base_session_public_id: fv5097 || @root_token.public_id,
+          oidc_sid: fv5096 || @rp_session.public_id,
+          oidc_jti: @rp_session.oidc_jti,
+          expires_at: fv5095,
+          scopes: %w(openid profile),
+          issuer: fv5094 || OidcIssuer.for_resource_type("client"),
+          audiences: fv5093 || [fv5090.aud],
+          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5090),
+          subject: fv5092 || OidcSubject.for(@client, resource_type: "client"),
+          client_id: fv5091 || fv5090.client_id,
+        )
+      end
     result = OidcTokenExchangeCoordinator::Result.new(
       success: true,
       token_response: {
@@ -177,7 +258,33 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
   }.each do |label, overrides|
     test "an access credential for #{label} is refused and detached" do
       cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
-        access_token_for(expires_at: 5.minutes.from_now, **overrides)
+        begin
+          fv5089 = { expires_at: 5.minutes.from_now, **overrides }
+          fv5086 = fv5089.fetch(:expires_at)
+          fv5085 = fv5089.fetch(:issuer) { nil }
+          fv5084 = fv5089.fetch(:audiences) { nil }
+          fv5082 = fv5089.fetch(:client_id) { nil }
+          fv5083 = fv5089.fetch(:subject) { nil }
+          fv5088 = fv5089.fetch(:base_session_public_id) { nil }
+          fv5087 = fv5089.fetch(:oidc_sid) { nil }
+          fv5081 = OidcClientRegistry.find!("core-app")
+          AuthenticationTokenService.encode(
+            @client,
+            host: request.host,
+            resource_type: "client",
+            session_public_id: @root_token.public_id,
+            base_session_public_id: fv5088 || @root_token.public_id,
+            oidc_sid: fv5087 || @rp_session.public_id,
+            oidc_jti: @rp_session.oidc_jti,
+            expires_at: fv5086,
+            scopes: %w(openid profile),
+            issuer: fv5085 || OidcIssuer.for_resource_type("client"),
+            audiences: fv5084 || [fv5081.aud],
+            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5081),
+            subject: fv5083 || OidcSubject.for(@client, resource_type: "client"),
+            client_id: fv5082 || fv5081.client_id,
+          )
+        end
 
       get :show, params: { required: "1" }
 
@@ -226,7 +333,34 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     test "an access credential #{offset} second(s) from exp plus leeway answers #{expected}" do
       freeze_time
       expires_at = 5.minutes.from_now
-      cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token_for(expires_at: expires_at)
+      cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+        begin
+          fv5080 = { expires_at: expires_at }
+          fv5077 = fv5080.fetch(:expires_at)
+          fv5076 = fv5080.fetch(:issuer) { nil }
+          fv5075 = fv5080.fetch(:audiences) { nil }
+          fv5073 = fv5080.fetch(:client_id) { nil }
+          fv5074 = fv5080.fetch(:subject) { nil }
+          fv5079 = fv5080.fetch(:base_session_public_id) { nil }
+          fv5078 = fv5080.fetch(:oidc_sid) { nil }
+          fv5072 = OidcClientRegistry.find!("core-app")
+          AuthenticationTokenService.encode(
+            @client,
+            host: request.host,
+            resource_type: "client",
+            session_public_id: @root_token.public_id,
+            base_session_public_id: fv5079 || @root_token.public_id,
+            oidc_sid: fv5078 || @rp_session.public_id,
+            oidc_jti: @rp_session.oidc_jti,
+            expires_at: fv5077,
+            scopes: %w(openid profile),
+            issuer: fv5076 || OidcIssuer.for_resource_type("client"),
+            audiences: fv5075 || [fv5072.aud],
+            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5072),
+            subject: fv5074 || OidcSubject.for(@client, resource_type: "client"),
+            client_id: fv5073 || fv5072.client_id,
+          )
+        end
       travel_to(expires_at + AuthenticationJwtConfiguration.leeway_seconds.seconds + offset.seconds)
 
       get :show, params: { required: "1" }
@@ -257,7 +391,33 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
 
   test "an access credential whose RP Session row no longer exists does not authenticate" do
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
-      access_token_for(expires_at: 5.minutes.from_now, oidc_sid: "missing-rp-session")
+      begin
+        fv5071 = { expires_at: 5.minutes.from_now, oidc_sid: "missing-rp-session" }
+        fv5068 = fv5071.fetch(:expires_at)
+        fv5067 = fv5071.fetch(:issuer) { nil }
+        fv5066 = fv5071.fetch(:audiences) { nil }
+        fv5064 = fv5071.fetch(:client_id) { nil }
+        fv5065 = fv5071.fetch(:subject) { nil }
+        fv5070 = fv5071.fetch(:base_session_public_id) { nil }
+        fv5069 = fv5071.fetch(:oidc_sid) { nil }
+        fv5063 = OidcClientRegistry.find!("core-app")
+        AuthenticationTokenService.encode(
+          @client,
+          host: request.host,
+          resource_type: "client",
+          session_public_id: @root_token.public_id,
+          base_session_public_id: fv5070 || @root_token.public_id,
+          oidc_sid: fv5069 || @rp_session.public_id,
+          oidc_jti: @rp_session.oidc_jti,
+          expires_at: fv5068,
+          scopes: %w(openid profile),
+          issuer: fv5067 || OidcIssuer.for_resource_type("client"),
+          audiences: fv5066 || [fv5063.aud],
+          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5063),
+          subject: fv5065 || OidcSubject.for(@client, resource_type: "client"),
+          client_id: fv5064 || fv5063.client_id,
+        )
+      end
 
     get :show, params: { required: "1" }
 
@@ -406,7 +566,34 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
 
   ["", " ", "\t", "a\u0000b", " padded "].each do |value|
     test "a refresh credential of #{value.inspect} is treated as absent and never presented" do
-      cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token_for(expires_at: 1.minute.ago)
+      cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+        begin
+          fv5062 = { expires_at: 1.minute.ago }
+          fv5059 = fv5062.fetch(:expires_at)
+          fv5058 = fv5062.fetch(:issuer) { nil }
+          fv5057 = fv5062.fetch(:audiences) { nil }
+          fv5055 = fv5062.fetch(:client_id) { nil }
+          fv5056 = fv5062.fetch(:subject) { nil }
+          fv5061 = fv5062.fetch(:base_session_public_id) { nil }
+          fv5060 = fv5062.fetch(:oidc_sid) { nil }
+          fv5054 = OidcClientRegistry.find!("core-app")
+          AuthenticationTokenService.encode(
+            @client,
+            host: request.host,
+            resource_type: "client",
+            session_public_id: @root_token.public_id,
+            base_session_public_id: fv5061 || @root_token.public_id,
+            oidc_sid: fv5060 || @rp_session.public_id,
+            oidc_jti: @rp_session.oidc_jti,
+            expires_at: fv5059,
+            scopes: %w(openid profile),
+            issuer: fv5058 || OidcIssuer.for_resource_type("client"),
+            audiences: fv5057 || [fv5054.aud],
+            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5054),
+            subject: fv5056 || OidcSubject.for(@client, resource_type: "client"),
+            client_id: fv5055 || fv5054.client_id,
+          )
+        end
       cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = value
 
       OidcTokenExchangeCoordinator.stub(:call, ->(**) { raise RuntimeError, "refresh must not run" }) do
@@ -419,7 +606,34 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
 
   ["0", "malformed", "a" * 4000].each do |value|
     test "a refresh credential #{value[0, 12].inspect} of #{value.bytesize} bytes is decided by the authority" do
-      cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token_for(expires_at: 1.minute.ago)
+      cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+        begin
+          fv5053 = { expires_at: 1.minute.ago }
+          fv5050 = fv5053.fetch(:expires_at)
+          fv5049 = fv5053.fetch(:issuer) { nil }
+          fv5048 = fv5053.fetch(:audiences) { nil }
+          fv5046 = fv5053.fetch(:client_id) { nil }
+          fv5047 = fv5053.fetch(:subject) { nil }
+          fv5052 = fv5053.fetch(:base_session_public_id) { nil }
+          fv5051 = fv5053.fetch(:oidc_sid) { nil }
+          fv5045 = OidcClientRegistry.find!("core-app")
+          AuthenticationTokenService.encode(
+            @client,
+            host: request.host,
+            resource_type: "client",
+            session_public_id: @root_token.public_id,
+            base_session_public_id: fv5052 || @root_token.public_id,
+            oidc_sid: fv5051 || @rp_session.public_id,
+            oidc_jti: @rp_session.oidc_jti,
+            expires_at: fv5050,
+            scopes: %w(openid profile),
+            issuer: fv5049 || OidcIssuer.for_resource_type("client"),
+            audiences: fv5048 || [fv5045.aud],
+            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5045),
+            subject: fv5047 || OidcSubject.for(@client, resource_type: "client"),
+            client_id: fv5046 || fv5045.client_id,
+          )
+        end
       cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = value
       presented = []
       refusal = OidcTokenExchangeCoordinator::Result.new(
@@ -439,22 +653,80 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
   # --- Unsafe requests: provenance and CSRF before refresh, then exactly one mutation (RP4) -----
 
   test "an unsafe request without a valid CSRF token causes no rotation and no mutation" do
-    with_real_forgery_protection do
-      cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token_for(expires_at: 1.minute.ago)
+    begin
+      previous_forgery_protection = ActionController::Base.allow_forgery_protection
+      ActionController::Base.allow_forgery_protection = true
+      cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+        begin
+          fv5044 = { expires_at: 1.minute.ago }
+          fv5041 = fv5044.fetch(:expires_at)
+          fv5040 = fv5044.fetch(:issuer) { nil }
+          fv5039 = fv5044.fetch(:audiences) { nil }
+          fv5037 = fv5044.fetch(:client_id) { nil }
+          fv5038 = fv5044.fetch(:subject) { nil }
+          fv5043 = fv5044.fetch(:base_session_public_id) { nil }
+          fv5042 = fv5044.fetch(:oidc_sid) { nil }
+          fv5036 = OidcClientRegistry.find!("core-app")
+          AuthenticationTokenService.encode(
+            @client,
+            host: request.host,
+            resource_type: "client",
+            session_public_id: @root_token.public_id,
+            base_session_public_id: fv5043 || @root_token.public_id,
+            oidc_sid: fv5042 || @rp_session.public_id,
+            oidc_jti: @rp_session.oidc_jti,
+            expires_at: fv5041,
+            scopes: %w(openid profile),
+            issuer: fv5040 || OidcIssuer.for_resource_type("client"),
+            audiences: fv5039 || [fv5036.aud],
+            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5036),
+            subject: fv5038 || OidcSubject.for(@client, resource_type: "client"),
+            client_id: fv5037 || fv5036.client_id,
+          )
+        end
       cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = @refresh_token
 
       OidcTokenExchangeCoordinator.stub(:call, ->(**) { raise RuntimeError, "refresh must not run" }) do
-        patch :update, params: { authenticity_token: "forged" }
+        patch(:update, params: { authenticity_token: "forged" })
       end
 
       assert_response :unprocessable_content
       assert_not_equal "mutated", response.body
       assert_equal 0, @rp_session.reload.refresh_generation
+    ensure
+      ActionController::Base.allow_forgery_protection = previous_forgery_protection
     end
   end
 
   test "an unsafe request with Origin null causes no rotation and no mutation" do
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token_for(expires_at: 1.minute.ago)
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+      begin
+        fv5035 = { expires_at: 1.minute.ago }
+        fv5032 = fv5035.fetch(:expires_at)
+        fv5031 = fv5035.fetch(:issuer) { nil }
+        fv5030 = fv5035.fetch(:audiences) { nil }
+        fv5028 = fv5035.fetch(:client_id) { nil }
+        fv5029 = fv5035.fetch(:subject) { nil }
+        fv5034 = fv5035.fetch(:base_session_public_id) { nil }
+        fv5033 = fv5035.fetch(:oidc_sid) { nil }
+        fv5027 = OidcClientRegistry.find!("core-app")
+        AuthenticationTokenService.encode(
+          @client,
+          host: request.host,
+          resource_type: "client",
+          session_public_id: @root_token.public_id,
+          base_session_public_id: fv5034 || @root_token.public_id,
+          oidc_sid: fv5033 || @rp_session.public_id,
+          oidc_jti: @rp_session.oidc_jti,
+          expires_at: fv5032,
+          scopes: %w(openid profile),
+          issuer: fv5031 || OidcIssuer.for_resource_type("client"),
+          audiences: fv5030 || [fv5027.aud],
+          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5027),
+          subject: fv5029 || OidcSubject.for(@client, resource_type: "client"),
+          client_id: fv5028 || fv5027.client_id,
+        )
+      end
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = @refresh_token
 
     OidcTokenExchangeCoordinator.stub(:call, ->(**) { raise RuntimeError, "refresh must not run" }) do
@@ -467,19 +739,74 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
   end
 
   test "an unsafe request with an expired access credential refreshes once and performs one mutation" do
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token_for(expires_at: 1.minute.ago)
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+      begin
+        fv5026 = { expires_at: 1.minute.ago }
+        fv5023 = fv5026.fetch(:expires_at)
+        fv5022 = fv5026.fetch(:issuer) { nil }
+        fv5021 = fv5026.fetch(:audiences) { nil }
+        fv5019 = fv5026.fetch(:client_id) { nil }
+        fv5020 = fv5026.fetch(:subject) { nil }
+        fv5025 = fv5026.fetch(:base_session_public_id) { nil }
+        fv5024 = fv5026.fetch(:oidc_sid) { nil }
+        fv5018 = OidcClientRegistry.find!("core-app")
+        AuthenticationTokenService.encode(
+          @client,
+          host: request.host,
+          resource_type: "client",
+          session_public_id: @root_token.public_id,
+          base_session_public_id: fv5025 || @root_token.public_id,
+          oidc_sid: fv5024 || @rp_session.public_id,
+          oidc_jti: @rp_session.oidc_jti,
+          expires_at: fv5023,
+          scopes: %w(openid profile),
+          issuer: fv5022 || OidcIssuer.for_resource_type("client"),
+          audiences: fv5021 || [fv5018.aud],
+          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5018),
+          subject: fv5020 || OidcSubject.for(@client, resource_type: "client"),
+          client_id: fv5019 || fv5018.client_id,
+        )
+      end
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = @refresh_token
     calls = 0
     success = OidcTokenExchangeCoordinator::Result.new(
       success: true,
       token_response: {
-        access_token: access_token_for(expires_at: 5.minutes.from_now),
+        access_token: begin
+          fv5017 = { expires_at: 5.minutes.from_now }
+          fv5014 = fv5017.fetch(:expires_at)
+          fv5013 = fv5017.fetch(:issuer) { nil }
+          fv5012 = fv5017.fetch(:audiences) { nil }
+          fv5010 = fv5017.fetch(:client_id) { nil }
+          fv5011 = fv5017.fetch(:subject) { nil }
+          fv5016 = fv5017.fetch(:base_session_public_id) { nil }
+          fv5015 = fv5017.fetch(:oidc_sid) { nil }
+          fv5009 = OidcClientRegistry.find!("core-app")
+          AuthenticationTokenService.encode(
+            @client,
+            host: request.host,
+            resource_type: "client",
+            session_public_id: @root_token.public_id,
+            base_session_public_id: fv5016 || @root_token.public_id,
+            oidc_sid: fv5015 || @rp_session.public_id,
+            oidc_jti: @rp_session.oidc_jti,
+            expires_at: fv5014,
+            scopes: %w(openid profile),
+            issuer: fv5013 || OidcIssuer.for_resource_type("client"),
+            audiences: fv5012 || [fv5009.aud],
+            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5009),
+            subject: fv5011 || OidcSubject.for(@client, resource_type: "client"),
+            client_id: fv5010 || fv5009.client_id,
+          )
+        end,
         refresh_token: "replacement-refresh",
         expires_in: 300,
         refresh_token_expires_in: 600,
       },
-      error: nil, error_description: nil,
-      access_expires_at: 5.minutes.from_now, refresh_expires_at: 10.minutes.from_now,
+      error: nil,
+      error_description: nil,
+      access_expires_at: 5.minutes.from_now,
+      refresh_expires_at: 10.minutes.from_now,
     )
 
     OidcTokenExchangeCoordinator.stub(:call, ->(**) { calls += 1; success }) do
@@ -493,7 +820,34 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
   end
 
   test "an unsafe request whose refresh is refused performs no mutation" do
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token_for(expires_at: 1.minute.ago)
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+      begin
+        fv5008 = { expires_at: 1.minute.ago }
+        fv5005 = fv5008.fetch(:expires_at)
+        fv5004 = fv5008.fetch(:issuer) { nil }
+        fv5003 = fv5008.fetch(:audiences) { nil }
+        fv5001 = fv5008.fetch(:client_id) { nil }
+        fv5002 = fv5008.fetch(:subject) { nil }
+        fv5007 = fv5008.fetch(:base_session_public_id) { nil }
+        fv5006 = fv5008.fetch(:oidc_sid) { nil }
+        fv5000 = OidcClientRegistry.find!("core-app")
+        AuthenticationTokenService.encode(
+          @client,
+          host: request.host,
+          resource_type: "client",
+          session_public_id: @root_token.public_id,
+          base_session_public_id: fv5007 || @root_token.public_id,
+          oidc_sid: fv5006 || @rp_session.public_id,
+          oidc_jti: @rp_session.oidc_jti,
+          expires_at: fv5005,
+          scopes: %w(openid profile),
+          issuer: fv5004 || OidcIssuer.for_resource_type("client"),
+          audiences: fv5003 || [fv5000.aud],
+          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5000),
+          subject: fv5002 || OidcSubject.for(@client, resource_type: "client"),
+          client_id: fv5001 || fv5000.client_id,
+        )
+      end
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = @refresh_token
     refusal = OidcTokenExchangeCoordinator::Result.new(
       success: false, token_response: nil, error: "invalid_grant", error_description: "invalid refresh",
@@ -524,32 +878,4 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
   private
 
   # CSRF is verified by real Rails forgery protection for this test only (D-113).
-  def with_real_forgery_protection
-    previous = ActionController::Base.allow_forgery_protection
-    ActionController::Base.allow_forgery_protection = true
-    yield
-  ensure
-    ActionController::Base.allow_forgery_protection = previous
-  end
-
-  def access_token_for(expires_at:, issuer: nil, audiences: nil, client_id: nil, subject: nil,
-                       base_session_public_id: nil, oidc_sid: nil)
-    client = OidcClientRegistry.find!("core-app")
-    AuthenticationTokenService.encode(
-      @client,
-      host: request.host,
-      resource_type: "client",
-      session_public_id: @root_token.public_id,
-      base_session_public_id: base_session_public_id || @root_token.public_id,
-      oidc_sid: oidc_sid || @rp_session.public_id,
-      oidc_jti: @rp_session.oidc_jti,
-      expires_at: expires_at,
-      scopes: %w(openid profile),
-      issuer: issuer || OidcIssuer.for_resource_type("client"),
-      audiences: audiences || [client.aud],
-      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
-      subject: subject || OidcSubject.for(@client, resource_type: "client"),
-      client_id: client_id || client.client_id,
-    )
-  end
 end

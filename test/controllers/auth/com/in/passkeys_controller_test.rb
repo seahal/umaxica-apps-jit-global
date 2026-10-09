@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "webauthn/fake_client"
 # require "helpers/global_test_support"
 require "base64"
 
@@ -9,31 +10,122 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   include AuthCeremonyEntryHelper
 
   setup do
-    @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+    @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! @host
-    @origin_headers = { "HTTP_ORIGIN" => "http://#{@host}", "Origin" => "http://#{@host}" }.freeze
+    https!
+    @origin_headers = { "HTTP_ORIGIN" => "https://#{@host}", "Origin" => "https://#{@host}" }.freeze
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
 
     @visitor = create_verified_visitor_with_email(email_address: "com_passkey_test@example.com")
-    @visitor.visitor_telephones.create!(
+    @visitor.visitor_emails.first.finalize_binding!
+    telephone = @visitor.visitor_telephones.create!(
       number: "+8190" + format("%08d", SecureRandom.random_number(100_000_000)),
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
     )
+    telephone.finalize_binding!
+    @fake = WebAuthn::FakeClient.new("https://#{@host}")
+    @registration = WebAuthn::Credential.from_create(@fake.create(user_verified: true))
     @passkey = VisitorPasskey.create!(
       visitor: @visitor,
-      webauthn_id: Base64.urlsafe_encode64("com_login_id_bytes_d6d168ddb214ad82", padding: false),
+      webauthn_id: @registration.id,
       external_id: SecureRandom.uuid,
-      public_key: "login_key",
+      public_key: @registration.public_key,
       description: "Login Key",
       status_id: VisitorPasskeyStatus::ACTIVE,
     )
-    ensure_local_sign_in_admission!(
-      surface: "com",
-      path: auth_com_sign_in_path,
-      params: { ri: "jp" },
-      headers: { "Host" => @host },
-    )
+    begin
+      fv5026 = "com"
+      fv5025 = auth_com_sign_in_path
+      fv5024 = { ri: "jp" }
+      fv5023 = { "Host" => @host }
+      begin
+        fv5001 = self
+        fv5017 = fv5026.to_s
+        fv5013 = fv5025
+        fv5012 = fv5024
+        fv5020 = fv5023
+        fv5015 = fv5001.cookies["__Host-auth_sid"].presence || fv5001.cookies["auth_sid"].presence
+        if fv5015.present?
+          fv5022 = {
+            "app" => ClientAuthCeremonySession,
+            "com" => VisitorAuthCeremonySession,
+            "org" => OperatorAuthCeremonySession,
+          }.fetch(fv5017).find_active_by_raw_sid(fv5015)
+          fv5021 = fv5022&.admitted? && fv5022.admission_purpose == "local_sign_in"
+        end
+
+        unless fv5021
+          fv5014 = ENV.fetch(
+            { "app" => "PUBLIC_AUTH_SERVICE_URL",
+              "com" => "PUBLIC_AUTH_CORPORATE_URL",
+              "org" => "PUBLIC_AUTH_STAFF_URL", }.fetch(fv5017),
+          )
+
+          fv5002 = fv5020.merge(
+            "Host" => fv5014, "Origin" => "https://#{fv5014}", "Sec-Fetch-Site" => "same-origin",
+          )
+          fv5011 = BaseAuthAdmissionCoordinator.issue_local_entry!(
+            surface: fv5017,
+            intent: "sign_in",
+            base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            base_token: nil,
+          )
+          fv5018 = BaseAuthAdmissionCoordinator.find_admission_binding!(
+            surface: fv5017, reference: fv5011.reference,
+          )
+          fv5019, fv5015 = fv5018.class.auth_admission_session_class.issue!
+          fv5018.attach_auth_session!(auth_session: fv5019, confirmation_ref: SecureRandom.uuid)
+          fv5018.confirm_base!(
+            base_token: nil,
+            browser_digest: AuthAdmissionBinding.browser_digest(
+              surface: fv5017,
+              entry_ref: fv5011.reference,
+              nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            ),
+          )
+          fv5001.host!(fv5014)
+          fv5001.https!
+          fv5016 = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+          fv5001.cookies.delete("auth_sid")
+          fv5001.cookies.delete("__Host-auth_sid")
+          fv5001.cookies.merge( # rubocop:disable Lint/Void
+            "#{fv5016}=#{Rack::Utils.escape(fv5015)}", URI.parse("https://#{fv5014}/"),
+          )
+          fv5001.get(
+            fv5013,
+            params: fv5012.merge(entry_ref: fv5011.reference),
+            headers: fv5002,
+          )
+          fv5005, fv5003, fv5004 =
+            begin
+              fv5010 = fv5001.response.body
+              fv5009 = false
+              fv5008 = Nokogiri::HTML(fv5010).at_css("form")
+              if fv5008.nil? && fv5009
+                nil
+              else
+                raise RuntimeError, "Auth continuation form is missing" unless fv5008
+
+                fv5007 = fv5008.at_css("input[name='authenticity_token']")&.[]("value")
+                raise RuntimeError,
+                      "Auth continuation is missing its CSRF token" if fv5007.blank?
+
+                fv5006 = fv5008.css("input[type='hidden']").to_h do |input|
+                  [input["name"], input["value"]]
+                end.except("authenticity_token")
+                [fv5008["action"], fv5007, fv5006]
+              end
+            end
+          fv5001.post(
+            fv5005, params: fv5004.merge(authenticity_token: fv5003),
+                    headers: fv5002,
+          )
+
+          assert_equal 303, fv5001.response.status
+        end
+      end
+    end
   end
 
   teardown do
@@ -97,24 +189,16 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     post auth_com_sign_in_passkey_options_path(ri: "jp"), headers: @origin_headers
     challenge_id = response.parsed_body["challenge_id"]
 
-    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
-
-    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_com_sign_in_passkey_verification_path(ri: "jp"),
-           params: {
-             challenge_id: challenge_id,
-             credential: {
-               id: @passkey.webauthn_id,
-               response: {
-                 clientDataJSON: "e30=",
-                 authenticatorData: "e30=",
-                 signature: "sig",
-                 userHandle: "h",
-               },
-             },
-           },
-           headers: @origin_headers
-    end
+    post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+         params: {
+           challenge_id: challenge_id,
+           credential: @fake.get(
+             challenge: response.parsed_body.fetch("options").fetch("challenge"),
+             user_verified: true,
+             sign_count: 1,
+           ),
+         },
+         headers: @origin_headers
 
     assert_response :ok
     assert_equal "ok", response.parsed_body["status"]
@@ -150,20 +234,16 @@ class Auth::Com::Sign::In::PasskeysControllerTest
          params: { identifier: @visitor.visitor_emails.first.address },
          headers: @origin_headers
     challenge_id = response.parsed_body["challenge_id"]
-    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
 
-    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_com_sign_in_passkey_verification_path(ri: "jp"),
-           params: {
-             challenge_id: challenge_id,
-             credential: {
-               id: @passkey.webauthn_id,
-               response: {
-                 clientDataJSON: "e30=", authenticatorData: "e30=", signature: "sig", userHandle: "h",
-               },
-             },
-           }, headers: @origin_headers
-    end
+    post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+         params: {
+           challenge_id: challenge_id,
+           credential: @fake.get(
+             challenge: response.parsed_body.fetch("options").fetch("challenge"),
+             user_verified: true,
+             sign_count: 1,
+           ),
+         }, headers: @origin_headers
 
     assert_response :unauthorized
     assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
@@ -171,11 +251,14 @@ class Auth::Com::Sign::In::PasskeysControllerTest
 
   test "verification uses credential ownership and ignores a forged userHandle" do
     other_visitor = create_verified_visitor_with_email(email_address: "com_other_passkey@example.com")
-    other_passkey = VisitorPasskey.create!(
+    other_visitor.visitor_emails.first.finalize_binding!
+    other_fake = WebAuthn::FakeClient.new("https://#{@host}")
+    other_registration = WebAuthn::Credential.from_create(other_fake.create(user_verified: true))
+    VisitorPasskey.create!(
       visitor: other_visitor,
-      webauthn_id: Base64.urlsafe_encode64("com_other_login_id_bytes_0000001", padding: false),
+      webauthn_id: other_registration.id,
       external_id: SecureRandom.uuid,
-      public_key: "other_login_key",
+      public_key: other_registration.public_key,
       description: "Other Login Key",
       status_id: VisitorPasskeyStatus::ACTIVE,
     )
@@ -183,20 +266,19 @@ class Auth::Com::Sign::In::PasskeysControllerTest
          params: {},
          headers: @origin_headers
     challenge_id = response.parsed_body["challenge_id"]
-    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
 
-    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_com_sign_in_passkey_verification_path(ri: "jp"),
-           params: {
-             challenge_id: challenge_id,
-             credential: {
-               id: other_passkey.webauthn_id,
-               response: {
-                 clientDataJSON: "e30=", authenticatorData: "e30=", signature: "sig", userHandle: "h",
-               },
-             },
-           }, headers: @origin_headers
-    end
+    post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+         params: {
+           challenge_id: challenge_id,
+           credential: other_fake.get(
+             challenge: response.parsed_body.fetch("options").fetch("challenge"),
+             user_verified: true,
+             sign_count: 1,
+           ).tap { |assertion|
+             assertion.fetch("response")["userHandle"] =
+               Base64.urlsafe_encode64("forged-handle", padding: false)
+           },
+         }, headers: @origin_headers
 
     assert_response :ok
     assert_equal "ok", response.parsed_body["status"]
@@ -210,20 +292,16 @@ class Auth::Com::Sign::In::PasskeysControllerTest
          params: {},
          headers: @origin_headers
     challenge_id = response.parsed_body.fetch("challenge_id")
-    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
 
-    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_com_sign_in_passkey_verification_path(ri: "jp"),
-           params: {
-             challenge_id: challenge_id,
-             credential: {
-               id: @passkey.webauthn_id,
-               response: {
-                 clientDataJSON: "e30=", authenticatorData: "e30=", signature: "sig", userHandle: "h",
-               },
-             },
-           }, headers: @origin_headers
-    end
+    post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+         params: {
+           challenge_id: challenge_id,
+           credential: @fake.get(
+             challenge: response.parsed_body.fetch("options").fetch("challenge"),
+             user_verified: true,
+             sign_count: 1,
+           ),
+         }, headers: @origin_headers
 
     assert_response :unauthorized
     assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
@@ -231,25 +309,21 @@ class Auth::Com::Sign::In::PasskeysControllerTest
   end
 
   test "verification rejects a discoverable credential owned by a suspended visitor" do
-    @visitor.update!(deactivated_at: Time.current)
+    @visitor.reload.update!(deactivated_at: Time.current)
     post auth_com_sign_in_passkey_options_path(ri: "jp"),
          params: {},
          headers: @origin_headers
     challenge_id = response.parsed_body.fetch("challenge_id")
-    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
 
-    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_com_sign_in_passkey_verification_path(ri: "jp"),
-           params: {
-             challenge_id: challenge_id,
-             credential: {
-               id: @passkey.webauthn_id,
-               response: {
-                 clientDataJSON: "e30=", authenticatorData: "e30=", signature: "sig", userHandle: "h",
-               },
-             },
-           }, headers: @origin_headers
-    end
+    post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+         params: {
+           challenge_id: challenge_id,
+           credential: @fake.get(
+             challenge: response.parsed_body.fetch("options").fetch("challenge"),
+             user_verified: true,
+             sign_count: 1,
+           ),
+         }, headers: @origin_headers
 
     assert_response :unauthorized
     assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")

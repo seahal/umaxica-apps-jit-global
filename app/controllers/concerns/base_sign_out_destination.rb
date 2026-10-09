@@ -53,6 +53,10 @@ module BaseSignOutDestination
            status: :ok
   end
 
+  def render_oidc_rp_logout_completion
+    render_oidc_end_session_confirmation
+  end
+
   def render_oidc_logout_completion
     render_oidc_end_session_confirmation
   end

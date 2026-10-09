@@ -11,7 +11,7 @@ module Base
         fixtures :operators, :operator_email_statuses
 
         setup do
-          @host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+          @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
           @operator = operators(:one)
           @email = OperatorEmail.create!(
             staff: @operator,
@@ -349,7 +349,8 @@ class Base::Org::Preference::EmailsControllerTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,

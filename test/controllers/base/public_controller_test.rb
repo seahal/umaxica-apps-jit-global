@@ -24,28 +24,28 @@ class BasePublicControllerTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
   test "health endpoint returns successfully" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost").delete_suffix("/")
+    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL").delete_suffix("/")
     get "/health", params: { ri: "jp" }
 
     assert_response :success
   end
 
   test "robots.txt endpoint returns successfully" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost").delete_suffix("/")
+    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL").delete_suffix("/")
     get "/robots.txt", params: { ri: "jp" }
 
     assert_response :success
   end
 
   test "sitemap.xml endpoint returns successfully" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost").delete_suffix("/")
+    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL").delete_suffix("/")
     get "/sitemap.xml", params: { ri: "jp" }
 
     assert_response :success
   end
 
   test "no Actor state leaks into response" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost").delete_suffix("/")
+    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL").delete_suffix("/")
     original_authentication = Actor.authn
 
     get "/health", params: { ri: "jp" }
@@ -60,7 +60,7 @@ class BasePublicControllerTest < ActionDispatch::IntegrationTest
       get("/test_csrf", to: "base/app/test_csrf#show")
       post("/test_csrf", to: "base/app/test_csrf#create")
     end
-    host!(ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost").delete_suffix("/"))
+    host!(ENV.fetch("PUBLIC_BASE_SERVICE_URL").delete_suffix("/"))
     with_forgery_protection do
       # Sec-Fetch-Site decides first: a same-origin request needs no token, so the missing
       # token only rejects a request another site made.
@@ -77,7 +77,7 @@ class BasePublicControllerTest < ActionDispatch::IntegrationTest
       get("/test_csrf", to: "base/app/test_csrf#show")
       post("/test_csrf", to: "base/app/test_csrf#create")
     end
-    host!(ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost").delete_suffix("/"))
+    host!(ENV.fetch("PUBLIC_BASE_SERVICE_URL").delete_suffix("/"))
     with_forgery_protection do
       post("/test_csrf", params: { ri: "jp" }, headers: csrf_headers(fetch_csrf_token("/test_csrf?ri=jp")))
     end
@@ -88,7 +88,7 @@ class BasePublicControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "no preference state leaks on public endpoints" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost").delete_suffix("/")
+    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL").delete_suffix("/")
     original_preference = Actor.preferences
 
     get "/health", params: { ri: "jp" }
@@ -445,7 +445,8 @@ class Base::App::TestCsrfController
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,

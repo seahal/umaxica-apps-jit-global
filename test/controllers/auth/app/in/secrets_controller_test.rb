@@ -40,12 +40,30 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
         "Sec-Fetch-Site" => "same-origin",
       }
       admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
-        surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        surface: "app",
+        intent: "sign_in",
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: nil,
       )
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
-      _auth_session, raw_auth_sid = prepare_admission_binding_for_consumption!(
-        binding, base_token: nil, base_browser_nonce: "test-browser-nonce",
-      )
+      _auth_session, raw_auth_sid =
+        begin
+          admission_binding = binding
+          admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+          admission_binding.attach_auth_session!(
+            auth_session: admission_session,
+            confirmation_ref: SecureRandom.uuid,
+          )
+          admission_binding.confirm_base!(
+            base_token: nil,
+            browser_digest: AuthAdmissionBinding.browser_digest(
+              surface: admission_binding.class.auth_admission_surface_name,
+              entry_ref: admission_binding.entry_ref,
+              nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            ),
+          )
+          [admission_session, admission_raw_sid]
+        end
       cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
       cookies[cookie_name] = raw_auth_sid
       get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference }, headers: headers

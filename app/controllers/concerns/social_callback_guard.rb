@@ -362,7 +362,6 @@ module SocialCallbackGuard
 
     redirect_to(
       failure_redirect_path,
-      alert: I18n.t("sign.app.social.sessions.create.failure"),
       status: :forbidden,
     )
   end

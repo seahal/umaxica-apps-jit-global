@@ -9,7 +9,7 @@ module BaseStepUpTransactionMarker
 
   def remember_base_step_up_transaction!(transaction:, actor:, token:)
     locator = base_step_up_marker_locator!
-    Valkey::AuthState::BaseStepUpMarkerStore.new.issue!(
+    BaseStepUpMarkerAdapter.new.issue!(
       locator:, transaction_ref: transaction.transaction_id, surface: transaction.surface,
       actor_ref: actor.public_id, session_ref: token.public_id, expires_at: transaction.expires_at,
     )
@@ -19,7 +19,7 @@ module BaseStepUpTransactionMarker
     locator = base_step_up_marker_locator
     return nil unless locator
 
-    payload = Valkey::AuthState::BaseStepUpMarkerStore.new.read(locator:, transaction_ref: reference)
+    payload = BaseStepUpMarkerAdapter.new.read(locator:, transaction_ref: reference)
     return nil unless payload
     return nil unless payload["surface"] == surface.to_s && payload["actor_ref"] == actor.public_id
     return payload if payload["session_ref"] == token.public_id

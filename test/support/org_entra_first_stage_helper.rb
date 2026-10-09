@@ -15,13 +15,6 @@ module OrgEntraFirstStageHelper
 
   # @return [String] the Entra object id the identity was provisioned with
   def complete_org_entra_first_stage!(operator, entra_object_id: SecureRandom.uuid)
-    ensure_local_sign_in_admission!(
-      surface: "org",
-      path: auth_org_sign_in_path,
-      params: { ri: "jp" },
-      headers: { "Host" => ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost") },
-    )
-
     previous_test_mode = OmniAuth.config.test_mode
     OmniAuth.config.test_mode = false
     OrganizationEntraConnectionState.ensure_defaults!
@@ -104,7 +97,12 @@ module OrgEntraFirstStageHelper
   end
 
   def restore_org_entra_registry!
-    @org_entra_registry_originals&.each { |name, method| ExternalAuthentication::ProviderRegistry.define_singleton_method(name, method) }
+    @org_entra_registry_originals&.each { |name, method|
+      ExternalAuthentication::ProviderRegistry.define_singleton_method(
+        name,
+        method,
+      )
+    }
     @org_entra_registry_originals = nil
   end
 

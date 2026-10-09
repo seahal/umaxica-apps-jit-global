@@ -245,6 +245,7 @@ module AuthCeremonyAdmission
              reference_param: admission_reference_param_name,
              reference: admission_reference_param,
              ri: params[:ri],
+             lx: normalized_locale(params[:lx]),
              pt: params[:pt],
            }
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
@@ -289,15 +290,15 @@ module AuthCeremonyAdmission
   def auth_ceremony_clean_url(expected_intent:)
     return auth_step_up_ceremony_clean_url if BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
 
-    ri = params[:ri]
+    query = { ri: params[:ri], lx: normalized_locale(params[:lx]) }.compact
     path = (expected_intent.to_s == "sign_up") ? "sign_up" : "sign_in"
     case auth_ceremony_surface
     when "app"
-      (path == "sign_up") ? auth_app_sign_up_path(ri: ri) : auth_app_sign_in_path(ri: ri)
+      (path == "sign_up") ? auth_app_sign_up_path(**query) : auth_app_sign_in_path(**query)
     when "com"
-      (path == "sign_up") ? auth_com_sign_up_path(ri: ri) : auth_com_sign_in_path(ri: ri)
+      (path == "sign_up") ? auth_com_sign_up_path(**query) : auth_com_sign_in_path(**query)
     else
-      (path == "sign_up") ? auth_org_sign_up_path(ri: ri) : auth_org_sign_in_path(ri: ri)
+      (path == "sign_up") ? auth_org_sign_up_path(**query) : auth_org_sign_in_path(**query)
     end
   end
 

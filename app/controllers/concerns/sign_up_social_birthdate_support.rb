@@ -66,7 +66,7 @@ module SignUpSocialBirthdateSupport
     raise IdentitySocialCeremonyContract::Error, "candidate actor mismatch" unless
       candidate.actor_ref.to_s == @sign_up_ticket.public_id.to_s
     raise IdentitySocialCeremonyContract::Error, "candidate session mismatch" unless
-      candidate.session_ref.to_s == @sign_up_ticket.public_id.to_s
+      candidate.session_ref.to_s == auth_social_admission_binding!.entry_ref.to_s
 
     expected_transaction_id = evidence["grant_transaction_id"].presence || @sign_up_ticket.public_id
     raise IdentitySocialCeremonyContract::Error, "candidate transaction mismatch" unless
@@ -99,7 +99,7 @@ module SignUpSocialBirthdateSupport
       candidate: candidate,
       birthdate: birthdate,
     )
-    result_reference = Valkey::AuthState::SocialCeremonyResultStore.new.issue!(
+    result_reference = SocialCeremonyResultAdapter.new.issue!(
       token: result_token, expires_at: grant.expires_at,
     )
     sign_up_session_state.clear_all!

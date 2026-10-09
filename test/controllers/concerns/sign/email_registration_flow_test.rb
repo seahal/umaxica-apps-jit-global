@@ -1,191 +1,255 @@
-# typed: false
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
 
-class SignEmailRegistrationFlowTest < ActiveSupport::TestCase
-  class Harness
-    class << self
-      def before_action(*) = nil
-
-      def skip_before_action(*) = nil
+class SignEmailRegistrationFlowTest < ActionDispatch::IntegrationTest
+  setup do
+    https!
+    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! @host
+    @user = clients(:one)
+    @token = ClientToken.create!(
+      user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
+    )
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
+    BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = @host
+          rp_token = @token
+          rp_client = OidcClientRegistry.find!("base-app-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = ClientRpSession.create!(
+                client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                @user, host: rp_host, resource_type: "client",
+                       session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                       subject: OidcSubject.for(@user, resource_type: "client"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
     end
-
-    include SignEmailRegistrable
-    include SignEmailRegistrationFlow
-    include EnforcementIdentifierGate
-
-    attr_accessor :session_hash, :flash_hash, :reset_called, :target_user, :params_hash, :render_args, :redirect_args
-
-    def initialize
-      @session_hash = {}
-      @flash_hash = {}
-      @reset_called = false
-      @params_hash = {}
+    # Synthetic evidence isolates contact mutation; the public Base operation owns freshness.
+    passkey = @user.client_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "app-contact-verification-public-key", sign_count: 0,
+    )
+    requirement = StepUpRequirement.new(
+      scope: "settings_email", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:app",
+      step_up_required: true, phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @user.public_id,
+      resource_ref: nil, tenant_ref: nil,
+      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: @user,
+      token: @token,
+      requirement: requirement,
+      return_to: "/identity/emails/registration/new",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: @token,
+    )
+    transaction = issuance.transaction
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(base_token: @token, browser_digest: binding.base_browser_digest)
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: issuance.reference, surface: "app", expected_intent: "step_up", binding: binding,
+      raw_auth_sid: raw_sid,
+    )
+    transaction.record_verification!(
+      method: "passkey", aal: "aal1", phishing_resistant: true,
+      user_verified: true,
+      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: passkey.public_id,
+    )
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      previous_raw_sid: raw_sid,
+    )
+    binding.redeem!(auth_session: attached, admitted_auth_session: ceremony)
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
+    )
+    IdentityStepUpCeremonyFreshnessCommitter.call!(
+      actor: @user, token: @token, transaction: transaction, requirement: requirement, raw_result: result.code,
+    )
+    access_token = AuthenticationToken.encode(
+      @user, host: @host, session_public_id: @token.public_id,
+             resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
+    )
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = @host
+          rp_token = @token
+          rp_client = OidcClientRegistry.find!("base-app-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = ClientRpSession.create!(
+                client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                @user, host: rp_host, resource_type: "client",
+                       session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                       subject: OidcSubject.for(@user, resource_type: "client"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
     end
+    @headers = {
+      "Authorization" => "Bearer #{access_token}",
+      "Client-Agent" => "Mozilla/5.0",
+      "Host" => @host,
+    }.freeze
 
-    def session = session_hash
-
-    def flash = flash_hash
-
-    def params = ActionController::Parameters.new(params_hash)
-
-    def safe_internal_path(path)
-      (path.to_s.start_with?("/") && !path.to_s.start_with?("//")) ? path : nil
-    end
-
-    def signed_pt_token(value)
-      safe_path = safe_internal_path(value)
-      safe_path ? "signed:#{safe_path}" : nil
-    end
-
-    def path_from_signed_pt(token)
-      token.to_s.start_with?("signed:") ? token.delete_prefix("signed:") : nil
-    end
-
-    def build_notice_params(message, _session_key = nil)
-      { notice: message, pt: signed_pt_token("/settings/emails") }
-    end
-
-    def reset_email_flow!
-      self.reset_called = true
-    end
-
-    def t(...)
-      I18n.t(...)
-    end
-
-    def new_email_registration_path(params = {})
-      "/emails/new?#{params.to_query}"
-    end
-
-    def auth_app_settings_emails_url(**params)
-      query = params.to_query
-      query.present? ? "/settings/emails?#{query}" : "/settings/emails"
-    end
-
-    def cross_host_redirect_allowed?
-      false
-    end
-
-    def email_registration_target_user
-      target_user
-    end
-
-    def verify_email_registration_turnstile!(...)
-      true
-    end
-
-    def initiate_email_verification!(*)
-      false
-    end
-
-    def render(*args, **kwargs)
-      self.render_args = [*args, kwargs]
-    end
-
-    def redirect_to(*args, **kwargs)
-      self.redirect_args = [*args, kwargs].reject(&:empty?)
-    end
+    ActionMailer::Base.deliveries.clear
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = { "success" => true }
+  end
+  teardown do
+    TurnstileVerifierStub.challenge_enabled = false
+    TurnstileVerifierStub.challenge_response = nil
   end
 
-  test "create renders new when verification cannot be initiated" do
-    harness = Harness.new
-    harness.params_hash = {
-      user_email: {
-        raw_address: "failed-registration@example.com",
-        confirm_policy: "1",
-      },
-    }
-
-    harness.create
-
-    assert_equal [:new, { status: :unprocessable_content }], harness.render_args
+  test "invalid address renders the public entry without creating a candidate" do
+    assert_no_difference(["ClientEmail.count", "ClientEmailCeremonyTransaction.count"]) do
+      post base_app_identity_emails_registration_path(ri: "jp"),
+           params: { user_email: { raw_address: "invalid-address" } }, headers: @headers
+    end
+    assert_response :unprocessable_content
+    assert_predicate inertia_props.fetch("errors"), :present?
+    assert_nil flash[:notice]
+    assert_nil flash[:alert]
   end
 
-  test "update redirects to new registration path when session is invalid" do
-    harness = Harness.new
-    harness.params_hash = { user_email: { pass_code: "123456" } }
-
-    harness.update
-
-    assert_predicate harness, :reset_called
-    assert_equal ["/emails/new?pt=signed%3A%2Fsettings%2Femails"], harness.redirect_args
+  test "update without this browser's registration returns to the entry without consuming an OTP" do
+    before = @token.reload.attributes.slice("root_login_established_at", "last_step_up_at", "discard_at")
+    assert_no_difference(["ClientEmail.count", "ClientEmailCeremonyTransaction.count"]) do
+      patch base_app_identity_emails_registration_path(ri: "jp"),
+            params: { user_email: { pass_code: "123456" } }, headers: @headers
+    end
+    assert_response :redirect
+    assert_equal new_base_app_identity_emails_registration_path, URI.parse(response.location).path
+    assert_equal before, @token.reload.attributes.slice(*before.keys)
+    assert_nil flash[:notice]
   end
 
-  test "update renders the edit screen when turnstile stealth validation fails" do
-    harness = Harness.new
-    flash = Object.new
-    now_store = {}
-    flash.define_singleton_method(:now) { now_store }
-    flash.define_singleton_method(:[]=) { |key, value|
-      instance_variable_set(:@store, (instance_variable_get(:@store) || {}).merge(key => value))
-    }
-    flash.define_singleton_method(:[]) { |key| (instance_variable_get(:@store) || {})[key] }
-    harness.flash_hash = flash
-    pending = ClientEmail.new
-    pending.define_singleton_method(:otp_expired?) { false }
-    pending.user_email_status_id = ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP
-    harness.define_singleton_method(:current_registration_email) { pending }
-    harness.define_singleton_method(:valid_registration_email_session?) { true }
-    harness.define_singleton_method(:cloudflare_turnstile_stealth_validation) { { "success" => false } }
+  test "a failed stealth validation retains the pending original candidate and verifier" do
+    post base_app_identity_emails_registration_path(ri: "jp"),
+         params: { user_email: { raw_address: "stealth-#{SecureRandom.hex(8)}@example.test" } }, headers: @headers
 
-    harness.update
+    assert_response :redirect
+    email = @user.client_emails.find_by!(public_id: session[:email_registration_public_id])
+    transaction = ClientEmailCeremonyTransaction.find_by!(transaction_id: session[:email_registration_transaction_ref])
+    original = transaction.attributes.slice("otp_generation", "otp_verifier", "otp_expires_at")
+    TurnstileVerifierStub.challenge_response = { "success" => false }
+    patch base_app_identity_emails_registration_path(ri: "jp"),
+          params: { user_email: { pass_code: "123456" } }, headers: @headers
 
-    assert_equal [:edit, { status: :unprocessable_content }], harness.render_args
-    assert_equal I18n.t("turnstile_error"), now_store[:alert]
+    assert_response :unprocessable_content
+    assert_equal original, transaction.reload.attributes.slice(*original.keys)
+    assert_nil transaction.otp_consumed_at
+    assert_nil email.reload.binding_finalized_at
+    assert_nil flash[:alert]
   end
 
-  test "resend redirects away unless the registration email is resendable" do
-    harness = Harness.new
-
-    harness.resend
-
-    assert_predicate harness, :reset_called
-    assert_equal ["/emails/new?pt=signed%3A%2Fsettings%2Femails"], harness.redirect_args
+  test "redelivery without a pending browser registration returns to the entry" do
+    assert_no_difference("ClientEmailCeremonyTransaction.count") do
+      post base_app_identity_emails_registration_redelivery_path(ri: "jp"), headers: @headers
+    end
+    assert_response :redirect
+    assert_equal new_base_app_identity_emails_registration_path, URI.parse(response.location).path
+    assert_nil flash[:notice]
   end
 
-  test "resend redirects with a too-soon notice while the otp cooldown is active" do
-    harness = Harness.new
-    pending = ClientEmail.new
-    pending.define_singleton_method(:otp_expired?) { false }
-    pending.define_singleton_method(:locked?) { false }
-    pending.define_singleton_method(:otp_cooldown_active?) { true }
-    pending.user_email_status_id = ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP
-    harness.define_singleton_method(:current_registration_email) { pending }
-    harness.define_singleton_method(:after_email_registration_started_path) { |params = {}|
-      "/emails/edit?#{params.to_query}"
-    }
-    harness.define_singleton_method(:build_redirect_params) { |key, message, _session_key| { key => message } }
+  test "redelivery during cooldown retains generation and the original expiry without a flash" do
+    post base_app_identity_emails_registration_path(ri: "jp"),
+         params: { user_email: { raw_address: "cooldown-#{SecureRandom.hex(8)}@example.test" } }, headers: @headers
 
-    harness.resend
-
-    assert_match %r{\A/emails/edit\?}, harness.redirect_args.first
-    assert_equal I18n.t("otp.resend.too_soon"), harness.flash_hash[:alert]
+    assert_response :redirect
+    transaction = ClientEmailCeremonyTransaction.find_by!(transaction_id: session[:email_registration_transaction_ref])
+    original = transaction.attributes.slice("otp_generation", "otp_verifier", "otp_expires_at")
+    assert_no_enqueued_jobs do
+      post base_app_identity_emails_registration_redelivery_path(ri: "jp"), headers: @headers
+    end
+    assert_response :redirect
+    assert_equal original, transaction.reload.attributes.slice(*original.keys)
+    assert_nil flash[:notice]
+    assert_nil flash[:alert]
   end
 
-  test "resend generates an otp and redirects with a sent notice" do
-    harness = Harness.new
-    pending = ClientEmail.new
-    pending.define_singleton_method(:otp_expired?) { false }
-    pending.define_singleton_method(:locked?) { false }
-    pending.define_singleton_method(:otp_cooldown_active?) { false }
-    pending.user_email_status_id = ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP
-    harness.define_singleton_method(:current_registration_email) { pending }
-    generated = []
-    sent = []
-    harness.define_singleton_method(:generate_otp_for) { |email| generated << email; "654321" }
-    harness.define_singleton_method(:send_verification_email) { |code| sent << code }
-    harness.define_singleton_method(:after_email_registration_started_path) { |params = {}|
-      "/emails/edit?#{params.to_query}"
-    }
-    harness.define_singleton_method(:build_redirect_params) { |key, message, _session_key| { key => message } }
+  test "redelivery after cooldown issues one new generation under the original candidate and deadline" do
+    post base_app_identity_emails_registration_path(ri: "jp"),
+         params: { user_email: { raw_address: "resend-#{SecureRandom.hex(8)}@example.test" } }, headers: @headers
 
-    harness.resend
-
-    assert_equal [pending], generated
-    assert_equal ["654321"], sent
-    assert_equal I18n.t("otp.resend.sent"), harness.flash_hash[:notice]
+    assert_response :redirect
+    email = @user.client_emails.find_by!(public_id: session[:email_registration_public_id])
+    transaction = ClientEmailCeremonyTransaction.find_by!(transaction_id: session[:email_registration_transaction_ref])
+    generation = transaction.otp_generation
+    deadline = transaction.otp_expires_at
+    email.update!(otp_last_sent_at: email.class.database_now - 2.minutes)
+    assert_enqueued_jobs 1 do
+      post base_app_identity_emails_registration_redelivery_path(ri: "jp"), headers: @headers
+    end
+    assert_response :redirect
+    assert_not_equal generation, transaction.reload.otp_generation
+    assert_equal deadline, transaction.otp_expires_at
+    assert_equal email.public_id, session[:email_registration_public_id]
+    assert_nil email.reload.binding_finalized_at
+    assert_nil flash[:notice]
   end
 end

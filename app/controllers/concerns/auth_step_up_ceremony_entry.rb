@@ -16,6 +16,7 @@ module AuthStepUpCeremonyEntry
       render_verification_entry_page
     end
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
+    log_ticket_ceremony_entry_refusal("step_up")
     render_invalid_admission_request!
   end
 

@@ -136,7 +136,44 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
   end
 
   test "binding transitions reject caller-supplied decision clocks" do
-    binding = create_binding(create_authorization_transaction)
+    binding =
+      begin
+        fv5021 =
+          begin
+            fv5024 = SecureRandom.uuid
+            fv5023 = ClientOidcAuthorizationTransaction.database_now
+            ClientOidcAuthorizationTransaction.create_transaction!(
+              surface: "app",
+              intent: "sign_in",
+              client_id: "test-client",
+              redirect_uri: "https://client.example.test/callback",
+              response_type: "code",
+              scope: "openid",
+              state: SecureRandom.urlsafe_base64(16),
+              nonce: SecureRandom.urlsafe_base64(16),
+              code_challenge: "a" * 43,
+              code_challenge_method: "S256",
+              login_challenge: fv5024,
+              login_challenge_expires_at: fv5023 + 10.minutes,
+              expires_at: fv5023 + 10.minutes,
+              now: fv5023,
+            )
+          end
+        fv5022 = {}
+        fv5020 = fv5022.except()
+        ClientAuthAdmissionBinding.create!(
+          begin
+            {
+              entry_ref: SecureRandom.uuid,
+              purpose: "authentication_handoff",
+              base_browser_digest: "a" * 64,
+              expires_at: 10.minutes.from_now,
+              created_at: Time.current,
+              updated_at: Time.current,
+            }
+          end.merge(authorization_transaction_id: fv5021.id).merge(fv5020),
+        )
+      end
     auth_session, = ClientAuthCeremonySession.issue!
     assert_raises(ArgumentError) do
       binding.attach_auth_session!(auth_session: auth_session, confirmation_ref: SecureRandom.uuid, now: 1.day.ago)
@@ -186,7 +223,17 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
   end
 
   test "rejects zero or multiple admission parents and partial proof pairs" do
-    attrs = binding_attributes
+    attrs =
+      begin
+        {
+          entry_ref: SecureRandom.uuid,
+          purpose: "authentication_handoff",
+          base_browser_digest: "a" * 64,
+          expires_at: 10.minutes.from_now,
+          created_at: Time.current,
+          updated_at: Time.current,
+        }
+      end
 
     assert_not ClientAuthAdmissionBinding.new(attrs).valid?
 
@@ -202,12 +249,53 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
   end
 
   test "attaches, confirms and redeems once without reopening terminal facts" do
-    parent = create_authorization_transaction
+    parent =
+      begin
+        fv5019 = SecureRandom.uuid
+        fv5018 = ClientOidcAuthorizationTransaction.database_now
+        ClientOidcAuthorizationTransaction.create_transaction!(
+          surface: "app",
+          intent: "sign_in",
+          client_id: "test-client",
+          redirect_uri: "https://client.example.test/callback",
+          response_type: "code",
+          scope: "openid",
+          state: SecureRandom.urlsafe_base64(16),
+          nonce: SecureRandom.urlsafe_base64(16),
+          code_challenge: "a" * 43,
+          code_challenge_method: "S256",
+          login_challenge: fv5019,
+          login_challenge_expires_at: fv5018 + 10.minutes,
+          expires_at: fv5018 + 10.minutes,
+          now: fv5018,
+        )
+      end
     entry_ref = SecureRandom.uuid
     digest = AuthAdmissionBinding.browser_digest(
       surface: "app", entry_ref:, nonce: "base-browser-nonce",
     )
-    binding = create_binding(parent, entry_ref:, base_token_id: client_tokens(:one).id, base_browser_digest: digest)
+    binding =
+      begin
+        fv5016 = parent
+        fv5017 = {
+          entry_ref:,
+          base_token_id: client_tokens(:one).id,
+          base_browser_digest: digest,
+        }
+        fv5015 = fv5017.except()
+        ClientAuthAdmissionBinding.create!(
+          begin
+            {
+              entry_ref: SecureRandom.uuid,
+              purpose: "authentication_handoff",
+              base_browser_digest: "a" * 64,
+              expires_at: 10.minutes.from_now,
+              created_at: Time.current,
+              updated_at: Time.current,
+            }
+          end.merge(authorization_transaction_id: fv5016.id).merge(fv5015),
+        )
+      end
     auth_session, raw_sid = ClientAuthCeremonySession.issue!
 
     binding.attach_auth_session!(auth_session:, confirmation_ref: SecureRandom.uuid)
@@ -231,7 +319,44 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
   end
 
   test "rejects changes to immutable identity and proof facts" do
-    binding = create_binding(create_authorization_transaction)
+    binding =
+      begin
+        fv5011 =
+          begin
+            fv5014 = SecureRandom.uuid
+            fv5013 = ClientOidcAuthorizationTransaction.database_now
+            ClientOidcAuthorizationTransaction.create_transaction!(
+              surface: "app",
+              intent: "sign_in",
+              client_id: "test-client",
+              redirect_uri: "https://client.example.test/callback",
+              response_type: "code",
+              scope: "openid",
+              state: SecureRandom.urlsafe_base64(16),
+              nonce: SecureRandom.urlsafe_base64(16),
+              code_challenge: "a" * 43,
+              code_challenge_method: "S256",
+              login_challenge: fv5014,
+              login_challenge_expires_at: fv5013 + 10.minutes,
+              expires_at: fv5013 + 10.minutes,
+              now: fv5013,
+            )
+          end
+        fv5012 = {}
+        fv5010 = fv5012.except()
+        ClientAuthAdmissionBinding.create!(
+          begin
+            {
+              entry_ref: SecureRandom.uuid,
+              purpose: "authentication_handoff",
+              base_browser_digest: "a" * 64,
+              expires_at: 10.minutes.from_now,
+              created_at: Time.current,
+              updated_at: Time.current,
+            }
+          end.merge(authorization_transaction_id: fv5011.id).merge(fv5010),
+        )
+      end
 
     assert_raises(AuthAdmissionBinding::InvalidTransition) do
       binding.update!(purpose: "invitation_handoff")
@@ -245,16 +370,98 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
   end
 
   test "same parent has one live binding, and expiry is retired explicitly" do
-    parent = create_authorization_transaction
-    first = create_binding(parent)
-    second = ClientAuthAdmissionBinding.new(binding_attributes.merge(authorization_transaction_id: parent.id))
+    parent =
+      begin
+        fv5009 = SecureRandom.uuid
+        fv5008 = ClientOidcAuthorizationTransaction.database_now
+        ClientOidcAuthorizationTransaction.create_transaction!(
+          surface: "app",
+          intent: "sign_in",
+          client_id: "test-client",
+          redirect_uri: "https://client.example.test/callback",
+          response_type: "code",
+          scope: "openid",
+          state: SecureRandom.urlsafe_base64(16),
+          nonce: SecureRandom.urlsafe_base64(16),
+          code_challenge: "a" * 43,
+          code_challenge_method: "S256",
+          login_challenge: fv5009,
+          login_challenge_expires_at: fv5008 + 10.minutes,
+          expires_at: fv5008 + 10.minutes,
+          now: fv5008,
+        )
+      end
+    first =
+      begin
+        fv5006 = parent
+        fv5007 = {}
+        fv5005 = fv5007.except()
+        ClientAuthAdmissionBinding.create!(
+          begin
+            {
+              entry_ref: SecureRandom.uuid,
+              purpose: "authentication_handoff",
+              base_browser_digest: "a" * 64,
+              expires_at: 10.minutes.from_now,
+              created_at: Time.current,
+              updated_at: Time.current,
+            }
+          end.merge(authorization_transaction_id: fv5006.id).merge(fv5005),
+        )
+      end
+    second = ClientAuthAdmissionBinding.new(
+      begin
+        {
+          entry_ref: SecureRandom.uuid,
+          purpose: "authentication_handoff",
+          base_browser_digest: "a" * 64,
+          expires_at: 10.minutes.from_now,
+          created_at: Time.current,
+          updated_at: Time.current,
+        }
+      end.merge(authorization_transaction_id: parent.id),
+    )
 
     assert_raises(ActiveRecord::RecordNotUnique) { second.save!(validate: true) }
 
-    expired = create_binding(
-      create_authorization_transaction(login_challenge: "expired-#{SecureRandom.uuid}"),
-      expires_at: 1.second.ago,
-    )
+    expired =
+      begin
+        fv5001 =
+          begin
+            fv5004 = "expired-#{SecureRandom.uuid}"
+            fv5003 = ClientOidcAuthorizationTransaction.database_now
+            ClientOidcAuthorizationTransaction.create_transaction!(
+              surface: "app",
+              intent: "sign_in",
+              client_id: "test-client",
+              redirect_uri: "https://client.example.test/callback",
+              response_type: "code",
+              scope: "openid",
+              state: SecureRandom.urlsafe_base64(16),
+              nonce: SecureRandom.urlsafe_base64(16),
+              code_challenge: "a" * 43,
+              code_challenge_method: "S256",
+              login_challenge: fv5004,
+              login_challenge_expires_at: fv5003 + 10.minutes,
+              expires_at: fv5003 + 10.minutes,
+              now: fv5003,
+            )
+          end
+        fv5002 = { expires_at: 1.second.ago }
+        fv5000 = fv5002.except()
+        ClientAuthAdmissionBinding.create!(
+          begin
+            {
+              entry_ref: SecureRandom.uuid,
+              purpose: "authentication_handoff",
+              base_browser_digest: "a" * 64,
+              expires_at: 10.minutes.from_now,
+              created_at: Time.current,
+              updated_at: Time.current,
+            }
+          end.merge(authorization_transaction_id: fv5001.id).merge(fv5000),
+        )
+      end
 
     assert_not expired.live?
     expired.retire!
@@ -265,32 +472,4 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
   end
 
   private
-
-  def binding_attributes
-    {
-      entry_ref: SecureRandom.uuid,
-      purpose: "authentication_handoff",
-      base_browser_digest: "a" * 64,
-      expires_at: 10.minutes.from_now,
-      created_at: Time.current,
-      updated_at: Time.current,
-    }
-  end
-
-  def create_binding(parent, **overrides)
-    ClientAuthAdmissionBinding.create!(
-      binding_attributes.merge(authorization_transaction_id: parent.id).merge(overrides),
-    )
-  end
-
-  def create_authorization_transaction(login_challenge: SecureRandom.uuid)
-    now = ClientOidcAuthorizationTransaction.database_now
-    ClientOidcAuthorizationTransaction.create_transaction!(
-      surface: "app", intent: "sign_in", client_id: "test-client",
-      redirect_uri: "https://client.example.test/callback", response_type: "code",
-      scope: "openid", state: SecureRandom.urlsafe_base64(16), nonce: SecureRandom.urlsafe_base64(16),
-      code_challenge: "a" * 43, code_challenge_method: "S256", login_challenge: login_challenge,
-      login_challenge_expires_at: now + 10.minutes, expires_at: now + 10.minutes, now: now,
-    )
-  end
 end

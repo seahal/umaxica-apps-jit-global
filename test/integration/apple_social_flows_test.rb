@@ -13,7 +13,7 @@ class AppleSocialFlowsTest < ActionDispatch::IntegrationTest
     # The ceremony runs on the Auth host the application is configured with: a request
     # made to any other host gets a session cookie the application does not read back,
     # so the sign-up ticket is lost and the flow restarts instead of advancing.
-    @host = configured_host(:sign_service)
+    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     @callback_headers = social_callback_headers(@host)
   end
 
@@ -23,7 +23,139 @@ class AppleSocialFlowsTest < ActionDispatch::IntegrationTest
   end
 
   test "sign up waits for confirmation before creating user and identity" do
-    state = start_social_auth_flow(intent: "login")
+    state =
+      begin
+        flow0_provider = "apple"
+        flow0_intent = "login"
+        flow0_user = nil
+        flow0_entry = "sign_up"
+        flow0_ri = "jp"
+        flow0_rt = nil
+        flow0_referer = nil
+        unless flow0_intent.to_s == "link"
+          @base_browser = open_session
+          flow0_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+          flow0_auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+          @base_browser.host!(flow0_base_host)
+          @base_browser.https!
+          @base_browser.get("/sign", params: { ri: flow0_ri, pt: "/dashboard?ri=#{flow0_ri}" })
+          flow0_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+          flow0_fields =
+            flow0_form.css("input[name]").to_h { |flow0_input|
+              [
+                flow0_input["name"],
+                flow0_input["value"],
+              ]
+            }
+          @base_browser.post(
+            flow0_form["action"], params: flow0_fields, headers: {
+              "Origin" => "https://#{flow0_base_host}", "Sec-Fetch-Site" => "same-origin",
+            },
+          )
+          flow0_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          2.times do |flow0_index|
+            flow0_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
+            flow0_payload, = JWT.decode(
+              flow0_rt, JitSecurityJwtRegistry.public_key_for(
+                flow0_issuer.id,
+                flow0_issuer.current_kid,
+              ), true,
+              algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow0_base_host}",
+              verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+            )
+            flow0_target = URI.parse(flow0_payload.fetch("url"))
+            if flow0_index.zero?
+              raise RuntimeError,
+                    "Base authorization host mismatch" unless flow0_target.host == flow0_base_host
+
+              @base_browser.get(flow0_target.request_uri)
+              flow0_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+              flow0_fields =
+                flow0_form.css("input[name]").to_h { |flow0_input|
+                  [
+                    flow0_input["name"],
+                    flow0_input["value"],
+                  ]
+                }
+              @base_browser.post(
+                flow0_form["action"], params: flow0_fields, headers: {
+                  "Origin" => "https://#{flow0_base_host}", "Sec-Fetch-Site" => "same-origin",
+                },
+              )
+            else
+              raise RuntimeError, "Auth admission host mismatch" unless flow0_target.host == flow0_auth_host
+
+              host!(flow0_auth_host)
+              https!
+              get(flow0_target.request_uri)
+            end
+          end
+          3.times do |flow0_index|
+            flow0_sender = (flow0_index == 1) ? @base_browser : self
+            flow0_form = Nokogiri::HTML(flow0_sender.response.body).at_css("form")
+            flow0_fields =
+              flow0_form.css("input[name]").to_h { |flow0_input|
+                [
+                  flow0_input["name"],
+                  flow0_input["value"],
+                ]
+              }
+            flow0_sender.post(
+              flow0_form["action"], params: flow0_fields, headers: {
+                "Origin" => "https://#{(flow0_index == 1) ? flow0_base_host : flow0_auth_host}",
+                "Sec-Fetch-Site" => "same-origin",
+              },
+            )
+            raise RuntimeError,
+                  "Social admission failed at step #{flow0_index}" unless flow0_sender.response.status == 303
+            next if flow0_index == 2
+
+            flow0_receiver = flow0_index.zero? ? @base_browser : self
+            flow0_receiver.get(URI.parse(flow0_sender.response.location).request_uri)
+          end
+        end
+        flow0_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+        host!(flow0_host)
+        flow0_normalized_provider = SocialIdentifiable.normalize_provider(flow0_provider)
+        flow0_continue_path =
+          if flow0_intent.to_s == "link"
+            ((if flow0_normalized_provider == "google"
+                auth_app_settings_google_path(ri: flow0_ri)
+              else
+                auth_app_settings_apple_path(ri: flow0_ri)
+              end))
+          elsif flow0_entry.to_s == "sign_up"
+            ((flow0_normalized_provider == "google") ? auth_app_social_google_registration_path(
+              ri: flow0_ri,
+              rt: flow0_rt,
+            ) : auth_app_social_apple_registration_path(
+              ri: flow0_ri,
+              rt: flow0_rt,
+            ))
+          else
+            ((flow0_normalized_provider == "google") ? auth_app_social_google_session_path(
+              ri: flow0_ri,
+              rt: flow0_rt,
+            ) : auth_app_social_apple_session_path(
+              ri: flow0_ri,
+              rt: flow0_rt,
+            ))
+          end
+        flow0_headers = social_callback_headers(flow0_host)
+        flow0_headers["Referer"] = flow0_referer if flow0_referer.present?
+        if flow0_user
+          flow0_user_headers =
+            as_user_headers(flow0_user, host: flow0_host)
+          flow0_token = ClientToken.find_by(public_id: flow0_user_headers["X-TEST-SESSION-PUBLIC-ID"])
+          mark_token_step_up_satisfied_for_test(
+            flow0_token,
+            scope: SocialAuth::SOCIAL_LINK_SCOPE,
+          ) if flow0_intent.to_s == "link" && flow0_token
+          flow0_headers = flow0_headers.merge(flow0_user_headers)
+        end
+        post(flow0_continue_path, headers: flow0_headers)
+        social_auth_state_from_response
+      end
     setup_apple_mock_auth(uid: "apple_flow_signup")
 
     assert_no_difference("Client.count") do
@@ -37,7 +169,15 @@ class AppleSocialFlowsTest < ActionDispatch::IntegrationTest
     assert_redirected_to sign_app_sign_up_guard_apple_url(ri: "jp")
     follow_redirect!
 
-    assert_redirected_to sign_app_sign_up_check_apple_confirmation_url(ri: "jp")
+    assert_redirected_to sign_app_sign_up_check_apple_confirmation_url(
+      ri: "jp", fb: SignFlowBindingCodec.encode(
+        flow: SignUpCycleLocator.new(
+          session,
+          surface: :app,
+        ).current,
+        surface: :app,
+      ),
+    )
     follow_redirect!
 
     assert_response :ok
@@ -47,15 +187,39 @@ class AppleSocialFlowsTest < ActionDispatch::IntegrationTest
     assert_predicate inertia_props.fetch("confirm_label"), :present?
 
     cycle = ClientSignUpFlow.order(:id).last
-    patch sign_app_sign_up_check_apple_confirmation_url(ri: "jp"),
+    patch sign_app_sign_up_check_apple_confirmation_url(
+      ri: "jp", fb: SignFlowBindingCodec.encode(
+        flow: SignUpCycleLocator.new(
+          session,
+          surface: :app,
+        ).current,
+        surface: :app,
+      ),
+    ),
           params: { confirm_new_social_identity: "1", checkpoint_version: cycle.checkpoint_version },
           headers: @callback_headers
 
-    assert_redirected_to sign_app_sign_up_check_apple_birthdate_url(ri: "jp")
+    assert_redirected_to sign_app_sign_up_check_apple_birthdate_url(
+      ri: "jp", fb: SignFlowBindingCodec.encode(
+        flow: SignUpCycleLocator.new(
+          session,
+          surface: :app,
+        ).current,
+        surface: :app,
+      ),
+    )
 
     assert_no_difference("Client.count") do
       assert_no_difference("ClientAppleIdentity.count") do
-        patch sign_app_sign_up_check_apple_birthdate_url(ri: "jp"),
+        patch sign_app_sign_up_check_apple_birthdate_url(
+          ri: "jp", fb: SignFlowBindingCodec.encode(
+            flow: SignUpCycleLocator.new(
+              session,
+              surface: :app,
+            ).current,
+            surface: :app,
+          ),
+        ),
               params: {
                 requirement: "birthdate",
                 birthdate: "2000-02-03",
@@ -70,13 +234,342 @@ class AppleSocialFlowsTest < ActionDispatch::IntegrationTest
 
     assert_difference("Client.count", 1) do
       assert_difference("ClientAppleIdentity.count", 1) do
-        submit_social_completion_if_present!
+        1.times do
+          if response.media_type == "text/html" && response.body.include?("social-completion-form")
+            flow1_form = response.parsed_body.at_css("form#social-completion-form")
+            flow1_fields =
+              flow1_form.css("input[name]").to_h { |flow1_input|
+                [
+                  flow1_input["name"],
+                  flow1_input["value"],
+                ]
+              }
+            flow1_rails_cookie = Rails.application.config.session_options.fetch(:key)
+            flow1_owner_cookie =
+              request.headers["Cookie"].to_s.split("; ")
+                .reject { |flow1_pair| flow1_pair.start_with?("#{flow1_rails_cookie}=") }
+            flow1_owner_cookie << "#{flow1_rails_cookie}=#{Rack::Utils.escape(
+              response
+                            .cookies.fetch(flow1_rails_cookie),
+            )}"
+            post(
+              flow1_form["action"], params: flow1_fields, headers: {
+                "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                "Cookie" => flow1_owner_cookie.join("; "),
+                "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}",
+                "Sec-Fetch-Site" => "same-origin",
+              },
+            )
+            break
+          end
+          break unless response.redirect? && @base_browser
+
+          flow1_target = URI.parse(response.location)
+          if flow1_target.path == "/sign/in/check"
+            flow1_sid_cookie = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+            flow1_ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(cookies[flow1_sid_cookie])
+            flow1_parent = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
+              surface: "app", transaction_id: flow1_ceremony.authorization_transaction_ref,
+            )
+            get(auth_app_sign_oidc_handoff_path(ri: "jp"))
+            flow1_form = response.parsed_body.at_css("form")
+            flow1_fields =
+              flow1_form.css("input[name]").to_h { |flow1_input|
+                [
+                  flow1_input["name"],
+                  flow1_input["value"],
+                ]
+              }
+            post(
+              flow1_form["action"], params: flow1_fields, headers: {
+                "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin",
+              },
+            )
+            flow1_target = URI.parse(response.location)
+            flow1_principal = Client.find_by!(public_id: flow1_parent.reload.actor_ref)
+            BaseSelectorBootstrapAuthority.call(surface: :app, principal: flow1_principal)
+          end
+          break unless flow1_target.host == ENV.fetch("PUBLIC_BASE_SERVICE_URL") &&
+            %w(/social/authentication/completion /oauth/authorize).include?(flow1_target.path)
+
+          flow1_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+          flow1_base_cookie = @base_browser.cookies.to_hash.map { |flow1_name, flow1_value|
+            "#{flow1_name}=#{Rack::Utils.escape(flow1_value)}"
+          }.join("; ")
+          flow1_base_headers = { "Origin" => "https://#{flow1_base_host}",
+                                 "Sec-Fetch-Site" => "same-origin",
+                                 "Cookie" => flow1_base_cookie,
+                                 "HTTP_COOKIE" => flow1_base_cookie, }
+          host!(flow1_base_host)
+          https!
+          get(flow1_target.request_uri, headers: flow1_base_headers)
+          flow1_form = response.parsed_body.at_css("form")
+          flow1_fields =
+            flow1_form.css("input[name]").to_h { |flow1_input|
+              [
+                flow1_input["name"],
+                flow1_input["value"],
+              ]
+            }
+          post(
+            flow1_form["action"],
+            params: flow1_fields,
+            headers: flow1_base_headers,
+          )
+          if response.redirect? && URI.parse(response.location).path == "/oauth/authorize"
+            get(URI.parse(response.location).request_uri, headers: flow1_base_headers)
+            flow1_form = response.parsed_body.at_css("form")
+            flow1_fields =
+              flow1_form.css("input[name]").to_h { |flow1_input|
+                [
+                  flow1_input["name"],
+                  flow1_input["value"],
+                ]
+              }
+            post(
+              flow1_form["action"],
+              params: flow1_fields,
+              headers: flow1_base_headers,
+            )
+          end
+          break unless response
+            .redirect? && URI.parse(
+              response
+                            .location,
+            ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+
+          flow1_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          flow1_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
+          flow1_payload, = JWT.decode(
+            flow1_rt, JitSecurityJwtRegistry.public_key_for(
+              flow1_issuer.id,
+              flow1_issuer.current_kid,
+            ), true,
+            algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow1_base_host}",
+            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+          )
+          flow1_callback_uri = URI.parse(flow1_payload.fetch("url"))
+          flow1_protocol_browser = open_session
+          flow1_protocol_browser.host!(flow1_base_host)
+          flow1_protocol_browser.https!
+          # Substitute network transport only: the token and UserInfo requests still run
+          # through their real public controllers, including PKCE and client authentication.
+          flow1_transport =
+            Faraday::Adapter::Test::Stubs.new do |flow1_stub|
+              flow1_stub.post(/.*/) do |flow1_env|
+                # The nested Rack executor must not complete the in-flight callback.
+                flow1_outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
+                flow1_outer_actor = Actor.context
+                flow1_executor_key = Rails.application.executor.active_key
+                flow1_outer_execution = ActiveSupport::IsolatedExecutionState.delete(flow1_executor_key)
+                begin
+                  flow1_protocol_browser.host!(flow1_env.url.authority)
+                  flow1_protocol_browser.https!(flow1_env.url.scheme == "https")
+                  flow1_protocol_browser.post(
+                    flow1_env.url.request_uri, params: Rack::Utils.parse_query(flow1_env.body),
+                                               headers: { "Accept" => "application/json" },
+                  )
+                ensure
+                  ActiveSupport::IsolatedExecutionState[flow1_executor_key] =
+                    flow1_outer_execution
+                end
+
+                # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                assert_equal [true, true, 200],
+                             [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow1_outer_controller),
+                              Actor.context.equal?(flow1_outer_actor), flow1_protocol_browser.response.status,]
+                # rubocop:enable Minitest/AssertSame
+                [flow1_protocol_browser.response.status, { "Content-Type" => "application/json" },
+                 flow1_protocol_browser.response.body,]
+              end
+              flow1_stub.get(/.*/) do |flow1_env|
+                flow1_outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
+                flow1_outer_actor = Actor.context
+                flow1_executor_key = Rails.application.executor.active_key
+                flow1_outer_execution = ActiveSupport::IsolatedExecutionState.delete(flow1_executor_key)
+                begin
+                  flow1_protocol_browser.host!(flow1_env.url.authority)
+                  flow1_protocol_browser.https!(flow1_env.url.scheme == "https")
+                  flow1_protocol_browser.get(
+                    flow1_env.url.request_uri, headers: {
+                      "Authorization" => flow1_env.request_headers.fetch("Authorization"),
+                      "Accept" => "application/json",
+                    },
+                  )
+                ensure
+                  ActiveSupport::IsolatedExecutionState[flow1_executor_key] =
+                    flow1_outer_execution
+                end
+
+                # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                assert_equal [true, true, 200],
+                             [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow1_outer_controller),
+                              Actor.context.equal?(flow1_outer_actor), flow1_protocol_browser.response.status,]
+                # rubocop:enable Minitest/AssertSame
+                [flow1_protocol_browser.response.status, { "Content-Type" => "application/json" },
+                 flow1_protocol_browser.response.body,]
+              end
+            end
+          flow1_connection =
+            Faraday.new do |flow1_builder|
+              flow1_builder.request(:url_encoded)
+              flow1_builder.adapter(:test, flow1_transport)
+            end
+          OutboundHttp::Connection.stub(
+            :build, ->(**flow1_args) {
+              assert_equal flow1_base_host, flow1_args.fetch(:url).host
+              flow1_connection
+            },
+          ) do
+            TestSupport::OutboundHttpGuard.allow do
+              get(flow1_callback_uri.request_uri)
+            end
+          end
+
+          assert_equal [true, true, true],
+                       [response.redirect?,
+                        cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.present?,
+                        cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s.present?,]
+          flow1_transport.verify_stubbed_calls
+        end
       end
     end
   end
 
   test "cancel after unknown Apple callback creates nothing durable" do
-    state = start_social_auth_flow(intent: "login")
+    state =
+      begin
+        flow2_provider = "apple"
+        flow2_intent = "login"
+        flow2_user = nil
+        flow2_entry = "sign_up"
+        flow2_ri = "jp"
+        flow2_rt = nil
+        flow2_referer = nil
+        unless flow2_intent.to_s == "link"
+          @base_browser = open_session
+          flow2_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+          flow2_auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+          @base_browser.host!(flow2_base_host)
+          @base_browser.https!
+          @base_browser.get("/sign", params: { ri: flow2_ri, pt: "/dashboard?ri=#{flow2_ri}" })
+          flow2_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+          flow2_fields =
+            flow2_form.css("input[name]").to_h { |flow2_input|
+              [
+                flow2_input["name"],
+                flow2_input["value"],
+              ]
+            }
+          @base_browser.post(
+            flow2_form["action"], params: flow2_fields, headers: {
+              "Origin" => "https://#{flow2_base_host}", "Sec-Fetch-Site" => "same-origin",
+            },
+          )
+          flow2_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          2.times do |flow2_index|
+            flow2_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
+            flow2_payload, = JWT.decode(
+              flow2_rt, JitSecurityJwtRegistry.public_key_for(
+                flow2_issuer.id,
+                flow2_issuer.current_kid,
+              ), true,
+              algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow2_base_host}",
+              verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+            )
+            flow2_target = URI.parse(flow2_payload.fetch("url"))
+            if flow2_index.zero?
+              raise RuntimeError,
+                    "Base authorization host mismatch" unless flow2_target.host == flow2_base_host
+
+              @base_browser.get(flow2_target.request_uri)
+              flow2_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+              flow2_fields =
+                flow2_form.css("input[name]").to_h { |flow2_input|
+                  [
+                    flow2_input["name"],
+                    flow2_input["value"],
+                  ]
+                }
+              @base_browser.post(
+                flow2_form["action"], params: flow2_fields, headers: {
+                  "Origin" => "https://#{flow2_base_host}", "Sec-Fetch-Site" => "same-origin",
+                },
+              )
+            else
+              raise RuntimeError, "Auth admission host mismatch" unless flow2_target.host == flow2_auth_host
+
+              host!(flow2_auth_host)
+              https!
+              get(flow2_target.request_uri)
+            end
+          end
+          3.times do |flow2_index|
+            flow2_sender = (flow2_index == 1) ? @base_browser : self
+            flow2_form = Nokogiri::HTML(flow2_sender.response.body).at_css("form")
+            flow2_fields =
+              flow2_form.css("input[name]").to_h { |flow2_input|
+                [
+                  flow2_input["name"],
+                  flow2_input["value"],
+                ]
+              }
+            flow2_sender.post(
+              flow2_form["action"], params: flow2_fields, headers: {
+                "Origin" => "https://#{(flow2_index == 1) ? flow2_base_host : flow2_auth_host}",
+                "Sec-Fetch-Site" => "same-origin",
+              },
+            )
+            raise RuntimeError,
+                  "Social admission failed at step #{flow2_index}" unless flow2_sender.response.status == 303
+            next if flow2_index == 2
+
+            flow2_receiver = flow2_index.zero? ? @base_browser : self
+            flow2_receiver.get(URI.parse(flow2_sender.response.location).request_uri)
+          end
+        end
+        flow2_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+        host!(flow2_host)
+        flow2_normalized_provider = SocialIdentifiable.normalize_provider(flow2_provider)
+        flow2_continue_path =
+          if flow2_intent.to_s == "link"
+            ((if flow2_normalized_provider == "google"
+                auth_app_settings_google_path(ri: flow2_ri)
+              else
+                auth_app_settings_apple_path(ri: flow2_ri)
+              end))
+          elsif flow2_entry.to_s == "sign_up"
+            ((flow2_normalized_provider == "google") ? auth_app_social_google_registration_path(
+              ri: flow2_ri,
+              rt: flow2_rt,
+            ) : auth_app_social_apple_registration_path(
+              ri: flow2_ri,
+              rt: flow2_rt,
+            ))
+          else
+            ((flow2_normalized_provider == "google") ? auth_app_social_google_session_path(
+              ri: flow2_ri,
+              rt: flow2_rt,
+            ) : auth_app_social_apple_session_path(
+              ri: flow2_ri,
+              rt: flow2_rt,
+            ))
+          end
+        flow2_headers = social_callback_headers(flow2_host)
+        flow2_headers["Referer"] = flow2_referer if flow2_referer.present?
+        if flow2_user
+          flow2_user_headers =
+            as_user_headers(flow2_user, host: flow2_host)
+          flow2_token = ClientToken.find_by(public_id: flow2_user_headers["X-TEST-SESSION-PUBLIC-ID"])
+          mark_token_step_up_satisfied_for_test(
+            flow2_token,
+            scope: SocialAuth::SOCIAL_LINK_SCOPE,
+          ) if flow2_intent.to_s == "link" && flow2_token
+          flow2_headers = flow2_headers.merge(flow2_user_headers)
+        end
+        post(flow2_continue_path, headers: flow2_headers)
+        social_auth_state_from_response
+      end
     setup_apple_mock_auth(uid: "apple_flow_cancel")
 
     get auth_app_social_apple_callback_url(provider: "apple", ri: "jp"),
@@ -87,7 +580,15 @@ class AppleSocialFlowsTest < ActionDispatch::IntegrationTest
 
     assert_no_difference("Client.count") do
       assert_no_difference("ClientAppleIdentity.count") do
-        delete sign_app_sign_up_check_apple_confirmation_url(ri: "jp"), headers: @callback_headers
+        delete sign_app_sign_up_check_apple_confirmation_url(
+          ri: "jp", fb: SignFlowBindingCodec.encode(
+            flow: SignUpCycleLocator.new(
+              session,
+              surface: :app,
+            ).current,
+            surface: :app,
+          ),
+        ), headers: @callback_headers
       end
     end
 
@@ -107,14 +608,337 @@ class AppleSocialFlowsTest < ActionDispatch::IntegrationTest
       user_apple_identity_status: client_apple_identity_statuses(:active),
     )
 
-    state = start_social_auth_flow(intent: "login")
+    state =
+      begin
+        flow3_intent = "login"
+        flow3_user = nil
+        begin
+          flow4_provider = "apple"
+          flow4_intent = flow3_intent
+          flow4_user = flow3_user
+          flow4_entry = nil
+          flow4_ri = "jp"
+          flow4_rt = nil
+          flow4_referer = nil
+          unless flow4_intent.to_s == "link"
+            @base_browser = open_session
+            flow4_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+            flow4_auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+            @base_browser.host!(flow4_base_host)
+            @base_browser.https!
+            @base_browser.get(
+              "/sign", params: {
+                ri: flow4_ri,
+                pt: "/dashboard?ri=#{flow4_ri}",
+              },
+            )
+            flow4_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+            flow4_fields =
+              flow4_form.css("input[name]").to_h { |flow4_input|
+                [
+                  flow4_input["name"],
+                  flow4_input["value"],
+                ]
+              }
+            @base_browser.post(
+              flow4_form["action"], params: flow4_fields, headers: {
+                "Origin" => "https://#{flow4_base_host}", "Sec-Fetch-Site" => "same-origin",
+              },
+            )
+            flow4_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+            2.times do |flow4_index|
+              flow4_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
+              flow4_payload, = JWT.decode(
+                flow4_rt, JitSecurityJwtRegistry.public_key_for(
+                  flow4_issuer.id,
+                  flow4_issuer.current_kid,
+                ), true,
+                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow4_base_host}",
+                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+              )
+              flow4_target = URI.parse(flow4_payload.fetch("url"))
+              if flow4_index.zero?
+                raise RuntimeError,
+                      "Base authorization host mismatch" unless flow4_target.host == flow4_base_host
+
+                @base_browser.get(flow4_target.request_uri)
+                flow4_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+                flow4_fields =
+                  flow4_form.css("input[name]").to_h { |flow4_input|
+                    [
+                      flow4_input["name"],
+                      flow4_input["value"],
+                    ]
+                  }
+                @base_browser.post(
+                  flow4_form["action"], params: flow4_fields, headers: {
+                    "Origin" => "https://#{flow4_base_host}", "Sec-Fetch-Site" => "same-origin",
+                  },
+                )
+              else
+                raise RuntimeError,
+                      "Auth admission host mismatch" unless flow4_target.host == flow4_auth_host
+
+                host!(flow4_auth_host)
+                https!
+                get(flow4_target.request_uri)
+              end
+            end
+            3.times do |flow4_index|
+              flow4_sender = (flow4_index == 1) ? @base_browser : self
+              flow4_form = Nokogiri::HTML(flow4_sender.response.body).at_css("form")
+              flow4_fields =
+                flow4_form.css("input[name]").to_h { |flow4_input|
+                  [
+                    flow4_input["name"],
+                    flow4_input["value"],
+                  ]
+                }
+              flow4_sender.post(
+                flow4_form["action"], params: flow4_fields, headers: {
+                  "Origin" => "https://#{(flow4_index == 1) ? flow4_base_host : flow4_auth_host}",
+                  "Sec-Fetch-Site" => "same-origin",
+                },
+              )
+              raise RuntimeError,
+                    "Social admission failed at step #{flow4_index}" unless flow4_sender.response.status == 303
+              next if flow4_index == 2
+
+              flow4_receiver = flow4_index.zero? ? @base_browser : self
+              flow4_receiver.get(URI.parse(flow4_sender.response.location).request_uri)
+            end
+          end
+          flow4_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+          host!(flow4_host)
+          flow4_normalized_provider = SocialIdentifiable.normalize_provider(flow4_provider)
+          flow4_continue_path =
+            if flow4_intent.to_s == "link"
+              ((if flow4_normalized_provider == "google"
+                  auth_app_settings_google_path(ri: flow4_ri)
+                else
+                  auth_app_settings_apple_path(ri: flow4_ri)
+                end))
+            elsif flow4_entry.to_s == "sign_up"
+              ((flow4_normalized_provider == "google") ? auth_app_social_google_registration_path(
+                ri: flow4_ri,
+                rt: flow4_rt,
+              ) : auth_app_social_apple_registration_path(
+                ri: flow4_ri,
+                rt: flow4_rt,
+              ))
+            else
+              ((flow4_normalized_provider == "google") ? auth_app_social_google_session_path(
+                ri: flow4_ri,
+                rt: flow4_rt,
+              ) : auth_app_social_apple_session_path(
+                ri: flow4_ri,
+                rt: flow4_rt,
+              ))
+            end
+          flow4_headers = social_callback_headers(flow4_host)
+          flow4_headers["Referer"] = flow4_referer if flow4_referer.present?
+          if flow4_user
+            flow4_user_headers =
+              as_user_headers(flow4_user, host: flow4_host)
+            flow4_token = ClientToken.find_by(public_id: flow4_user_headers["X-TEST-SESSION-PUBLIC-ID"])
+            mark_token_step_up_satisfied_for_test(
+              flow4_token,
+              scope: SocialAuth::SOCIAL_LINK_SCOPE,
+            ) if flow4_intent.to_s == "link" && flow4_token
+            flow4_headers = flow4_headers.merge(flow4_user_headers)
+          end
+          post(flow4_continue_path, headers: flow4_headers)
+          social_auth_state_from_response
+        end
+      end
     setup_apple_mock_auth(uid: "apple_flow_existing", token: "token_new")
 
     get auth_app_social_apple_callback_url(provider: "apple", ri: "jp"),
         params: { state: state },
         headers: @callback_headers
 
-    submit_social_completion_if_present!
+    1.times do
+      if response.media_type == "text/html" && response.body.include?("social-completion-form")
+        flow5_form = response.parsed_body.at_css("form#social-completion-form")
+        flow5_fields =
+          flow5_form.css("input[name]").to_h { |flow5_input|
+            [
+              flow5_input["name"],
+              flow5_input["value"],
+            ]
+          }
+        flow5_rails_cookie = Rails.application.config.session_options.fetch(:key)
+        flow5_owner_cookie =
+          request.headers["Cookie"].to_s.split("; ")
+            .reject { |flow5_pair| flow5_pair.start_with?("#{flow5_rails_cookie}=") }
+        flow5_owner_cookie << "#{flow5_rails_cookie}=#{Rack::Utils.escape(response.cookies.fetch(flow5_rails_cookie))}"
+        post(
+          flow5_form["action"], params: flow5_fields, headers: {
+            "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+            "Cookie" => flow5_owner_cookie.join("; "),
+            "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}",
+            "Sec-Fetch-Site" => "same-origin",
+          },
+        )
+        break
+      end
+      break unless response.redirect? && @base_browser
+
+      flow5_target = URI.parse(response.location)
+      if flow5_target.path == "/sign/in/check"
+        flow5_sid_cookie = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        flow5_ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(cookies[flow5_sid_cookie])
+        flow5_parent = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
+          surface: "app", transaction_id: flow5_ceremony.authorization_transaction_ref,
+        )
+        get(auth_app_sign_oidc_handoff_path(ri: "jp"))
+        flow5_form = response.parsed_body.at_css("form")
+        flow5_fields =
+          flow5_form.css("input[name]").to_h { |flow5_input|
+            [
+              flow5_input["name"],
+              flow5_input["value"],
+            ]
+          }
+        post(
+          flow5_form["action"], params: flow5_fields, headers: {
+            "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin",
+          },
+        )
+        flow5_target = URI.parse(response.location)
+        flow5_principal = Client.find_by!(public_id: flow5_parent.reload.actor_ref)
+        BaseSelectorBootstrapAuthority.call(surface: :app, principal: flow5_principal)
+      end
+      break unless flow5_target.host == ENV.fetch("PUBLIC_BASE_SERVICE_URL") &&
+        %w(/social/authentication/completion /oauth/authorize).include?(flow5_target.path)
+
+      flow5_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+      flow5_base_cookie = @base_browser.cookies.to_hash.map { |flow5_name, flow5_value|
+        "#{flow5_name}=#{Rack::Utils.escape(flow5_value)}"
+      }.join("; ")
+      flow5_base_headers = { "Origin" => "https://#{flow5_base_host}",
+                             "Sec-Fetch-Site" => "same-origin",
+                             "Cookie" => flow5_base_cookie,
+                             "HTTP_COOKIE" => flow5_base_cookie, }
+      host!(flow5_base_host)
+      https!
+      get(flow5_target.request_uri, headers: flow5_base_headers)
+      flow5_form = response.parsed_body.at_css("form")
+      flow5_fields =
+        flow5_form.css("input[name]").to_h { |flow5_input|
+          [
+            flow5_input["name"],
+            flow5_input["value"],
+          ]
+        }
+      post(flow5_form["action"], params: flow5_fields, headers: flow5_base_headers)
+      if response.redirect? && URI.parse(response.location).path == "/oauth/authorize"
+        get(URI.parse(response.location).request_uri, headers: flow5_base_headers)
+        flow5_form = response.parsed_body.at_css("form")
+        flow5_fields =
+          flow5_form.css("input[name]").to_h { |flow5_input|
+            [
+              flow5_input["name"],
+              flow5_input["value"],
+            ]
+          }
+        post(flow5_form["action"], params: flow5_fields, headers: flow5_base_headers)
+      end
+      break unless response
+        .redirect? && URI.parse(
+          response
+                    .location,
+        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+
+      flow5_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+      flow5_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
+      flow5_payload, = JWT.decode(
+        flow5_rt, JitSecurityJwtRegistry.public_key_for(flow5_issuer.id, flow5_issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow5_base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      flow5_callback_uri = URI.parse(flow5_payload.fetch("url"))
+      flow5_protocol_browser = open_session
+      flow5_protocol_browser.host!(flow5_base_host)
+      flow5_protocol_browser.https!
+      # Substitute network transport only: the token and UserInfo requests still run
+      # through their real public controllers, including PKCE and client authentication.
+      flow5_transport =
+        Faraday::Adapter::Test::Stubs.new do |flow5_stub|
+          flow5_stub.post(/.*/) do |flow5_env|
+            # The nested Rack executor must not complete the in-flight callback.
+            flow5_outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
+            flow5_outer_actor = Actor.context
+            flow5_executor_key = Rails.application.executor.active_key
+            flow5_outer_execution = ActiveSupport::IsolatedExecutionState.delete(flow5_executor_key)
+            begin
+              flow5_protocol_browser.host!(flow5_env.url.authority)
+              flow5_protocol_browser.https!(flow5_env.url.scheme == "https")
+              flow5_protocol_browser.post(
+                flow5_env.url.request_uri, params: Rack::Utils.parse_query(flow5_env.body),
+                                           headers: { "Accept" => "application/json" },
+              )
+            ensure
+              ActiveSupport::IsolatedExecutionState[flow5_executor_key] = flow5_outer_execution
+            end
+
+            # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+            assert_equal [true, true, 200],
+                         [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow5_outer_controller),
+                          Actor.context.equal?(flow5_outer_actor), flow5_protocol_browser.response.status,]
+            # rubocop:enable Minitest/AssertSame
+            [flow5_protocol_browser.response.status, { "Content-Type" => "application/json" },
+             flow5_protocol_browser.response.body,]
+          end
+          flow5_stub.get(/.*/) do |flow5_env|
+            flow5_outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
+            flow5_outer_actor = Actor.context
+            flow5_executor_key = Rails.application.executor.active_key
+            flow5_outer_execution = ActiveSupport::IsolatedExecutionState.delete(flow5_executor_key)
+            begin
+              flow5_protocol_browser.host!(flow5_env.url.authority)
+              flow5_protocol_browser.https!(flow5_env.url.scheme == "https")
+              flow5_protocol_browser.get(
+                flow5_env.url.request_uri, headers: {
+                  "Authorization" => flow5_env.request_headers.fetch("Authorization"),
+                  "Accept" => "application/json",
+                },
+              )
+            ensure
+              ActiveSupport::IsolatedExecutionState[flow5_executor_key] = flow5_outer_execution
+            end
+
+            # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+            assert_equal [true, true, 200],
+                         [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow5_outer_controller),
+                          Actor.context.equal?(flow5_outer_actor), flow5_protocol_browser.response.status,]
+            # rubocop:enable Minitest/AssertSame
+            [flow5_protocol_browser.response.status, { "Content-Type" => "application/json" },
+             flow5_protocol_browser.response.body,]
+          end
+        end
+      flow5_connection =
+        Faraday.new do |flow5_builder|
+          flow5_builder.request(:url_encoded)
+          flow5_builder.adapter(:test, flow5_transport)
+        end
+      OutboundHttp::Connection.stub(
+        :build, ->(**flow5_args) {
+          assert_equal flow5_base_host, flow5_args.fetch(:url).host
+          flow5_connection
+        },
+      ) do
+        TestSupport::OutboundHttpGuard.allow do
+          get(flow5_callback_uri.request_uri)
+        end
+      end
+
+      assert_equal [true, true, true],
+                   [response.redirect?,
+                    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.present?,
+                    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s.present?,]
+      flow5_transport.verify_stubbed_calls
+    end
 
     assert_response :redirect
     redirect_uri = URI.parse(response.location)
@@ -140,9 +964,6 @@ class AppleSocialFlowsTest < ActionDispatch::IntegrationTest
     )
   end
 
-  def start_social_auth_flow(intent:, user: nil)
-    seed_social_auth_session(provider: "apple", intent: intent, user: user, ri: "jp")
-  end
   private
 
   def bearer_headers(token, host: nil, headers: {})
@@ -370,33 +1191,6 @@ class AppleSocialFlowsTest
     end
   end
 
-  def seed_social_auth_session(provider:, intent: "login", user: nil, entry: nil, ri: "jp", rt: nil, referer: nil)
-    host = configured_host(:sign_service)
-    host!(host) if respond_to?(:host!)
-    normalized_provider = SocialIdentifiable.normalize_provider(provider)
-    continue_path =
-      if intent.to_s == "link"
-        public_send(:"auth_app_settings_#{normalized_provider}_path", ri: ri)
-      elsif entry.to_s == "sign_up"
-        public_send(:"auth_app_social_#{normalized_provider}_registration_path", ri: ri, rt: rt)
-      else
-        public_send(:"auth_app_social_#{normalized_provider}_session_path", ri: ri, rt: rt)
-      end
-    headers = social_callback_headers(host)
-    headers["Referer"] = referer if referer.present?
-    if user
-      user_headers = as_user_headers(user, host: host)
-      token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
-      mark_token_step_up_satisfied_for_test(
-        token,
-        scope: SocialAuth::SOCIAL_LINK_SCOPE,
-      ) if intent.to_s == "link" && token
-      headers = headers.merge(user_headers)
-    end
-    post(continue_path, headers: headers)
-    social_auth_state_from_response
-  end
-
   def assert_oidc_authorize_redirect(location, host:, client_id: "base-rails-rp")
     uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
@@ -411,72 +1205,6 @@ end
 # DAMP local social completion helpers for former shared test support.
 class AppleSocialFlowsTest
   private
-
-  def seed_app_social_link_grant_session(provider:, user:, ri: "jp")
-    host = configured_host(:sign_service)
-    host!(host) if respond_to?(:host!)
-
-    user_headers = as_user_headers(user, host: host)
-    session_public_id = user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
-    token = ClientToken.find_by(public_id: session_public_id)
-    mark_token_step_up_satisfied_for_test(token, scope: SocialAuth::SOCIAL_LINK_SCOPE) if token
-
-    issuance = IdentitySocialCeremonyGrantIssuer.issue!(
-      surface: "app",
-      actor_ref: user.public_id,
-      session_ref: session_public_id,
-      operation: "link",
-      provider: provider,
-    )
-
-    normalized_provider = SocialIdentifiable.normalize_provider(provider)
-    continue_path = public_send(
-      :"auth_app_settings_#{normalized_provider}_path",
-      ri: ri,
-      social_ceremony_grant: issuance.grant,
-    )
-
-    headers = social_callback_headers(host).merge(user_headers)
-    post(continue_path, headers: headers)
-
-    Struct.new(:state, :user_headers, :session_public_id, keyword_init: true).new(
-      state: social_auth_state_from_response,
-      user_headers: user_headers,
-      session_public_id: session_public_id,
-    )
-  end
-
-  def submit_social_completion_if_present!
-    return if follow_social_completion_redirect_if_present!
-
-    return unless response.media_type == "text/html"
-    return unless response.body.include?("social-completion-form")
-
-    # A browser only reaches the completion endpoint when CSP allows the form
-    # target. See test/support/form_action_policy_helper.rb.
-    assert_forms_submittable_under_policy
-
-    form = response.parsed_body.at_css("form#social-completion-form")
-    raise StandardError, "social completion form missing" unless form
-
-    params = {}
-    form.css("input").each do |input|
-      name = input["name"]
-      params[name] = input["value"] if name.present?
-    end
-
-    post(
-      form["action"],
-      params: params,
-      headers: {
-        # A browser sends the form target as the Host, not a separately configured one.
-        "Host" => URI.parse(form["action"]).host,
-        "Origin" => "https://#{configured_host(:sign_service)}",
-        "Sec-Fetch-Site" => "same-site",
-      },
-    )
-    cookies.to_hash.each_key { |key| cookies.delete(key) }
-  end
 end
 
 # DAMP local route helper aliases for former shared test support.

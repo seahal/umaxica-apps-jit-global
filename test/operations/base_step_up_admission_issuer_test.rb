@@ -31,7 +31,13 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       # Public persistence arranges an expired parent; production observes expiry under its Ticket lock.
       first.transaction.update!(expires_at: first.transaction.class.database_now - Rational(1, 1_000_000))
       replacement = BaseStepUpAdmissionIssuer.call!(
-        actor:, token:, requirement: StepUpRequirement.new(**requirement.to_h.merge(scope: "settings_email")),
+        actor:, token:, requirement: StepUpRequirement.new(
+          step_up_required: true,
+          phishing_resistant_required: false,
+          user_verification_required: false,
+          full_reauthentication_required: false,
+          **requirement.to_h.merge(scope: "settings_email"),
+        ),
         return_to: "/identity/emails", base_browser_nonce: nonce, base_token: token,
       )
 
@@ -76,7 +82,13 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       arguments = {
         actor: actor,
         token: token,
-        requirement: StepUpRequirement.new(**attributes),
+        requirement: StepUpRequirement.new(
+          step_up_required: true,
+          phishing_resistant_required: false,
+          user_verification_required: false,
+          full_reauthentication_required: false,
+          **attributes,
+        ),
         return_to: "/identity/passkeys",
         base_browser_nonce: SecureRandom.urlsafe_base64(32),
         base_token: token,
@@ -98,7 +110,13 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
           assert_raises(BaseAuthAdmissionCoordinator::Denied, "#{surface}: #{change.keys}") do
             BaseStepUpAdmissionIssuer.call!(
               **arguments.merge(
-                requirement: StepUpRequirement.new(**attributes.merge(change)),
+                requirement: StepUpRequirement.new(
+                  step_up_required: true,
+                  phishing_resistant_required: false,
+                  user_verification_required: false,
+                  full_reauthentication_required: false,
+                  **attributes.merge(change),
+                ),
                 return_to: target,
               ),
             )
@@ -252,9 +270,9 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       ].each do |path|
         assert_no_difference [-> { parents.count }, -> { sessions.count }] do
           assert_raises(BaseAuthAdmissionCoordinator::Denied, "target #{path.inspect}") do
-            issue_base_step_up_admission!(
+            BaseStepUpAdmissionIssuer.call!(
               actor: actor, token: token, requirement: requirement, return_to: path,
-              base_browser_nonce: "test-browser-nonce", base_token: token,
+              base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
             )
           end
         end
@@ -292,10 +310,10 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       )
       assert_no_difference(-> { parents.count }) do
         assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-          issue_base_step_up_admission!(
+          BaseStepUpAdmissionIssuer.call!(
             actor: actor, token: token, requirement: requirement,
             return_to: "/identity/passkeys",
-            base_browser_nonce: "test-browser-nonce", base_token: token,
+            base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
           )
         end
       end
@@ -318,9 +336,9 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
         token.update!(invalid)
         assert_no_difference(-> { parents.count }) do
           assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-            issue_base_step_up_admission!(
+            BaseStepUpAdmissionIssuer.call!(
               actor: actor, token: token, requirement: requirement, return_to: "/identity/passkeys",
-              base_browser_nonce: "test-browser-nonce", base_token: token,
+              base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
             )
           end
         end
@@ -330,9 +348,9 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
         parents.stub(:database_now, event + StepUpRequirement::DEFAULT_TTL + Rational(microseconds, 1_000_000)) do
           assert_no_difference(-> { parents.count }) do
             assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-              issue_base_step_up_admission!(
+              BaseStepUpAdmissionIssuer.call!(
                 actor: actor, token: token, requirement: requirement, return_to: "/identity/passkeys",
-                base_browser_nonce: "test-browser-nonce", base_token: token,
+                base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
               )
             end
           end
@@ -340,9 +358,9 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       end
       issuance =
         parents.stub(:database_now, event + StepUpRequirement::DEFAULT_TTL - Rational(1, 1_000_000)) do
-          issue_base_step_up_admission!(
+          BaseStepUpAdmissionIssuer.call!(
             actor: actor, token: token, requirement: requirement, return_to: "/identity/passkeys",
-            base_browser_nonce: "test-browser-nonce", base_token: token,
+            base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
           )
         end
 
@@ -354,7 +372,25 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
         surface: surface.to_s,
         reference: issuance.reference,
       )
-      _auth_session, raw_sid = prepare_binding_for_consumption!(binding, token)
+      _auth_session, raw_sid =
+        begin
+          fv5019 = binding
+          fv5018 = token
+          fv5016, fv5015 = fv5019.class.auth_admission_session_class.issue!
+          fv5019.attach_auth_session!(
+            auth_session: fv5016, confirmation_ref: SecureRandom.uuid,
+          )
+          fv5017 = AuthAdmissionBinding.browser_digest(
+            surface: fv5019.class.auth_admission_surface_name,
+            entry_ref: fv5019.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          )
+          fv5019.confirm_base!(
+            base_token: fv5018,
+            browser_digest: fv5017,
+          )
+          [fv5016, fv5015]
+        end
 
       assert_equal issuance.transaction.transaction_id, BaseAuthAdmissionCoordinator.consume_entry_reference!(
         reference: issuance.reference, surface: surface.to_s, expected_intent: "credential_registration",
@@ -399,33 +435,59 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       { scope: "settings_birthdate" }, { purpose: "credential_change" },
     ].each do |invalid|
       if invalid[:allowed_methods] == []
-        assert_raises(ArgumentError) { StepUpRequirement.new(**attributes.merge(invalid)) }
+        assert_raises(ArgumentError) {
+          StepUpRequirement.new(
+            step_up_required: true,
+            phishing_resistant_required: false,
+            user_verification_required: false,
+            full_reauthentication_required: false,
+            **attributes.merge(invalid),
+          )
+        }
         next
       end
 
       requirement =
         begin
-          StepUpRequirement.new(**attributes.merge(invalid))
+          StepUpRequirement.new(
+            step_up_required: true,
+            phishing_resistant_required: false,
+            user_verification_required: false,
+            full_reauthentication_required: false,
+            **attributes.merge(invalid),
+          )
         rescue ArgumentError
           next
         end
 
       assert_no_difference("ClientStepUpCeremonyTransaction.count") do
         assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-          issue_base_step_up_admission!(
+          BaseStepUpAdmissionIssuer.call!(
             actor: actor, token: token, requirement: requirement,
             return_to: "/identity/totps",
-            base_browser_nonce: "test-browser-nonce", base_token: token,
+            base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
           )
         end
       end
     end
     assert_raises(ArgumentError) do
-      StepUpRequirement.new(**attributes.merge(required_aal: :aal1))
+      StepUpRequirement.new(
+        step_up_required: true,
+        phishing_resistant_required: false,
+        user_verification_required: false,
+        full_reauthentication_required: false,
+        **attributes.merge(required_aal: :aal1),
+      )
     end
-    issuance = issue_base_step_up_admission!(
-      actor: actor, token: token, requirement: StepUpRequirement.new(**attributes), return_to: "/identity/totps",
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: StepUpRequirement.new(
+        step_up_required: true,
+        phishing_resistant_required: false,
+        user_verification_required: false,
+        full_reauthentication_required: false,
+        **attributes,
+      ), return_to: "/identity/totps",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     )
 
     assert_equal ["totp"], issuance.transaction.allowed_methods_array
@@ -444,18 +506,18 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       token_binding: token.public_id, require_session_binding: true,
       actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
-    first = issue_base_step_up_admission!(
+    first = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token, requirement: requirement,
       return_to: "/identity/birthdate",
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     )
     session_record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: first.transaction.transaction_id)
     session_record.update!(attempt_count: 3)
     deadline = first.transaction.expires_at
-    second = issue_base_step_up_admission!(
+    second = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token, requirement: requirement,
       return_to: "/identity/birthdate",
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     )
 
     assert_equal first.reference, second.reference
@@ -464,7 +526,25 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
     assert_equal 3, session_record.reload.attempt_count
     assert_equal "step_up", second.transaction.purpose
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: second.reference)
-    _auth_session, raw_sid = prepare_binding_for_consumption!(binding, token)
+    _auth_session, raw_sid =
+      begin
+        fv5014 = binding
+        fv5013 = token
+        fv5011, fv5010 = fv5014.class.auth_admission_session_class.issue!
+        fv5014.attach_auth_session!(
+          auth_session: fv5011, confirmation_ref: SecureRandom.uuid,
+        )
+        fv5012 = AuthAdmissionBinding.browser_digest(
+          surface: fv5014.class.auth_admission_surface_name,
+          entry_ref: fv5014.entry_ref,
+          nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        )
+        fv5014.confirm_base!(
+          base_token: fv5013,
+          browser_digest: fv5012,
+        )
+        [fv5011, fv5010]
+      end
     payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
       reference: second.reference, surface: "app", expected_intent: "step_up",
       binding: binding, raw_auth_sid: raw_sid,
@@ -477,7 +557,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
   test "another scope cannot rewrite a pending transaction" do
     actor = clients(:one)
     token = ClientToken.create!(user: actor)
-    first = issue_base_step_up_admission!(
+    first = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
         step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
@@ -488,11 +568,11 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       ),
       return_to: "/identity/birthdate",
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     )
 
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-      issue_base_step_up_admission!(
+      BaseStepUpAdmissionIssuer.call!(
         actor: actor, token: token,
         requirement: StepUpRequirement.new(
           step_up_required: true, scope: "settings_telephone", allowed_methods: [:passkey],
@@ -503,7 +583,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
           actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
         ),
         return_to: "/identity/telephones",
-        base_browser_nonce: "test-browser-nonce", base_token: token,
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
       )
     end
     assert_equal "settings_birthdate", first.transaction.reload.required_scope
@@ -514,7 +594,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
   test "a new admission after the previous transaction expired records that expiry and starts a new one" do
     actor = clients(:one)
     token = ClientToken.create!(user: actor)
-    first = issue_base_step_up_admission!(
+    first = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
         step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
@@ -525,12 +605,12 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       ),
       return_to: "/identity/birthdate",
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     ).transaction
     # Moves the deadline into the past; no public API shortens a live transaction.
     first.update_columns(expires_at: ClientStepUpCeremonyTransaction.database_now - 1.second)
 
-    second = issue_base_step_up_admission!(
+    second = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
         step_up_required: true, scope: "settings_telephone", allowed_methods: [:passkey],
@@ -541,7 +621,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       ),
       return_to: "/identity/telephones",
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     ).transaction
 
     assert_not_equal first.transaction_id, second.transaction_id
@@ -557,7 +637,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
   test "a conflicting admission is refused with the conflict code and leaves the pending transaction open" do
     actor = clients(:one)
     token = ClientToken.create!(user: actor)
-    first = issue_base_step_up_admission!(
+    first = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
         step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
@@ -568,12 +648,12 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       ),
       return_to: "/identity/birthdate",
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     ).transaction
 
     error =
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-        issue_base_step_up_admission!(
+        BaseStepUpAdmissionIssuer.call!(
           actor: actor, token: token,
           requirement: StepUpRequirement.new(
             step_up_required: true, scope: "settings_telephone", allowed_methods: [:passkey],
@@ -584,7 +664,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
             actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
           ),
           return_to: "/identity/telephones",
-          base_browser_nonce: "test-browser-nonce", base_token: token,
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
         )
       end
 
@@ -603,23 +683,47 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
       require_session_binding: true, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
-    first = issue_base_step_up_admission!(
+    first = BaseStepUpAdmissionIssuer.call!(
       actor:, token:, requirement: first_requirement, return_to: "/identity/birthdate",
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: first.reference)
-    auth_session, raw_sid = prepare_binding_for_consumption!(binding, token)
+    auth_session, raw_sid =
+      begin
+        fv5009 = binding
+        fv5008 = token
+        fv5006, fv5005 = fv5009.class.auth_admission_session_class.issue!
+        fv5009.attach_auth_session!(
+          auth_session: fv5006, confirmation_ref: SecureRandom.uuid,
+        )
+        fv5007 = AuthAdmissionBinding.browser_digest(
+          surface: fv5009.class.auth_admission_surface_name,
+          entry_ref: fv5009.entry_ref,
+          nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        )
+        fv5009.confirm_base!(
+          base_token: fv5008,
+          browser_digest: fv5007,
+        )
+        [fv5006, fv5005]
+      end
     admitted, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", previous_raw_sid: raw_sid,
       step_up_ceremony_transaction_ref: first.transaction.transaction_id,
     )
     binding.redeem!(auth_session:, admitted_auth_session: admitted)
 
-    second = issue_base_step_up_admission!(
+    second = BaseStepUpAdmissionIssuer.call!(
       actor:, token:,
-      requirement: StepUpRequirement.new(**first_requirement.to_h.merge(scope: "settings_telephone")),
+      requirement: StepUpRequirement.new(
+        step_up_required: true,
+        phishing_resistant_required: false,
+        user_verification_required: false,
+        full_reauthentication_required: false,
+        **first_requirement.to_h.merge(scope: "settings_telephone"),
+      ),
       return_to: "/identity/telephones", restart_of: first.reference,
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     )
 
     assert_not_equal first.transaction.transaction_id, second.transaction.transaction_id
@@ -638,12 +742,30 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
       require_session_binding: true, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
-    first = issue_base_step_up_admission!(
+    first = BaseStepUpAdmissionIssuer.call!(
       actor:, token:, requirement:, return_to: "/identity/birthdate",
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: first.reference)
-    auth_session, raw_sid = prepare_binding_for_consumption!(binding, token)
+    auth_session, raw_sid =
+      begin
+        fv5004 = binding
+        fv5003 = token
+        fv5001, fv5000 = fv5004.class.auth_admission_session_class.issue!
+        fv5004.attach_auth_session!(
+          auth_session: fv5001, confirmation_ref: SecureRandom.uuid,
+        )
+        fv5002 = AuthAdmissionBinding.browser_digest(
+          surface: fv5004.class.auth_admission_surface_name,
+          entry_ref: fv5004.entry_ref,
+          nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        )
+        fv5004.confirm_base!(
+          base_token: fv5003,
+          browser_digest: fv5002,
+        )
+        [fv5001, fv5000]
+      end
     admitted, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", previous_raw_sid: raw_sid,
       step_up_ceremony_transaction_ref: first.transaction.transaction_id,
@@ -652,16 +774,16 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
 
     assert_no_difference "ClientAuthAdmissionBinding.count" do
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-        issue_base_step_up_admission!(
+        BaseStepUpAdmissionIssuer.call!(
           actor:, token:, requirement:, return_to: "/identity/birthdate",
-          base_browser_nonce: "test-browser-nonce", base_token: token,
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
         )
       end
     end
 
-    second = issue_base_step_up_admission!(
+    second = BaseStepUpAdmissionIssuer.call!(
       actor:, token:, requirement:, return_to: "/identity/birthdate", restart_of: first.reference,
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     )
 
     assert_not_equal first.transaction.transaction_id, second.transaction.transaction_id
@@ -680,17 +802,17 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
       require_session_binding: true, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
-    first = issue_base_step_up_admission!(
+    first = BaseStepUpAdmissionIssuer.call!(
       actor:, token:, requirement:, return_to: "/identity/birthdate",
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: first.reference)
     deadline = first.transaction.expires_at
     binding.update_columns(expires_at: binding.class.database_now - 1.second)
 
-    second = issue_base_step_up_admission!(
+    second = BaseStepUpAdmissionIssuer.call!(
       actor:, token:, requirement:, return_to: "/identity/birthdate", restart_of: first.reference,
-      base_browser_nonce: "test-browser-nonce", base_token: token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     )
 
     assert_equal first.transaction.id, second.transaction.id
@@ -705,7 +827,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
 
     assert_no_difference("VisitorStepUpCeremonyTransaction.count") do
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-        issue_base_step_up_admission!(
+        BaseStepUpAdmissionIssuer.call!(
           actor: actor, token: token,
           requirement: StepUpRequirement.new(
             step_up_required: true, scope: "settings_birthdate", allowed_methods: [:totp],
@@ -716,11 +838,11 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
             actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
           ),
           return_to: "/identity/birthdate",
-          base_browser_nonce: "test-browser-nonce", base_token: token,
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
         )
       end
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-        issue_base_step_up_admission!(
+        BaseStepUpAdmissionIssuer.call!(
           actor: clients(:one), token: token,
           requirement: StepUpRequirement.new(
             step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
@@ -731,23 +853,11 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
             actor_ref: clients(:one).public_id, resource_ref: nil, tenant_ref: nil,
           ),
           return_to: "/identity/birthdate",
-          base_browser_nonce: "test-browser-nonce", base_token: token,
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
         )
       end
     end
   end
 
   private
-
-  def prepare_binding_for_consumption!(binding, token)
-    auth_session, raw_sid = binding.class.auth_admission_session_class.issue!
-    binding.attach_auth_session!(auth_session:, confirmation_ref: SecureRandom.uuid)
-    digest = AuthAdmissionBinding.browser_digest(
-      surface: binding.class.auth_admission_surface_name,
-      entry_ref: binding.entry_ref,
-      nonce: "test-browser-nonce",
-    )
-    binding.confirm_base!(base_token: token, browser_digest: digest)
-    [auth_session, raw_sid]
-  end
 end

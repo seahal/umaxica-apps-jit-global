@@ -104,7 +104,7 @@ class ObservabilityGatewayContractTest < Minitest::Test
   end
 
   # An unbounded local volume is a misconfiguration under the ADR. Tempo and Prometheus already
-  # carry 24h; logs must not be the exception.
+  # carry 24h; development logs retain the documented fourteen-day window.
   def test_every_storage_backend_declares_bounded_retention
     tempo = YAML.safe_load_file(File.join(REPOSITORY_ROOT, "podman/tempo/tempo.yaml"))
 
@@ -117,7 +117,7 @@ class ObservabilityGatewayContractTest < Minitest::Test
     # `schema_config` carries a bare date, which safe_load rejects unless Date is permitted.
     loki = YAML.safe_load_file(File.join(REPOSITORY_ROOT, "podman/loki/loki.yaml"), permitted_classes: [Date])
 
-    assert_equal "24h", loki.dig("limits_config", "retention_period")
+    assert_equal "336h", loki.dig("limits_config", "retention_period")
     assert loki.dig("compactor", "retention_enabled"),
            "Loki keeps chunks forever unless the compactor is allowed to enforce the retention period."
   end

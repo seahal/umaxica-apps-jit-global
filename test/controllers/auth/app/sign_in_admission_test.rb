@@ -5,7 +5,7 @@ require "test_helper"
 
 class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
   setup do
-    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! @host
   end
 
@@ -20,7 +20,10 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
 
   test "legacy admission query is rejected without consuming a code" do
     issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "app",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     )
 
     get auth_app_sign_in_url(ri: "jp", admission: issuance.code), headers: { "Host" => @host }
@@ -88,10 +91,30 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
 
   test "Base-owned local admission reaches the ceremony without creating an OIDC transaction" do
     issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "app",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    _auth_session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     get auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @host }
     cookies["auth_sid"] = raw_sid
     reference = issuance.reference
@@ -125,10 +148,30 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
 
   test "a replayed Base-owned local admission returns to the clean ceremony" do
     issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "app",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    _auth_session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     get auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @host }
     cookies["auth_sid"] = raw_sid
     reference = issuance.reference
@@ -202,10 +245,29 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
         },
       )
     handoff = BaseAuthAdmissionCoordinator.issue_handoff!(
-      transaction: issuance.transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+      transaction: issuance.transaction,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: handoff.reference)
-    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    _auth_session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     get(auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @host })
     cookies.delete("auth_sid")
     cookies.delete("__Host-auth_sid")

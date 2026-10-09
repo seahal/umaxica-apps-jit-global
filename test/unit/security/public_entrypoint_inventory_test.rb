@@ -231,8 +231,15 @@ module Security
     end
 
     def public_local_auth_admission?(entry)
-      post?(entry) && entry.path == "/" &&
-        entry.controller_path.match?(%r{\Abase/(app|com|org)/roots\z}) && entry.action == "create"
+      case entry.controller_path
+      when %r{\Aauth/(app|com|org)/ceremony_bindings\z}
+        post?(entry) && entry.path == "/ceremony_bindings" && entry.action == "create"
+      when %r{\Abase/(app|com|org)/ceremony_binding_confirmations\z}
+        entry.path == "/ceremony_bindings/:binding_ref/confirmation" &&
+          { "show" => "GET", "create" => "POST" }[entry.action] == entry.verb
+      else
+        false
+      end
     end
 
     def public_lobby?(entry)
@@ -273,7 +280,7 @@ module Security
 
     def public_sign_in_or_up?(entry)
       if entry.path == "/sign/completion"
-        return post?(entry) && entry.action == "create" &&
+        return { "show" => "GET", "create" => "POST" }[entry.action] == entry.verb &&
             entry.controller_path.match?(%r{\Abase/(app|com|org)/sign/completions\z})
       end
       if entry.path == "/sign/handoff"
@@ -303,6 +310,11 @@ module Security
         when %r{\Aauth/(app|com|org)/verification/passkeys\z}
           [%r{\A/verification/passkey(?:/(?:new|options))?\z},
            { "new" => %w(GET), "options" => %w(POST), "create" => %w(POST) },]
+        when %r{\Aauth/(app|com|org)/verification/registration/passkeys\z}
+          [%r{\A/verification/registration/passkey(?:/(?:new|options))?\z},
+           { "new" => %w(GET), "options" => %w(POST), "create" => %w(POST) },]
+        when %r{\Aauth/(app|com|org)/verification/registration/handoffs\z}
+          [%r{\A/verification/registration/handoff\z}, { "show" => %w(GET), "create" => %w(POST) }]
         when "auth/app/verification/totps"
           [%r{\A/verification/totp(?:/new)?\z}, { "new" => %w(GET), "create" => %w(POST) }]
         when %r{\Aauth/(app|com)/verification/emails\z}

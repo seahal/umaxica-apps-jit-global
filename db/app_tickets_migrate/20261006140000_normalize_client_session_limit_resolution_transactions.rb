@@ -13,24 +13,34 @@ class NormalizeClientSessionLimitResolutionTransactions < ActiveRecord::Migratio
     normalize_existing_rows
     enforce_normalized_columns
     safety_assured do
-      remove_column :client_session_limit_resolution_transactions, :status, :string if column_exists?(:client_session_limit_resolution_transactions, :status)
-      remove_column :client_session_limit_resolution_transactions, :actor_type, :string if column_exists?(:client_session_limit_resolution_transactions, :actor_type)
+      remove_column(:client_session_limit_resolution_transactions, :status, :string) if column_exists?(:client_session_limit_resolution_transactions, :status)
+      remove_column(:client_session_limit_resolution_transactions, :actor_type, :string) if column_exists?(:client_session_limit_resolution_transactions, :actor_type)
     end
 
     safety_assured do
-      add_foreign_key :client_session_limit_resolution_transactions, :client_session_limit_resolution_states,
-                      column: :state_id, on_delete: :restrict, if_not_exists: true
-      add_foreign_key :client_session_limit_resolution_transactions, :client_sign_in_flows,
-                      column: :sign_in_flow_id, on_delete: :restrict, if_not_exists: true
-      add_foreign_key :client_session_limit_resolution_transactions, :client_oidc_authorization_transactions,
-                      column: :oidc_authorization_transaction_id, on_delete: :restrict, if_not_exists: true
+      add_foreign_key(
+        :client_session_limit_resolution_transactions, :client_session_limit_resolution_states,
+        column: :state_id, on_delete: :restrict, if_not_exists: true,
+      )
+      add_foreign_key(
+        :client_session_limit_resolution_transactions, :client_sign_in_flows,
+        column: :sign_in_flow_id, on_delete: :restrict, if_not_exists: true,
+      )
+      add_foreign_key(
+        :client_session_limit_resolution_transactions, :client_oidc_authorization_transactions,
+        column: :oidc_authorization_transaction_id, on_delete: :restrict, if_not_exists: true,
+      )
     end
     safety_assured do
-      add_index :client_session_limit_resolution_transactions, :sign_in_flow_id,
-                unique: true, where: "state_id IN (10, 20)", name: "idx_client_resolution_open_parent", if_not_exists: true
-      add_check_constraint :client_session_limit_resolution_transactions,
-                          "(state_id = 10 AND selected_at IS NULL AND resolved_at IS NULL AND cancelled_at IS NULL AND expired_at IS NULL) OR (state_id = 20 AND selected_at IS NOT NULL AND resolved_at IS NULL AND cancelled_at IS NULL AND expired_at IS NULL) OR (state_id = 100 AND selected_at IS NOT NULL AND resolved_at IS NOT NULL AND cancelled_at IS NULL AND expired_at IS NULL) OR (state_id = 910 AND expired_at IS NOT NULL AND resolved_at IS NULL AND cancelled_at IS NULL) OR (state_id = 920 AND cancelled_at IS NOT NULL AND resolved_at IS NULL AND expired_at IS NULL)",
-                          name: "chk_client_resolution_state_timestamps", if_not_exists: true
+      add_index(
+        :client_session_limit_resolution_transactions, :sign_in_flow_id,
+        unique: true, where: "state_id IN (10, 20)", name: "idx_client_resolution_open_parent", if_not_exists: true,
+      )
+      add_check_constraint(
+        :client_session_limit_resolution_transactions,
+        "(state_id = 10 AND selected_at IS NULL AND resolved_at IS NULL AND cancelled_at IS NULL AND expired_at IS NULL) OR (state_id = 20 AND selected_at IS NOT NULL AND resolved_at IS NULL AND cancelled_at IS NULL AND expired_at IS NULL) OR (state_id = 100 AND selected_at IS NOT NULL AND resolved_at IS NOT NULL AND cancelled_at IS NULL AND expired_at IS NULL) OR (state_id = 910 AND expired_at IS NOT NULL AND resolved_at IS NULL AND cancelled_at IS NULL) OR (state_id = 920 AND cancelled_at IS NOT NULL AND resolved_at IS NULL AND expired_at IS NULL)",
+        name: "chk_client_resolution_state_timestamps", if_not_exists: true,
+      )
     end
   end
 
@@ -42,15 +52,15 @@ class NormalizeClientSessionLimitResolutionTransactions < ActiveRecord::Migratio
 
   def add_normalized_columns
     safety_assured do
-      change_column_null :client_session_limit_resolution_transactions, :oidc_authorization_transaction_id, true
-      add_column :client_session_limit_resolution_transactions, :state_id, :bigint unless column_exists?(:client_session_limit_resolution_transactions, :state_id)
-      add_column :client_session_limit_resolution_transactions, :sign_in_flow_id, :bigint unless column_exists?(:client_session_limit_resolution_transactions, :sign_in_flow_id)
-      add_column :client_session_limit_resolution_transactions, :browser_binding_digest, :string unless column_exists?(:client_session_limit_resolution_transactions, :browser_binding_digest)
-      add_column :client_session_limit_resolution_transactions, :started_at, :datetime unless column_exists?(:client_session_limit_resolution_transactions, :started_at)
-      add_column :client_session_limit_resolution_transactions, :expired_at, :datetime unless column_exists?(:client_session_limit_resolution_transactions, :expired_at)
-      add_column :client_session_limit_resolution_transactions, :discard_at, :datetime, default: -> { "'infinity'::timestamp" } unless column_exists?(:client_session_limit_resolution_transactions, :discard_at)
-      add_column :client_session_limit_resolution_transactions, :purge_eligible_at, :datetime, default: -> { "'infinity'::timestamp" } unless column_exists?(:client_session_limit_resolution_transactions, :purge_eligible_at)
-      change_column_default :client_session_limit_resolution_transactions, :audit_context, from: nil, to: {} if column_exists?(:client_session_limit_resolution_transactions, :audit_context)
+      change_column_null(:client_session_limit_resolution_transactions, :oidc_authorization_transaction_id, true)
+      add_column(:client_session_limit_resolution_transactions, :state_id, :bigint) unless column_exists?(:client_session_limit_resolution_transactions, :state_id)
+      add_column(:client_session_limit_resolution_transactions, :sign_in_flow_id, :bigint) unless column_exists?(:client_session_limit_resolution_transactions, :sign_in_flow_id)
+      add_column(:client_session_limit_resolution_transactions, :browser_binding_digest, :string) unless column_exists?(:client_session_limit_resolution_transactions, :browser_binding_digest)
+      add_column(:client_session_limit_resolution_transactions, :started_at, :datetime) unless column_exists?(:client_session_limit_resolution_transactions, :started_at)
+      add_column(:client_session_limit_resolution_transactions, :expired_at, :datetime) unless column_exists?(:client_session_limit_resolution_transactions, :expired_at)
+      add_column(:client_session_limit_resolution_transactions, :discard_at, :datetime, default: -> { "'infinity'::timestamp" }) unless column_exists?(:client_session_limit_resolution_transactions, :discard_at)
+      add_column(:client_session_limit_resolution_transactions, :purge_eligible_at, :datetime, default: -> { "'infinity'::timestamp" }) unless column_exists?(:client_session_limit_resolution_transactions, :purge_eligible_at)
+      change_column_default(:client_session_limit_resolution_transactions, :audit_context, from: nil, to: {}) if column_exists?(:client_session_limit_resolution_transactions, :audit_context)
     end
   end
 
@@ -59,7 +69,7 @@ class NormalizeClientSessionLimitResolutionTransactions < ActiveRecord::Migratio
 
     safety_assured do
       if column_exists?(:client_session_limit_resolution_transactions, :status)
-        execute <<~SQL.squish
+        execute(<<~SQL.squish)
           UPDATE client_session_limit_resolution_transactions
           SET state_id = CASE status
             WHEN 'pending' THEN 10
@@ -72,7 +82,7 @@ class NormalizeClientSessionLimitResolutionTransactions < ActiveRecord::Migratio
         SQL
       end
 
-      execute <<~SQL.squish
+      execute(<<~SQL.squish)
         UPDATE client_session_limit_resolution_transactions AS resolution
         SET sign_in_flow_id = authorization.secret_sign_in_flow_id
         FROM client_oidc_authorization_transactions AS authorization
@@ -95,24 +105,24 @@ class NormalizeClientSessionLimitResolutionTransactions < ActiveRecord::Migratio
     return if ambiguous_ids.empty?
 
     raise ActiveRecord::MigrationError,
-          "client session-limit resolution rows require forward repair (ids=#{ambiguous_ids.join(',')})"
+          "client session-limit resolution rows require forward repair (ids=#{ambiguous_ids.join(",")})"
   end
 
   def enforce_normalized_columns
     safety_assured do
-      change_column_null :client_session_limit_resolution_transactions, :state_id, false
-      change_column_null :client_session_limit_resolution_transactions, :sign_in_flow_id, false
-      change_column_null :client_session_limit_resolution_transactions, :browser_binding_digest, false
-      change_column_null :client_session_limit_resolution_transactions, :started_at, false
-      change_column_null :client_session_limit_resolution_transactions, :discard_at, false
-      change_column_null :client_session_limit_resolution_transactions, :purge_eligible_at, false
+      change_column_null(:client_session_limit_resolution_transactions, :state_id, false)
+      change_column_null(:client_session_limit_resolution_transactions, :sign_in_flow_id, false)
+      change_column_null(:client_session_limit_resolution_transactions, :browser_binding_digest, false)
+      change_column_null(:client_session_limit_resolution_transactions, :started_at, false)
+      change_column_null(:client_session_limit_resolution_transactions, :discard_at, false)
+      change_column_null(:client_session_limit_resolution_transactions, :purge_eligible_at, false)
     end
   end
 
   def create_state_table
     return if table_exists?(:client_session_limit_resolution_states)
 
-    create_table :client_session_limit_resolution_states do |t|
+    create_table(:client_session_limit_resolution_states) do |t|
       t.timestamps
     end
 
@@ -126,7 +136,7 @@ class NormalizeClientSessionLimitResolutionTransactions < ActiveRecord::Migratio
   def seed_states
     safety_assured do
       STATE_IDS.each do |id|
-        execute "INSERT INTO client_session_limit_resolution_states (id, created_at, updated_at) VALUES (#{id}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT (id) DO NOTHING"
+        execute("INSERT INTO client_session_limit_resolution_states (id, created_at, updated_at) VALUES (#{id}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT (id) DO NOTHING")
       end
     end
   end

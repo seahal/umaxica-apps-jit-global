@@ -6,7 +6,7 @@ class RenameSideOrgOidcAudiencesToWarp < ActiveRecord::Migration[8.2]
     raise ActiveRecord::MigrationError, "conflicting org identity audiences" if conflicting_audiences?
 
     safety_assured do
-      execute <<~SQL
+      execute(<<~SQL.squish)
         UPDATE operator_identities
         SET audience = 'warp-org', updated_at = CURRENT_TIMESTAMP
         WHERE audience = 'side-org'
@@ -21,7 +21,7 @@ class RenameSideOrgOidcAudiencesToWarp < ActiveRecord::Migration[8.2]
   private
 
   def conflicting_audiences?
-    connection.select_value(<<~SQL).to_i.positive?
+    connection.select_value(<<~SQL.squish).to_i.positive?
       SELECT COUNT(*)
       FROM operator_identities old_rows
       JOIN operator_identities new_rows

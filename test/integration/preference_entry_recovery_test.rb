@@ -35,8 +35,21 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
       host! ENV.fetch(config[:auth_env])
       plant_refresh_cookie(surface, stale_refresh_token(config))
       reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
-        surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        surface: surface.to_s,
+        intent: "sign_in",
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: nil,
       ).reference
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: surface.to_s, reference: reference)
+      auth_session, raw_sid = binding.class.auth_admission_session_class.issue!
+      binding.attach_auth_session!(auth_session: auth_session, confirmation_ref: SecureRandom.uuid)
+      binding.confirm_base!(
+        base_token: nil, browser_digest: AuthAdmissionBinding.browser_digest(
+          surface: surface.to_s, entry_ref: reference, nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        ),
+      )
+      https!
+      cookies[JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"] = raw_sid
       preference_class = config[:preference].constantize
 
       logs =
@@ -133,7 +146,10 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
           browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
           browser.cookies[PreferenceCookieName.refresh(surface: :app)] = token
           reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
-            surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+            surface: "app",
+            intent: "sign_in",
+            base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            base_token: nil,
           ).reference
 
           logs = capture_logs { browser.get(auth_app_sign_in_path(ri: "jp", entry_ref: reference)) }
@@ -156,7 +172,10 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     plant_refresh_cookie(:app, forged)
     reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "app",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     ).reference
 
     logs = capture_logs { get(auth_app_sign_in_path(ri: "jp", entry_ref: reference)) }
@@ -175,7 +194,10 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     plant_refresh_cookie(:app, token)
     reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "app",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     ).reference
 
     logs = capture_logs { get(auth_app_sign_in_path(ri: "jp", entry_ref: reference)) }
@@ -194,7 +216,10 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
     plant_refresh_cookie(:app, token)
     cookies[PreferenceCookieName.access(surface: :app)] = access
     reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "app",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     ).reference
 
     get auth_app_sign_in_path(ri: "jp", entry_ref: reference)
@@ -226,8 +251,21 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "app",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     ).reference
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: reference)
+    auth_session, raw_sid = binding.class.auth_admission_session_class.issue!
+    binding.attach_auth_session!(auth_session: auth_session, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(
+      base_token: nil, browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref: reference, nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      ),
+    )
+    https!
+    cookies[JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"] = raw_sid
     get auth_app_sign_in_path(ri: "jp", entry_ref: reference)
 
     assert_response :success
@@ -252,16 +290,23 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
     host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
     plant_refresh_cookie(:app, stale_refresh_token(SURFACES[:app]))
     reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "app",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     ).reference
 
-    post(
-      auth_app_sign_in_path(ri: "jp"), params: { entry_ref: reference, authenticity_token: "stale-page-token" },
-                                       headers: { "Sec-Fetch-Site" => "cross-site" },
-    )
+    assert_no_difference [
+      -> { ClientAuthCeremonySession.count },
+      -> { ClientAuthCeremonySession.where.not(admitted_at: nil).count },
+    ] do
+      post(
+        auth_app_sign_in_path(ri: "jp"), params: { entry_ref: reference, authenticity_token: "stale-page-token" },
+                                         headers: { "Sec-Fetch-Site" => "cross-site" },
+      )
+    end
 
     assert_not_equal 303, response.status
-    assert_nil ClientAuthCeremonySession.order(created_at: :desc).first&.then { |r| r.admitted? || nil }
   ensure
     ActionController::Base.allow_forgery_protection =
       Rails.configuration.action_controller.allow_forgery_protection

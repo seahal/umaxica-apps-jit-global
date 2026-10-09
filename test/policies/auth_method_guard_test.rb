@@ -27,7 +27,16 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
 
     assert_equal [:google], AuthenticationCredentialInventory.call(@user).usable_sign_in_capabilities
 
-    create_verified_email(@user)
+    begin
+      fv5017 = @user
+      fv5016 = "test#{SecureRandom.hex(4)}@example.com"
+      ClientEmail.create!(
+        user: fv5017,
+        address: fv5016,
+        user_email_status_id: ClientEmailStatus::VERIFIED,
+        binding_finalized_at: ClientEmail.database_now,
+      )
+    end
     inventory = AuthenticationCredentialInventory.call(@user)
 
     assert_equal %i(google email_otp).sort, inventory.usable_sign_in_capabilities.sort
@@ -72,7 +81,16 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
   test "verified telephone is a contact and step-up selector but not sign-in" do
     user = @user
 
-    create_verified_telephone(user, "+819012345678")
+    begin
+      fv5015 = user
+      fv5014 = "+819012345678"
+      ClientTelephone.create!(
+        user: fv5015,
+        number: fv5014,
+        user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+        binding_finalized_at: ClientTelephone.database_now,
+      )
+    end
     inventory = AuthenticationCredentialInventory.call(user)
 
     assert_empty inventory.usable_sign_in_capabilities
@@ -96,7 +114,16 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
 
   test "inventory exclusion removes only the excluded effective identity" do
     google = create_active_external_identity(client: @user, provider: "google")
-    create_verified_email(@user)
+    begin
+      fv5013 = @user
+      fv5012 = "test#{SecureRandom.hex(4)}@example.com"
+      ClientEmail.create!(
+        user: fv5013,
+        address: fv5012,
+        user_email_status_id: ClientEmailStatus::VERIFIED,
+        binding_finalized_at: ClientEmail.database_now,
+      )
+    end
 
     inventory = AuthenticationCredentialInventory.call(@user, excluding: google)
 
@@ -112,17 +139,50 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
   end
 
   test "can_remove_telephone does not require a second contact when no sign-in path depends on it" do
-    telephone = create_verified_telephone(@user, "+819012300001")
+    telephone =
+      begin
+        fv5011 = @user
+        fv5010 = "+819012300001"
+        ClientTelephone.create!(
+          user: fv5011,
+          number: fv5010,
+          user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+          binding_finalized_at: ClientTelephone.database_now,
+        )
+      end
 
     assert AuthMethodGuard.can_remove_telephone?(@user, telephone)
 
-    create_verified_email(@user, "telephone-removal#{SecureRandom.hex(4)}@example.com")
+    begin
+      fv5009 = @user
+      fv5008 = "telephone-removal#{SecureRandom.hex(4)}@example.com"
+      ClientEmail.create!(
+        user: fv5009,
+        address: fv5008,
+        user_email_status_id: ClientEmailStatus::VERIFIED,
+        binding_finalized_at: ClientEmail.database_now,
+      )
+    end
 
     assert AuthMethodGuard.can_remove_telephone?(@user, telephone)
   end
 
   test "can_remove_passkey preserves the last usable sign-in path with zero contacts" do
-    passkey = create_active_passkey(@user)
+    passkey =
+      begin
+        fv5007 = @user
+        fv5006 = fv5007.client_passkeys.new(
+          webauthn_id: "auth_guard_passkey_#{SecureRandom.hex(4)}",
+          external_id: SecureRandom.uuid,
+          public_key: "public_key",
+          sign_count: 0,
+          description: "auth guard passkey",
+          status_id: ClientPasskeyStatus::ACTIVE,
+          uv_verified_at: Time.current,
+        )
+        fv5006.save!(validate: false)
+        fv5006
+      end
 
     assert_not AuthMethodGuard.can_remove_passkey?(@user, passkey)
   end
@@ -134,7 +194,17 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
   end
 
   test "can_remove_email preserves sign-in and UV step-up capabilities" do
-    email = create_verified_email(@user, "email-removal#{SecureRandom.hex(4)}@example.com")
+    email =
+      begin
+        fv5005 = @user
+        fv5004 = "email-removal#{SecureRandom.hex(4)}@example.com"
+        ClientEmail.create!(
+          user: fv5005,
+          address: fv5004,
+          user_email_status_id: ClientEmailStatus::VERIFIED,
+          binding_finalized_at: ClientEmail.database_now,
+        )
+      end
     passkey = @user.client_passkeys.new(
       webauthn_id: "auth_guard_passkey_#{SecureRandom.hex(4)}",
       external_id: SecureRandom.uuid,
@@ -195,7 +265,21 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
       actual[partition] =
         case partition
         when :passkey_with_zero_contacts
-          passkey = create_active_passkey(@user)
+          passkey =
+            begin
+              fv5003 = @user
+              fv5002 = fv5003.client_passkeys.new(
+                webauthn_id: "auth_guard_passkey_#{SecureRandom.hex(4)}",
+                external_id: SecureRandom.uuid,
+                public_key: "public_key",
+                sign_count: 0,
+                description: "auth guard passkey",
+                status_id: ClientPasskeyStatus::ACTIVE,
+                uv_verified_at: Time.current,
+              )
+              fv5002.save!(validate: false)
+              fv5002
+            end
           inventory = AuthenticationCredentialInventory.call(@user)
 
           assert_equal [:passkey], inventory.usable_sign_in_capabilities, partition
@@ -225,7 +309,17 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
           assert_empty inventory.usable_step_up_capabilities, partition
           AuthMethodGuard.can_remove_external_identity?(@user, identity)
         when :no_step_up_method
-          email = create_verified_email(@user)
+          email =
+            begin
+              fv5001 = @user
+              fv5000 = "test#{SecureRandom.hex(4)}@example.com"
+              ClientEmail.create!(
+                user: fv5001,
+                address: fv5000,
+                user_email_status_id: ClientEmailStatus::VERIFIED,
+                binding_finalized_at: ClientEmail.database_now,
+              )
+            end
           email.update!(step_up_otp_locked_until: 1.hour.from_now)
           inventory = AuthenticationCredentialInventory.call(@user)
 
@@ -252,36 +346,4 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
   end
 
   private
-
-  def create_verified_email(user, address = "test#{SecureRandom.hex(4)}@example.com")
-    ClientEmail.create!(
-      user: user,
-      address: address,
-      user_email_status_id: ClientEmailStatus::VERIFIED,
-      binding_finalized_at: ClientEmail.database_now,
-    )
-  end
-
-  def create_verified_telephone(user, number)
-    ClientTelephone.create!(
-      user: user,
-      number: number,
-      user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-      binding_finalized_at: ClientTelephone.database_now,
-    )
-  end
-
-  def create_active_passkey(user)
-    passkey = user.client_passkeys.new(
-      webauthn_id: "auth_guard_passkey_#{SecureRandom.hex(4)}",
-      external_id: SecureRandom.uuid,
-      public_key: "public_key",
-      sign_count: 0,
-      description: "auth guard passkey",
-      status_id: ClientPasskeyStatus::ACTIVE,
-      uv_verified_at: Time.current,
-    )
-    passkey.save!(validate: false)
-    passkey
-  end
 end

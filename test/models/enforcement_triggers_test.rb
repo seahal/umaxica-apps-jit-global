@@ -18,7 +18,13 @@ class EnforcementTriggersTest < ActiveSupport::TestCase
       end
 
     assert_equal(
-      %w(enforcement_protect_client_emails_delete enforcement_protect_clients_delete),
+      %w(
+        client_emails_binding_facts_trigger client_emails_credential_registration_otp_proof_trigger
+        client_emails_sign_up_otp_proof_trigger client_external_identities_binding_facts_trigger
+        client_rotation_audit_guard client_telephones_binding_facts_trigger
+        client_telephones_credential_registration_otp_proof_trigger client_telephones_sign_up_otp_proof_trigger
+        enforcement_protect_client_emails_delete enforcement_protect_clients_delete
+      ),
       triggers.uniq.sort,
       "Adding or removing a trigger requires updating this inventory test " \
       "(adr/database-trigger-usage-boundary.md: triggers are named, enumerated, and asserted).",
@@ -84,7 +90,10 @@ class EnforcementTriggersTest < ActiveSupport::TestCase
   end
 
   test "raw SQL DELETE on clients raises when an in-force principal_hard_delete_blocked Principal Effect exists" do
-    client = Client.create!(public_id: "trig_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)
+    client = Client.create!(
+      public_id: "trig_#{SecureRandom.uuid}".chars.first(16).join,
+      status_id: ClientStatus::ACTIVE,
+    )
     operator = operators(:one)
 
     the_case = AppEnforcementCase.new(
@@ -119,7 +128,10 @@ class EnforcementTriggersTest < ActiveSupport::TestCase
   end
 
   test "a client with no in-force principal_hard_delete_blocked effect deletes normally via raw SQL" do
-    client = Client.create!(public_id: "trig_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)
+    client = Client.create!(
+      public_id: "trig_#{SecureRandom.uuid}".chars.first(16).join,
+      status_id: ClientStatus::ACTIVE,
+    )
 
     Client.transaction(requires_new: true) do
       Client.lease_connection.execute("DELETE FROM clients WHERE id = #{client.id}")

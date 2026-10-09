@@ -6,7 +6,7 @@ class RenameSideComOidcAudiencesToWarp < ActiveRecord::Migration[8.2]
     raise ActiveRecord::MigrationError, "conflicting com identity audiences" if conflicting_audiences?
 
     safety_assured do
-      execute <<~SQL
+      execute(<<~SQL.squish)
         UPDATE visitor_identities
         SET audience = 'warp-com', updated_at = CURRENT_TIMESTAMP
         WHERE audience = 'side-com'
@@ -21,7 +21,7 @@ class RenameSideComOidcAudiencesToWarp < ActiveRecord::Migration[8.2]
   private
 
   def conflicting_audiences?
-    connection.select_value(<<~SQL).to_i.positive?
+    connection.select_value(<<~SQL.squish).to_i.positive?
       SELECT COUNT(*)
       FROM visitor_identities old_rows
       JOIN visitor_identities new_rows

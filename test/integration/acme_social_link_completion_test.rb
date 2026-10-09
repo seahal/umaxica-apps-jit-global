@@ -16,8 +16,8 @@ class BaseSocialLinkCompletionTest < ActionDispatch::IntegrationTest
 
   setup do
     OmniAuth.config.test_mode = true
-    @host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")
-    @base_host = ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost")
+    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    @base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     @callback_headers = social_callback_headers(@host)
   end
 
@@ -26,19 +26,201 @@ class BaseSocialLinkCompletionTest < ActionDispatch::IntegrationTest
     OmniAuth.config.mock_auth[:apple] = nil
   end
 
-  test "sign callback commits the social link without base completion" do
+  test "sign callback stages the social link until the Auth receiver POST" do
     user = Client.create!(status_id: ClientStatus::ACTIVE, public_id: "linkcompl_#{SecureRandom.hex(4)}")
     uid = "completion_google_#{SecureRandom.hex(4)}"
     setup_google_mock_auth(uid: uid, token: "completion_token")
 
-    grant_session = seed_app_social_link_grant_session(provider: "google", user: user, ri: "jp")
+    grant_session =
+      begin
+        fx0_provider = "google"
+        fx0_user = user
+        fx0_ri = "jp"
+        fx0_host = @host
+        host!(fx0_host) if respond_to?(:host!)
 
-    assert_difference("ClientGoogleIdentity.count", 1) do
+        fx0_user_headers =
+          begin
+            f0_headers =
+              begin
+                rp_headers = as_user_headers(fx0_user, host: fx0_host)
+                rp_host = rp_headers["Host"]
+                rp_route =
+                  begin
+                    Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+                  rescue ActionController::RoutingError
+                    nil
+                  end
+                rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+                if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+                  rp_client_id =
+                    case rp_family
+                    when "base" then "base-#{rp_surface}-ww"
+                    when "edit" then "edit-org"
+                    else "#{rp_family}-#{rp_surface}"
+                    end
+                  rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                  rp_client = OidcClientRegistry.find!(rp_client_id)
+                  rp_key = [rp_client.client_id, rp_token.public_id]
+                  @base_browser_rp_credentials ||= {}
+                  if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                      !(rp_token.device_session_id && ClientRpSession.exists?(
+                        device_session_id: rp_token.device_session_id,
+                        oidc_client_id: rp_client.client_id,
+                        revoked_at: nil,
+                      ))
+                    rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                    rp_now = Time.current
+                    rp_session = ClientRpSession.create!(
+                      client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                      refresh_token_expires_at: rp_now + 10.minutes,
+                    )
+                    rp_access = AuthenticationTokenService.encode(
+                      rp_token.user, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.user,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+                    )
+                    @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+                  end
+                  if @base_browser_rp_credentials[rp_key]
+                    rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+                    rp_cookie = [
+                      rp_headers.fetch("Cookie"),
+                      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                    ].join("; ")
+                    rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+                  end
+                end
+                rp_headers
+              end
+            f0_host = f0_headers["Host"]
+            f0_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f0_host}/") if f0_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f0_family, f0_surface = f0_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f0_family) && f0_surface == "app"
+              f0_client_id =
+                case f0_family
+                when "base" then "base-#{f0_surface}-ww"
+                when "edit" then "edit-org"
+                else "#{f0_family}-#{f0_surface}"
+                end
+              f0_token = ClientToken.find_by!(public_id: f0_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f0_client = OidcClientRegistry.find!(f0_client_id)
+              f0_key = [f0_client.client_id, f0_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f0_key] && f0_token.currently_usable? &&
+                  !(f0_token.device_session_id && ClientRpSession.exists?(
+                    device_session_id: f0_token.device_session_id,
+                    oidc_client_id: f0_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f0_token.rotate_refresh_token! unless f0_token.device_session.current_refresh_token_id
+                f0_now = Time.current
+                f0_session = ClientRpSession.create!(
+                  client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
+                  refresh_token_expires_at: f0_now + 10.minutes,
+                )
+                f0_access = AuthenticationTokenService.encode(
+                  f0_token.user, host: f0_host, resource_type: "client",
+                                 session_public_id: f0_token.public_id, base_session_public_id: f0_token.public_id,
+                                 oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
+                                 expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
+                                 issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
+                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
+                                 subject: OidcSubject.for(
+                                   f0_token.user,
+                                   resource_type: "client",
+                                 ), client_id: f0_client.client_id,
+                )
+                @base_browser_rp_credentials[f0_key] =
+                  [f0_access, f0_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f0_key]
+                f0_access, f0_refresh = @base_browser_rp_credentials.fetch(f0_key)
+                f0_cookie = [
+                  f0_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f0_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f0_refresh)}",
+                ].join("; ")
+                f0_headers = f0_headers.merge(
+                  "Cookie" => f0_cookie,
+                  "HTTP_COOKIE" => f0_cookie,
+                )
+              end
+            end
+            f0_headers
+          end
+        fx0_token_public_id = fx0_user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
+        fx0_token = ClientToken.find_by(public_id: fx0_token_public_id)
+        fx0_session_public_id = fx0_token&.try(:device_session)&.public_id.presence || fx0_token_public_id
+        mark_token_step_up_satisfied_for_test(
+          fx0_token,
+          scope: SocialAuth::SOCIAL_LINK_SCOPE,
+        ) if fx0_token
+
+        fx0_issuance = IdentitySocialCeremonyGrantIssuer.issue!(
+          surface: "app",
+          actor_ref: fx0_user.public_id,
+          session_ref: fx0_session_public_id,
+          operation: "link",
+          provider: fx0_provider,
+        )
+
+        fx0_normalized_provider = SocialIdentifiable.normalize_provider(fx0_provider)
+        fx0_continue_path = public_send(
+          :"auth_app_settings_#{fx0_normalized_provider}_path",
+          ri: fx0_ri,
+          social_ceremony_grant: fx0_issuance.grant,
+        )
+
+        fx0_headers = social_callback_headers(fx0_host).merge(fx0_user_headers)
+        post(fx0_continue_path, headers: fx0_headers)
+        fx0_rails_cookie_key = Rails.application.config.session_options.fetch(:key)
+        fx0_rails_cookie = response.cookies.fetch(fx0_rails_cookie_key)
+        fx0_user_headers["Cookie"] = [
+          fx0_user_headers.fetch("Cookie"),
+          "#{fx0_rails_cookie_key}=#{Rack::Utils.escape(fx0_rails_cookie)}",
+        ].join("; ")
+        fx0_user_headers["HTTP_COOKIE"] = fx0_user_headers.fetch("Cookie")
+
+        Struct.new(:state, :user_headers, :session_public_id, keyword_init: true).new(
+          state: social_auth_state_from_response,
+          user_headers: fx0_user_headers,
+          session_public_id: fx0_session_public_id,
+        )
+      end
+
+    assert_no_difference("ClientGoogleIdentity.count") do
       get auth_app_social_google_callback_url(ri: "jp"),
-          params: { state: grant_session.state },
-          headers: @callback_headers.merge(grant_session.user_headers)
+          params: { state: grant_session.state }, headers: @callback_headers.merge(grant_session.user_headers)
     end
+    assert_response :success
+    form = response.parsed_body.at_css("form")
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    cookie_key = Rails.application.config.session_options.fetch(:key)
+    grant_session.user_headers["Cookie"] = [grant_session.user_headers.fetch("Cookie").split("; ").reject { |pair|
+      pair.start_with?("#{cookie_key}=")
+    }.join("; "), "#{cookie_key}=#{Rack::Utils.escape(response.cookies.fetch(cookie_key))}",].join("; ")
+    grant_session.user_headers["HTTP_COOKIE"] = grant_session.user_headers.fetch("Cookie")
+    assert_difference("ClientGoogleIdentity.count", 1) do
+      post form["action"], params: fields, headers: @callback_headers.merge(grant_session.user_headers)
 
+      assert_response :see_other
+    end
     assert_redirected_to auth_app_settings_path(ri: "jp")
     assert_not_includes response.body.to_s, "social-completion-form"
     identity = ClientGoogleIdentity.find_by!(uid: uid)
@@ -58,36 +240,23 @@ class BaseSocialLinkCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :unprocessable_content
     assert_nil response.location
-    assert_equal "Invalid browser request", response.body
+    assert_equal I18n.t("sign.app.social.sessions.create.failure"), response.body
   end
 
-  test "base social login start delegates to sign with a login ceremony grant" do
-    assert_no_difference("Client.count") do
+  test "base social login continuation returns to passive Base admission without a provider grant" do
+    assert_no_difference(["Client.count", "ClientToken.count", "ClientSocialCeremonyTransaction.count"]) do
       post base_app_social_authentication_continuation_url(id: "google", ri: "jp", host: @base_host),
            headers: { "Host" => @base_host }
     end
 
-    # 307, not 303: the Auth ceremony accepts POST only, so the handoff has to preserve the
-    # method and body (see Base::App::Social::Authentication::ContinuationsController).
-    assert_response :temporary_redirect
-
+    assert_response :see_other
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query)
 
-    assert_equal Rails.configuration.x.boot_config.fetch(:hosts).sign_service.host, location.host
-    assert_equal "/social/google/session", location.path
-    assert_equal "sign_in", query["entry"]
-    assert_equal "jp", query["ri"]
-    assert_predicate query["social_ceremony_grant"], :present?
-
-    grant = IdentitySocialCeremonyGrant.decode(
-      query.fetch("social_ceremony_grant"),
-      issuer_id: IdentitySocialCeremonyContract.acme_issuer_id("app"),
-    )
-
-    assert_equal "login", grant["operation"]
-    assert_equal "google", grant["provider"]
-    assert_equal "anonymous", grant["actor_ref"]
+    assert_equal @base_host, location.host
+    assert_equal "/sign", location.path
+    assert_equal({ "ri" => "jp" }, query)
+    assert_nil session[SocialCallbackGuard::SOCIAL_STATE_SESSION_KEY]
   end
 
   test "sign com and org surfaces expose no social routes" do
@@ -249,23 +418,52 @@ class BaseSocialLinkCompletionTest
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)
-    return unless token.respond_to?(:update_columns)
-
-    attrs = {
-      last_step_up_at: at,
-      last_step_up_scope: scope.presence || token.try(:last_step_up_scope).presence || "verification",
-      last_step_up_aal: ("aal2" if token.respond_to?(:last_step_up_aal)),
-      last_step_up_method: ("passkey" if token.respond_to?(:last_step_up_method)),
-      last_step_up_session_public_id: (token.public_id if token.respond_to?(:last_step_up_session_public_id)),
-      last_step_up_purpose: ("step_up" if token.respond_to?(:last_step_up_purpose)),
-      last_step_up_audience: (step_up_test_audience_for_token(token) if token.respond_to?(:last_step_up_audience)),
-      last_step_up_credential_ref: ("test-step-up-credential" if token.respond_to?(:last_step_up_credential_ref)),
-      last_step_up_phishing_resistant: (false if token.respond_to?(:last_step_up_phishing_resistant)),
-      last_step_up_user_verified: (true if token.respond_to?(:last_step_up_user_verified)),
-      last_step_up_full_reauthentication: (false if token.respond_to?(:last_step_up_full_reauthentication)),
-      updated_at: Time.current,
-    }.compact
-    token.update_columns(attrs)
+    _, scope = at, scope || SocialAuth::SOCIAL_LINK_SCOPE
+    actor = token.user
+    token.rotate_refresh_token! unless token.device_session.current_refresh_token_id
+    credential = actor.client_totp_credentials.find_by(
+      user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    ) || ClientTotpCredential.create_for_user!(
+      user: actor, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    requirement = StepUpRequirement.new(
+      step_up_required: true, scope: scope, allowed_methods: [:totp],
+      phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
+      ttl: 15.minutes, purpose: "step_up", audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
+    )
+    nonce = SecureRandom.urlsafe_base64(32)
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement,
+      return_to: (scope == "settings_email") ? "/identity/emails" : "/settings/google",
+      base_browser_nonce: nonce, base_token: token,
+    )
+    transaction = issuance.transaction
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    digest = AuthAdmissionBinding.browser_digest(surface: "app", entry_ref: issuance.reference, nonce: nonce)
+    binding.confirm_base!(base_token: token, browser_digest: digest)
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: issuance.reference, surface: "app", expected_intent: "step_up", binding: binding,
+      raw_auth_sid: raw_sid,
+    )
+    admitted, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", previous_raw_sid: raw_sid,
+      step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
+    # This fixture exercises Social authorization; TOTP code verification has its own public-boundary tests.
+    transaction.record_verification!(
+      method: "totp", aal: "aal1", phishing_resistant: false, user_verified: false,
+      verified_at: transaction.class.database_now, verified_credential_ref: credential.public_id,
+    )
+    proof = BaseAuthAdmissionCoordinator.issue_result!(transaction: transaction, ceremony_session_ref: admitted.id.to_s)
+    IdentityStepUpCeremonyFreshnessCommitter.call!(
+      actor: actor, token: token, transaction: transaction, requirement: requirement, result_reference: proof.reference,
+    )
+    token.reload
   end
 
   def step_up_test_audience_for_token(token)
@@ -357,35 +555,6 @@ class BaseSocialLinkCompletionTest
     end
   end
 
-  def seed_social_auth_session(provider:, intent: "login", user: nil, entry: nil, ri: "jp", rt: nil, referer: nil)
-    # Keep the Auth request phase and callback on the same host so the Rack
-    # session carrying the ceremony state is the one the callback reads.
-    host = @host
-    host!(host) if respond_to?(:host!)
-    normalized_provider = SocialIdentifiable.normalize_provider(provider)
-    continue_path =
-      if intent.to_s == "link"
-        public_send(:"auth_app_settings_#{normalized_provider}_path", ri: ri)
-      elsif entry.to_s == "sign_up"
-        public_send(:"auth_app_social_#{normalized_provider}_registration_path", ri: ri, rt: rt)
-      else
-        public_send(:"auth_app_social_#{normalized_provider}_session_path", ri: ri, rt: rt)
-      end
-    headers = social_callback_headers(host)
-    headers["Referer"] = referer if referer.present?
-    if user
-      user_headers = as_user_headers(user, host: host)
-      token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
-      mark_token_step_up_satisfied_for_test(
-        token,
-        scope: SocialAuth::SOCIAL_LINK_SCOPE,
-      ) if intent.to_s == "link" && token
-      headers = headers.merge(user_headers)
-    end
-    post(continue_path, headers: headers)
-    social_auth_state_from_response
-  end
-
   def assert_oidc_authorize_redirect(location, host:, client_id: "base-rails-rp")
     uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
@@ -401,73 +570,37 @@ end
 class BaseSocialLinkCompletionTest
   private
 
-  def seed_app_social_link_grant_session(provider:, user:, ri: "jp")
-    # Keep the Auth request phase and callback on the same host so the Rack
-    # session carrying the ceremony state is the one the callback reads.
-    host = @host
-    host!(host) if respond_to?(:host!)
-
-    user_headers = as_user_headers(user, host: host)
-    token_public_id = user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
-    token = ClientToken.find_by(public_id: token_public_id)
-    session_public_id = token&.try(:device_session)&.public_id.presence || token_public_id
-    mark_token_step_up_satisfied_for_test(token, scope: SocialAuth::SOCIAL_LINK_SCOPE) if token
-
-    issuance = IdentitySocialCeremonyGrantIssuer.issue!(
-      surface: "app",
-      actor_ref: user.public_id,
-      session_ref: session_public_id,
-      operation: "link",
-      provider: provider,
-    )
-
-    normalized_provider = SocialIdentifiable.normalize_provider(provider)
-    continue_path = public_send(
-      :"auth_app_settings_#{normalized_provider}_path",
-      ri: ri,
-      social_ceremony_grant: issuance.grant,
-    )
-
-    headers = social_callback_headers(host).merge(user_headers)
-    post(continue_path, headers: headers)
-
-    Struct.new(:state, :user_headers, :session_public_id, keyword_init: true).new(
-      state: social_auth_state_from_response,
-      user_headers: user_headers,
-      session_public_id: session_public_id,
-    )
-  end
-
   def submit_social_completion_if_present!
-    return if follow_social_completion_redirect_if_present!
+    target = URI.parse(response.location) if response.redirect?
+    continuation = target&.path == "/social/authentication/completion"
+    if continuation
+      host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+      host!(host)
+      https!
+      headers = { "Host" => host, "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+      get(target.request_uri, headers: headers)
+      form = response.parsed_body.at_css("form")
+      raise StandardError, "social completion continuation form missing" unless form
 
-    return unless response.media_type == "text/html"
-    return unless response.body.include?("social-completion-form")
+    else
+      return unless response.media_type == "text/html" && response.body.include?("social-completion-form")
 
-    # A browser only reaches the completion endpoint when CSP allows the form
-    # target. See test/support/form_action_policy_helper.rb.
-    assert_forms_submittable_under_policy
+      assert_forms_submittable_under_policy
+      form = response.parsed_body.at_css("form#social-completion-form")
+      raise StandardError, "social completion form missing" unless form
 
-    form = response.parsed_body.at_css("form#social-completion-form")
-    raise StandardError, "social completion form missing" unless form
-
-    params = {}
-    form.css("input").each do |input|
-      name = input["name"]
-      params[name] = input["value"] if name.present?
-    end
-
-    post(
-      form["action"],
-      params: params,
-      headers: {
-        # A browser sends the form target as the Host, not a separately configured one.
+      headers = {
         "Host" => URI.parse(form["action"]).host,
         "Origin" => "https://#{configured_host(:sign_service)}",
         "Sec-Fetch-Site" => "same-site",
-      },
-    )
-    cookies.to_hash.each_key { |key| cookies.delete(key) }
+      }
+    end
+    params = form.css("input").filter_map do |input|
+      name = input["name"]
+      [name, input["value"]] if continuation ? !name.nil? : name.present?
+    end.to_h
+    post(form["action"], params: params, headers: headers)
+    cookies.to_hash.each_key { |key| cookies.delete(key) } unless continuation
   end
 end
 

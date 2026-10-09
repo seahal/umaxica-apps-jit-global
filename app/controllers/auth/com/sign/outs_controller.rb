@@ -16,6 +16,8 @@ module Auth
         after_action :sign_out_notice_cache_headers!, only: %i(show edit)
 
         def show
+          return render "auth/shared/sign_outs/edit" if params[:logout_challenge].present?
+
           redirect_to_base_sign_out!
         end
 

@@ -140,7 +140,7 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
 
         assert_nil owner.request.headers["Sec-Fetch-Site"]
         assert_nil owner.request.headers["Origin"]
-        assert_equal 302, owner.response.status
+        assert_equal 303, owner.response.status
         assert parent.reload.base_finalized_at.present?
         root_reference ||= parent.browser_session_ref
 

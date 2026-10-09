@@ -40,7 +40,12 @@ module Webauthn
 
     def self.verify!(credential_params:, challenge:, config:)
       policy = UvPolicy.for(:registration)
-      credential = WebAuthn::Credential.from_create(credential_params, relying_party: config.relying_party)
+      credential =
+        begin
+          WebAuthn::Credential.from_create(credential_params, relying_party: config.relying_party)
+        rescue ArgumentError
+          raise VerificationError, "attestation encoding is invalid"
+        end
       credential.verify(challenge, user_verification: policy.enforce_server_side?)
 
       authenticator_data = credential.response.authenticator_data

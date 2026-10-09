@@ -83,10 +83,29 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
         required_aal: "none", allowed_methods: ["totp"], purpose: purpose,
       )
       issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
-        transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: base_token,
+        transaction: transaction,
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: base_token,
       )
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-      _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: base_token)
+      _auth_session, raw_sid =
+        begin
+          admission_binding = binding
+          admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+          admission_binding.attach_auth_session!(
+            auth_session: admission_session,
+            confirmation_ref: SecureRandom.uuid,
+          )
+          admission_binding.confirm_base!(
+            base_token: base_token,
+            browser_digest: AuthAdmissionBinding.browser_digest(
+              surface: admission_binding.class.auth_admission_surface_name,
+              entry_ref: admission_binding.entry_ref,
+              nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            ),
+          )
+          [admission_session, admission_raw_sid]
+        end
       payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
         reference: issuance.reference, surface: "app", expected_intent: purpose,
         binding: binding, raw_auth_sid: raw_sid,
@@ -119,10 +138,27 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
       required_scope: "settings_birthdate", required_aal: "none", allowed_methods: ["passkey"],
     )
     issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
-      transaction:, base_browser_nonce: "test-browser-nonce", base_token: token,
+      transaction:, base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: token)
+    _auth_session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     store = Valkey::AuthState::OpaqueAdmissionStore.new
     original = store.read_reference!(reference: issuance.reference)
     { actor_ref: clients(:two).public_id,
@@ -152,10 +188,29 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
       required_aal: "none", allowed_methods: ["passkey"],
     )
     issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
-      transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: client_tokens(:one),
+      transaction: transaction,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: client_tokens(:one),
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: client_tokens(:one))
+    _auth_session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: client_tokens(:one),
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
       reference: issuance.reference, surface: "app", expected_intent: "step_up",
       binding: binding, raw_auth_sid: raw_sid,
@@ -194,7 +249,24 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
       transaction:, base_browser_nonce: nonce, base_token: token,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-    auth, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: token, base_browser_nonce: nonce)
+    auth, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: nonce,
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     admitted, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", previous_raw_sid: raw_sid,
       step_up_ceremony_transaction_ref: transaction.transaction_id,
@@ -254,11 +326,11 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     assert_no_difference("ClientToken.count") do
       issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
         surface: "app", intent: "sign_in", nonce_digest: nonce_digest,
-        base_browser_nonce: "test-browser-nonce", base_token: nil,
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
       )
     end
     assert_instance_of ClientSignInFlow, issuance.transaction
-    assert_match(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN, issuance.reference)
+    assert_match(AuthAdmissionBinding::REFERENCE_PATTERN, issuance.reference)
     assert_equal nonce_digest, issuance.transaction.nonce_digest
     assert_nil issuance.transaction.principal_id
     assert_nil issuance.transaction.token_id
@@ -268,13 +340,13 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
   test "an explicit local restart retires the old binding and preserves the pending flow" do
     first = BaseAuthAdmissionCoordinator.issue_local_entry!(
       surface: "app", intent: "sign_in", nonce_digest: ClientSignInFlow.digest_nonce("entry-nonce"),
-      base_browser_nonce: "test-browser-nonce", base_token: nil,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
     )
 
     second = BaseAuthAdmissionCoordinator.issue_local_entry!(
       surface: "app", intent: "sign_in", restart_of: first.reference,
       nonce_digest: first.transaction.nonce_digest,
-      base_browser_nonce: "test-browser-nonce", base_token: nil,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
     )
 
     assert_not_equal first.reference, second.reference
@@ -291,10 +363,27 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     transaction = issue_transaction!
 
     issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
-      transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+      transaction: transaction, base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    _auth_session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
       reference: issuance.reference, surface: "app", expected_intent: "sign_in",
       binding:, raw_auth_sid: raw_sid,
@@ -315,10 +404,27 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
   test "OIDC intent substitution does not consume the original sign-in admission" do
     transaction = issue_transaction!
     issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
-      transaction:, base_browser_nonce: "test-browser-nonce", base_token: nil,
+      transaction:, base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    _auth_session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
 
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
       BaseAuthAdmissionCoordinator.consume_entry_reference!(
@@ -337,11 +443,31 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
 
   test "local entry consume returns the payload once for the issuing surface" do
     issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "com", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "com",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     )
 
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
-    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    _auth_session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
       reference: issuance.reference, surface: "com", expected_intent: "sign_in",
       binding:, raw_auth_sid: raw_sid,
@@ -359,11 +485,31 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
 
   test "local entry consume denies a code issued for another surface" do
     issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "com", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "com",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     )
 
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
-    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    _auth_session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
       BaseAuthAdmissionCoordinator.consume_entry_reference!(
         reference: issuance.reference, surface: "app", expected_intent: "sign_in",
@@ -374,11 +520,31 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
 
   test "local entry consume denies a code issued for another intent" do
     issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "com", intent: "sign_up", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "com",
+      intent: "sign_up",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     )
 
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
-    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    _auth_session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
       BaseAuthAdmissionCoordinator.consume_entry_reference!(
         reference: issuance.reference, surface: "com", expected_intent: "sign_in",
@@ -398,10 +564,30 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
 
   test "local entry consume rejects an unsupported intent" do
     issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "com", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "com",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
-    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    _auth_session, raw_sid =
+      begin
+        admission_binding = binding
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: nil,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_binding.class.auth_admission_surface_name,
+            entry_ref: admission_binding.entry_ref,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        [admission_session, admission_raw_sid]
+      end
     assert_raises(ArgumentError) do
       BaseAuthAdmissionCoordinator.consume_entry_reference!(
         reference: issuance.reference, surface: "com", expected_intent: "withdrawal",
@@ -549,5 +735,86 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     def issue!(**)
       raise Umaxica::Valkey::Unavailable, "test Valkey delivery failure"
     end
+  end
+  public
+
+  test "social signup acceptance requires the redeemed browser parent and exact provider evidence" do
+    nonce = SecureRandom.urlsafe_base64(32)
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_up", base_browser_nonce: nonce, base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    pending, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: pending, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(
+      base_token: nil,
+      browser_digest: AuthAdmissionBinding.browser_digest(surface: "app", entry_ref: binding.entry_ref, nonce:),
+    )
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: binding.entry_ref, surface: "app", expected_intent: "sign_up", binding:, raw_auth_sid: raw_sid,
+    )
+    admitted, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "local_sign_up", previous_raw_sid: raw_sid,
+      local_sign_in_flow_ref: issuance.transaction.public_id,
+    )
+    binding.redeem!(auth_session: pending, admitted_auth_session: admitted)
+    record = binding.reload.admitted_auth_ceremony_session
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.validate_social_result_browser_binding!(
+        reference: binding.entry_ref, surface: "app", provider: "google", base_browser_nonce: nonce, base_token: nil,
+      )
+    end
+    record.record_authentication_evidence!(method: "google")
+
+    assert_equal binding.id, BaseAuthAdmissionCoordinator.validate_social_result_browser_binding!(
+      reference: binding.entry_ref, surface: "app", provider: "google", base_browser_nonce: nonce, base_token: nil,
+    ).id
+    [nil, "", " ", [], {}, SecureRandom.urlsafe_base64(32)].each do |other_nonce|
+      assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+        BaseAuthAdmissionCoordinator.validate_social_result_browser_binding!(
+          reference: binding.entry_ref,
+          surface: "app",
+          provider: "google",
+          base_browser_nonce: other_nonce,
+          base_token: nil,
+        )
+      end
+    end
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.validate_social_result_browser_binding!(
+        reference: binding.entry_ref, surface: "app", provider: "apple", base_browser_nonce: nonce, base_token: nil,
+      )
+    end
+    deadline = binding.expires_at
+    [-1, 0, 1].each do |microseconds|
+      ClientAuthAdmissionBinding.stub(:database_now, deadline + Rational(microseconds, 1_000_000)) do
+        if microseconds.negative?
+          assert_equal binding.id, BaseAuthAdmissionCoordinator.validate_social_result_browser_binding!(
+            reference: binding.entry_ref,
+            surface: "app",
+            provider: "google",
+            base_browser_nonce: nonce,
+            base_token: nil,
+          ).id
+        else
+          assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+            BaseAuthAdmissionCoordinator.validate_social_result_browser_binding!(
+              reference: binding.entry_ref,
+              surface: "app",
+              provider: "google",
+              base_browser_nonce: nonce,
+              base_token: nil,
+            )
+          end
+        end
+      end
+    end
+    record.complete!
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.validate_social_result_browser_binding!(
+        reference: binding.entry_ref, surface: "app", provider: "google", base_browser_nonce: nonce, base_token: nil,
+      )
+    end
+    assert_not ClientSocialCeremonyTransaction.exists?(session_ref: binding.entry_ref)
   end
 end

@@ -1,0 +1,79 @@
+# frozen_string_literal: true
+
+module Auth
+  module App
+    module Social
+      class LinkCompletionsController < ::Auth::App::ApplicationController
+        include SocialAuth
+        include VerificationClient
+
+        AUTHENTICATION_MODE = :private
+        protect_from_forgery using: :header_or_legacy_token, with: :exception
+
+        public
+
+        def create
+          authorize!(current_client, to: :update?)
+          response.headers["Cache-Control"] = "private, no-store"
+          response.headers["Referrer-Policy"] = "no-referrer"
+          response.headers["Content-Security-Policy"] = "frame-ancestors 'none'; form-action 'self'"
+          reference = params[:candidate_ref]
+          unless reference.is_a?(String) && reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
+            raise ActionController::BadRequest
+          end
+
+          marker = session[SocialAuth::SOCIAL_LINK_COMPLETION_SESSION_KEY]
+          token = current_session
+          unless marker.is_a?(Array) && marker.length == 2 && marker.first == reference &&
+              token && marker.last == token.public_id && current_client
+            raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+          end
+
+          current_client.with_lock do
+            AppTicketRecord.connected_to(role: :writing) do
+              token.device_session.with_lock do
+                token.with_lock { commit_link_candidate!(reference, token) }
+              end
+            end
+          end
+          session.delete(SocialAuth::SOCIAL_LINK_COMPLETION_SESSION_KEY)
+          redirect_to(auth_app_settings_path(ri: params[:ri]), status: :see_other)
+        rescue IdentitySocialCeremonyContract::Error, ActiveRecord::RecordNotFound, ActionController::BadRequest
+          head :bad_request
+        rescue SocialAuth::BaseError => e
+          render plain: e.message, status: e.status_code
+        end
+
+        private
+
+        def commit_link_candidate!(reference, token)
+          now = token.class.database_now
+          unless current_client.login_allowed? && token.currently_usable?(now) && token.device_session.usable? &&
+              token.device_session.current_refresh_token_id == token.id
+            raise SocialAuth::UnauthorizedError.new("errors.social_auth.not_logged_in")
+          end
+
+          authorize_social_auth_link!(current_client)
+          require_recent_step_up!
+          record = IdentitySocialCeremonyCandidate.lock.find_by!(ref: reference)
+          unless record.surface == "app" && record.operation == "link" &&
+              record.actor_ref == current_client.public_id && record.session_ref == token.device_session.public_id &&
+              record.consumed_at.nil? && record.expires_at > now
+            raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+          end
+
+          candidate = IdentitySocialCeremonyCandidateStore.fetch!(reference)
+          ExternalAuthenticationLinkUseCase.call(
+            principal: candidate.callback_result.principal,
+            credential_candidate: candidate.callback_result.credential_candidate,
+            user: current_client,
+          )
+          record.consume!(
+            now: now, error_class: IdentitySocialCeremonyContract::Error,
+            not_found_message: "social link candidate unavailable", expired_message: "social link candidate expired",
+          )
+        end
+      end
+    end
+  end
+end

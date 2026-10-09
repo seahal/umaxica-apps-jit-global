@@ -32,7 +32,6 @@ class RedirectTargetUsageTest < ActiveSupport::TestCase
     app/controllers/concerns/oidc_sso_initiator.rb
     app/controllers/concerns/sign_out_notice.rb
     app/controllers/concerns/sign_up_social_birthdate_support.rb
-    app/controllers/concerns/social_auth.rb
     app/controllers/palm/app/oidc/callbacks_controller.rb
   ).freeze
 

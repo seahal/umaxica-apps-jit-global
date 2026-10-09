@@ -44,7 +44,6 @@ class ClientTelephone < AppPrincipalRecord
 
   self.filter_attributes += %w(number sign_up_otp_context credential_registration_otp_context)
 
-  MAX_TELEPHONES_PER_USER = 4
   alias_attribute :user_telephone_status_id, :user_identity_telephone_status_id
   include Retainable
   include Telephone
@@ -105,14 +104,6 @@ class ClientTelephone < AppPrincipalRecord
   validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :user_identity_telephone_status_id, numericality: { only_integer: true }
   validates :number_digest, presence: true, if: :binding_effective?
-  validates_with AssociatedRecordLimitValidator,
-                 on: :create,
-                 owner: :user,
-                 association: :client_telephones,
-                 foreign_key: :user_id,
-                 limit: :MAX_TELEPHONES_PER_USER,
-                 record_name: "telephones",
-                 owner_name: "user"
 
   after_initialize do
     self.number ||= ""

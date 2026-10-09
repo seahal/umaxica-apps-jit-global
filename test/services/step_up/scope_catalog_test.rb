@@ -12,7 +12,7 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
         "withdrawal" => %w(/settings/withdrawal /identity/withdrawal),
         "settings_email" => %w(/settings/emails /identity/emails),
         "settings_telephone" => %w(/settings/telephones /identity/telephones),
-        "settings_passkey" => %w(/settings/passkeys),
+        "settings_passkey" => %w(/identity/passkeys),
       }
       paths.each do |scope, roots|
         roots.each do |root|
@@ -31,7 +31,7 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
 
   test "actor-specific registration and lifecycle path prefixes require a segment boundary" do
     {
-      StepUpScopeCatalog::APP.fetch("settings_totp") => "/settings/totps",
+      StepUpScopeCatalog::APP.fetch("settings_totp") => "/identity/totps",
       StepUpScopeCatalog::COM.fetch("settings_secret_credential") => "/identity/secrets",
       StepUpScopeCatalog::ORG.fetch("operator_lifecycle") => "/settings/operator_lifecycle_requests",
     }.each do |pattern, root|

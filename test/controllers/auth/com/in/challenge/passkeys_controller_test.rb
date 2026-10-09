@@ -43,7 +43,10 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
     )
     # A real Base admission precedes every Auth-only MFA assertion; no root cookie is injected.
     @issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "com", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "com",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
     )
     get auth_com_sign_in_path, params: { entry_ref: @issuance.reference, ri: "jp" }
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]

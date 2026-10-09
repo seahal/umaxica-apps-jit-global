@@ -74,7 +74,21 @@ module RpSession
     token = device_session.current_refresh_token
     return false unless token
 
-    token.currently_usable?(now || self.class.database_now)
+    decision_time = now || self.class.database_now
+    return false unless token.currently_usable?(decision_time)
+
+    activity_at = token.last_used_at
+    activity_at = token.created_at if activity_at.nil?
+    return false if activity_at.nil?
+
+    resource_type =
+      case token
+      when ClientToken then "client"
+      when VisitorToken then "visitor"
+      when OperatorToken then "operator"
+      else raise ArgumentError, "unsupported RP parent token"
+      end
+    activity_at >= decision_time - SecurityTokenLifetimes.idle_ttl_for(resource_type)
   end
 
   def issue_refresh_token!(expires_at: nil, now: nil)

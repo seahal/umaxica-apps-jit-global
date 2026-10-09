@@ -22,11 +22,20 @@ class SignupOtpDeliveryPayloadTest < ActiveSupport::TestCase
             owner_key => owner.id, :confirm_policy => "1",
             ((channel == :email) ? :address : :number) => destination,
           )
+          transaction_ref = SecureRandom.uuid
+          generation = SecureRandom.uuid
+          delivery_binding =
+            if channel == :email
+              { sign_up_email_transaction_ref: transaction_ref, sign_up_email_otp_generation: generation }
+            else
+              { sign_up_telephone_transaction_ref: transaction_ref,
+                sign_up_telephone_otp_generation: generation, }
+            end
           clear_enqueued_jobs
           OtpEmailNotifierRollout.stub(:enabled?, notifier_enabled) do
             OtpAdapter.for(surface: surface, channel: channel).deliver(
               record: contact, otp_code: "001234", purpose: :sign_up, public_id: contact.public_id,
-              sign_up_flow_ref: "flow_ref", sign_up_otp_counter: "1",
+              sign_up_flow_ref: "flow_ref", **delivery_binding,
             )
           end
 
@@ -38,7 +47,8 @@ class SignupOtpDeliveryPayloadTest < ActiveSupport::TestCase
             params = arguments.last.fetch("params")
 
             assert_equal "flow_ref", params.fetch("sign_up_flow_ref")
-            assert_equal "1", params.fetch("sign_up_otp_counter")
+            assert_equal transaction_ref, params.fetch("sign_up_email_transaction_ref")
+            assert_equal generation, params.fetch("sign_up_email_otp_generation")
             assert_equal contact.public_id, params.fetch("public_id")
             plaintext_matches =
               OutboundSensitivePayload.decrypt_email_otp(params.fetch("encrypted_hotp_token")) == "001234"
@@ -47,8 +57,8 @@ class SignupOtpDeliveryPayloadTest < ActiveSupport::TestCase
           else
             payload = OutboundSensitivePayload.decrypt_sms_delivery(arguments.first.fetch("encrypted_payload"))
 
-            assert_equal 2, payload.fetch(:version)
-            assert_equal [surface.to_s, "sign_up", "flow_ref", contact.public_id, "1"], payload.fetch(:otp_binding)
+            assert_equal 3, payload.fetch(:version)
+            assert_equal [surface.to_s, "sign_up", "flow_ref", transaction_ref, generation], payload.fetch(:otp_binding)
             assert_equal destination, payload.fetch(:to)
           end
 

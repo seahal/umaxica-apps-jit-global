@@ -63,11 +63,22 @@ class Base::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
   # The result branch resolves a stored transaction. An unknown one must not echo the
   # model or primary key that was looked up.
   test "a region identifier on the request is ignored rather than treated as unpermitted" do
-    assert_difference -> { VisitorOidcAuthorizationTransaction.pending.count }, +1 do
+    assert_no_difference -> { VisitorOidcAuthorizationTransaction.pending.count } do
       get base_com_oauth_authorization_url(host: @host, **authorize_params),
-          params: { ri: "jp" },
-          headers: host_headers(@host)
+          params: { ri: "jp" }, headers: host_headers(@host)
     end
+
+    assert_response :success
+    fields = response.parsed_body.css("form input[name]").to_h { |input| [input["name"], input["value"]] }
+    assert_difference -> { VisitorOidcAuthorizationTransaction.pending.count }, +1 do
+      post base_com_oauth_authorization_url(host: @host), params: fields,
+                                                          headers: host_headers(@host).merge(
+                                                            "Origin" => "https://#{@host}",
+                                                            "Sec-Fetch-Site" => "same-origin",
+                                                          )
+    end
+
+    assert_response :see_other
   end
 
   test "an unknown result code is refused with a fixed description" do

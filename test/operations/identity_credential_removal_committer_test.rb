@@ -5,6 +5,38 @@ require "test_helper"
 class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
+  test "pending Contacts are refused without releasing ownership or invalidating Root freshness" do
+    [
+      [Client, ClientEmail, ClientToken, ClientContactAuditOutbox, :user_id, :app,
+       { address: "pending-removal@example.test" },],
+      [Client, ClientTelephone, ClientToken, ClientContactAuditOutbox, :user_id, :app, { number: "+819012345687" }],
+      [Visitor, VisitorEmail, VisitorToken, VisitorContactAuditOutbox, :visitor_id, :com,
+       { address: "pending-removal@example.test" },],
+      [Visitor, VisitorTelephone, VisitorToken, VisitorContactAuditOutbox, :visitor_id, :com,
+       { number: "+819012345687" },],
+    ].each do |owner_class, contact_class, token_class, outbox_class, owner_key, surface, attributes|
+      owner = owner_class.create!
+      contact = contact_class.create!(attributes.merge(owner_key => owner.id, :confirm_policy => "1"))
+      token = token_class.create!(owner_key => owner.id)
+      token.update!(last_step_up_at: token_class.database_now, last_step_up_scope: "settings_email")
+      previous = token.attributes.slice("last_step_up_at", "last_step_up_scope", "discard_at")
+      contact_before = contact.attributes
+      context = ActorValuesContext.empty.with(
+        subject: owner, actor_type: (surface == :app) ? :client : :visitor, tld: surface, surface: :base,
+      )
+
+      assert_no_difference -> { outbox_class.where(contact_ref: contact.public_id).count } do
+        assert_not IdentityCredentialRemovalCommitter.call!(
+          actor: owner, credential: contact, current_session: token, actor_context: context,
+        )
+      end
+      assert_equal contact_before, contact.reload.attributes
+      assert_equal previous, token.reload.attributes.slice(*previous.keys)
+      assert_nil contact.binding_finalized_at
+      assert_nil contact.binding_released_at
+    end
+  end
+
   test "Contact release and Source intent roll back together without resurrecting invalidated authority" do
     [
       [Client, ClientEmail, ClientToken, ClientContactAuditOutbox, :user_id, :app],
@@ -251,7 +283,8 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
         when :com
           actor = Visitor.create!
           actor.visitor_emails.create!(
-            address: "removal-#{SecureRandom.hex(8)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+            address: "removal-#{SecureRandom.hex(8)}@example.com",
+            visitor_email_status_id: VisitorEmailStatus::VERIFIED,
           ).finalize_binding!
           credential = actor.visitor_passkeys.create!(
             webauthn_id: SecureRandom.uuid, public_key: "removed-key",

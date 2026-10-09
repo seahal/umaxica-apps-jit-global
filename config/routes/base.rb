@@ -509,7 +509,7 @@ scope(module: :base, as: :base) do
         post "", to: "sign/entries#create", as: :create
       end
       namespace :sign do
-        resource :completion, only: :create
+        resource :completion, only: %i(show create)
         namespace :in do
           resource :limitation, only: %i(show update destroy), controller: :limitations
         end

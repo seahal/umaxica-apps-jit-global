@@ -66,8 +66,6 @@ class VisitorEmail < ComPrincipalRecord
 
   self.filter_attributes += %w(address sign_up_otp_context credential_registration_otp_context)
 
-  MAX_EMAILS_PER_VISITOR = 4
-
   attribute :visitor_email_status_id, default: VisitorEmailStatus::UNVERIFIED
 
   belongs_to :visitor, inverse_of: :visitor_emails
@@ -80,14 +78,6 @@ class VisitorEmail < ComPrincipalRecord
   validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :visitor_email_status_id, numericality: { only_integer: true }
   validates :address_digest, presence: true, if: :binding_effective?
-  validates_with AssociatedRecordLimitValidator,
-                 on: :create,
-                 owner: :visitor,
-                 association: :visitor_emails,
-                 foreign_key: :visitor_id,
-                 limit: :MAX_EMAILS_PER_VISITOR,
-                 record_name: "emails",
-                 owner_name: "visitor"
   before_destroy :prevent_destroy_when_undeletable
 
   public

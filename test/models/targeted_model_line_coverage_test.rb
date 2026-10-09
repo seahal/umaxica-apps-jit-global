@@ -26,49 +26,74 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "session limit transaction predicates and write helpers cover every state" do
-    transaction = ClientSessionLimitResolutionTransaction.new(status: "pending", expires_at: 1.minute.from_now)
+    states = {
+      ClientSessionLimitResolutionTransaction::PENDING => :pending?,
+      ClientSessionLimitResolutionTransaction::SESSION_SELECTED => :session_selected?,
+      ClientSessionLimitResolutionTransaction::RESOLVED => :resolved?,
+      ClientSessionLimitResolutionTransaction::EXPIRED => :expired?,
+      ClientSessionLimitResolutionTransaction::CANCELLED => :cancelled?,
+    }
 
-    assert_predicate transaction, :pending?
-    transaction.status = "session_selected"
-
-    assert_predicate transaction, :session_selected?
-    transaction.status = "expired"
-
-    assert_predicate transaction, :expired?
-
-    updates = []
-    transaction.stub(:update!, ->(attributes) { updates << attributes }) do
-      now = Time.current
-      transaction.mark_resolved!(now: now)
-
-      assert_equal({ resolved_at: now, status: "resolved" }, updates.last)
+    states.each do |state, predicate|
+      assert_predicate ClientSessionLimitResolutionTransaction.new(state_id: state), predicate
     end
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    now = ClientSignInFlow.database_now
+    flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlowState::SESSION_ISSUANCE_PENDING,
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+    token = ClientToken.create!(user: actor)
+    digest = ClientSessionLimitResolutionTransaction.digest_challenge(SecureRandom.urlsafe_base64(32))
+    issuance = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: flow,
+      actor: actor,
+      browser_binding_digest: digest,
+    )
+    record = issuance.transaction
+    record.select_session!(
+      actor: actor,
+      challenge: issuance.challenge,
+      session_ref: token.public_id,
+      browser_binding_digest: digest,
+    )
+
+    assert_predicate record.reload, :session_selected?
+    record.resolve!(actor: actor, challenge: issuance.challenge, browser_binding_digest: digest)
+
+    assert_predicate record.reload, :resolved?
+    assert_equal record.resolved_at, record.finalized_at
+    assert_not_nil record.resolved_at
+    assert_not_predicate token.reload, :currently_usable?
   end
 
   test "session limit issuance refreshes an existing active transaction" do
-    existing = Struct.new(:audit_context) do
-      attr_reader :updates
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    now = ClientSignInFlow.database_now
+    flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlowState::SESSION_ISSUANCE_PENDING,
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+    digest = ClientSessionLimitResolutionTransaction.digest_challenge(SecureRandom.urlsafe_base64(32))
+    first = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: flow, actor: actor, browser_binding_digest: digest, audit_context: { "existing" => true },
+    )
+    second = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: flow, actor: actor, browser_binding_digest: digest, audit_context: { "new" => true },
+    )
 
-      def update!(attributes)
-        @updates = attributes
-      end
-    end.new({ "existing" => true })
-    relation = Object.new
-    relation.define_singleton_method(:active_at) { |_now| self }
-    relation.define_singleton_method(:find_by) { |**_attributes| existing }
-    actor = Client.new(public_id: "client-public-id")
-    oidc_transaction = Struct.new(:id).new(123)
-
-    ClientSessionLimitResolutionTransaction.stub(:open_status, relation) do
-      issuance = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
-        actor: actor,
-        oidc_transaction: oidc_transaction,
-        audit_context: { "new" => true },
-      )
-
-      assert_same existing, issuance.transaction
-      assert_equal({ "existing" => true, "new" => true }, existing.updates.fetch(:audit_context))
-    end
+    assert_equal first.transaction.id, second.transaction.id
+    assert_equal({ "existing" => true, "new" => true }, second.transaction.audit_context)
+    assert_nil ClientSessionLimitResolutionTransaction.find_active_by_challenge(first.challenge)
+    assert_equal second.transaction.id,
+                 ClientSessionLimitResolutionTransaction.find_active_by_challenge(second.challenge).id
+    assert_not_equal first.challenge, second.challenge
   end
 
   test "processor notification status helpers and pending scope are executable" do
@@ -120,7 +145,7 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
 
   test "flow sign in and sign out delegate their remaining public transitions" do
     sign_in = ClientSignInFlow.new
-    assert_raises(FlowInvalidTransition) { sign_in.advance_sign_in_to_dashboard! }
+    assert_raises(FlowInvalidTransition) { sign_in.advance_sign_in_to_selector! }
     discard_calls = []
     sign_in.stub(:discard_cycle!, ->(**options) { discard_calls << options }) do
       sign_in.discard_sign_in!(now: Time.current)
@@ -177,7 +202,7 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
     )
 
     assert_not transaction.valid?
-    assert_includes transaction.errors[:expected_step], "is not valid for the origin surface"
+    assert_includes transaction.errors[:expected_step], "is not valid for the logout workflow"
   end
 
   test "unsupported email verification outcome is reported" do

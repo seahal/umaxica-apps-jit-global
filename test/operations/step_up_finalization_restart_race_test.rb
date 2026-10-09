@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "concurrent/executor/simple_executor_service"
 require "timeout"
 
 class StepUpFinalizationRestartRaceTest < ActiveSupport::TestCase
@@ -46,7 +47,7 @@ class StepUpFinalizationRestartRaceTest < ActiveSupport::TestCase
     release = Queue.new
     ActiveRecord::Base.connection_handler.clear_active_connections!
     finalizer =
-      Concurrent::Future.execute do
+      Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
         Client.connection_pool.with_connection(prevent_permanent_checkout: true) do
           ClientStepUpCeremonyTransaction.connection_pool.with_connection(
             prevent_permanent_checkout: true,
@@ -64,12 +65,12 @@ class StepUpFinalizationRestartRaceTest < ActiveSupport::TestCase
           end
         end
       ensure
-        # Leases taken on this pooled thread outlive the future unless released here.
+        # Release model-clock leases before the dedicated worker exits.
         ActiveRecord::Base.connection_handler.clear_active_connections!
       end
     finalizer_backend = Timeout.timeout(10) { ready.pop }
     restarter =
-      Concurrent::Future.execute do
+      Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
         Client.connection_pool.with_connection(prevent_permanent_checkout: true) do
           ClientStepUpCeremonyTransaction.connection_pool.with_connection(
             prevent_permanent_checkout: true,
@@ -86,7 +87,7 @@ class StepUpFinalizationRestartRaceTest < ActiveSupport::TestCase
           end
         end
       ensure
-        # Leases taken on this pooled thread outlive the future unless released here.
+        # Release model-clock leases before the dedicated worker exits.
         ActiveRecord::Base.connection_handler.clear_active_connections!
       end
     restarter_backend, stale_status = Timeout.timeout(10) { ready.pop }

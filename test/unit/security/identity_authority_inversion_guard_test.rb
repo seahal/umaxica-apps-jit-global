@@ -80,11 +80,16 @@ class IdentityAuthorityInversionGuardTest < ActiveSupport::TestCase
   test "unknown social signup compatibility is explicit" do
     concern = file_content("app/controllers/concerns/social_auth.rb")
 
-    assert_source_includes concern, "reject_grantless_established_social_login!"
+    assert_source_includes concern, "auth_social_admission_binding!"
     assert_source_includes concern, "ExternalAuthenticationLoginUseCase.call"
-    assert_source_includes concern, "ExternalAuthenticationLinkUseCase.call"
-    assert_source_includes concern, "process_social_ceremony_login_callback"
-    assert_source_includes concern, "acme_social_login_completion_supported?"
+    assert_source_includes concern, "stage_social_link_completion!"
+    link = file_content("app/controllers/auth/app/social/link_completions_controller.rb")
+
+    assert_source_includes link, "ExternalAuthenticationLinkUseCase.call"
+    assert_source_includes link, "require_recent_step_up!"
+    assert_source_includes link, "token.with_lock"
+    assert_source_includes concern, "resolve_social_auth_callback_result"
+    assert_source_includes concern, "sign_up_entry: current_social_auth_entry == \"sign_up\""
   end
 
   test "social completion uses a receiver-local POST carrying only the opaque result reference" do
@@ -94,7 +99,7 @@ class IdentityAuthorityInversionGuardTest < ActiveSupport::TestCase
     assert_source_includes form, "url: action_url, method: :post, local: true"
     assert_source_includes form, "hidden_field_tag :result_ref, result_ref"
     assert_source_includes receiver, 'render "base/shared/result_continuation"'
-    assert_source_includes receiver, "SocialCeremonyResultStore.new.read(reference: result_reference)"
+    assert_source_includes receiver, "SocialCeremonyResultAdapter.new.read(reference: result_reference)"
     assert_source_includes receiver, "IdentitySocialCeremonyFinalCommitter.call!"
     assert_no_match(/\bsocial_ceremony_result\b/, form)
     assert_no_match(/\baccess_token\b/, form)

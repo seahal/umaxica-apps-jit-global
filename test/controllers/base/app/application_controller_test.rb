@@ -36,12 +36,12 @@ module Base
         before_filters = callbacks.select { |c| c.kind == :before }.map(&:filter)
 
         expected_order = %i(
+          authenticate_browser_rp_safe_request!
           set_current_context
           reset_flash
           set_preferences_cookie
           resolve_param_context
           set_region
-          transparent_refresh_access_token
           set_current_actor
           apply_localization_preferences
           set_color_theme

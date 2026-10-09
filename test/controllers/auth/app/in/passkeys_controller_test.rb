@@ -14,7 +14,7 @@ module Auth::App::In
     fixtures :clients, :client_statuses, :client_email_statuses, :client_telephone_statuses
 
     setup do
-      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       TurnstileVerifierStub.challenge_enabled = true
       TurnstileVerifierStub.challenge_response = { "success" => true }
       TurnstileVerifierStub.enabled = true
@@ -35,12 +35,99 @@ module Auth::App::In
       @fake_client = webauthn_fake_client
       @passkey = register_fake_client_passkey!(client: @fake_client, user: @user, description: "Login Key")
       # Auth runs a ceremony only for a browser that Base admitted (D-82).
-      ensure_local_sign_in_admission!(
-        surface: "app",
-        path: auth_app_sign_in_path,
-        params: { ri: "jp" },
-        headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL") },
-      )
+      begin
+        fv5026 = "app"
+        fv5025 = auth_app_sign_in_path
+        fv5024 = { ri: "jp" }
+        fv5023 = { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL") }
+        begin
+          fv5001 = self
+          fv5017 = fv5026.to_s
+          fv5013 = fv5025
+          fv5012 = fv5024
+          fv5020 = fv5023
+          fv5015 = fv5001.cookies["__Host-auth_sid"].presence || fv5001.cookies["auth_sid"].presence
+          if fv5015.present?
+            fv5022 = {
+              "app" => ClientAuthCeremonySession,
+              "com" => VisitorAuthCeremonySession,
+              "org" => OperatorAuthCeremonySession,
+            }.fetch(fv5017).find_active_by_raw_sid(fv5015)
+            fv5021 = fv5022&.admitted? && fv5022.admission_purpose == "local_sign_in"
+          end
+
+          unless fv5021
+            fv5014 = ENV.fetch(
+              { "app" => "PUBLIC_AUTH_SERVICE_URL",
+                "com" => "PUBLIC_AUTH_CORPORATE_URL",
+                "org" => "PUBLIC_AUTH_STAFF_URL", }.fetch(fv5017),
+            )
+
+            fv5002 = fv5020.merge(
+              "Host" => fv5014, "Origin" => "https://#{fv5014}", "Sec-Fetch-Site" => "same-origin",
+            )
+            fv5011 = BaseAuthAdmissionCoordinator.issue_local_entry!(
+              surface: fv5017,
+              intent: "sign_in",
+              base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+              base_token: nil,
+            )
+            fv5018 = BaseAuthAdmissionCoordinator.find_admission_binding!(
+              surface: fv5017, reference: fv5011.reference,
+            )
+            fv5019, fv5015 = fv5018.class.auth_admission_session_class.issue!
+            fv5018.attach_auth_session!(auth_session: fv5019, confirmation_ref: SecureRandom.uuid)
+            fv5018.confirm_base!(
+              base_token: nil,
+              browser_digest: AuthAdmissionBinding.browser_digest(
+                surface: fv5017,
+                entry_ref: fv5011.reference,
+                nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+              ),
+            )
+            fv5001.host!(fv5014)
+            fv5001.https!
+            fv5016 = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+            fv5001.cookies.delete("auth_sid")
+            fv5001.cookies.delete("__Host-auth_sid")
+            fv5001.cookies.merge( # rubocop:disable Lint/Void
+              "#{fv5016}=#{Rack::Utils.escape(fv5015)}", URI.parse("https://#{fv5014}/"),
+            )
+            fv5001.get(
+              fv5013,
+              params: fv5012.merge(entry_ref: fv5011.reference),
+              headers: fv5002,
+            )
+            fv5005, fv5003, fv5004 =
+              begin
+                fv5010 = fv5001.response.body
+                fv5009 = false
+                fv5008 = Nokogiri::HTML(fv5010).at_css("form")
+                if fv5008.nil? && fv5009
+                  nil
+                else
+                  raise RuntimeError, "Auth continuation form is missing" unless fv5008
+
+                  fv5007 = fv5008.at_css("input[name='authenticity_token']")&.[]("value")
+                  raise RuntimeError,
+                        "Auth continuation is missing its CSRF token" if fv5007.blank?
+
+                  fv5006 = fv5008.css("input[type='hidden']").to_h do |input|
+                    [input["name"], input["value"]]
+                  end.except("authenticity_token")
+                  [fv5008["action"], fv5007, fv5006]
+                end
+              end
+            fv5001.post(
+              fv5005,
+              params: fv5004.merge(authenticity_token: fv5003),
+              headers: fv5002,
+            )
+
+            assert_equal 303, fv5001.response.status
+          end
+        end
+      end
     end
 
     teardown do

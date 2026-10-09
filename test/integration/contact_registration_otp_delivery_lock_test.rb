@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "concurrent/executor/simple_executor_service"
 require "minitest/mock"
 require "timeout"
 
@@ -123,7 +124,7 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
         ready = Queue.new
         release = Queue.new
         holder =
-          Concurrent::Future.execute do
+          Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
             source_base.connected_to(role: :writing) do
               source_base.connection_pool.with_connection(prevent_permanent_checkout: true) do |source_db|
                 ticket_base.connected_to(role: :writing) do
@@ -153,7 +154,7 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
             ready << e
             raise
           ensure
-            # Leases taken on this pooled thread outlive the future unless released here.
+            # Release model-clock leases before the dedicated worker exits.
             ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         holding = Timeout.timeout(20) { ready.pop }

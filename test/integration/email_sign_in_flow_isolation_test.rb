@@ -34,7 +34,58 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
         admissions =
           browsers.map do |browser|
             browser.https!
-            admit_auth_local_entry!(surface:, browser:)
+            begin
+              admission_browser = browser
+              admission_surface = surface
+              admission_intent = "sign_in"
+              admission_host = {
+                "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+                "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+              }.fetch(admission_surface)
+              admission_browser.host!(admission_host)
+              admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+                surface: admission_surface, intent: admission_intent,
+                base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+              )
+              admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+              admission_browser.get(
+                admission_path,
+                params: { entry_ref: admission_issuance.reference, ri: "jp" },
+              )
+              admission_csrf =
+                admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+              admission_browser.post(
+                "/ceremony_bindings",
+                params: { entry_ref: admission_issuance.reference,
+                          authenticity_token: admission_csrf,
+                          ri: "jp", },
+              )
+
+              assert_equal 303, admission_browser.response.status
+              admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+                surface: admission_surface, reference: admission_issuance.reference,
+              )
+              admission_binding.reload.confirm_base!(
+                base_token: nil,
+                browser_digest: admission_binding.base_browser_digest,
+              )
+              admission_browser.get(
+                admission_path,
+                params: { entry_ref: admission_issuance.reference, ri: "jp" },
+              )
+              admission_csrf =
+                admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+              admission_browser.post(
+                admission_path,
+                params: { entry_ref: admission_issuance.reference,
+                          authenticity_token: admission_csrf,
+                          ri: "jp", },
+              )
+
+              assert_equal 303, admission_browser.response.status
+              admission_issuance
+            end
           end
         ceremonies =
           admissions.map do |admission|

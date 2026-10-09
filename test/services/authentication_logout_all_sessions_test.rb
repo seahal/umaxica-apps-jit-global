@@ -12,12 +12,18 @@ class AuthenticationLogoutAllSessionsTest < ActiveSupport::TestCase
     assert AuthenticationLogoutAllSessions.call(resource: Object.new)
   end
 
-  test "does not require a session version on the resource" do
-    resource = Object.new
-    def resource.session_version
-      raise RuntimeError, "session_version is not an authority"
-    end
+  test "revokes real Root sessions without a session version authority" do
+    actor = Client.create!
+    token = ClientToken.create!(user: actor)
+    encoded = AuthenticationToken.encode(
+      actor, host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), resource_type: "client",
+             session_public_id: token.public_id,
+    )
 
-    assert AuthenticationLogoutAllSessions.call(resource: resource)
+    assert_predicate encoded, :present?
+    assert_predicate token, :currently_usable?
+    assert AuthenticationLogoutAllSessions.call(resource: actor)
+    assert_predicate token.reload, :revoked?
+    assert_predicate token.device_session.reload, :revoked?
   end
 end

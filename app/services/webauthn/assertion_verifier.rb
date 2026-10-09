@@ -30,7 +30,12 @@ module Webauthn
 
     def self.verify!(credential_params:, challenge:, config:, public_key:, sign_count:, purpose:)
       policy = UvPolicy.for(purpose)
-      credential = WebAuthn::Credential.from_get(credential_params, relying_party: config.relying_party)
+      credential =
+        begin
+          WebAuthn::Credential.from_get(credential_params, relying_party: config.relying_party)
+        rescue ArgumentError
+          raise VerificationError, "assertion encoding is invalid"
+        end
       credential.verify(
         challenge,
         public_key: public_key,

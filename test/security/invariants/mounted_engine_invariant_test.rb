@@ -134,9 +134,11 @@ module Security
 
       test "the Flipper UI mount is wrapped in an authorization guard" do
         flipper_route =
-          Rails.application.routes.routes.find { |route| route.constraints[:host] == ["flipper.core.dev.localhost"] }
+          Rails.application.routes.routes.find do |route|
+            Array(route.constraints[:host]).include?("flipper.core.dev.localhost")
+          end
 
-        skip "Flipper UI is not mounted in this environment" if flipper_route.nil?
+        assert_not_nil flipper_route, "The protected Flipper control surface must remain mounted"
 
         endpoint = flipper_route.app.app
 

@@ -158,7 +158,10 @@ module CoreBrowserApiBoundary
     return if request.get? || request.head? || request.options?
 
     token = request.headers["X-CSRF-Token"].to_s
-    if valid_request_origin? && token.present? && valid_authenticity_token?(session, token) &&
+    if request.origin.present? && valid_request_origin? && token.present? && valid_authenticity_token?(
+      session,
+      token,
+    ) &&
         verified_request_for_forgery_protection?
       return
     end

@@ -438,7 +438,10 @@ class Client < AppPrincipalRecord
         throw(:abort)
       end
 
-      RetentionCrossDatabaseChildPurge.call(actor: self)
+      if notification_records.exists? || avatar_assignments.exists?
+        errors.add(:base, "Cross-database children require the account purge workflow")
+        throw(:abort)
+      end
     end
   end
 

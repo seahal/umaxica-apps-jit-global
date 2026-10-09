@@ -26,6 +26,24 @@ module AuthCeremonyContext
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   end
 
+  def auth_social_admission_binding!
+    record = admitted_auth_ceremony_session
+    unless record&.active? && %w(authentication_handoff local_sign_in local_sign_up).include?(record.admission_purpose)
+      raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+    end
+
+    binding = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
+      .find_by!(admitted_auth_ceremony_session_id: record.id)
+    unless binding.redeemed? && !binding.retired? && !binding.expired? &&
+        (auth_ceremony_matches_intent?("sign_in") || auth_ceremony_matches_intent?("sign_up"))
+      raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+    end
+
+    binding
+  rescue ActiveRecord::RecordNotFound
+    raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+  end
+
   def auth_ceremony_surface
     self.class.const_get(:AUTH_CEREMONY_SURFACE)
   end

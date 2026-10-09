@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="turbo-cache-control" content="no-cache">
-  <title><%= t("base.app.secrets.present") %></title>
+  <%= display_meta_tags site: "#{ENV.fetch("BRAND_NAME").upcase} (#{"APP"})",
+                          title: t("base.app.secrets.present"), separator: "—", reverse: true %>
   <%= vite_stylesheet_tag "styles/surfaces/base_app", nonce: true %>
   <%= vite_typescript_tag "secret_presentation", nonce: true %>
 </head>

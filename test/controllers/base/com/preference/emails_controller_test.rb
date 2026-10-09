@@ -16,7 +16,7 @@ module Base
                  :visitor_telephone_statuses
 
         setup do
-          @host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+          @host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
           @visitor = create_verified_visitor_with_email(
             email_address: "visitor-unsubscribe-#{SecureRandom.hex(4)}@example.com",
           )
@@ -351,7 +351,8 @@ class Base::Com::Preference::EmailsControllerTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,

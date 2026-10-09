@@ -5,7 +5,7 @@ class RetireLegacyComSignUpHandoffStatuses < ActiveRecord::Migration[8.2]
 
   def up
     safety_assured do
-      execute <<~SQL.squish
+      execute(<<~SQL.squish)
         UPDATE visitor_sign_up_flows
         SET status_id = 930, state = 'halted', step = 'halted', updated_at = CURRENT_TIMESTAMP
         WHERE status_id IN (70, 80)

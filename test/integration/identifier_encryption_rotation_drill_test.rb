@@ -132,7 +132,103 @@ class IdentifierEncryptionRotationDrillTest < ActionDispatch::IntegrationTest
     end
 
     travel(31.seconds) do
-      assert_app_sign_in_email_flow(app_email_address)
+      begin
+        fx0_address = app_email_address
+        https!
+        begin
+          entry0_browser = self
+          entry0_surface = "app"
+          entry0_intent = "sign_in"
+          entry0_host = {
+            "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+            "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+            "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+          }.fetch(entry0_surface)
+          entry0_browser.host!(entry0_host)
+          entry0_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+            surface: entry0_surface, intent: entry0_intent,
+            base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+          )
+          entry0_path = "/sign/#{(entry0_intent == "sign_up") ? "up" : "in"}"
+          entry0_browser.get(
+            entry0_path,
+            params: { entry_ref: entry0_issuance.reference, ri: "jp" },
+          )
+          entry0_csrf = entry0_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+          entry0_browser.post(
+            "/ceremony_bindings",
+            params: {
+              entry_ref: entry0_issuance.reference,
+              authenticity_token: entry0_csrf,
+              ri: "jp",
+            },
+          )
+
+          assert_equal 303, entry0_browser.response.status
+          entry0_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+            surface: entry0_surface, reference: entry0_issuance.reference,
+          )
+          entry0_binding.reload.confirm_base!(
+            base_token: nil,
+            browser_digest: entry0_binding.base_browser_digest,
+          )
+          entry0_browser.get(
+            entry0_path,
+            params: { entry_ref: entry0_issuance.reference, ri: "jp" },
+          )
+          entry0_csrf = entry0_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+          entry0_browser.post(
+            entry0_path,
+            params: {
+              entry_ref: entry0_issuance.reference,
+              authenticity_token: entry0_csrf,
+              ri: "jp",
+            },
+          )
+
+          assert_equal 303, entry0_browser.response.status
+        end
+        fx0_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+        fx0_headers = { "Origin" => "https://#{fx0_host}", "Sec-Fetch-Site" => "same-origin" }
+        get("/sign/in/email/new", params: { ri: "jp" })
+
+        assert_response :ok
+        fx0_csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
+        fx0_delivery_count = ActionMailer::Base.deliveries.size
+        perform_enqueued_jobs do
+          post(
+            "/sign/in/email", params: {
+              client_email: { address: fx0_address },
+              authenticity_token: fx0_csrf,
+              "cf-turnstile-response": "test",
+              ri: "jp",
+            }, headers: fx0_headers,
+          )
+        end
+
+        assert_response :found
+        assert_equal fx0_delivery_count + 1, ActionMailer::Base.deliveries.size
+        fx0_match = ActionMailer::Base.deliveries.last.text_part.body.decoded.match(/Pass Code:\s*([0-9]{6})/)
+
+        assert_predicate fx0_match, :present?, "expected a delivered ceremony OTP"
+        fx0_code = fx0_match[1]
+        get(URI.parse(response.location).request_uri, params: { ri: "jp" })
+
+        assert_response :ok
+        fx0_csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
+
+        patch(
+          "/sign/in/email", params: {
+            client_email: { pass_code: fx0_code },
+            authenticity_token: fx0_csrf,
+            "cf-turnstile-response": "test",
+            ri: "jp",
+          }, headers: fx0_headers,
+        )
+
+        assert_response :found
+        assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+      end
     end
   ensure
     original_types&.each { |model, column, _, type| model.attribute(column, type) }
@@ -140,51 +236,6 @@ class IdentifierEncryptionRotationDrillTest < ActionDispatch::IntegrationTest
   end
 
   private
-
-  def assert_app_sign_in_email_flow(address)
-    https!
-    admit_auth_local_entry!(surface: "app")
-    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
-    get("/sign/in/email/new", params: { ri: "jp" })
-
-    assert_response :ok
-    csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
-    delivery_count = ActionMailer::Base.deliveries.size
-    perform_enqueued_jobs do
-      post(
-        "/sign/in/email", params: {
-          client_email: { address: address },
-          authenticity_token: csrf,
-          "cf-turnstile-response": "test",
-          ri: "jp",
-        }, headers:,
-      )
-    end
-
-    assert_response :found
-    assert_equal delivery_count + 1, ActionMailer::Base.deliveries.size
-    match = ActionMailer::Base.deliveries.last.text_part.body.decoded.match(/Pass Code:\s*([0-9]{6})/)
-
-    assert_predicate match, :present?, "expected a delivered ceremony OTP"
-    code = match[1]
-    get(URI.parse(response.location).request_uri, params: { ri: "jp" })
-
-    assert_response :ok
-    csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
-
-    patch(
-      "/sign/in/email", params: {
-        client_email: { pass_code: code },
-        authenticity_token: csrf,
-        "cf-turnstile-response": "test",
-        ri: "jp",
-      }, headers:,
-    )
-
-    assert_response :found
-    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
-  end
 end
 
 # DAMP local helper copy for former shared test support.

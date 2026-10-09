@@ -10,6 +10,8 @@ require "digest"
 module AuthAdmissionBinding
   extend ActiveSupport::Concern
 
+  REFERENCE_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i.freeze
+
   PARENT_PURPOSES = {
     sign_in_flow: %w(local_sign_in local_sign_up),
     authorization_transaction: %w(authentication_handoff invitation_handoff),
@@ -277,7 +279,7 @@ module AuthAdmissionBinding
   end
 
   def require_uuid!(value, label)
-    return if value.is_a?(String) && value.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN)
+    return if value.is_a?(String) && value.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
 
     raise InvalidTransition, "#{label} is invalid"
   end

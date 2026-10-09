@@ -19,7 +19,7 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
     end
     ClientSignOutFlowKind.ensure_defaults!
     ClientSignOutFlowStatus.ensure_defaults!
-    @request.host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    @request.host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     @actor = Client.create!(status_id: ClientStatus::NOTHING, birthdate: "2000-01-01")
     @existing = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(user: @actor) }
     now = ClientSignInFlow.database_now
@@ -33,7 +33,30 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
       authentication_event_at: now,
       authentication_context: AuthenticationContextValue::NORMAL_KEY,
     )
-    issue_resolution_for_flow!
+    begin
+      @binding = SecureRandom.urlsafe_base64(32)
+      @issuance = ClientSessionLimitResolutionTransaction.issue!(
+        actor: @actor,
+        sign_in_flow: @flow,
+        browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(@binding),
+      )
+      @resolution = @issuance.transaction
+      @gate =
+        begin
+          fv5015 = @issuance.challenge
+          fv5014 = @binding
+          fv5016 = @flow
+          {
+            "nonce" => SecureRandom.hex(16),
+            "issued_at" => Time.current.to_i,
+            "pt" => "/sign/in",
+            "flow" => fv5016.public_id,
+            "resolution_challenge" => fv5015,
+            "resolution_binding" => fv5014,
+            "actor_type" => "Client",
+          }
+        end
+    end
   end
 
   test "the browser holding the pending flow sees its sessions" do
@@ -57,7 +80,13 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
 
   test "revoking one session commits the waiting flow exactly once" do
     ref = SessionLimitResolutionTokenRef.issue(@existing.first)
-    set_browser_headers!
+    begin
+      begin
+        { "Origin" => "http://#{@request.host}", "Sec-Fetch-Site" => "same-origin" }
+      end.each { |fv5013, fv5012|
+        @request.headers[fv5013] = fv5012
+      }
+    end
 
     assert_difference(-> { ClientToken.where(user_id: @actor.id).count }, 1) do
       patch :update, params: { ri: "jp", session_ref: ref },
@@ -73,7 +102,13 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
   end
 
   test "cancelling ends only the waiting flow" do
-    set_browser_headers!
+    begin
+      begin
+        { "Origin" => "http://#{@request.host}", "Sec-Fetch-Site" => "same-origin" }
+      end.each { |fv5011, fv5010|
+        @request.headers[fv5011] = fv5010
+      }
+    end
     delete :destroy, params: { ri: "jp" }, session: { SessionLimitGate::GATE_SESSION_KEY => @gate }
 
     assert_redirected_to base_app_sign_show_path(ri: "jp")
@@ -111,7 +146,21 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
       browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(raw_binding),
       oidc_authorization_transaction: parent,
     )
-    oidc_gate = gate_for(issuance.challenge, raw_binding, flow)
+    oidc_gate =
+      begin
+        fv5008 = issuance.challenge
+        fv5007 = raw_binding
+        fv5009 = flow
+        {
+          "nonce" => SecureRandom.hex(16),
+          "issued_at" => Time.current.to_i,
+          "pt" => "/sign/in",
+          "flow" => fv5009.public_id,
+          "resolution_challenge" => fv5008,
+          "resolution_binding" => fv5007,
+          "actor_type" => "Client",
+        }
+      end
     parent.update!(expires_at: now - 1.second)
     ref = SessionLimitResolutionTokenRef.issue(@existing.first)
 
@@ -121,7 +170,13 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
 
     assert_response :gone
     assert_no_difference(-> { ClientToken.where(user_id: @actor.id).count }) do
-      set_browser_headers!
+      begin
+        begin
+          { "Origin" => "http://#{@request.host}", "Sec-Fetch-Site" => "same-origin" }
+        end.each { |fv5006, fv5005|
+          @request.headers[fv5006] = fv5005
+        }
+      end
       patch :update, params: { ri: "jp", resolution_challenge: issuance.challenge, session_ref: ref }, session: {
         SessionLimitGate::GATE_SESSION_KEY => oidc_gate,
       }
@@ -169,10 +224,30 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
       browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(@binding),
     )
     @resolution = @issuance.transaction
-    @gate = gate_for(@issuance.challenge, @binding, @flow)
+    @gate =
+      begin
+        fv5003 = @issuance.challenge
+        fv5002 = @binding
+        fv5004 = @flow
+        {
+          "nonce" => SecureRandom.hex(16),
+          "issued_at" => Time.current.to_i,
+          "pt" => "/sign/in",
+          "flow" => fv5004.public_id,
+          "resolution_challenge" => fv5003,
+          "resolution_binding" => fv5002,
+          "actor_type" => "Client",
+        }
+      end
     @local_locator = { "public_id" => @flow.public_id, "nonce" => local_nonce }
     ref = SessionLimitResolutionTokenRef.issue(@existing.first)
-    set_browser_headers!
+    begin
+      begin
+        { "Origin" => "http://#{@request.host}", "Sec-Fetch-Site" => "same-origin" }
+      end.each { |fv5001, fv5000|
+        @request.headers[fv5001] = fv5000
+      }
+    end
 
     assert_difference(-> { ClientToken.where(user_id: @actor.id).count }, 1) do
       patch :update, params: { ri: "jp", session_ref: ref },
@@ -190,35 +265,4 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
   end
 
   private
-
-  def issue_resolution_for_flow!
-    @binding = SecureRandom.urlsafe_base64(32)
-    @issuance = ClientSessionLimitResolutionTransaction.issue!(
-      actor: @actor,
-      sign_in_flow: @flow,
-      browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(@binding),
-    )
-    @resolution = @issuance.transaction
-    @gate = gate_for(@issuance.challenge, @binding, @flow)
-  end
-
-  def gate_for(challenge, binding, flow)
-    {
-      "nonce" => SecureRandom.hex(16),
-      "issued_at" => Time.current.to_i,
-      "pt" => "/sign/in",
-      "flow" => flow.public_id,
-      "resolution_challenge" => challenge,
-      "resolution_binding" => binding,
-      "actor_type" => "Client",
-    }
-  end
-
-  def set_browser_headers!
-    browser_headers.each { |name, value| @request.headers[name] = value }
-  end
-
-  def browser_headers
-    { "Origin" => "http://#{@request.host}", "Sec-Fetch-Site" => "same-origin" }
-  end
 end

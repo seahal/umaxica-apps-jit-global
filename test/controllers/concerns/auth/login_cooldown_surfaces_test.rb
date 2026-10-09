@@ -42,11 +42,26 @@ class AuthLoginCooldownSurfacesTest < ActiveSupport::TestCase
   SURFACES.each do |surface, config|
     test "#{surface}: a root login 29 seconds after the previous one is refused" do
       freeze_time do
-        resource = config[:resource].call
-        config[:token].call(resource, root_login_established_at: (WINDOW - 1.second).ago)
+        config[:token_class].stub(:database_now, Time.current) do
+          resource = config[:resource].call
+          config[:token].call(resource, root_login_established_at: (WINDOW - 1.second).ago)
 
-        with_login_cooldown(WINDOW) do
-          assert_raises(AuthenticationBase::LoginCooldownError) { root_login(config, resource) }
+          with_login_cooldown(WINDOW) do
+            assert_raises(AuthenticationBase::LoginCooldownError) { root_login(config, resource) }
+          end
+        end
+      end
+    end
+
+    test "#{surface}: an application clock ahead of the database cannot bypass the cooldown" do
+      now = config[:token_class].database_now
+      resource = config[:resource].call
+      config[:token].call(resource, root_login_established_at: now - 10.seconds)
+      travel_to(now + 1.day) do
+        config[:token_class].stub(:database_now, now) do
+          with_login_cooldown(WINDOW) do
+            assert_raises(AuthenticationBase::LoginCooldownError) { root_login(config, resource) }
+          end
         end
       end
     end
@@ -55,92 +70,108 @@ class AuthLoginCooldownSurfacesTest < ActiveSupport::TestCase
     # window is the nearest representable value below the boundary.
     test "#{surface}: a root login one microsecond inside the window is refused" do
       freeze_time do
-        resource = config[:resource].call
-        config[:token].call(resource, root_login_established_at: WINDOW.ago + Rational(1, 1_000_000))
+        config[:token_class].stub(:database_now, Time.current) do
+          resource = config[:resource].call
+          config[:token].call(resource, root_login_established_at: WINDOW.ago + Rational(1, 1_000_000))
 
-        with_login_cooldown(WINDOW) do
-          assert_raises(AuthenticationBase::LoginCooldownError) { root_login(config, resource) }
+          with_login_cooldown(WINDOW) do
+            assert_raises(AuthenticationBase::LoginCooldownError) { root_login(config, resource) }
+          end
         end
       end
     end
 
     test "#{surface}: a root login exactly 30 seconds after the previous one is not refused by the cooldown" do
       freeze_time do
-        resource = config[:resource].call
-        signed_out_token(config, resource, root_login_established_at: WINDOW.ago)
+        config[:token_class].stub(:database_now, Time.current) do
+          resource = config[:resource].call
+          signed_out_token(config, resource, root_login_established_at: WINDOW.ago)
 
-        with_login_cooldown(WINDOW) { assert_committed_root_login(config, resource) }
+          with_login_cooldown(WINDOW) { assert_committed_root_login(config, resource) }
+        end
       end
     end
 
     test "#{surface}: a root login 31 seconds after the previous one is not refused by the cooldown" do
       freeze_time do
-        resource = config[:resource].call
-        signed_out_token(config, resource, root_login_established_at: (WINDOW + 1.second).ago)
+        config[:token_class].stub(:database_now, Time.current) do
+          resource = config[:resource].call
+          signed_out_token(config, resource, root_login_established_at: (WINDOW + 1.second).ago)
 
-        with_login_cooldown(WINDOW) { assert_committed_root_login(config, resource) }
+          with_login_cooldown(WINDOW) { assert_committed_root_login(config, resource) }
+        end
       end
     end
 
     test "#{surface}: signing out does not clear the anchor (revoked root login inside the window)" do
       freeze_time do
-        resource = config[:resource].call
-        token = config[:token].call(resource, root_login_established_at: 10.seconds.ago)
-        token.revoke!
+        config[:token_class].stub(:database_now, Time.current) do
+          resource = config[:resource].call
+          token = config[:token].call(resource, root_login_established_at: 10.seconds.ago)
+          token.revoke!
 
-        with_login_cooldown(WINDOW) do
-          assert_raises(AuthenticationBase::LoginCooldownError) { root_login(config, resource) }
+          with_login_cooldown(WINDOW) do
+            assert_raises(AuthenticationBase::LoginCooldownError) { root_login(config, resource) }
+          end
         end
       end
     end
 
     test "#{surface}: a token created this instant without a root login record does not trigger the cooldown" do
       freeze_time do
-        resource = config[:resource].call
-        signed_out_token(config, resource, {})
+        config[:token_class].stub(:database_now, Time.current) do
+          resource = config[:resource].call
+          signed_out_token(config, resource, {})
 
-        with_login_cooldown(WINDOW) { assert_committed_root_login(config, resource) }
+          with_login_cooldown(WINDOW) { assert_committed_root_login(config, resource) }
+        end
       end
     end
 
     test "#{surface}: a refusal writes nothing and does not move the anchor" do
       freeze_time do
-        resource = config[:resource].call
-        anchor = 10.seconds.ago
-        config[:token].call(resource, root_login_established_at: anchor)
+        config[:token_class].stub(:database_now, Time.current) do
+          resource = config[:resource].call
+          anchor = 10.seconds.ago
+          config[:token].call(resource, root_login_established_at: anchor)
 
-        with_login_cooldown(WINDOW) do
-          assert_no_difference(-> { config[:token_class].where(fk_for(config) => resource.id).count }) do
-            2.times { assert_raises(AuthenticationBase::LoginCooldownError) { root_login(config, resource) } }
+          with_login_cooldown(WINDOW) do
+            assert_no_difference(-> { config[:token_class].where(fk_for(config) => resource.id).count }) do
+              2.times { assert_raises(AuthenticationBase::LoginCooldownError) { root_login(config, resource) } }
+            end
           end
-        end
 
-        assert_equal anchor, latest_anchor(config, resource)
+          assert_equal anchor, latest_anchor(config, resource)
+        end
       end
     end
 
     test "#{surface}: an RP session neither checks nor records the root login anchor" do
       freeze_time do
-        resource = config[:resource].call
-        anchor = 1.second.ago
-        signed_out_token(config, resource, root_login_established_at: anchor)
+        config[:token_class].stub(:database_now, Time.current) do
+          resource = config[:resource].call
+          anchor = 1.second.ago
+          signed_out_token(config, resource, root_login_established_at: anchor)
 
-        with_login_cooldown(WINDOW) do
-          result = build_controller(config).log_in(resource, establishment: :rp_session)
+          with_login_cooldown(WINDOW) do
+            result = build_controller(config).log_in(resource, establishment: :rp_session)
 
-          assert_equal :success, result.fetch(:status)
+            assert_equal :success, result.fetch(:status)
+          end
+
+          assert_equal anchor, latest_anchor(config, resource)
         end
-
-        assert_equal anchor, latest_anchor(config, resource)
       end
     end
 
     test "#{surface}: a zero cooldown disables the gate even for a root login committed this instant" do
       freeze_time do
-        resource = config[:resource].call
-        signed_out_token(config, resource, root_login_established_at: Time.current)
+        config[:token_class].stub(:database_now, Time.current) do
+          resource = config[:resource].call
+          signed_out_token(config, resource, root_login_established_at: Time.current)
 
-        with_login_cooldown(0.seconds) { assert_committed_root_login(config, resource) }
+          with_login_cooldown(0.seconds) { assert_committed_root_login(config, resource) }
+        end
       end
     end
 

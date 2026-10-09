@@ -20,8 +20,8 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     @host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
-    @base_host = ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost")
-    @public_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", @base_host)
+    @base_host = ENV.fetch("PRIVATE_BASE_SERVICE_URL")
+    @public_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
 
     @user = Client.create!(
       status_id: ClientStatus::NOTHING,
@@ -38,7 +38,65 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
       last_otp_at: Time.zone.at(0),
     )
-    @headers = as_user_headers(@user, host: @host)
+    @headers =
+      begin
+        rp_headers = as_user_headers(@user, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && ClientRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = ClientRpSession.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.user, host: rp_host, resource_type: "client",
+                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                             subject: OidcSubject.for(
+                               rp_token.user,
+                               resource_type: "client",
+                             ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     @token = ClientToken.find_by!(public_id: @headers["X-TEST-SESSION-PUBLIC-ID"])
   end
 
@@ -66,8 +124,77 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       updated_at: 2.hours.ago,
     )
 
+    http_headers_11 =
+      begin
+        fx0_token = ClientToken.where(user_id: @user.id).order(created_at: :asc).last
+
+        begin
+          f0_headers = as_user_headers(@user, host: @host, session_public_id: fx0_token.public_id)
+          f0_host = f0_headers["Host"]
+          f0_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{f0_host}/") if f0_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          f0_family, f0_surface = f0_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(f0_family) && f0_surface == "app"
+            f0_client_id =
+              case f0_family
+              when "base" then "base-#{f0_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{f0_family}-#{f0_surface}"
+              end
+            f0_token = ClientToken.find_by!(public_id: f0_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            f0_client = OidcClientRegistry.find!(f0_client_id)
+            f0_key = [f0_client.client_id, f0_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[f0_key] && f0_token.currently_usable? &&
+                !(f0_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: f0_token.device_session_id,
+                  oidc_client_id: f0_client.client_id,
+                  revoked_at: nil,
+                ))
+              f0_token.rotate_refresh_token! unless f0_token.device_session.current_refresh_token_id
+              f0_now = Time.current
+              f0_session = ClientRpSession.create!(
+                client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
+                refresh_token_expires_at: f0_now + 10.minutes,
+              )
+              f0_access = AuthenticationTokenService.encode(
+                f0_token.user, host: f0_host, resource_type: "client",
+                               session_public_id: f0_token.public_id, base_session_public_id: f0_token.public_id,
+                               oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
+                               expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
+                               issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
+                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
+                               subject: OidcSubject.for(
+                                 f0_token.user,
+                                 resource_type: "client",
+                               ), client_id: f0_client.client_id,
+              )
+              @base_browser_rp_credentials[f0_key] =
+                [f0_access, f0_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[f0_key]
+              f0_access, f0_refresh = @base_browser_rp_credentials.fetch(f0_key)
+              f0_cookie = [
+                f0_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f0_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f0_refresh)}",
+              ].join("; ")
+              f0_headers = f0_headers.merge(
+                "Cookie" => f0_cookie,
+                "HTTP_COOKIE" => f0_cookie,
+              )
+            end
+          end
+          f0_headers
+        end
+      end
     delete auth_app_settings_google_url(ri: "jp", host: @host),
-           headers: stale_step_up_headers
+           headers: http_headers_11
 
     assert_response :unauthorized
     google_identity.reload
@@ -92,8 +219,77 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       updated_at: 2.hours.ago,
     )
 
+    http_headers_10 =
+      begin
+        fx1_token = ClientToken.where(user_id: @user.id).order(created_at: :asc).last
+
+        begin
+          f1_headers = as_user_headers(@user, host: @host, session_public_id: fx1_token.public_id)
+          f1_host = f1_headers["Host"]
+          f1_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{f1_host}/") if f1_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          f1_family, f1_surface = f1_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(f1_family) && f1_surface == "app"
+            f1_client_id =
+              case f1_family
+              when "base" then "base-#{f1_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{f1_family}-#{f1_surface}"
+              end
+            f1_token = ClientToken.find_by!(public_id: f1_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            f1_client = OidcClientRegistry.find!(f1_client_id)
+            f1_key = [f1_client.client_id, f1_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[f1_key] && f1_token.currently_usable? &&
+                !(f1_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: f1_token.device_session_id,
+                  oidc_client_id: f1_client.client_id,
+                  revoked_at: nil,
+                ))
+              f1_token.rotate_refresh_token! unless f1_token.device_session.current_refresh_token_id
+              f1_now = Time.current
+              f1_session = ClientRpSession.create!(
+                client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
+                refresh_token_expires_at: f1_now + 10.minutes,
+              )
+              f1_access = AuthenticationTokenService.encode(
+                f1_token.user, host: f1_host, resource_type: "client",
+                               session_public_id: f1_token.public_id, base_session_public_id: f1_token.public_id,
+                               oidc_sid: f1_session.public_id, oidc_jti: f1_session.oidc_jti,
+                               expires_at: f1_now + 10.minutes, scopes: %w(openid profile),
+                               issuer: OidcIssuer.for_client(f1_client), audiences: [f1_client.aud],
+                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
+                               subject: OidcSubject.for(
+                                 f1_token.user,
+                                 resource_type: "client",
+                               ), client_id: f1_client.client_id,
+              )
+              @base_browser_rp_credentials[f1_key] =
+                [f1_access, f1_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[f1_key]
+              f1_access, f1_refresh = @base_browser_rp_credentials.fetch(f1_key)
+              f1_cookie = [
+                f1_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f1_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f1_refresh)}",
+              ].join("; ")
+              f1_headers = f1_headers.merge(
+                "Cookie" => f1_cookie,
+                "HTTP_COOKIE" => f1_cookie,
+              )
+            end
+          end
+          f1_headers
+        end
+      end
     delete auth_app_settings_apple_url(ri: "jp", host: @host),
-           headers: stale_step_up_headers
+           headers: http_headers_10
 
     assert_response :unauthorized
     apple_identity.reload
@@ -115,19 +311,82 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       user_google_identity_status: client_google_identity_statuses(:active),
     )
 
+    http_headers_9 =
+      begin
+        satisfy_user_verification(@token)
+        mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
+        begin
+          f2_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+          f2_host = f2_headers["Host"]
+          f2_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{f2_host}/") if f2_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          f2_family, f2_surface = f2_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(f2_family) && f2_surface == "app"
+            f2_client_id =
+              case f2_family
+              when "base" then "base-#{f2_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{f2_family}-#{f2_surface}"
+              end
+            f2_token = ClientToken.find_by!(public_id: f2_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            f2_client = OidcClientRegistry.find!(f2_client_id)
+            f2_key = [f2_client.client_id, f2_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[f2_key] && f2_token.currently_usable? &&
+                !(f2_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: f2_token.device_session_id,
+                  oidc_client_id: f2_client.client_id,
+                  revoked_at: nil,
+                ))
+              f2_token.rotate_refresh_token! unless f2_token.device_session.current_refresh_token_id
+              f2_now = Time.current
+              f2_session = ClientRpSession.create!(
+                client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
+                refresh_token_expires_at: f2_now + 10.minutes,
+              )
+              f2_access = AuthenticationTokenService.encode(
+                f2_token.user, host: f2_host, resource_type: "client",
+                               session_public_id: f2_token.public_id, base_session_public_id: f2_token.public_id,
+                               oidc_sid: f2_session.public_id, oidc_jti: f2_session.oidc_jti,
+                               expires_at: f2_now + 10.minutes, scopes: %w(openid profile),
+                               issuer: OidcIssuer.for_client(f2_client), audiences: [f2_client.aud],
+                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
+                               subject: OidcSubject.for(
+                                 f2_token.user,
+                                 resource_type: "client",
+                               ), client_id: f2_client.client_id,
+              )
+              @base_browser_rp_credentials[f2_key] =
+                [f2_access, f2_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[f2_key]
+              f2_access, f2_refresh = @base_browser_rp_credentials.fetch(f2_key)
+              f2_cookie = [
+                f2_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f2_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f2_refresh)}",
+              ].join("; ")
+              f2_headers = f2_headers.merge(
+                "Cookie" => f2_cookie,
+                "HTTP_COOKIE" => f2_cookie,
+              )
+            end
+          end
+          f2_headers
+        end
+      end
     delete auth_app_settings_google_url(ri: "jp", host: @host),
-           headers: social_unlink_headers
+           headers: http_headers_9
 
     assert_response :unprocessable_content
 
     # Identity should still exist
     assert ClientGoogleIdentity.exists?(id: google_identity.id), "Last identity should NOT be deleted"
-  end
-
-  def stale_step_up_headers
-    token = ClientToken.where(user_id: @user.id).order(created_at: :asc).last
-
-    as_user_headers(@user, host: @host, session_public_id: token.public_id)
   end
 
   def prepare_step_up_method!
@@ -140,12 +399,6 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
     satisfy_user_verification(@token)
   end
 
-  def social_unlink_headers
-    satisfy_user_verification(@token)
-    mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
-    as_user_headers(@user, host: @host, session_public_id: @token.public_id)
-  end
-
   test "unlink last Apple identity returns 422 LastIdentityError" do
     apple_identity = ClientAppleIdentity.create!(
       user: @user,
@@ -156,8 +409,77 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       user_apple_identity_status: client_apple_identity_statuses(:active),
     )
 
+    http_headers_8 =
+      begin
+        satisfy_user_verification(@token)
+        mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
+        begin
+          f3_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+          f3_host = f3_headers["Host"]
+          f3_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{f3_host}/") if f3_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          f3_family, f3_surface = f3_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(f3_family) && f3_surface == "app"
+            f3_client_id =
+              case f3_family
+              when "base" then "base-#{f3_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{f3_family}-#{f3_surface}"
+              end
+            f3_token = ClientToken.find_by!(public_id: f3_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            f3_client = OidcClientRegistry.find!(f3_client_id)
+            f3_key = [f3_client.client_id, f3_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[f3_key] && f3_token.currently_usable? &&
+                !(f3_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: f3_token.device_session_id,
+                  oidc_client_id: f3_client.client_id,
+                  revoked_at: nil,
+                ))
+              f3_token.rotate_refresh_token! unless f3_token.device_session.current_refresh_token_id
+              f3_now = Time.current
+              f3_session = ClientRpSession.create!(
+                client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
+                refresh_token_expires_at: f3_now + 10.minutes,
+              )
+              f3_access = AuthenticationTokenService.encode(
+                f3_token.user, host: f3_host, resource_type: "client",
+                               session_public_id: f3_token.public_id, base_session_public_id: f3_token.public_id,
+                               oidc_sid: f3_session.public_id, oidc_jti: f3_session.oidc_jti,
+                               expires_at: f3_now + 10.minutes, scopes: %w(openid profile),
+                               issuer: OidcIssuer.for_client(f3_client), audiences: [f3_client.aud],
+                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f3_client),
+                               subject: OidcSubject.for(
+                                 f3_token.user,
+                                 resource_type: "client",
+                               ), client_id: f3_client.client_id,
+              )
+              @base_browser_rp_credentials[f3_key] =
+                [f3_access, f3_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[f3_key]
+              f3_access, f3_refresh = @base_browser_rp_credentials.fetch(f3_key)
+              f3_cookie = [
+                f3_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f3_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f3_refresh)}",
+              ].join("; ")
+              f3_headers = f3_headers.merge(
+                "Cookie" => f3_cookie,
+                "HTTP_COOKIE" => f3_cookie,
+              )
+            end
+          end
+          f3_headers
+        end
+      end
     delete auth_app_settings_apple_url(ri: "jp", host: @host),
-           headers: social_unlink_headers
+           headers: http_headers_8
 
     assert_response :unprocessable_content
     assert ClientAppleIdentity.exists?(id: apple_identity.id), "Last identity should NOT be deleted"
@@ -178,10 +500,82 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       user_google_identity_status: client_google_identity_statuses(:active),
     )
 
-    create_effective_email!("google-backup-#{SecureRandom.hex(4)}@example.com")
+    begin
+      fv5003 = "google-backup-#{SecureRandom.hex(4)}@example.com"
+      insert_verified_user_email!(user_id: @user.id, address: fv5003)
+    end
 
+    http_headers_7 =
+      begin
+        satisfy_user_verification(@token)
+        mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
+        begin
+          f4_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+          f4_host = f4_headers["Host"]
+          f4_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{f4_host}/") if f4_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          f4_family, f4_surface = f4_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(f4_family) && f4_surface == "app"
+            f4_client_id =
+              case f4_family
+              when "base" then "base-#{f4_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{f4_family}-#{f4_surface}"
+              end
+            f4_token = ClientToken.find_by!(public_id: f4_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            f4_client = OidcClientRegistry.find!(f4_client_id)
+            f4_key = [f4_client.client_id, f4_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[f4_key] && f4_token.currently_usable? &&
+                !(f4_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: f4_token.device_session_id,
+                  oidc_client_id: f4_client.client_id,
+                  revoked_at: nil,
+                ))
+              f4_token.rotate_refresh_token! unless f4_token.device_session.current_refresh_token_id
+              f4_now = Time.current
+              f4_session = ClientRpSession.create!(
+                client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
+                refresh_token_expires_at: f4_now + 10.minutes,
+              )
+              f4_access = AuthenticationTokenService.encode(
+                f4_token.user, host: f4_host, resource_type: "client",
+                               session_public_id: f4_token.public_id, base_session_public_id: f4_token.public_id,
+                               oidc_sid: f4_session.public_id, oidc_jti: f4_session.oidc_jti,
+                               expires_at: f4_now + 10.minutes, scopes: %w(openid profile),
+                               issuer: OidcIssuer.for_client(f4_client), audiences: [f4_client.aud],
+                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f4_client),
+                               subject: OidcSubject.for(
+                                 f4_token.user,
+                                 resource_type: "client",
+                               ), client_id: f4_client.client_id,
+              )
+              @base_browser_rp_credentials[f4_key] =
+                [f4_access, f4_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[f4_key]
+              f4_access, f4_refresh = @base_browser_rp_credentials.fetch(f4_key)
+              f4_cookie = [
+                f4_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f4_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f4_refresh)}",
+              ].join("; ")
+              f4_headers = f4_headers.merge(
+                "Cookie" => f4_cookie,
+                "HTTP_COOKIE" => f4_cookie,
+              )
+            end
+          end
+          f4_headers
+        end
+      end
     delete auth_app_settings_google_url(ri: "jp", host: @host),
-           headers: social_unlink_headers
+           headers: http_headers_7
 
     assert_response :redirect
 
@@ -199,10 +593,82 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       expires_at: 1.week.from_now.to_i,
       user_apple_identity_status: client_apple_identity_statuses(:active),
     )
-    create_effective_email!("apple-backup-#{SecureRandom.hex(4)}@example.com")
+    begin
+      fv5002 = "apple-backup-#{SecureRandom.hex(4)}@example.com"
+      insert_verified_user_email!(user_id: @user.id, address: fv5002)
+    end
 
+    http_headers_6 =
+      begin
+        satisfy_user_verification(@token)
+        mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
+        begin
+          f5_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+          f5_host = f5_headers["Host"]
+          f5_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{f5_host}/") if f5_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          f5_family, f5_surface = f5_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(f5_family) && f5_surface == "app"
+            f5_client_id =
+              case f5_family
+              when "base" then "base-#{f5_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{f5_family}-#{f5_surface}"
+              end
+            f5_token = ClientToken.find_by!(public_id: f5_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            f5_client = OidcClientRegistry.find!(f5_client_id)
+            f5_key = [f5_client.client_id, f5_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[f5_key] && f5_token.currently_usable? &&
+                !(f5_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: f5_token.device_session_id,
+                  oidc_client_id: f5_client.client_id,
+                  revoked_at: nil,
+                ))
+              f5_token.rotate_refresh_token! unless f5_token.device_session.current_refresh_token_id
+              f5_now = Time.current
+              f5_session = ClientRpSession.create!(
+                client_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
+                refresh_token_expires_at: f5_now + 10.minutes,
+              )
+              f5_access = AuthenticationTokenService.encode(
+                f5_token.user, host: f5_host, resource_type: "client",
+                               session_public_id: f5_token.public_id, base_session_public_id: f5_token.public_id,
+                               oidc_sid: f5_session.public_id, oidc_jti: f5_session.oidc_jti,
+                               expires_at: f5_now + 10.minutes, scopes: %w(openid profile),
+                               issuer: OidcIssuer.for_client(f5_client), audiences: [f5_client.aud],
+                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f5_client),
+                               subject: OidcSubject.for(
+                                 f5_token.user,
+                                 resource_type: "client",
+                               ), client_id: f5_client.client_id,
+              )
+              @base_browser_rp_credentials[f5_key] =
+                [f5_access, f5_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[f5_key]
+              f5_access, f5_refresh = @base_browser_rp_credentials.fetch(f5_key)
+              f5_cookie = [
+                f5_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f5_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f5_refresh)}",
+              ].join("; ")
+              f5_headers = f5_headers.merge(
+                "Cookie" => f5_cookie,
+                "HTTP_COOKIE" => f5_cookie,
+              )
+            end
+          end
+          f5_headers
+        end
+      end
     delete auth_app_settings_apple_url(ri: "jp", host: @host),
-           headers: social_unlink_headers
+           headers: http_headers_6
 
     assert_response :redirect
 
@@ -237,8 +703,77 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
 
     email.destroy!
 
+    http_headers_5 =
+      begin
+        satisfy_user_verification(@token)
+        mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
+        begin
+          f6_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+          f6_host = f6_headers["Host"]
+          f6_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{f6_host}/") if f6_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          f6_family, f6_surface = f6_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(f6_family) && f6_surface == "app"
+            f6_client_id =
+              case f6_family
+              when "base" then "base-#{f6_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{f6_family}-#{f6_surface}"
+              end
+            f6_token = ClientToken.find_by!(public_id: f6_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            f6_client = OidcClientRegistry.find!(f6_client_id)
+            f6_key = [f6_client.client_id, f6_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[f6_key] && f6_token.currently_usable? &&
+                !(f6_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: f6_token.device_session_id,
+                  oidc_client_id: f6_client.client_id,
+                  revoked_at: nil,
+                ))
+              f6_token.rotate_refresh_token! unless f6_token.device_session.current_refresh_token_id
+              f6_now = Time.current
+              f6_session = ClientRpSession.create!(
+                client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
+                refresh_token_expires_at: f6_now + 10.minutes,
+              )
+              f6_access = AuthenticationTokenService.encode(
+                f6_token.user, host: f6_host, resource_type: "client",
+                               session_public_id: f6_token.public_id, base_session_public_id: f6_token.public_id,
+                               oidc_sid: f6_session.public_id, oidc_jti: f6_session.oidc_jti,
+                               expires_at: f6_now + 10.minutes, scopes: %w(openid profile),
+                               issuer: OidcIssuer.for_client(f6_client), audiences: [f6_client.aud],
+                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f6_client),
+                               subject: OidcSubject.for(
+                                 f6_token.user,
+                                 resource_type: "client",
+                               ), client_id: f6_client.client_id,
+              )
+              @base_browser_rp_credentials[f6_key] =
+                [f6_access, f6_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[f6_key]
+              f6_access, f6_refresh = @base_browser_rp_credentials.fetch(f6_key)
+              f6_cookie = [
+                f6_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f6_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f6_refresh)}",
+              ].join("; ")
+              f6_headers = f6_headers.merge(
+                "Cookie" => f6_cookie,
+                "HTTP_COOKIE" => f6_cookie,
+              )
+            end
+          end
+          f6_headers
+        end
+      end
     delete auth_app_settings_google_url(ri: "jp", host: @host),
-           headers: social_unlink_headers
+           headers: http_headers_5
 
     assert_response :redirect
     assert_not ClientExternalIdentity.effective_binding.exists?(id: google_identity.id)
@@ -269,8 +804,77 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       description: "Test Passkey",
     )
 
+    http_headers_4 =
+      begin
+        satisfy_user_verification(@token)
+        mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
+        begin
+          f7_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+          f7_host = f7_headers["Host"]
+          f7_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{f7_host}/") if f7_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          f7_family, f7_surface = f7_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(f7_family) && f7_surface == "app"
+            f7_client_id =
+              case f7_family
+              when "base" then "base-#{f7_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{f7_family}-#{f7_surface}"
+              end
+            f7_token = ClientToken.find_by!(public_id: f7_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            f7_client = OidcClientRegistry.find!(f7_client_id)
+            f7_key = [f7_client.client_id, f7_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[f7_key] && f7_token.currently_usable? &&
+                !(f7_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: f7_token.device_session_id,
+                  oidc_client_id: f7_client.client_id,
+                  revoked_at: nil,
+                ))
+              f7_token.rotate_refresh_token! unless f7_token.device_session.current_refresh_token_id
+              f7_now = Time.current
+              f7_session = ClientRpSession.create!(
+                client_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f7_now,
+                refresh_token_expires_at: f7_now + 10.minutes,
+              )
+              f7_access = AuthenticationTokenService.encode(
+                f7_token.user, host: f7_host, resource_type: "client",
+                               session_public_id: f7_token.public_id, base_session_public_id: f7_token.public_id,
+                               oidc_sid: f7_session.public_id, oidc_jti: f7_session.oidc_jti,
+                               expires_at: f7_now + 10.minutes, scopes: %w(openid profile),
+                               issuer: OidcIssuer.for_client(f7_client), audiences: [f7_client.aud],
+                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f7_client),
+                               subject: OidcSubject.for(
+                                 f7_token.user,
+                                 resource_type: "client",
+                               ), client_id: f7_client.client_id,
+              )
+              @base_browser_rp_credentials[f7_key] =
+                [f7_access, f7_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[f7_key]
+              f7_access, f7_refresh = @base_browser_rp_credentials.fetch(f7_key)
+              f7_cookie = [
+                f7_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f7_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f7_refresh)}",
+              ].join("; ")
+              f7_headers = f7_headers.merge(
+                "Cookie" => f7_cookie,
+                "HTTP_COOKIE" => f7_cookie,
+              )
+            end
+          end
+          f7_headers
+        end
+      end
     delete auth_app_settings_google_url(ri: "jp", host: @host),
-           headers: social_unlink_headers
+           headers: http_headers_4
 
     assert_response :redirect
     assert_not ClientExternalIdentity.effective_binding.exists?(id: google_identity.id)
@@ -291,8 +895,77 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       user_apple_identity_status: client_apple_identity_statuses(:active),
     )
 
+    http_headers_3 =
+      begin
+        satisfy_user_verification(@token)
+        mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
+        begin
+          f8_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+          f8_host = f8_headers["Host"]
+          f8_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{f8_host}/") if f8_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          f8_family, f8_surface = f8_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(f8_family) && f8_surface == "app"
+            f8_client_id =
+              case f8_family
+              when "base" then "base-#{f8_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{f8_family}-#{f8_surface}"
+              end
+            f8_token = ClientToken.find_by!(public_id: f8_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            f8_client = OidcClientRegistry.find!(f8_client_id)
+            f8_key = [f8_client.client_id, f8_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[f8_key] && f8_token.currently_usable? &&
+                !(f8_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: f8_token.device_session_id,
+                  oidc_client_id: f8_client.client_id,
+                  revoked_at: nil,
+                ))
+              f8_token.rotate_refresh_token! unless f8_token.device_session.current_refresh_token_id
+              f8_now = Time.current
+              f8_session = ClientRpSession.create!(
+                client_token: f8_token, oidc_client_id: f8_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f8_now,
+                refresh_token_expires_at: f8_now + 10.minutes,
+              )
+              f8_access = AuthenticationTokenService.encode(
+                f8_token.user, host: f8_host, resource_type: "client",
+                               session_public_id: f8_token.public_id, base_session_public_id: f8_token.public_id,
+                               oidc_sid: f8_session.public_id, oidc_jti: f8_session.oidc_jti,
+                               expires_at: f8_now + 10.minutes, scopes: %w(openid profile),
+                               issuer: OidcIssuer.for_client(f8_client), audiences: [f8_client.aud],
+                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f8_client),
+                               subject: OidcSubject.for(
+                                 f8_token.user,
+                                 resource_type: "client",
+                               ), client_id: f8_client.client_id,
+              )
+              @base_browser_rp_credentials[f8_key] =
+                [f8_access, f8_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[f8_key]
+              f8_access, f8_refresh = @base_browser_rp_credentials.fetch(f8_key)
+              f8_cookie = [
+                f8_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f8_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f8_refresh)}",
+              ].join("; ")
+              f8_headers = f8_headers.merge(
+                "Cookie" => f8_cookie,
+                "HTTP_COOKIE" => f8_cookie,
+              )
+            end
+          end
+          f8_headers
+        end
+      end
     delete auth_app_settings_google_url(ri: "jp", host: @host),
-           headers: social_unlink_headers
+           headers: http_headers_3
 
     assert_response :redirect
     assert_predicate ClientAppleIdentity, :exists?
@@ -308,8 +981,77 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       user_google_identity_status: client_google_identity_statuses(:revoked),
     )
 
+    http_headers_2 =
+      begin
+        satisfy_user_verification(@token)
+        mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
+        begin
+          f9_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+          f9_host = f9_headers["Host"]
+          f9_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{f9_host}/") if f9_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          f9_family, f9_surface = f9_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(f9_family) && f9_surface == "app"
+            f9_client_id =
+              case f9_family
+              when "base" then "base-#{f9_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{f9_family}-#{f9_surface}"
+              end
+            f9_token = ClientToken.find_by!(public_id: f9_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            f9_client = OidcClientRegistry.find!(f9_client_id)
+            f9_key = [f9_client.client_id, f9_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[f9_key] && f9_token.currently_usable? &&
+                !(f9_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: f9_token.device_session_id,
+                  oidc_client_id: f9_client.client_id,
+                  revoked_at: nil,
+                ))
+              f9_token.rotate_refresh_token! unless f9_token.device_session.current_refresh_token_id
+              f9_now = Time.current
+              f9_session = ClientRpSession.create!(
+                client_token: f9_token, oidc_client_id: f9_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f9_now,
+                refresh_token_expires_at: f9_now + 10.minutes,
+              )
+              f9_access = AuthenticationTokenService.encode(
+                f9_token.user, host: f9_host, resource_type: "client",
+                               session_public_id: f9_token.public_id, base_session_public_id: f9_token.public_id,
+                               oidc_sid: f9_session.public_id, oidc_jti: f9_session.oidc_jti,
+                               expires_at: f9_now + 10.minutes, scopes: %w(openid profile),
+                               issuer: OidcIssuer.for_client(f9_client), audiences: [f9_client.aud],
+                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f9_client),
+                               subject: OidcSubject.for(
+                                 f9_token.user,
+                                 resource_type: "client",
+                               ), client_id: f9_client.client_id,
+              )
+              @base_browser_rp_credentials[f9_key] =
+                [f9_access, f9_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[f9_key]
+              f9_access, f9_refresh = @base_browser_rp_credentials.fetch(f9_key)
+              f9_cookie = [
+                f9_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f9_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f9_refresh)}",
+              ].join("; ")
+              f9_headers = f9_headers.merge(
+                "Cookie" => f9_cookie,
+                "HTTP_COOKIE" => f9_cookie,
+              )
+            end
+          end
+          f9_headers
+        end
+      end
     delete auth_app_settings_google_url(ri: "jp", host: @host),
-           headers: social_unlink_headers
+           headers: http_headers_2
 
     assert_response :unprocessable_content
     assert ClientGoogleIdentity.exists?(identity.id)
@@ -335,12 +1077,91 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       released_at: Time.current,
     )
 
-    create_effective_email!("active-#{SecureRandom.hex(4)}@example.com")
+    begin
+      fv5001 = "active-#{SecureRandom.hex(4)}@example.com"
+      insert_verified_user_email!(user_id: @user.id, address: fv5001)
+    end
 
     # A released legacy row is not an effective social binding and is already
     # idempotently unlinked; the effective email remains available.
+    http_headers_1 =
+      begin
+        satisfy_user_verification(@token)
+        mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
+        begin
+          f10_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+          f10_host = f10_headers["Host"]
+          f10_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{f10_host}/") if f10_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          f10_family, f10_surface = f10_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(f10_family) && f10_surface == "app"
+            f10_client_id =
+              case f10_family
+              when "base" then "base-#{f10_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{f10_family}-#{f10_surface}"
+              end
+            f10_token = ClientToken.find_by!(public_id: f10_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            f10_client = OidcClientRegistry.find!(f10_client_id)
+            f10_key = [f10_client.client_id, f10_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[f10_key] && f10_token.currently_usable? &&
+                !(f10_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: f10_token.device_session_id,
+                  oidc_client_id: f10_client.client_id,
+                  revoked_at: nil,
+                ))
+              f10_token.rotate_refresh_token! unless f10_token.device_session.current_refresh_token_id
+              f10_now = Time.current
+              f10_session = ClientRpSession.create!(
+                client_token: f10_token, oidc_client_id: f10_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f10_now,
+                refresh_token_expires_at: f10_now + 10.minutes,
+              )
+              f10_access = AuthenticationTokenService.encode(
+                f10_token.user,
+                host: f10_host,
+                resource_type: "client",
+                session_public_id: f10_token.public_id,
+                base_session_public_id: f10_token.public_id,
+                oidc_sid: f10_session.public_id,
+                oidc_jti: f10_session.oidc_jti,
+                expires_at: f10_now + 10.minutes,
+                scopes: %w(openid profile),
+                issuer: OidcIssuer.for_client(f10_client),
+                audiences: [f10_client.aud],
+                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f10_client),
+                subject: OidcSubject.for(
+                  f10_token.user,
+                  resource_type: "client",
+                ),
+                client_id: f10_client.client_id,
+              )
+              @base_browser_rp_credentials[f10_key] =
+                [f10_access, f10_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[f10_key]
+              f10_access, f10_refresh = @base_browser_rp_credentials.fetch(f10_key)
+              f10_cookie = [
+                f10_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f10_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f10_refresh)}",
+              ].join("; ")
+              f10_headers = f10_headers.merge(
+                "Cookie" => f10_cookie,
+                "HTTP_COOKIE" => f10_cookie,
+              )
+            end
+          end
+          f10_headers
+        end
+      end
     delete auth_app_settings_google_url(ri: "jp", host: @host),
-           headers: social_unlink_headers
+           headers: http_headers_1
 
     assert_response :redirect
     assert ClientGoogleIdentity.exists?(inactive_google.id)
@@ -361,8 +1182,84 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
     )
 
     # Try to unlink Google - should fail because it's the only ACTIVE identity
+    http_headers_0 =
+      begin
+        satisfy_user_verification(@token)
+        mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
+        begin
+          f11_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+          f11_host = f11_headers["Host"]
+          f11_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{f11_host}/") if f11_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          f11_family, f11_surface = f11_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(f11_family) && f11_surface == "app"
+            f11_client_id =
+              case f11_family
+              when "base" then "base-#{f11_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{f11_family}-#{f11_surface}"
+              end
+            f11_token = ClientToken.find_by!(public_id: f11_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            f11_client = OidcClientRegistry.find!(f11_client_id)
+            f11_key = [f11_client.client_id, f11_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[f11_key] && f11_token.currently_usable? &&
+                !(f11_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: f11_token.device_session_id,
+                  oidc_client_id: f11_client.client_id,
+                  revoked_at: nil,
+                ))
+              f11_token.rotate_refresh_token! unless f11_token.device_session.current_refresh_token_id
+              f11_now = Time.current
+              f11_session = ClientRpSession.create!(
+                client_token: f11_token, oidc_client_id: f11_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f11_now,
+                refresh_token_expires_at: f11_now + 10.minutes,
+              )
+              f11_access = AuthenticationTokenService.encode(
+                f11_token.user,
+                host: f11_host,
+                resource_type: "client",
+                session_public_id: f11_token.public_id,
+                base_session_public_id: f11_token.public_id,
+                oidc_sid: f11_session.public_id,
+                oidc_jti: f11_session.oidc_jti,
+                expires_at: f11_now + 10.minutes,
+                scopes: %w(openid profile),
+                issuer: OidcIssuer.for_client(f11_client),
+                audiences: [f11_client.aud],
+                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f11_client),
+                subject: OidcSubject.for(
+                  f11_token.user,
+                  resource_type: "client",
+                ),
+                client_id: f11_client.client_id,
+              )
+              @base_browser_rp_credentials[f11_key] =
+                [f11_access, f11_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[f11_key]
+              f11_access, f11_refresh = @base_browser_rp_credentials.fetch(f11_key)
+              f11_cookie = [
+                f11_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f11_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f11_refresh)}",
+              ].join("; ")
+              f11_headers = f11_headers.merge(
+                "Cookie" => f11_cookie,
+                "HTTP_COOKIE" => f11_cookie,
+              )
+            end
+          end
+          f11_headers
+        end
+      end
     delete auth_app_settings_google_url(ri: "jp", host: @host),
-           headers: social_unlink_headers
+           headers: http_headers_0
 
     assert_response :unprocessable_content
 
@@ -400,16 +1297,16 @@ class SocialAuthUnlinkTest
     normalized = host.to_s
     base_hosts = {
       "APP" => [
-        ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
-        ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost"),
+        ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+        ENV.fetch("PRIVATE_BASE_SERVICE_URL"),
       ],
       "ORG" => [
-        ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
-        ENV.fetch("PRIVATE_BASE_STAFF_URL", "www.org.localhost"),
+        ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+        ENV.fetch("PRIVATE_BASE_STAFF_URL"),
       ],
       "COM" => [
-        ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
-        ENV.fetch("PRIVATE_BASE_CORPORATE_URL", "www.com.localhost"),
+        ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
+        ENV.fetch("PRIVATE_BASE_CORPORATE_URL"),
       ],
     }
     base_surface = base_hosts.find { |_surface, hosts| hosts.include?(normalized) }&.first
@@ -484,10 +1381,6 @@ class SocialAuthUnlinkTest
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     ).tap { |email| email.finalize_binding! }
-  end
-
-  def create_effective_email!(address)
-    insert_verified_user_email!(user_id: @user.id, address: address)
   end
 
   def insert_verified_visitor_email!(visitor_id:, address:)
@@ -634,7 +1527,8 @@ class SocialAuthUnlinkTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,

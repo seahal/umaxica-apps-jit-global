@@ -118,29 +118,39 @@ class VisitorEmailTest < ActiveSupport::TestCase
     end
   end
 
-  test "rejects creating more than the maximum emails per visitor" do
-    VisitorEmail.where(visitor: @visitor).delete_all
-    status = VisitorEmailStatus.find(VisitorEmailStatus::UNVERIFIED)
+  test "pending email rows do not reserve capacity and the database permits only one effective binding" do
+    owner = Visitor.create!
 
-    VisitorEmail::MAX_EMAILS_PER_VISITOR.times do
-      VisitorEmail.create!(
-        @valid_attributes.merge(
-          address: "limit-#{SecureRandom.hex(4)}@example.com",
-          visitor_email_status: status,
-        ),
-      )
+    assert_equal 0, owner.visitor_emails.effective_binding.count
+    candidates =
+      5.times.map do |index|
+        VisitorEmail.create!(
+          visitor: owner, address: "contact-limit-#{SecureRandom.hex(4)}-#{index}@example.test",
+          confirm_policy: "1",
+        )
+      end
+
+    assert candidates.none?(&:binding_effective?)
+    first, second = candidates
+    first.update!(visitor_email_status_id: VisitorEmailStatus::VERIFIED)
+    assert_difference -> { VisitorEmail.effective_binding.where(visitor_id: owner.id).count }, 1 do
+      first.finalize_binding!
     end
+    second.update!(visitor_email_status_id: VisitorEmailStatus::VERIFIED)
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      VisitorEmail.transaction(requires_new: true) { second.finalize_binding! }
+    end
+    assert_predicate first.reload, :binding_effective?
+    assert_not_predicate second.reload, :binding_effective?
+    assert_equal 1, VisitorEmail.effective_binding.where(visitor_id: owner.id).count
+    first.release_binding!
+    second.finalize_binding!
 
-    extra = VisitorEmail.new(
-      @valid_attributes.merge(
-        address: "limit-extra-#{SecureRandom.hex(4)}@example.com",
-        visitor_email_status: status,
-      ),
-    )
-
-    assert_not extra.valid?
-    assert_not_empty extra.errors[:base]
+    assert_predicate first.reload, :binding_released?
+    assert_predicate second.reload, :binding_effective?
+    assert_equal 1, VisitorEmail.effective_binding.where(visitor_id: owner.id).count
   end
+
   private
 end
 

@@ -13,9 +13,53 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    admit_auth_local_entry!(surface: "app")
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    begin
+      admission_browser = self
+      admission_surface = "app"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+    end
     ActionMailer::Base.deliveries.clear
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
@@ -89,12 +133,13 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
       confirm_policy: "1",
     ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url,
-         params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
-         headers: { "Host" => @host }
-
-    email.reload
-    otp_code = ROTP::HOTP.new(email.otp_private_key).at(email.otp_counter.to_i)
+    perform_enqueued_jobs do
+      post auth_app_sign_in_email_url,
+           params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
+           headers: { "Host" => @host }
+    end
+    otp_code = ActionMailer::Base.deliveries
+      .last.text_part.body.decoded.match(/Pass Code:\s*([0-9]{6})/).captures.fetch(0)
 
     patch auth_app_sign_in_email_url(format: :json),
           params: { user_email: { pass_code: otp_code } },

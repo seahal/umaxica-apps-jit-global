@@ -12,7 +12,7 @@ class IdentitySocialCeremonyAcmeTransactionTest < ActiveSupport::TestCase
   fixtures :clients, :client_statuses, :client_chronicle_events, :client_chronicle_levels
 
   setup do
-    @now = Time.zone.parse("2026-06-03 12:00:00")
+    @now = ClientSocialCeremonyTransaction.database_now.change(usec: 0)
     @client = clients(:one)
     @client.client_external_identities.where(provider: "google").destroy_all
     @session_ref = "session-#{SecureRandom.hex(4)}"
@@ -411,7 +411,7 @@ class IdentitySocialCeremonyAcmeTransactionTest < ActiveSupport::TestCase
       result_token = issue_signup_result(
         issuance.grant,
         auth_hash: signup_auth_hash,
-        birthdate: "2010-06-26",
+        birthdate: (@now.to_date - 15.years).iso8601,
       )
 
       assert_no_difference -> { Client.count } do
@@ -434,9 +434,25 @@ class IdentitySocialCeremonyAcmeTransactionTest < ActiveSupport::TestCase
   end
 
   def issue_signup_grant(provider: "google")
+    @signup_flow = ClientSignUpFlow.create!(
+      entry_method: provider, social_provider: provider, step: "start", issued_at: ClientSignUpFlow.database_now,
+      expires_at: ClientSignUpFlow.database_now + 15.minutes,
+      nonce_digest: Digest::SHA256.hexdigest(SecureRandom.hex(16)),
+    )
+    [:start_social_callback, :complete_social_callback].each do |event|
+      result = SignUpStateMachine.call(ticket: @signup_flow, event: event, actor_context: nil)
+      raise RuntimeError, "Signup fixture transition refused" unless result.success?
+    end
+    [:confirmation, :birthdate].each do |requirement|
+      result = SignUpStateMachine.call(
+        ticket: @signup_flow, event: :clear_requirement, actor_context: nil,
+        payload: { requirement: requirement, checkpoint_version: @signup_flow.reload.checkpoint_version },
+      )
+      raise RuntimeError, "Signup fixture requirement refused" unless result.success?
+    end
     IdentitySocialCeremonyGrantIssuer.issue!(
       surface: "app",
-      actor_ref: @client.public_id,
+      actor_ref: @signup_flow.public_id,
       session_ref: @session_ref,
       operation: "signup",
       provider: provider,
@@ -485,7 +501,7 @@ class IdentitySocialCeremonyAcmeTransactionTest < ActiveSupport::TestCase
       grant_token: grant_token,
       callback_result: callback_result,
       surface: "app",
-      actor_ref: @client.public_id,
+      actor_ref: @signup_flow.public_id,
       session_ref: @session_ref,
       operation: "signup",
       birthdate: birthdate,

@@ -150,7 +150,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # Targets lines 34, 35 and the "continue" branch of fail_sign_out_flow's
   # guard (else@257), plus its normal reload-and-terminal-refusal path (259, 260).
   # ------------------------------------------------------------------
-  test "marks the sign-out cycle failed and re-raises when a step in the flow raises" do
+  test "halts the sign-out cycle and re-raises when a step in the flow raises" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
@@ -177,7 +177,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
       end
     end
 
-    assert_predicate cycle.reload, :sign_out_failed?
+    assert_predicate cycle.reload, :sign_out_halted?
     assert_not token.reload.revoked?,
                "the token must not have been revoked yet since the failure happened before revocation"
   end

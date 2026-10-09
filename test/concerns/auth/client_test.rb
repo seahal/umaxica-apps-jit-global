@@ -182,7 +182,10 @@ class AuthClientTest < ActiveSupport::TestCase
     ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
     before_ids = ClientToken.where(user_id: @user.id).order(:id).pluck(:id, :user_token_status_id, :discard_at)
 
-    result = @obj.send(:log_in, @user, establishment: :root_login, require_totp_check: false)
+    result = @obj.log_in(
+      @user, establishment: :root_login, require_totp_check: false,
+             established_authentication_method: "passkey", authentication_event_at: ClientToken.database_now,
+    )
 
     assert_equal :session_limit_pending, result[:status]
     assert_nil @obj.cookies[::AuthenticationClient::ACCESS_COOKIE_KEY]

@@ -56,10 +56,6 @@ class VisitorTelephone < ComPrincipalRecord
 
   self.filter_attributes += %w(number sign_up_otp_context credential_registration_otp_context)
 
-  # Matches MAX_TELEPHONES_PER_USER and MAX_TELEPHONES_PER_STAFF: contact-method
-  # caps are four across every principal.
-  MAX_TELEPHONES_PER_VISITOR = 4
-
   attribute :visitor_telephone_status_id, default: VisitorTelephoneStatus::UNVERIFIED
 
   belongs_to :visitor, inverse_of: :visitor_telephones
@@ -70,14 +66,6 @@ class VisitorTelephone < ComPrincipalRecord
   validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :visitor_telephone_status_id, numericality: { only_integer: true }
   validates :number_digest, presence: true, if: :binding_effective?
-  validates_with AssociatedRecordLimitValidator,
-                 on: :create,
-                 owner: :visitor,
-                 association: :visitor_telephones,
-                 foreign_key: :visitor_id,
-                 limit: :MAX_TELEPHONES_PER_VISITOR,
-                 record_name: "telephones",
-                 owner_name: "visitor"
 
   public
 

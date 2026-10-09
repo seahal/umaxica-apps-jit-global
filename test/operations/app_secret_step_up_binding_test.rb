@@ -23,7 +23,10 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
       assert_no_difference("ClientStepUpCeremonyTransaction.count") do
         assert_no_difference("ClientStepUpSession.count") do
           assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-            issue_base_step_up_admission!(actor: actor, token: token, requirement: requirement, return_to: path)
+            BaseStepUpAdmissionIssuer.call!(
+              actor: actor, token: token, requirement: requirement, return_to: path,
+              base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
+            )
           end
         end
       end
@@ -43,8 +46,13 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
       user_verification_required: false, full_reauthentication_required: false,
       ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
-    admission = issue_base_step_up_admission!(
-      actor: actor, token: token, requirement: requirement, return_to: "/secrets/new?ri=jp",
+    admission = BaseStepUpAdmissionIssuer.call!(
+      actor: actor,
+      token: token,
+      requirement: requirement,
+      return_to: "/secrets/new?ri=jp",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: token,
     )
 
     assert_equal "settings_secret_credential", admission.transaction.required_scope
@@ -70,8 +78,9 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
     )
 
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-      issue_base_step_up_admission!(
+      BaseStepUpAdmissionIssuer.call!(
         actor: actor, token: token, requirement: requirement, return_to: "/secrets/new",
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
       )
     end
   end
@@ -91,7 +100,10 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
     ["/settings/secrets", "/settings/secret_credentials", "/secrets-extra", "/identity/emails",
      "https://untrusted.example/secrets", "//untrusted.example/secrets",].each do |path|
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-        issue_base_step_up_admission!(actor: actor, token: token, requirement: requirement, return_to: path)
+        BaseStepUpAdmissionIssuer.call!(
+          actor: actor, token: token, requirement: requirement, return_to: path,
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
+        )
       end
     end
   end
@@ -111,8 +123,13 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
 
     assert_no_difference("ClientStepUpCeremonyTransaction.count") do
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-        issue_base_step_up_admission!(
-          actor: actor, token: second, requirement: requirement, return_to: "/secrets/new",
+        BaseStepUpAdmissionIssuer.call!(
+          actor: actor,
+          token: second,
+          requirement: requirement,
+          return_to: "/secrets/new",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: second,
         )
       end
     end
@@ -132,8 +149,13 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
 
     assert_no_difference("ClientStepUpCeremonyTransaction.count") do
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-        issue_base_step_up_admission!(
-          actor: actor, token: token, requirement: requirement, return_to: "/secrets/new",
+        BaseStepUpAdmissionIssuer.call!(
+          actor: actor,
+          token: token,
+          requirement: requirement,
+          return_to: "/secrets/new",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: token,
         )
       end
     end
@@ -160,15 +182,25 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
         user_verification_required: false, full_reauthentication_required: false,
         ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
-      admission = issue_base_step_up_admission!(
-        actor: actor, token: token, requirement: requirement, return_to: "/identity/secrets",
+      admission = BaseStepUpAdmissionIssuer.call!(
+        actor: actor,
+        token: token,
+        requirement: requirement,
+        return_to: "/identity/secrets",
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: token,
       )
 
       assert_equal surface, admission.transaction.surface
       assert_equal "/identity/secrets", admission.transaction.return_to
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-        issue_base_step_up_admission!(
-          actor: actor, token: token, requirement: requirement, return_to: "/secrets/new",
+        BaseStepUpAdmissionIssuer.call!(
+          actor: actor,
+          token: token,
+          requirement: requirement,
+          return_to: "/secrets/new",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: token,
         )
       end
     end

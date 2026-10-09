@@ -21,14 +21,15 @@ class Auth::App::Sign::Up::Check::Google::ConfirmationsControllerTest < ActionDi
     Rails.configuration.x.rate_limit.fetch(:store).clear
   end
 
-  test "show without a sign-up ticket restarts sign-up instead of a dead-end error body" do
+  test "show without a sign-up ticket refuses the unbound phase" do
     user = clients(:one)
 
     get auth_app_sign_up_check_google_confirmation_url(ri: "jp"),
         headers: as_user_headers(user, host: @host)
 
-    assert_response :see_other
-    assert_redirected_to auth_app_sign_up_path(ri: "jp")
+    assert_response :conflict
+    assert_nil response.location
+    assert_equal I18n.t("errors.messages.phase_violation_refused", locale: :ja), response.body
   end
 
   private

@@ -38,7 +38,7 @@ class IdentityCredentialRemovalCommitter
               if current_session.is_a?(OperatorToken) && current_session.emergency_authentication_context?
                 raise ArgumentError, "credential removal requires a Normal session"
               end
-              return false if terminal? || !removable?
+              return false if terminal? || (contact? && !credential.binding_effective?) || !removable?
 
               # Ticket invalidation precedes principal mutation. A separate-DB failure can
               # remove freshness while retaining the credential, but cannot preserve stale authority.

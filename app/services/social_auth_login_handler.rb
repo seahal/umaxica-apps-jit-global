@@ -56,6 +56,8 @@ class SocialAuthLoginHandler
   end
 
   def pending_social_signup
+    raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent") unless sign_up_entry
+
     Rails.logger.debug { "[SocialAuth] Unknown social identity requires signup confirmation" }
     {
       user: nil,

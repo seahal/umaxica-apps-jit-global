@@ -11,7 +11,7 @@ class Base::App::Edge::V0::CookieControllerTest < ActionDispatch::IntegrationTes
   # include PreferenceJwtHelper
 
   setup do
-    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! @host
   end
 
@@ -333,7 +333,8 @@ class Base::App::Edge::V0::CookieControllerTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,

@@ -6,7 +6,8 @@ require "test_helper"
 # Browser-condition CSRF for the org administrative mutations. The requests are authenticated by the
 # access cookie alone (no bearer header), synthetic verified evidence is finalized through
 # the public Base committer, and forgery protection is on. This isolates mutation CSRF; the
-# administrative ceremony integration test exercises the HTTP completion and real signatures. The expected results follow the org surface's
+# administrative ceremony integration test exercises the HTTP completion and real signatures. The expected results
+# follow the org surface's
 # `protect_from_forgery using: :header_or_legacy_token` contract in Rails:
 #
 # - `Sec-Fetch-Site: same-origin` or `same-site` is accepted without a token;
@@ -49,7 +50,52 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
 
     assert_equal ["#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(access)}"], installed
 
-    install_base_browser_rp_credentials!(surface: "org", host: @host, actor: @operator, token: @token)
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = @host
+          rp_token = @token
+          rp_client = OidcClientRegistry.find!("base-org-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && OperatorRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = OperatorRpSession.create!(
+                operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                @operator, host: rp_host, resource_type: "operator",
+                           session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                           oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                           expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                           issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                           subject: OidcSubject.for(
+                             @operator,
+                             resource_type: "operator",
+                           ), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
+    end
     @session_headers = { "Host" => @host, "Client-Agent" => "Mozilla/5.0" }.freeze
     @mutations = {
       support: [
@@ -104,8 +150,9 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
         scope: scope, allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:org",
         session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
       )
-      transaction = issue_base_step_up_admission!(
-        actor: @operator, token: @token, requirement: requirement, return_to: return_to,
+      transaction = BaseStepUpAdmissionIssuer.call!(
+        actor: @operator, token: @token, requirement: requirement,
+        return_to: return_to, base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
       ).transaction
       transaction.record_verification!(
         method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: false,
@@ -180,9 +227,10 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
       scope: scope, allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:org",
       session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
     )
-    transaction = issue_base_step_up_admission!(
+    transaction = BaseStepUpAdmissionIssuer.call!(
       actor: @operator, token: @token, requirement: requirement,
       return_to: "/support/clients/#{@client.public_id}/revocations/new",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
     ).transaction
     transaction.record_verification!(
       method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: false,

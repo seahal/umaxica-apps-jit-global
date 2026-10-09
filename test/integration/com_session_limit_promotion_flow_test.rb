@@ -16,8 +16,8 @@ class ComSessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
     end
     VisitorSignOutFlowKind.ensure_defaults!
     VisitorSignOutFlowStatus.ensure_defaults!
-    @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
-    @base_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "www.umaxica.com")
+    @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+    @base_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     host! @host
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
@@ -47,7 +47,10 @@ class ComSessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
     base.get(base_com_sign_show_path, params: { ri: "jp" })
     nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
     issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "com", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      surface: "com",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
       nonce_digest: VisitorSignInFlow.digest_nonce(nonce),
     )
     SignInCycleLocator.new(base.session, surface: "com").issue!(issuance.transaction, nonce: nonce)
@@ -62,7 +65,7 @@ class ComSessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
     auth_session, raw_sid = VisitorAuthCeremonySession.issue!
     binding.attach_auth_session!(auth_session: auth_session, confirmation_ref: SecureRandom.uuid)
     browser_digest = AuthAdmissionBinding.browser_digest(
-      surface: "com", entry_ref: binding.entry_ref, nonce: "test-browser-nonce",
+      surface: "com", entry_ref: binding.entry_ref, nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
     )
     binding.confirm_base!(base_token: nil, browser_digest: browser_digest)
     https!

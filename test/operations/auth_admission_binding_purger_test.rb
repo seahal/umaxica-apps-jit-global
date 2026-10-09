@@ -7,7 +7,7 @@ class AuthAdmissionBindingPurgerTest < ActiveSupport::TestCase
   test "retired binding remains until its parent deadline and retention boundary in every realm" do
     %w(app com org).each do |surface|
       issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-        surface:, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        surface:, intent: "sign_in", base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
       )
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
       binding.retire!
@@ -33,7 +33,7 @@ class AuthAdmissionBindingPurgerTest < ActiveSupport::TestCase
   test "expired parent retains its binding until attached Auth continuity reaches retention in every realm" do
     %w(app com org).each do |surface|
       issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-        surface:, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        surface:, intent: "sign_in", base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
       )
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
       continuity, = binding.class.auth_admission_session_class.issue!

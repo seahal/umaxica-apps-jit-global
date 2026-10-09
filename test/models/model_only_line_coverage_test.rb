@@ -165,76 +165,79 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "session limit transaction creates finds and completes every remaining state" do
-    created_attributes = nil
-    relation = Object.new
-    relation.define_singleton_method(:active_at) { |_now| self }
-    relation.define_singleton_method(:find_by) { |**_attributes| nil }
-    created = ClientSessionLimitResolutionTransaction.new(status: "pending", expires_at: 1.minute.from_now)
-    actor = Client.new(public_id: "client-session-limit")
-    oidc_transaction = Struct.new(:id).new(321)
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    now = ClientSignInFlow.database_now
+    flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlowState::SESSION_ISSUANCE_PENDING,
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+    digest = ClientSessionLimitResolutionTransaction.digest_challenge(SecureRandom.urlsafe_base64(32))
+    issuance = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: flow,
+      actor: actor,
+      browser_binding_digest: digest,
+    )
+    record = issuance.transaction
 
-    ClientSessionLimitResolutionTransaction.stub(:open_status, relation) do
-      ClientSessionLimitResolutionTransaction.stub(
-        :create!,
-        ->(**attributes) { created_attributes = attributes; created },
-      ) do
-        issuance = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
-          actor: actor, oidc_transaction: oidc_transaction,
-        )
+    assert_predicate record, :pending?
+    assert_equal record.id, ClientSessionLimitResolutionTransaction.find_active_by_challenge(issuance.challenge).id
+    token = ClientToken.create!(user: actor)
+    record.select_session!(
+      actor: actor,
+      challenge: issuance.challenge,
+      session_ref: token.public_id,
+      browser_binding_digest: digest,
+    )
 
-        assert_same created, issuance.transaction
-      end
+    assert_equal token.public_id, record.reload.selected_session_ref
+    record.resolve!(actor: actor, challenge: issuance.challenge, browser_binding_digest: digest)
+
+    assert_predicate record.reload, :resolved?
+    assert_not_nil record.finalized_at
+    assert_raises(FlowInvalidTransition) do
+      record.cancel!(actor: actor, challenge: issuance.challenge, browser_binding_digest: digest)
     end
+    another_flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlowState::SESSION_ISSUANCE_PENDING,
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+    another = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: another_flow,
+      actor: actor,
+      browser_binding_digest: digest,
+    )
+    another.transaction.cancel!(actor: actor, challenge: another.challenge, browser_binding_digest: digest)
 
-    assert_equal "pending", created_attributes[:status]
-
-    found = Object.new
-    find_relation = Object.new
-    find_relation.define_singleton_method(:active_at) { |_now| self }
-    find_relation.define_singleton_method(:find_by) { |**_attributes| found }
-
-    ClientSessionLimitResolutionTransaction.stub(:open_status, find_relation) do
-      assert_same found, ClientSessionLimitResolutionTransaction.find_active_by_challenge("challenge")
-    end
-
-    updates = []
-    created.stub(:update!, ->(attributes) { updates << attributes }) do
-      now = Time.current
-      created.status = "resolved"
-
-      assert_predicate created, :resolved?
-      created.status = "cancelled"
-
-      assert_predicate created, :cancelled?
-      created.mark_session_selected!(session_ref: 123, now: now)
-      created.finalize!(now: now)
-      created.cancel!(now: now)
-    end
-
-    assert_equal "123", updates.first[:selected_session_ref]
-    assert_equal "resolved", updates.second[:status]
-    assert_equal "cancelled", updates.third[:status]
+    assert_predicate another.transaction.reload, :cancelled?
+    assert_predicate another_flow.reload, :sign_in_session_issuance_pending?
   end
 
   test "oidc token usage scope and rotation update the refresh token family" do
     assert_kind_of ActiveRecord::Relation, ClientRpSession.currently_usable_at(Time.current)
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(user: actor)
+    usage = ClientRpSession.create!(
+      client_token: root, oidc_client_id: "base-app-ww", oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: ClientRpSession.database_now,
+      refresh_token_expires_at: ClientRpSession.database_now + 10.minutes,
+    )
+    previous = usage.issue_refresh_token!
+    digest = usage.refresh_token_digest
+    generation = usage.refresh_generation
+    root_generation = root.reload.refresh_token_generation
+    rotated = usage.rotate_refresh_token!(expires_at: ClientRpSession.database_now + 10.minutes)
 
-    usage = ClientRpSession.new(public_id: "usage-public-id", refresh_token_digest: "previous")
-    updates = []
-    usage.stub(:with_lock, ->(&block) { block.call }) do
-      usage.stub(:active?, true) do
-        usage.stub(:generate_refresh_token, ["raw-token", "verifier"]) do
-          usage.stub(:encoded_refresh_token_digest, "next-digest") do
-            usage.stub(:update!, ->(attributes) { updates << attributes }) do
-              assert_equal "raw-token", usage.rotate_refresh_token!(expires_at: 1.hour.from_now)
-            end
-          end
-        end
-      end
-    end
-
-    assert_equal "previous", updates.last[:previous_refresh_token_digest]
-    assert_equal "next-digest", updates.last[:refresh_token_digest]
+    assert_not_equal previous, rotated
+    assert_equal digest, usage.reload.previous_refresh_token_digest
+    assert_not_equal digest, usage.refresh_token_digest
+    assert_equal generation + 1, usage.refresh_generation
+    assert_equal root_generation, root.reload.refresh_token_generation
   end
 
   test "avatar group and memberships expose state and timestamp validation" do
@@ -326,19 +329,20 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "sign in flow recognizes legacy states and advances to return" do
-    flow = ClientSignInFlow.new
-    flow.stub(:cycle_status?, true) do
-      assert_predicate flow, :sign_in_primary_pending?
-      assert_predicate flow, :sign_in_dashboard_pending?
-      assert_predicate flow, :sign_in_return_pending?
-    end
+    flow = ClientSignInFlow.new(state_id: ClientSignInFlowState::PRIMARY_PENDING)
 
-    calls = []
-    flow.stub(:transition_sign_in_to!, ->(*arguments, **options) { calls << [arguments, options] }) do
-      flow.advance_sign_in_to_return!
-    end
+    assert_predicate flow, :sign_in_primary_pending?
+    assert_not_respond_to flow, :sign_in_dashboard_pending?
+    assert_not_respond_to flow, :sign_in_return_pending?
+    now = ClientSignInFlow.database_now
+    flow = ClientSignInFlow.create!(
+      state_id: ClientSignInFlowState::CHECKPOINT_PENDING, issued_at: now, expires_at: now + 5.minutes,
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+    )
+    flow.advance_sign_in_to_selector!
 
-    assert_equal "RETURN_PENDING", calls.last.first.first
+    assert_predicate flow.reload, :sign_in_selector_pending?
+    assert_raises(FlowInvalidTransition) { flow.advance_sign_in_to_mfa! }
   end
 
   test "step up purge scope and connection owners cover every store" do
@@ -458,12 +462,12 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "step up transaction exposes scopes claims and valid state transitions" do
-    now = Time.zone.parse("2026-07-18 08:00:00")
+    now = ClientStepUpCeremonyTransaction.database_now
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: "actor-model-coverage",
       session_ref: "session-model-coverage",
       required_scope: "settings_email",
-      required_aal: "aal2",
+      required_aal: "none",
       allowed_methods: %w(totp totp passkey),
       resource_ref: "resource-model-coverage",
       return_to: "/settings/email",
@@ -485,12 +489,11 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
                    now: now,
                  )
 
-    # The fixed clock of this test is outside the database-clocked transitions, so the consumed
-    # state is written directly; the transitions are covered by the transition contract test.
-    transaction.update_columns(
-      status: "consumed", result_jti: "model-coverage-result", method: "totp", aal: "aal1",
-      verified_at: now, consumed_at: now,
+    transaction.record_verification!(
+      method: "totp", aal: "aal1", phishing_resistant: false, user_verified: false,
+      verified_at: now, verified_credential_ref: SecureRandom.uuid,
     )
+    transaction.with_lock { transaction.commit_consumption!(now: ClientStepUpCeremonyTransaction.database_now) }
 
     assert_predicate transaction.reload, :consumed?
     assert_includes ClientStepUpCeremonyTransaction.consumed, transaction
@@ -502,7 +505,7 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
       actor_ref: "actor-model-cancel",
       session_ref: "session-model-cancel",
       required_scope: "settings_email",
-      required_aal: "aal2",
+      required_aal: "none",
       allowed_methods: %w(totp),
       transaction_id: "model-coverage-cancel",
       grant_jti: "model-coverage-cancel-grant",

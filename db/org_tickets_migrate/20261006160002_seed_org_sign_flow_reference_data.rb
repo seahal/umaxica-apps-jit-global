@@ -12,7 +12,7 @@ class SeedOrgSignFlowReferenceData < ActiveRecord::Migration[8.2]
     safety_assured do
       REFERENCE_ROWS.each do |table, ids|
         ids.each do |id|
-          execute "INSERT INTO #{table} (id) VALUES (#{id}) ON CONFLICT (id) DO NOTHING"
+          execute("INSERT INTO #{table} (id) VALUES (#{id}) ON CONFLICT (id) DO NOTHING")
         end
       end
     end

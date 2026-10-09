@@ -224,7 +224,7 @@ module Concerns
     # timezone alongside locale. Regression guard against auth/app losing set_timezone.
     test "app surface lifecycle controllers reflect timezone" do
       app_controllers =
-        lifecycle_controllers.select { |controller| controller[:content].include?("AuthenticationClient") }
+        lifecycle_controllers.select { |controller| controller[:path_name].end_with?("::app") }
 
       assert_operator app_controllers.length, :>=, 3,
                       "expected multiple app-surface lifecycle controllers"

@@ -36,9 +36,9 @@ class Auth::Com::Verification::PasskeysControllerTest < ActionDispatch::Integrat
       purpose: "step_up", audience: "step_up:com", require_session_binding: true,
       actor_ref: @visitor.public_id, resource_ref: nil, tenant_ref: nil,
     )
-    @issuance = issue_base_step_up_admission!(
+    @issuance = BaseStepUpAdmissionIssuer.call!(
       actor: @visitor, token: @token, requirement: requirement, return_to: "/identity/birthdate?ri=jp",
-      base_browser_nonce: "test-browser-nonce", base_token: @token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
     )
     @ticket = VisitorStepUpSession.find_by!(step_up_ceremony_transaction_ref: @issuance.transaction.transaction_id)
     https!
@@ -52,7 +52,7 @@ class Auth::Com::Verification::PasskeysControllerTest < ActionDispatch::Integrat
     binding.confirm_base!(
       base_token: @token,
       browser_digest: AuthAdmissionBinding.browser_digest(
-        surface: "com", entry_ref: @issuance.reference, nonce: "test-browser-nonce",
+        surface: "com", entry_ref: @issuance.reference, nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
       ),
     )
     post auth_com_verification_path(ri: "jp"), params: {
@@ -99,7 +99,7 @@ class Auth::Com::Verification::PasskeysControllerTest < ActionDispatch::Integrat
 
     assert_equal base_com_verification_cancellation_path, gateway.path
     assert_equal @issuance.transaction.transaction_id, params.fetch("transaction_ref")
-    assert_predicate params.fetch("cancellation_handoff"), :present?
+    assert_not params.key?("cancellation_handoff")
     assert_predicate params.fetch("cancellation_ref"), :present?
     assert_equal "pending", @issuance.transaction.reload.status
     assert_nil @token.reload.last_step_up_at

@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "concurrent/executor/simple_executor_service"
 
 class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
@@ -9,7 +10,18 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   test "client resolution binds the parent and revokes only an owned selected session" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     foreign_actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    flow = client_flow(actor)
+    flow =
+      begin
+        fv5030 = actor
+        fv5029 = ClientSignInFlow.database_now
+        ClientSignInFlow.create!(
+          principal_id: fv5030.id,
+          state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+          nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+          issued_at: fv5029,
+          expires_at: fv5029 + 5.minutes,
+        )
+      end
     token = ClientToken.create!(user: actor)
     foreign_token = ClientToken.create!(user: foreign_actor)
     binding = SecureRandom.urlsafe_base64(32)
@@ -54,7 +66,18 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
   test "visitor and operator resolutions use their own realm state and token ownership" do
     visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-    visitor_flow_record = visitor_flow(visitor)
+    visitor_flow_record =
+      begin
+        fv5028 = visitor
+        fv5027 = VisitorSignInFlow.database_now
+        VisitorSignInFlow.create!(
+          principal_id: fv5028.id,
+          state_id: VisitorSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+          nonce_digest: VisitorSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+          issued_at: fv5027,
+          expires_at: fv5027 + 5.minutes,
+        )
+      end
     visitor_token = VisitorToken.create!(visitor: visitor, skip_session_limit_check: true)
     visitor_binding = SecureRandom.urlsafe_base64(32)
     visitor_issuance = VisitorSessionLimitResolutionTransaction.issue!(
@@ -76,7 +99,18 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
     )
 
     operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
-    operator_flow_record = operator_flow(operator)
+    operator_flow_record =
+      begin
+        fv5026 = operator
+        fv5025 = OperatorSignInFlow.database_now
+        OperatorSignInFlow.create!(
+          principal_id: fv5026.id,
+          state_id: OperatorSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+          nonce_digest: OperatorSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+          issued_at: fv5025,
+          expires_at: fv5025 + 5.minutes,
+        )
+      end
     operator_token = OperatorToken.create!(staff: operator)
     operator_binding = SecureRandom.urlsafe_base64(32)
     operator_issuance = OperatorSessionLimitResolutionTransaction.issue!(
@@ -95,7 +129,18 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
   test "wrong browser binding and terminal replay cannot mutate a resolution" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    flow = client_flow(actor)
+    flow =
+      begin
+        fv5024 = actor
+        fv5023 = ClientSignInFlow.database_now
+        ClientSignInFlow.create!(
+          principal_id: fv5024.id,
+          state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+          nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+          issued_at: fv5023,
+          expires_at: fv5023 + 5.minutes,
+        )
+      end
     token = ClientToken.create!(user: actor)
     binding = SecureRandom.urlsafe_base64(32)
     issuance = ClientSessionLimitResolutionTransaction.issue!(
@@ -129,7 +174,18 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   test "issue enforces actor ownership and realm ownership" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     foreign_actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    flow = client_flow(actor)
+    flow =
+      begin
+        fv5022 = actor
+        fv5021 = ClientSignInFlow.database_now
+        ClientSignInFlow.create!(
+          principal_id: fv5022.id,
+          state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+          nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+          issued_at: fv5021,
+          expires_at: fv5021 + 5.minutes,
+        )
+      end
 
     assert_raises(FlowInvalidTransition) do
       ClientSessionLimitResolutionTransaction.issue!(
@@ -151,7 +207,18 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
   test "resolution expiry uses the parent deadline and rejects at -1, exact, and +1" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    flow = client_flow(actor)
+    flow =
+      begin
+        fv5020 = actor
+        fv5019 = ClientSignInFlow.database_now
+        ClientSignInFlow.create!(
+          principal_id: fv5020.id,
+          state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+          nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+          issued_at: fv5019,
+          expires_at: fv5019 + 5.minutes,
+        )
+      end
     binding = SecureRandom.urlsafe_base64(32)
     issuance = ClientSessionLimitResolutionTransaction.issue!(
       sign_in_flow: flow,
@@ -173,7 +240,18 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
     end
     assert_equal ClientSessionLimitResolutionTransaction::EXPIRED, resolution.reload.state_id
 
-    exact_flow = client_flow(actor)
+    exact_flow =
+      begin
+        fv5018 = actor
+        fv5017 = ClientSignInFlow.database_now
+        ClientSignInFlow.create!(
+          principal_id: fv5018.id,
+          state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+          nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+          issued_at: fv5017,
+          expires_at: fv5017 + 5.minutes,
+        )
+      end
     exact = ClientSessionLimitResolutionTransaction.issue!(
       sign_in_flow: exact_flow,
       actor: actor,
@@ -183,7 +261,18 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
     assert_not_predicate exact.reload, :open?
 
-    future_flow = client_flow(actor)
+    future_flow =
+      begin
+        fv5016 = actor
+        fv5015 = ClientSignInFlow.database_now
+        ClientSignInFlow.create!(
+          principal_id: fv5016.id,
+          state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+          nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+          issued_at: fv5015,
+          expires_at: fv5015 + 5.minutes,
+        )
+      end
     future = ClientSessionLimitResolutionTransaction.issue!(
       sign_in_flow: future_flow,
       actor: actor,
@@ -196,7 +285,18 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
   test "an expired parent cannot issue a child" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    flow = client_flow(actor)
+    flow =
+      begin
+        fv5014 = actor
+        fv5013 = ClientSignInFlow.database_now
+        ClientSignInFlow.create!(
+          principal_id: fv5014.id,
+          state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+          nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+          issued_at: fv5013,
+          expires_at: fv5013 + 5.minutes,
+        )
+      end
     now = ClientSignInFlow.database_now
     flow.update!(issued_at: now - 2.seconds, expires_at: now - 1.second)
 
@@ -212,7 +312,18 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
   test "a second selection cannot replace the first selected session" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    flow = client_flow(actor)
+    flow =
+      begin
+        fv5012 = actor
+        fv5011 = ClientSignInFlow.database_now
+        ClientSignInFlow.create!(
+          principal_id: fv5012.id,
+          state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+          nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+          issued_at: fv5011,
+          expires_at: fv5011 + 5.minutes,
+        )
+      end
     first_token = ClientToken.create!(user: actor)
     second_token = ClientToken.create!(user: actor)
     binding = SecureRandom.urlsafe_base64(32)
@@ -240,14 +351,25 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
   test "concurrent issue creates one open child and returns an opaque challenge for each caller" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    flow = client_flow(actor)
+    flow =
+      begin
+        fv5010 = actor
+        fv5009 = ClientSignInFlow.database_now
+        ClientSignInFlow.create!(
+          principal_id: fv5010.id,
+          state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+          nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+          issued_at: fv5009,
+          expires_at: fv5009 + 5.minutes,
+        )
+      end
     ActiveRecord::Base.connection_handler.clear_active_connections!
     barrier = Concurrent::CyclicBarrier.new(2)
     results = Queue.new
 
     threads =
       2.times.map do
-        Concurrent::Future.execute do
+        Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
           AppTicketRecord.connection_pool.with_connection do
             barrier.wait
             binding = SecureRandom.urlsafe_base64(32)
@@ -260,8 +382,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
         rescue StandardError => e
           results << e
         ensure
-          # Model clock reads lease connections to this executor thread; an unreleased lease
-          # outlives the future and starves the two-connection test pools.
+          # Model-clock leases must return before the dedicated worker exits.
           ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end
@@ -277,7 +398,18 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
   test "concurrent conflicting selections have one winner and never revoke the losing choice" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    flow = client_flow(actor)
+    flow =
+      begin
+        fv5008 = actor
+        fv5007 = ClientSignInFlow.database_now
+        ClientSignInFlow.create!(
+          principal_id: fv5008.id,
+          state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+          nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+          issued_at: fv5007,
+          expires_at: fv5007 + 5.minutes,
+        )
+      end
     first_token = ClientToken.create!(user: actor)
     second_token = ClientToken.create!(user: actor)
     binding = SecureRandom.urlsafe_base64(32)
@@ -293,10 +425,13 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
     threads =
       [first_token, second_token].map do |token|
-        Concurrent::Future.execute do
+        Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
           AppTicketRecord.connection_pool.with_connection do
             barrier.wait
-            results << resolution_for_thread(issuance.transaction.id).select_session!(
+            results << begin
+              fv5006 = issuance.transaction.id
+              ClientSessionLimitResolutionTransaction.find(fv5006)
+            end.select_session!(
               actor: Client.find(actor.id), challenge: issuance.challenge, session_ref: token.public_id,
               browser_binding_digest: digest,
             )
@@ -304,8 +439,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
         rescue StandardError => e
           results << e
         ensure
-          # Model clock reads lease connections to this executor thread; an unreleased lease
-          # outlives the future and starves the two-connection test pools.
+          # Model-clock leases must return before the dedicated worker exits.
           ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end
@@ -338,13 +472,49 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
         case surface
         when "app"
           client = Client.create!(status_id: ClientStatus::ACTIVE)
-          [client, Array.new(2) { client_flow(client) }]
+          [client, Array.new(2) {
+            begin
+              fv5005 = client
+              fv5004 = ClientSignInFlow.database_now
+              ClientSignInFlow.create!(
+                principal_id: fv5005.id,
+                state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+                nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+                issued_at: fv5004,
+                expires_at: fv5004 + 5.minutes,
+              )
+            end
+          },]
         when "com"
           visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-          [visitor, Array.new(2) { visitor_flow(visitor) }]
+          [visitor, Array.new(2) {
+            begin
+              fv5003 = visitor
+              fv5002 = VisitorSignInFlow.database_now
+              VisitorSignInFlow.create!(
+                principal_id: fv5003.id,
+                state_id: VisitorSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+                nonce_digest: VisitorSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+                issued_at: fv5002,
+                expires_at: fv5002 + 5.minutes,
+              )
+            end
+          },]
         when "org"
           operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-          [operator, Array.new(2) { operator_flow(operator) }]
+          [operator, Array.new(2) {
+            begin
+              fv5001 = operator
+              fv5000 = OperatorSignInFlow.database_now
+              OperatorSignInFlow.create!(
+                principal_id: fv5001.id,
+                state_id: OperatorSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+                nonce_digest: OperatorSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+                issued_at: fv5000,
+                expires_at: fv5000 + 5.minutes,
+              )
+            end
+          },]
         end
       # This file is not transactional and fixture loading recycles primary keys, so rows left by
       # an earlier interrupted run can carry this actor's or a future token's id. Remove only
@@ -371,7 +541,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
       threads =
         controllers.zip(flows).map do |controller, flow|
-          Concurrent::Future.execute do
+          Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
             barrier.wait
             results << controller.log_in(
               actor.class.find(actor.id), establishment: :root_login, sign_in_flow: flow.class.find(flow.id),
@@ -399,41 +569,4 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   private
-
-  def client_flow(actor)
-    now = ClientSignInFlow.database_now
-    ClientSignInFlow.create!(
-      principal_id: actor.id,
-      state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
-      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
-      issued_at: now,
-      expires_at: now + 5.minutes,
-    )
-  end
-
-  def visitor_flow(actor)
-    now = VisitorSignInFlow.database_now
-    VisitorSignInFlow.create!(
-      principal_id: actor.id,
-      state_id: VisitorSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
-      nonce_digest: VisitorSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
-      issued_at: now,
-      expires_at: now + 5.minutes,
-    )
-  end
-
-  def operator_flow(actor)
-    now = OperatorSignInFlow.database_now
-    OperatorSignInFlow.create!(
-      principal_id: actor.id,
-      state_id: OperatorSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
-      nonce_digest: OperatorSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
-      issued_at: now,
-      expires_at: now + 5.minutes,
-    )
-  end
-
-  def resolution_for_thread(id)
-    ClientSessionLimitResolutionTransaction.find(id)
-  end
 end

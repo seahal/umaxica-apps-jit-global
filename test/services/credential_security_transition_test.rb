@@ -24,7 +24,10 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
           end
         # Synthetic proof isolates revocation; real authentication is exercised by integration tests.
         issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+          surface: surface.to_s,
+          intent: "sign_in",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: nil,
         )
         flow = issuance.transaction
         flow.update!(principal_id: actor.id)
@@ -42,21 +45,25 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
           local_sign_in_flow_ref: flow.public_id,
         )
         ceremony.record_authentication_evidence!(method: "passkey")
-        foreign_flow = flow_model.create!(
-          principal_id: foreign.id, step: "primary",
-          nonce_digest: flow_model.digest_nonce(SecureRandom.urlsafe_base64(32)),
-        )
+        foreign_flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "foreign-browser-nonce", base_token: nil,
+        ).transaction
+        foreign_flow.update!(principal_id: foreign.id)
         foreign_ceremony, = ceremony_model.rotate_and_admit!(
-          admission_purpose: "local_sign_in",
-          local_sign_in_flow_ref: foreign_flow.public_id,
+          admission_purpose: "local_sign_in", local_sign_in_flow_ref: foreign_flow.public_id,
         )
-        completed = flow_model.create!(
-          principal_id: actor.id, token_id: token.id, state: "COMPLETED", step: "completed",
-          status_id: flow_model.status_id_for("COMPLETED"), completed_at: event, base_finalized_at: event,
-          authentication_method: "passkey", authentication_event_at: event, authentication_context: "normal",
-          result_digest: SecureRandom.hex(32), result_generation: 1, result_expires_at: event + 1.minute,
-          nonce_digest: flow_model.digest_nonce(SecureRandom.urlsafe_base64(32)),
-        )
+        completed = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "historical-browser-nonce", base_token: nil,
+        ).transaction
+        completed.update!(principal_id: actor.id, token_id: token.id)
+        completed.record_local_authentication_evidence!(method: "passkey", authenticated_at: event)
+        completed.advance_sign_in_to_guardrail!
+        completed.advance_sign_in_to_checkpoint!
+        completed.advance_sign_in_to_selector!
+        completed.advance_sign_in_to_session_issuance!
+        completed.prepare_local_result_delivery!(digest: SecureRandom.hex(32), ttl: 1.minute)
+        completed.complete_sign_in!
+        completed.update!(base_finalized_at: event)
         historical, = ceremony_model.rotate_and_admit!(
           admission_purpose: "local_sign_in",
           local_sign_in_flow_ref: completed.public_id,
@@ -69,7 +76,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
           revoke_current: false, revoke_other_sessions: false, revoke_step_up: revoke_step_up,
         )
 
-        assert_predicate flow.reload, :sign_in_failed?
+        assert_predicate flow.reload, :sign_in_halted?
         assert_not_nil ceremony.reload.revoked_at
         assert_equal digest, flow.result_digest
         assert_operator flow.result_expires_at, :<=, flow_model.database_now
@@ -103,7 +110,10 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
             [actor, OperatorToken.create!(staff: actor), OperatorSignInFlow, OperatorAuthCeremonySession]
           end
         flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
-          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+          surface: surface.to_s,
+          intent: "sign_in",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: nil,
         ).transaction
         now = flow_model.database_now
         flow.update!(
@@ -124,7 +134,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
 
         assert_not_nil ceremony.reload.revoked_at
         assert_equal expiry, flow.reload.expires_at
-        assert_equal microseconds.positive?, flow.sign_in_failed?
+        assert_equal microseconds.positive?, flow.sign_in_halted?
         assert_predicate token.reload, :currently_usable?
         assert_nil flow.authentication_event_at
       end
@@ -178,8 +188,18 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
       resolutions =
         if surface == :app
           [actor, foreign].each_with_index.map do |owner, index|
-            ClientSessionLimitResolutionTransaction.issue_for_oidc!(
-              actor: owner, oidc_transaction: rows.fetch(index).first,
+            flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
+              surface: "app", intent: "sign_in", base_browser_nonce: "resolution-browser-nonce", base_token: nil,
+            ).transaction
+            flow.update!(principal_id: owner.id)
+            flow.record_local_authentication_evidence!(method: "passkey")
+            flow.advance_sign_in_to_guardrail!
+            flow.advance_sign_in_to_checkpoint!
+            flow.advance_sign_in_to_selector!
+            flow.advance_sign_in_to_session_issuance!
+            ClientSessionLimitResolutionTransaction.issue!(
+              sign_in_flow: flow, actor: owner, browser_binding_digest: SecureRandom.hex(32),
+              oidc_authorization_transaction: rows.fetch(index).first,
             ).transaction
           end
         else
@@ -208,7 +228,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
         assert_equal historical_generation, row.result_generation
       end
       if surface == :app
-        assert_predicate resolutions.first.reload, :cancelled?
+        assert_predicate resolutions.first.reload, :expired?
         assert_predicate resolutions.last.reload, :pending?
       end
 
@@ -285,7 +305,10 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
           [actor, OperatorToken.create!(staff: actor), OperatorAuthCeremonySession]
         end
       flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
-        surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        surface: surface.to_s,
+        intent: "sign_in",
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: nil,
       ).transaction
       flow.update!(principal_id: actor.id)
       ceremony, = ceremony_model.rotate_and_admit!(
@@ -501,12 +524,22 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
     actor = clients(:one)
     token = ClientToken.create!(user: actor)
     requirement = StepUpRequirement.new(
+      step_up_required: true,
+      phishing_resistant_required: false,
+      user_verification_required: false,
+      full_reauthentication_required: false,
       scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
+      ttl: 15.minutes, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
       require_session_binding: true,
     )
-    transaction = issue_base_step_up_admission!(
-      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    transaction = BaseStepUpAdmissionIssuer.call!(
+      actor: actor,
+      token: token,
+      requirement: requirement,
+      return_to: "/identity/birthdate",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: token,
     ).transaction
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
@@ -604,7 +637,8 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
     assert_operator current_token.step_up_session.reload.discard_at, :<=, Time.current
     assert_operator other_token.step_up_session.reload.discard_at, :<=, Time.current
 
-    audit = ClientChronicle.where(event_id: ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION).order(:created_at).last
+    audit =
+      ClientChronicle.where(event_id: ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION).order(:created_at).last
 
     assert_equal "credential_security_transition.mfa_disabled", audit.context.fetch("action")
     assert_equal "mfa_disabled", audit.context.fetch("reason")

@@ -8,7 +8,7 @@ class Core::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   fixtures :visitors, :visitor_token_kinds
 
   setup do
-    @host = ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost")
+    @host = ENV.fetch("PUBLIC_CORE_CORPORATE_URL")
     host! @host
   end
 
@@ -76,9 +76,9 @@ class Core::Com::Sign::OutsControllerTest
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
     configured_hosts = {
-      "CORE_APP" => ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost"),
-      "CORE_ORG" => ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost"),
-      "CORE_COM" => ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost"),
+      "CORE_APP" => ENV.fetch("PUBLIC_CORE_SERVICE_URL"),
+      "CORE_ORG" => ENV.fetch("PUBLIC_CORE_STAFF_URL"),
+      "CORE_COM" => ENV.fetch("PUBLIC_CORE_CORPORATE_URL"),
     }
     return "surface:#{configured_hosts.key(normalized)}" if configured_hosts.value?(normalized)
 
@@ -297,7 +297,8 @@ class Core::Com::Sign::OutsControllerTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,

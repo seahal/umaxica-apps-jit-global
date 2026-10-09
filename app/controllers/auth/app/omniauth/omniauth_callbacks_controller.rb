@@ -233,10 +233,6 @@ module Auth
               return
             end
 
-            if social_sign_up_required?(user, existing_account)
-              return handle_social_sign_up_intent(user, provider_name, identity, pt: pt)
-            end
-
             handle_login_intent(user, provider_name, existing_account, pt: pt)
 
           else
@@ -348,6 +344,15 @@ module Auth
           end
           raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless cycle.entry_method == provider
 
+          binding = auth_social_admission_binding!
+          ceremony = binding.admitted_auth_ceremony_session
+          unless ceremony.authentication_evidence_recorded?
+            ceremony.record_authentication_evidence!(method: provider)
+          end
+          unless ceremony.reload.authentication_method == provider
+            raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+          end
+
           grant = social_signup_ceremony_grant_for(cycle, provider)
 
           candidate = IdentitySocialCeremonyCandidateStore.store!(
@@ -429,7 +434,7 @@ module Auth
           issuance = IdentitySocialCeremonyGrantIssuer.issue!(
             surface: "app",
             actor_ref: cycle.public_id,
-            session_ref: cycle.public_id,
+            session_ref: auth_social_admission_binding!.entry_ref,
             operation: "signup",
             provider: provider,
             resource_ref: "sign_up",
@@ -489,12 +494,23 @@ module Auth
           redirect_to(auth_app_settings_path)
         end
 
-        # SocialAuthLoginHandler reports every resolved login as an existing account; a callback
-        # without an Acme ceremony grant therefore never opens a session here.
-        def handle_login_intent(_user, provider_name, _existing_account, pt: nil)
-          _ = pt
-          Rails.logger.debug(JitLogEvent.format("sign.social.omniauth.login_intent", message: "Signing in user"))
-          reject_established_social_login_session_creation!(provider_name)
+        def handle_login_intent(user, provider_name, _existing_account, pt: nil)
+          provider = SocialIdentifiable.normalize_provider(provider_name)
+          result = AuthenticationSessionCommitter.call(
+            controller: self, resource: user, pt:, ri: params[:ri], auth_method: "social",
+            established_authentication_method: provider,
+            authentication_event_at: @external_authentication_callback_result.principal.verified_at,
+            audit_context: { auth_method: "social", provider: },
+          )
+          if result[:status] == :authentication_evidence_recorded && auth_ceremony_authorization_transaction
+            redirect_to_sign_in_sequence!(pt:, status: :see_other)
+          elsif %i(authentication_evidence_recorded mfa_required).include?(result[:status]) && result[:redirect_path]
+            redirect_to(result.fetch(:redirect_path), status: :see_other)
+          else
+            refusal = sign_in_result_from_session_result(result, actor: user)
+            render plain: refusal.message.presence || I18n.t("sign.app.social.sessions.create.failure"),
+                   status: refusal.response_status
+          end
         end
 
         def reject_established_social_login_session_creation!(provider_name)

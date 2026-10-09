@@ -118,62 +118,38 @@ module Palm
           assert_equal [nil, nil], query.values_at("actor_ref", "session_ref")
 
           browser_token = create_client_token(native_client)
-          post base_app_oidc_logout_url(
-            host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"),
-            ri: "jp",
-            logout_challenge: query["logout_challenge"],
-          ), headers: as_user_headers(
-            native_client,
-            host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"),
-            session_public_id: browser_token.public_id,
-            headers: {
-              "Origin" => "https://#{PALM_HOST}",
-              "Sec-Fetch-Site" => "same-site",
-            },
-          )
+          base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+          root_headers = as_user_headers(native_client, host: base_host, session_public_id: browser_token.public_id)
+          _merged_cookies = cookies.merge(root_headers.fetch("Cookie").split("; "), URI.parse("https://#{base_host}/"))
+          continuation = logout_uri
+          https!
+          3.times do |index|
+            transaction = AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: query.fetch("logout_challenge"))
+            before_step = transaction.expected_step
+            host!(continuation.host)
+            get continuation.request_uri, params: { ri: "jp" }
 
-          assert_response :success
-          sign_form = css_select("form#sign-out-handoff-form").first
-          sign_uri = URI.parse(sign_form["action"])
+            assert_response :success
+            assert_equal before_step, transaction.reload.expected_step
+            assert_not_predicate browser_token.reload, :revoked? if index.zero?
+            form = css_select("form").first
+            if form
+              fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+              action = form["action"]
+            else
+              receiver = inertia_props.fetch("form")
+              fields = { logout_challenge: receiver.fetch("logout_challenge"), ri: "jp" }
+              action = receiver.fetch("action")
+            end
+            csrf = css_select('meta[name="csrf-token"]').first&.[]("content")
+            post action, params: fields, headers: {
+              "Origin" => "https://#{continuation.host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf,
+            }
 
-          assert_equal Rails.configuration.x.boot_config.fetch(:hosts).sign_service.host, sign_uri.host
-          assert_equal "/sign/out", sign_uri.path
-
-          post auth_app_sign_out_url(
-            host: Rails.configuration.x.boot_config.fetch(:hosts).sign_service.host,
-            ri: "jp",
-            logout_challenge: query["logout_challenge"],
-          ), headers: as_user_headers(
-            native_client,
-            host: Rails.configuration.x.boot_config.fetch(:hosts).sign_service.host,
-            session_public_id: browser_token.public_id,
-            headers: {
-              "Origin" => "https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost")}",
-              "Sec-Fetch-Site" => "same-site",
-            },
-          )
-
-          assert_response :success
-          base_form = css_select("form#sign-out-handoff-form").first
-          base_uri = URI.parse(base_form["action"])
-
-          assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), base_uri.host
-          assert_equal "/oidc/logout", base_uri.path
-          assert_equal query.fetch("logout_challenge"),
-                       base_form.css('input[name="logout_challenge"]').first["value"]
-
-          post base_uri.path,
-               params: {
-                 logout_challenge: query.fetch("logout_challenge"),
-                 ri: "jp",
-               },
-               headers: {
-                 "Host" => base_uri.host,
-                 "Origin" => "https://#{Rails.configuration.x.boot_config.fetch(:hosts).sign_service.host}",
-                 "Sec-Fetch-Site" => "same-site",
-               }
-
-          assert_response :see_other
+            assert_response :see_other
+            assert_predicate browser_token.reload, :revoked?
+            continuation = URI.parse(response.location) if index < 2
+          end
           finalize_uri = URI.parse(jump_rt_url_from_location(response.location))
           finalize_query = Rack::Utils.parse_nested_query(finalize_uri.query.to_s)
 

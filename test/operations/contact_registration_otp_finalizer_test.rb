@@ -187,6 +187,10 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
             passkey.update!(discard_at: passkey.class.database_now)
           when :current_policy
             arguments[:requirement] = StepUpRequirement.new(
+              step_up_required: true,
+              phishing_resistant_required: false,
+              user_verification_required: false,
+              full_reauthentication_required: false,
               **requirement.to_h.merge(
                 allowed_methods: [:totp], phishing_resistant_required: false,
                 user_verification_required: false,

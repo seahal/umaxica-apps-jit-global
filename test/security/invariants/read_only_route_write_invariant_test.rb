@@ -26,8 +26,8 @@ module Security
         ]
         paths = [
           ["/", :success],
-          # Anonymous Dashboard is 404 (adr/home-dashboard-authentication-boundary.md).
-          ["/dashboard", :not_found],
+          # Anonymous Base Dashboard redirects to passive Sign (accepted ADR amendment 2026-10-08).
+          ["/dashboard", :found],
           ["/preference", :success],
           ["/preference/region/edit", :success],
           ["/preference/theme/edit", :success],

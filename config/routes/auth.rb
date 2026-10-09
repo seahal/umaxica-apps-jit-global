@@ -168,6 +168,7 @@ scope(module: :auth, as: :auth) do
       end
 
       namespace(:social) do
+        resource :link_completion, only: :create
         # Non-resourceful exception: OmniAuth middleware owns these fixed provider callback paths.
         get(
           "google/callback",

@@ -23,7 +23,7 @@ module Auth
 
         redirect_to(
           base_com_ceremony_binding_confirmation_url(
-            binding_ref: binding.confirmation_ref, ri: params[:ri],
+            binding_ref: binding.confirmation_ref, ri: params[:ri], lx: normalized_locale(params[:lx]),
             host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), protocol: "https",
           ), status: :see_other, allow_other_host: true,
         )

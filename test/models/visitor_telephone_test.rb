@@ -54,25 +54,34 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
     assert_equal telephone.public_id, telephone.to_param
   end
 
-  test "rejects creating more than the maximum telephones per visitor" do
-    status = VisitorTelephoneStatus.find(VisitorTelephoneStatus::UNVERIFIED)
+  test "pending telephone rows do not reserve capacity and the database permits only one effective binding" do
+    owner = Visitor.create!
 
-    VisitorTelephone::MAX_TELEPHONES_PER_VISITOR.times do |index|
-      VisitorTelephone.create!(
-        visitor: @visitor,
-        visitor_telephone_status: status,
-        number: "090-2222-#{format("%04d", index)}",
-      )
+    assert_equal 0, owner.visitor_telephones.effective_binding.count
+    candidates =
+      5.times.map do |index|
+        VisitorTelephone.create!(visitor: owner, number: "+81903333000#{index}", confirm_policy: "1")
+      end
+
+    assert candidates.none?(&:binding_effective?)
+    first, second = candidates
+    first.update!(visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED)
+    assert_difference -> { VisitorTelephone.effective_binding.where(visitor_id: owner.id).count }, 1 do
+      first.finalize_binding!
     end
+    second.update!(visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED)
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      VisitorTelephone.transaction(requires_new: true) { second.finalize_binding! }
+    end
+    assert_predicate first.reload, :binding_effective?
+    assert_not_predicate second.reload, :binding_effective?
+    assert_equal 1, VisitorTelephone.effective_binding.where(visitor_id: owner.id).count
+    first.release_binding!
+    second.finalize_binding!
 
-    extra = VisitorTelephone.new(
-      visitor: @visitor,
-      visitor_telephone_status: status,
-      number: "090-3333-0000",
-    )
-
-    assert_not extra.valid?
-    assert_not_empty extra.errors[:base]
+    assert_predicate first.reload, :binding_released?
+    assert_predicate second.reload, :binding_effective?
+    assert_equal 1, VisitorTelephone.effective_binding.where(visitor_id: owner.id).count
   end
 
   test "effective telephone numbers are unique at finalization" do

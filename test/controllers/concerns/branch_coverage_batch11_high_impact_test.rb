@@ -3,7 +3,7 @@
 
 require "test_helper"
 
-class BranchCoverageBatch11HighImpactTest < ActiveSupport::TestCase
+class BranchCoverageBatch11HighImpactTest < ActionDispatch::IntegrationTest
   def attach_request!(controller)
     request = ActionDispatch::TestRequest.create
     response = ActionDispatch::TestResponse.new
@@ -13,50 +13,94 @@ class BranchCoverageBatch11HighImpactTest < ActiveSupport::TestCase
     controller
   end
 
-  test "verification emails early-return guards on edit create update" do
-    c = attach_request!(Auth::Com::Verification::EmailsController.new)
-    c.define_singleton_method(:require_step_up_session!) { false }
+  test "verification emails refuse missing admission and accept only their transaction-scoped code" do
+    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+    get "/verification/emails/missing/edit", params: { ri: "jp" }
 
-    assert_nil c.send(:edit)
-    assert_nil c.send(:create)
-    assert_nil c.send(:update)
+    assert_response :bad_request
+    post "/verification/emails", params: { ri: "jp" }
 
-    c.define_singleton_method(:require_step_up_session!) { true }
-    c.define_singleton_method(:redirect_if_recent_verification_for_get!) { true }
+    assert_response :bad_request
+    patch "/verification/emails/missing", params: { ri: "jp", verification: { code: "012345" } }
 
-    assert_nil c.send(:edit)
+    assert_response :bad_request
+    actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+    email = actor.visitor_emails.create!(
+      address: "email-step-up-#{SecureRandom.hex(4)}@example.com",
+      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+    )
+    email.finalize_binding!
+    token = VisitorToken.create!(visitor: actor)
+    issuance =
+      begin
+        admission_issuance = BaseStepUpAdmissionIssuer.call!(
+          actor: actor,
+          token: token,
+          requirement: StepUpRequirement.new(
+            step_up_required: true, scope: "settings_birthdate", allowed_methods: [:email_otp],
+            phishing_resistant_required: false, user_verification_required: false,
+            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
+            audience: "step_up:com", session_binding: token.public_id, token_binding: token.public_id,
+            require_session_binding: true,
+          ),
+          return_to: "/identity/birthdate",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: token,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+        )
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_issuance.transaction.surface,
+            entry_ref: admission_issuance.reference,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        admission_auth_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_issuance.transaction.surface)
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+          URI.parse("https://#{admission_auth_host}/"),
+        )
+        admission_issuance
+      end
+    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+    post auth_com_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    transaction = issuance.transaction
+    record = VisitorStepUpSession.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
+    # The delivered code is seeded through the ticket's own API; delivery itself is covered by the
+    # issuer and delivery-recorder tests.
+    generation = record.issue_bound_email_code!(
+      transaction: transaction, credential_ref: email.public_id, code: "012345",
+    )
+    record.mark_bound_email_delivery!(transaction: transaction, generation: generation, success: true)
 
-    c.define_singleton_method(:redirect_if_recent_verification_for_get!) { false }
-    c.define_singleton_method(:require_email_nonce!) { false }
+    patch auth_com_verification_email_path(transaction.transaction_id, ri: "jp"),
+          params: { verification: { code: "012345" } }
 
-    assert_nil c.send(:edit)
+    assert_redirected_to auth_com_verification_handoff_path(ri: "jp")
+    transaction.reload
 
-    c.define_singleton_method(:redirect_if_recent_verification_for_post!) { true }
-
-    assert_nil c.send(:create)
-    assert_nil c.send(:update)
-
-    c.define_singleton_method(:redirect_if_recent_verification_for_post!) { false }
-    c.define_singleton_method(:require_method_available!) { |_| false }
-
-    assert_nil c.send(:create)
-
-    c.define_singleton_method(:require_method_available!) { |_| true }
-    c.define_singleton_method(:email_otp_session_active?) { true }
-    c.define_singleton_method(:ensure_email_nonce!) { "nonce" }
-    redirects = []
-    c.define_singleton_method(:redirect_to) { |*args, **kwargs| redirects << [args, kwargs] }
-    c.define_singleton_method(:edit_auth_com_verification_email_path) { |*| "/edit" }
-    c.define_singleton_method(:params) { {} }
-    c.define_singleton_method(:current_step_up_scope) { "s" }
-    c.define_singleton_method(:current_step_up_pt_param) { nil }
-    c.send(:create)
-
-    assert_predicate redirects, :present?
-
-    c.define_singleton_method(:require_email_nonce!) { false }
-
-    assert_nil c.send(:update)
+    assert_equal "verified", transaction.status
+    assert_equal "email_otp", transaction.method
+    assert_equal "none", transaction.aal
+    assert_equal email.public_id, transaction.verified_credential_ref
+    assert_nil token.reload.last_step_up_at
+    assert_nil cookies[AuthenticationCookieName.access]
+    assert_nil cookies[AuthenticationCookieName.refresh]
   end
 
   test "sign up state machine invalid arms" do

@@ -71,15 +71,13 @@ class ExternalAuthenticationUnlinkUseCase
           status: SocialCeremonyTransactionable::STATUS_PENDING,
         )
         ids = transactions.pluck(:transaction_id)
-        transactions.update_all(
-          status: SocialCeremonyTransactionable::STATUS_CONSUMED,
-          consumed_at: ClientSocialCeremonyTransaction.database_now,
-          updated_at: ClientSocialCeremonyTransaction.database_now,
-        )
-        IdentitySocialCeremonyCandidate.where(transaction_id: ids).update_all(
-          consumed_at: IdentitySocialCeremonyCandidate.database_now,
-          updated_at: IdentitySocialCeremonyCandidate.database_now,
-        ) if ids.any?
+        # Unlink invalidates unfinished evidence; it cannot fabricate a successful ceremony result.
+        transactions.order(:id).each do |transaction|
+          transaction.expire!
+        end
+        IdentitySocialCeremonyCandidate.where(transaction_id: ids).lock.order(:id).each do |candidate|
+          candidate.expire!
+        end
       end
     end
   end

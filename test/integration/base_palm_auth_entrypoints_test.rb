@@ -7,18 +7,18 @@ require "test_helper"
 class BasePalmAuthEntrypointsTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
-  BASE_APP_HOST = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-  BASE_COM_HOST = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
-  BASE_ORG_HOST = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+  BASE_APP_HOST = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+  BASE_COM_HOST = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+  BASE_ORG_HOST = ENV.fetch("PUBLIC_BASE_STAFF_URL")
   PALM_HOST = ENV.fetch("PUBLIC_PALM_SERVICE_URL")
 
   setup do
     load_jump_rt_env!
   end
 
-  test "base leftover RP authorize and callback paths are unroutable" do
+  test "base exposes no legacy RP authorization launcher" do
     [BASE_APP_HOST, BASE_COM_HOST, BASE_ORG_HOST].each do |host|
-      ["/oidc/authorization", "/oidc/callback"].each do |path|
+      ["/oidc/authorization"].each do |path|
         assert_raises(ActionController::RoutingError) do
           Rails.application.routes.recognize_path("http://#{host}#{path}", method: :get)
         end
@@ -39,11 +39,12 @@ class BasePalmAuthEntrypointsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "base leftover RP callback routes stay unroutable" do
-    [BASE_APP_HOST, BASE_COM_HOST, BASE_ORG_HOST].each do |host|
-      assert_raises(ActionController::RoutingError) do
-        Rails.application.routes.recognize_path("http://#{host}/oidc/callback", method: :get)
-      end
+  test "base app com and org expose their own self RP callback" do
+    { BASE_APP_HOST => "app", BASE_COM_HOST => "com", BASE_ORG_HOST => "org" }.each do |host, surface|
+      route = Rails.application.routes.recognize_path("https://#{host}/oidc/callback", method: :get)
+
+      assert_equal "base/#{surface}/oidc/callbacks", route.fetch(:controller)
+      assert_equal "show", route.fetch(:action)
     end
   end
 
@@ -317,7 +318,8 @@ class BasePalmAuthEntrypointsTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,

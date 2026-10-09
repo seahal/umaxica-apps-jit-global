@@ -79,18 +79,11 @@ require_relative "support/inertia_page_object"
 require_relative "support/org_entra_first_stage_helper"
 require_relative "support/oidc_authorization_response_helper"
 require_relative "support/auth_ceremony_entry_helper"
-require_relative "support/auth_admission_binding_helper"
 require_relative "support/auth_email_mfa_helper"
-require_relative "support/base_browser_rp_test_helper"
-require_relative "support/social_completion_test_helper"
 
 # Inject the Turnstile stub for the whole suite. Application code resolves the verifier
 # through Turnstile::VerifierFactory, so no production class knows about the test suite.
 Rails.application.config.x.turnstile.verifier = "TurnstileVerifierStub"
-
-ActiveSupport.on_load(:active_support_test_case) { include AuthAdmissionBindingTestHelper }
-ActiveSupport.on_load(:active_support_test_case) { include BaseBrowserRpTestHelper }
-ActiveSupport.on_load(:active_support_test_case) { include SocialCompletionTestHelper }
 
 module AuthenticationHarness
   TEST_BROWSER_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " \
@@ -229,36 +222,15 @@ module AuthenticationHarness
       authentication_context: token_record.authentication_context_value.to_s,
     )
 
-    # A Browser RP host authenticates only by its own RP credential; the root cookie stays for the
-    # Authority endpoints served on the same Base FQDN.
-    cookie = [
-      "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
-      *authentication_harness_browser_rp_cookies(
-        resource, host: host_value, token: token_record,
-                  resource_type: resource_type,
-      ),
-    ].join("; ")
-
     host_headers(host)
       .merge(headers)
       .merge(
         session_header => resource.id.to_s,
         "X-TEST-SESSION-PUBLIC-ID" => token_record.public_id,
         "Authorization" => "Bearer #{access_token}",
-        "Cookie" => cookie,
-        "HTTP_COOKIE" => cookie,
+        "Cookie" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
+        "HTTP_COOKIE" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
       )
-  end
-
-  def authentication_harness_browser_rp_cookies(resource, host:, token:, resource_type:)
-    return [] if host.blank?
-
-    rp = browser_rp_client_for_host(host)
-    return [] unless rp && BaseBrowserRpTestHelper::BROWSER_RP_RESOURCE_TYPES.fetch(rp.fetch(:surface)) == resource_type
-
-    browser_rp_cookie_pairs(
-      client_id: rp.fetch(:client_id), surface: rp.fetch(:surface), host: host, actor: resource, token: token,
-    )
   end
 
   def authentication_harness_session_token(resource, session_public_id:)

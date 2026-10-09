@@ -7,13 +7,16 @@ require "test_helper"
 class BaseRpBrowserFlowTest < ActionDispatch::IntegrationTest
   SURFACES = [
     {
-      host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
+      host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+      surface: "app",
     },
     {
-      host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
+      host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+      surface: "org",
     },
     {
-      host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
+      host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
+      surface: "com",
     },
   ].freeze
 
@@ -24,13 +27,15 @@ class BaseRpBrowserFlowTest < ActionDispatch::IntegrationTest
     OperatorIdentityState.ensure_defaults!
   end
 
-  test "leftover base RP authorize and callback paths are unroutable" do
+  test "the leftover RP authorization path is unroutable and the self-RP callback has its own controller" do
     SURFACES.each do |surface|
-      ["/oidc/authorization", "/oidc/callback"].each do |path|
-        assert_raises(ActionController::RoutingError, surface[:host] + path) do
-          Rails.application.routes.recognize_path("http://#{surface[:host]}#{path}", method: :get)
-        end
+      assert_raises(ActionController::RoutingError, surface[:host] + "/oidc/authorization") do
+        Rails.application.routes.recognize_path("https://#{surface[:host]}/oidc/authorization", method: :get)
       end
+      callback = Rails.application.routes.recognize_path("https://#{surface[:host]}/oidc/callback", method: :get)
+
+      assert_equal "base/#{surface.fetch(:surface)}/oidc/callbacks", callback.fetch(:controller)
+      assert_equal "show", callback.fetch(:action)
     end
   end
 
@@ -285,7 +290,8 @@ class BaseRpBrowserFlowTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,

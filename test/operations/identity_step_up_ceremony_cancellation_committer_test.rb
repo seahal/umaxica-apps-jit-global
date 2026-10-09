@@ -16,9 +16,9 @@ class IdentityStepUpCeremonyCancellationCommitterTest < ActiveSupport::TestCase
       audience: "step_up:app", session_binding: @token.public_id, token_binding: @token.public_id,
       require_session_binding: true,
     )
-    @transaction = issue_base_step_up_admission!(
+    @transaction = BaseStepUpAdmissionIssuer.call!(
       actor: @actor, token: @token, requirement: @requirement, return_to: "/identity/birthdate",
-      base_browser_nonce: "test-browser-nonce", base_token: @token,
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
     ).transaction
     binding = ClientAuthAdmissionBinding.find_by!(step_up_ceremony_transaction_id: @transaction.id)
     attached, raw_sid = ClientAuthCeremonySession.issue!
@@ -144,7 +144,7 @@ class IdentityStepUpCeremonyCancellationCommitterTest < ActiveSupport::TestCase
       outcome = BaseStepUpCancelAndStartCommitter.call!(
         actor: @actor, token: @token, previous_transaction: stale_parent,
         requirement: @requirement, return_to: "/identity/birthdate",
-        base_browser_nonce: "test-browser-nonce", base_token: @token,
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
       )
 
       assert_equal @transaction.id, outcome.transaction.id

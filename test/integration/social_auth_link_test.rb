@@ -57,15 +57,138 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
     # Setup mock auth with the same uid
     setup_google_mock_auth(uid: existing_uid)
 
-    grant_session = seed_app_social_link_grant_session(provider: "google", user: @user_two, ri: "jp")
+    grant_session =
+      begin
+        fx0_provider = "google"
+        fx0_user = @user_two
+        fx0_ri = "jp"
+        fx0_host = @host
+        host!(fx0_host) if respond_to?(:host!)
+
+        fx0_user_headers =
+          begin
+            f0_headers = as_user_headers(fx0_user, host: fx0_host)
+            f0_host = f0_headers["Host"]
+            f0_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f0_host}/") if f0_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f0_family, f0_surface = f0_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f0_family) && f0_surface == "app"
+              f0_client_id =
+                case f0_family
+                when "base" then "base-#{f0_surface}-ww"
+                when "edit" then "edit-org"
+                else "#{f0_family}-#{f0_surface}"
+                end
+              f0_token = ClientToken.find_by!(public_id: f0_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f0_client = OidcClientRegistry.find!(f0_client_id)
+              f0_key = [f0_client.client_id, f0_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f0_key] && f0_token.currently_usable? &&
+                  !(f0_token.device_session_id && ClientRpSession.exists?(
+                    device_session_id: f0_token.device_session_id,
+                    oidc_client_id: f0_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f0_token.rotate_refresh_token! unless f0_token.device_session.current_refresh_token_id
+                f0_now = Time.current
+                f0_session = ClientRpSession.create!(
+                  client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
+                  refresh_token_expires_at: f0_now + 10.minutes,
+                )
+                f0_access = AuthenticationTokenService.encode(
+                  f0_token.user, host: f0_host, resource_type: "client",
+                                 session_public_id: f0_token.public_id, base_session_public_id: f0_token.public_id,
+                                 oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
+                                 expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
+                                 issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
+                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
+                                 subject: OidcSubject.for(
+                                   f0_token.user,
+                                   resource_type: "client",
+                                 ), client_id: f0_client.client_id,
+                )
+                @base_browser_rp_credentials[f0_key] =
+                  [f0_access, f0_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f0_key]
+                f0_access, f0_refresh = @base_browser_rp_credentials.fetch(f0_key)
+                f0_cookie = [
+                  f0_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f0_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f0_refresh)}",
+                ].join("; ")
+                f0_headers = f0_headers.merge(
+                  "Cookie" => f0_cookie,
+                  "HTTP_COOKIE" => f0_cookie,
+                )
+              end
+            end
+            f0_headers
+          end
+        fx0_token_public_id = fx0_user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
+        fx0_token = ClientToken.find_by(public_id: fx0_token_public_id)
+        fx0_session_public_id = fx0_token&.try(:device_session)&.public_id.presence || fx0_token_public_id
+        mark_token_step_up_satisfied_for_test(
+          fx0_token,
+          scope: SocialAuth::SOCIAL_LINK_SCOPE,
+        ) if fx0_token
+
+        fx0_issuance = IdentitySocialCeremonyGrantIssuer.issue!(
+          surface: "app",
+          actor_ref: fx0_user.public_id,
+          session_ref: fx0_session_public_id,
+          operation: "link",
+          provider: fx0_provider,
+        )
+
+        fx0_normalized_provider = SocialIdentifiable.normalize_provider(fx0_provider)
+        fx0_continue_path = public_send(
+          :"auth_app_settings_#{fx0_normalized_provider}_path",
+          ri: fx0_ri,
+          social_ceremony_grant: fx0_issuance.grant,
+        )
+
+        fx0_headers = social_callback_headers(fx0_host).merge(fx0_user_headers)
+        post(fx0_continue_path, headers: fx0_headers)
+        fx0_rails_cookie_key = Rails.application.config.session_options.fetch(:key)
+        fx0_rails_cookie = response.cookies.fetch(fx0_rails_cookie_key)
+        fx0_user_headers["Cookie"] = [
+          fx0_user_headers.fetch("Cookie"),
+          "#{fx0_rails_cookie_key}=#{Rack::Utils.escape(fx0_rails_cookie)}",
+        ].join("; ")
+        fx0_user_headers["HTTP_COOKIE"] = fx0_user_headers.fetch("Cookie")
+
+        Struct.new(:state, :user_headers, :session_public_id, keyword_init: true).new(
+          state: social_auth_state_from_response,
+          user_headers: fx0_user_headers,
+          session_public_id: fx0_session_public_id,
+        )
+      end
 
     get auth_app_social_google_callback_url(ri: "jp"),
         params: { state: grant_session.state },
         headers: @callback_headers.merge(grant_session.user_headers)
+    form = response.parsed_body.at_css("form#social-completion-form")
 
-    # Should redirect with error (409 manifested as redirect)
-    assert_response :redirect
-    follow_redirect!
+    assert_not_nil form
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    cookie_key = Rails.application.config.session_options.fetch(:key)
+    headers = grant_session.user_headers.merge(
+      "Host" => @host, "Origin" => "https://#{@host}",
+    )
+    headers["Cookie"] = [
+      headers.fetch("Cookie").split("; ").reject { |entry| entry.start_with?("#{cookie_key}=") },
+      "#{cookie_key}=#{Rack::Utils.escape(response.cookies.fetch(cookie_key))}",
+    ].flatten.join("; ")
+    headers["HTTP_COOKIE"] = headers.fetch("Cookie")
+    post form["action"], params: fields, headers: headers
+
+    assert_response :conflict
 
     # Identity should still belong to user_one
     identity = ClientGoogleIdentity.find_by(uid: existing_uid)
@@ -85,15 +208,139 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
       user_apple_identity_status: client_apple_identity_statuses(:active),
     )
 
-    grant_session = seed_app_social_link_grant_session(provider: "apple", user: @user_two, ri: "jp")
+    grant_session =
+      begin
+        fx1_provider = "apple"
+        fx1_user = @user_two
+        fx1_ri = "jp"
+        fx1_host = @host
+        host!(fx1_host) if respond_to?(:host!)
+
+        fx1_user_headers =
+          begin
+            f1_headers = as_user_headers(fx1_user, host: fx1_host)
+            f1_host = f1_headers["Host"]
+            f1_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f1_host}/") if f1_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f1_family, f1_surface = f1_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f1_family) && f1_surface == "app"
+              f1_client_id =
+                case f1_family
+                when "base" then "base-#{f1_surface}-ww"
+                when "edit" then "edit-org"
+                else "#{f1_family}-#{f1_surface}"
+                end
+              f1_token = ClientToken.find_by!(public_id: f1_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f1_client = OidcClientRegistry.find!(f1_client_id)
+              f1_key = [f1_client.client_id, f1_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f1_key] && f1_token.currently_usable? &&
+                  !(f1_token.device_session_id && ClientRpSession.exists?(
+                    device_session_id: f1_token.device_session_id,
+                    oidc_client_id: f1_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f1_token.rotate_refresh_token! unless f1_token.device_session.current_refresh_token_id
+                f1_now = Time.current
+                f1_session = ClientRpSession.create!(
+                  client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
+                  refresh_token_expires_at: f1_now + 10.minutes,
+                )
+                f1_access = AuthenticationTokenService.encode(
+                  f1_token.user, host: f1_host, resource_type: "client",
+                                 session_public_id: f1_token.public_id, base_session_public_id: f1_token.public_id,
+                                 oidc_sid: f1_session.public_id, oidc_jti: f1_session.oidc_jti,
+                                 expires_at: f1_now + 10.minutes, scopes: %w(openid profile),
+                                 issuer: OidcIssuer.for_client(f1_client), audiences: [f1_client.aud],
+                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
+                                 subject: OidcSubject.for(
+                                   f1_token.user,
+                                   resource_type: "client",
+                                 ), client_id: f1_client.client_id,
+                )
+                @base_browser_rp_credentials[f1_key] =
+                  [f1_access, f1_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f1_key]
+                f1_access, f1_refresh = @base_browser_rp_credentials.fetch(f1_key)
+                f1_cookie = [
+                  f1_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f1_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f1_refresh)}",
+                ].join("; ")
+                f1_headers = f1_headers.merge(
+                  "Cookie" => f1_cookie,
+                  "HTTP_COOKIE" => f1_cookie,
+                )
+              end
+            end
+            f1_headers
+          end
+        fx1_token_public_id = fx1_user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
+        fx1_token = ClientToken.find_by(public_id: fx1_token_public_id)
+        fx1_session_public_id = fx1_token&.try(:device_session)&.public_id.presence || fx1_token_public_id
+        mark_token_step_up_satisfied_for_test(
+          fx1_token,
+          scope: SocialAuth::SOCIAL_LINK_SCOPE,
+        ) if fx1_token
+
+        fx1_issuance = IdentitySocialCeremonyGrantIssuer.issue!(
+          surface: "app",
+          actor_ref: fx1_user.public_id,
+          session_ref: fx1_session_public_id,
+          operation: "link",
+          provider: fx1_provider,
+        )
+
+        fx1_normalized_provider = SocialIdentifiable.normalize_provider(fx1_provider)
+        fx1_continue_path = public_send(
+          :"auth_app_settings_#{fx1_normalized_provider}_path",
+          ri: fx1_ri,
+          social_ceremony_grant: fx1_issuance.grant,
+        )
+
+        fx1_headers = social_callback_headers(fx1_host).merge(fx1_user_headers)
+        post(fx1_continue_path, headers: fx1_headers)
+        fx1_rails_cookie_key = Rails.application.config.session_options.fetch(:key)
+        fx1_rails_cookie = response.cookies.fetch(fx1_rails_cookie_key)
+        fx1_user_headers["Cookie"] = [
+          fx1_user_headers.fetch("Cookie"),
+          "#{fx1_rails_cookie_key}=#{Rack::Utils.escape(fx1_rails_cookie)}",
+        ].join("; ")
+        fx1_user_headers["HTTP_COOKIE"] = fx1_user_headers.fetch("Cookie")
+
+        Struct.new(:state, :user_headers, :session_public_id, keyword_init: true).new(
+          state: social_auth_state_from_response,
+          user_headers: fx1_user_headers,
+          session_public_id: fx1_session_public_id,
+        )
+      end
     setup_apple_mock_auth(uid: existing_uid)
 
     get auth_app_social_apple_callback_url(provider: "apple", ri: "jp"),
         params: { state: grant_session.state },
         headers: @callback_headers.merge(grant_session.user_headers)
+    form = response.parsed_body.at_css("form#social-completion-form")
 
-    assert_response :redirect
-    follow_redirect!
+    assert_not_nil form
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    cookie_key = Rails.application.config.session_options.fetch(:key)
+    headers = grant_session.user_headers.merge(
+      "Host" => @host, "Origin" => "https://#{@host}",
+    )
+    headers["Cookie"] = [
+      headers.fetch("Cookie").split("; ").reject { |entry| entry.start_with?("#{cookie_key}=") },
+      "#{cookie_key}=#{Rack::Utils.escape(response.cookies.fetch(cookie_key))}",
+    ].flatten.join("; ")
+    headers["HTTP_COOKIE"] = headers.fetch("Cookie")
+    post form["action"], params: fields, headers: headers
+
+    assert_response :conflict
 
     identity = ClientAppleIdentity.find_by(uid: existing_uid)
 
@@ -108,7 +355,66 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
     # Do not call /social/auth/:provider/continue to simulate missing link context
     # Use X-STRICT-SOCIAL-STATE to prevent test-mode state bypass
     get auth_app_social_apple_callback_url(provider: "apple", ri: "jp"),
-        headers: @callback_headers.merge(as_user_headers(@user_one, host: @host))
+        headers: @callback_headers.merge(
+          begin
+            rp_headers = as_user_headers(@user_one, host: @host)
+            rp_host = rp_headers["Host"]
+            rp_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+              rp_client_id =
+                case rp_family
+                when "base" then "base-#{rp_surface}-ww"
+                when "edit" then "edit-org"
+                else "#{rp_family}-#{rp_surface}"
+                end
+              rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              rp_client = OidcClientRegistry.find!(rp_client_id)
+              rp_key = [rp_client.client_id, rp_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                  !(rp_token.device_session_id && ClientRpSession.exists?(
+                    device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                  ))
+                rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                rp_now = Time.current
+                rp_session = ClientRpSession.create!(
+                  client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                  refresh_token_expires_at: rp_now + 10.minutes,
+                )
+                rp_access = AuthenticationTokenService.encode(
+                  rp_token.user, host: rp_host, resource_type: "client",
+                                 session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                 oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                 expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                 issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                 subject: OidcSubject.for(
+                                   rp_token.user,
+                                   resource_type: "client",
+                                 ), client_id: rp_client.client_id,
+                )
+                @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[rp_key]
+                rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+                rp_cookie = [
+                  rp_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                ].join("; ")
+                rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+              end
+            end
+            rp_headers
+          end,
+        )
           .merge("X-STRICT-SOCIAL-STATE" => "1")
 
     assert_response :forbidden
@@ -124,7 +430,66 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
     setup_google_mock_auth(uid: uid)
 
     get auth_app_social_google_callback_url(ri: "jp"),
-        headers: @callback_headers.merge(as_user_headers(@user_one, host: @host))
+        headers: @callback_headers.merge(
+          begin
+            rp_headers = as_user_headers(@user_one, host: @host)
+            rp_host = rp_headers["Host"]
+            rp_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+              rp_client_id =
+                case rp_family
+                when "base" then "base-#{rp_surface}-ww"
+                when "edit" then "edit-org"
+                else "#{rp_family}-#{rp_surface}"
+                end
+              rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              rp_client = OidcClientRegistry.find!(rp_client_id)
+              rp_key = [rp_client.client_id, rp_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                  !(rp_token.device_session_id && ClientRpSession.exists?(
+                    device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                  ))
+                rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                rp_now = Time.current
+                rp_session = ClientRpSession.create!(
+                  client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                  refresh_token_expires_at: rp_now + 10.minutes,
+                )
+                rp_access = AuthenticationTokenService.encode(
+                  rp_token.user, host: rp_host, resource_type: "client",
+                                 session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                 oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                 expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                 issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                 subject: OidcSubject.for(
+                                   rp_token.user,
+                                   resource_type: "client",
+                                 ), client_id: rp_client.client_id,
+                )
+                @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[rp_key]
+                rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+                rp_cookie = [
+                  rp_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                ].join("; ")
+                rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+              end
+            end
+            rp_headers
+          end,
+        )
           .merge("X-STRICT-SOCIAL-STATE" => "1")
 
     assert_response :forbidden
@@ -135,8 +500,80 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
   test "link Apple fails when intent TTL exceeded" do
     uid = "apple_state_expired_#{SecureRandom.hex(4)}"
 
+    http_headers_1 =
+      begin
+        fx2_user = @user_one
+        fx2_headers =
+          begin
+            f2_headers = as_user_headers(fx2_user, host: @host)
+            f2_host = f2_headers["Host"]
+            f2_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f2_host}/") if f2_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f2_family, f2_surface = f2_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f2_family) && f2_surface == "app"
+              f2_client_id =
+                case f2_family
+                when "base" then "base-#{f2_surface}-ww"
+                when "edit" then "edit-org"
+                else "#{f2_family}-#{f2_surface}"
+                end
+              f2_token = ClientToken.find_by!(public_id: f2_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f2_client = OidcClientRegistry.find!(f2_client_id)
+              f2_key = [f2_client.client_id, f2_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f2_key] && f2_token.currently_usable? &&
+                  !(f2_token.device_session_id && ClientRpSession.exists?(
+                    device_session_id: f2_token.device_session_id,
+                    oidc_client_id: f2_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f2_token.rotate_refresh_token! unless f2_token.device_session.current_refresh_token_id
+                f2_now = Time.current
+                f2_session = ClientRpSession.create!(
+                  client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
+                  refresh_token_expires_at: f2_now + 10.minutes,
+                )
+                f2_access = AuthenticationTokenService.encode(
+                  f2_token.user, host: f2_host, resource_type: "client",
+                                 session_public_id: f2_token.public_id, base_session_public_id: f2_token.public_id,
+                                 oidc_sid: f2_session.public_id, oidc_jti: f2_session.oidc_jti,
+                                 expires_at: f2_now + 10.minutes, scopes: %w(openid profile),
+                                 issuer: OidcIssuer.for_client(f2_client), audiences: [f2_client.aud],
+                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
+                                 subject: OidcSubject.for(
+                                   f2_token.user,
+                                   resource_type: "client",
+                                 ), client_id: f2_client.client_id,
+                )
+                @base_browser_rp_credentials[f2_key] =
+                  [f2_access, f2_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f2_key]
+                f2_access, f2_refresh = @base_browser_rp_credentials.fetch(f2_key)
+                f2_cookie = [
+                  f2_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f2_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f2_refresh)}",
+                ].join("; ")
+                f2_headers = f2_headers.merge(
+                  "Cookie" => f2_cookie,
+                  "HTTP_COOKIE" => f2_cookie,
+                )
+              end
+            end
+            f2_headers
+          end
+        fx2_token = ClientToken.find_by!(public_id: fx2_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+        mark_token_step_up_satisfied_for_test(fx2_token, scope: SocialAuth::SOCIAL_LINK_SCOPE)
+        fx2_headers
+      end
     post auth_app_settings_apple_url(ri: "jp"),
-         headers: social_link_headers(@user_one)
+         headers: http_headers_1
 
     assert_response :temporary_redirect
     assert_equal "/social/apple", URI.parse(response.location).path
@@ -147,7 +584,68 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
     travel_to 6.minutes.from_now do
       get auth_app_social_apple_callback_url(provider: "apple", ri: "jp"),
           params: { state: social_auth_state_from_response },
-          headers: @callback_headers.merge(as_user_headers(@user_one, host: @host))
+          headers: @callback_headers.merge(
+            begin
+              rp_headers = as_user_headers(@user_one, host: @host)
+              rp_host = rp_headers["Host"]
+              rp_route =
+                begin
+                  Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+                rescue ActionController::RoutingError
+                  nil
+                end
+              rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+              if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+                rp_client_id =
+                  case rp_family
+                  when "base" then "base-#{rp_surface}-ww"
+                  when "edit" then "edit-org"
+                  else "#{rp_family}-#{rp_surface}"
+                  end
+                rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                rp_client = OidcClientRegistry.find!(rp_client_id)
+                rp_key = [rp_client.client_id, rp_token.public_id]
+                @base_browser_rp_credentials ||= {}
+                if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                    !(rp_token.device_session_id && ClientRpSession.exists?(
+                      device_session_id: rp_token.device_session_id,
+                      oidc_client_id: rp_client.client_id,
+                      revoked_at: nil,
+                    ))
+                  rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                  rp_now = Time.current
+                  rp_session = ClientRpSession.create!(
+                    client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                    oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                    refresh_token_expires_at: rp_now + 10.minutes,
+                  )
+                  rp_access = AuthenticationTokenService.encode(
+                    rp_token.user, host: rp_host, resource_type: "client",
+                                   session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                   oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                   expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                   issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                   subject: OidcSubject.for(
+                                     rp_token.user,
+                                     resource_type: "client",
+                                   ), client_id: rp_client.client_id,
+                  )
+                  @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+                end
+                if @base_browser_rp_credentials[rp_key]
+                  rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+                  rp_cookie = [
+                    rp_headers.fetch("Cookie"),
+                    "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                    "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                  ].join("; ")
+                  rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+                end
+              end
+              rp_headers
+            end,
+          )
     end
 
     assert_response :forbidden
@@ -159,14 +657,129 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
   end
 
   test "Google link callback stages evidence before a receiver-local POST creates one identity" do
+    previous_forgery = ActionController::Base.allow_forgery_protection
     new_uid = "grantless_google_#{SecureRandom.hex(4)}"
     setup_google_mock_auth(uid: new_uid)
-    grant_session = seed_app_social_link_grant_session(provider: "google", user: @user_one, ri: "jp")
+    grant_session =
+      begin
+        fx3_provider = "google"
+        fx3_user = @user_one
+        fx3_ri = "jp"
+        fx3_host = @host
+        host!(fx3_host) if respond_to?(:host!)
 
+        fx3_user_headers =
+          begin
+            f3_headers = as_user_headers(fx3_user, host: fx3_host)
+            f3_host = f3_headers["Host"]
+            f3_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f3_host}/") if f3_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f3_family, f3_surface = f3_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f3_family) && f3_surface == "app"
+              f3_client_id =
+                case f3_family
+                when "base" then "base-#{f3_surface}-ww"
+                when "edit" then "edit-org"
+                else "#{f3_family}-#{f3_surface}"
+                end
+              f3_token = ClientToken.find_by!(public_id: f3_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f3_client = OidcClientRegistry.find!(f3_client_id)
+              f3_key = [f3_client.client_id, f3_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f3_key] && f3_token.currently_usable? &&
+                  !(f3_token.device_session_id && ClientRpSession.exists?(
+                    device_session_id: f3_token.device_session_id,
+                    oidc_client_id: f3_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f3_token.rotate_refresh_token! unless f3_token.device_session.current_refresh_token_id
+                f3_now = Time.current
+                f3_session = ClientRpSession.create!(
+                  client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
+                  refresh_token_expires_at: f3_now + 10.minutes,
+                )
+                f3_access = AuthenticationTokenService.encode(
+                  f3_token.user, host: f3_host, resource_type: "client",
+                                 session_public_id: f3_token.public_id, base_session_public_id: f3_token.public_id,
+                                 oidc_sid: f3_session.public_id, oidc_jti: f3_session.oidc_jti,
+                                 expires_at: f3_now + 10.minutes, scopes: %w(openid profile),
+                                 issuer: OidcIssuer.for_client(f3_client), audiences: [f3_client.aud],
+                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f3_client),
+                                 subject: OidcSubject.for(
+                                   f3_token.user,
+                                   resource_type: "client",
+                                 ), client_id: f3_client.client_id,
+                )
+                @base_browser_rp_credentials[f3_key] =
+                  [f3_access, f3_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f3_key]
+                f3_access, f3_refresh = @base_browser_rp_credentials.fetch(f3_key)
+                f3_cookie = [
+                  f3_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f3_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f3_refresh)}",
+                ].join("; ")
+                f3_headers = f3_headers.merge(
+                  "Cookie" => f3_cookie,
+                  "HTTP_COOKIE" => f3_cookie,
+                )
+              end
+            end
+            f3_headers
+          end
+        fx3_token_public_id = fx3_user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
+        fx3_token = ClientToken.find_by(public_id: fx3_token_public_id)
+        fx3_session_public_id = fx3_token&.try(:device_session)&.public_id.presence || fx3_token_public_id
+        mark_token_step_up_satisfied_for_test(
+          fx3_token,
+          scope: SocialAuth::SOCIAL_LINK_SCOPE,
+        ) if fx3_token
+
+        fx3_issuance = IdentitySocialCeremonyGrantIssuer.issue!(
+          surface: "app",
+          actor_ref: fx3_user.public_id,
+          session_ref: fx3_session_public_id,
+          operation: "link",
+          provider: fx3_provider,
+        )
+
+        fx3_normalized_provider = SocialIdentifiable.normalize_provider(fx3_provider)
+        fx3_continue_path = public_send(
+          :"auth_app_settings_#{fx3_normalized_provider}_path",
+          ri: fx3_ri,
+          social_ceremony_grant: fx3_issuance.grant,
+        )
+
+        fx3_headers = social_callback_headers(fx3_host).merge(fx3_user_headers)
+        post(fx3_continue_path, headers: fx3_headers)
+        fx3_rails_cookie_key = Rails.application.config.session_options.fetch(:key)
+        fx3_rails_cookie = response.cookies.fetch(fx3_rails_cookie_key)
+        fx3_user_headers["Cookie"] = [
+          fx3_user_headers.fetch("Cookie"),
+          "#{fx3_rails_cookie_key}=#{Rack::Utils.escape(fx3_rails_cookie)}",
+        ].join("; ")
+        fx3_user_headers["HTTP_COOKIE"] = fx3_user_headers.fetch("Cookie")
+
+        Struct.new(:state, :user_headers, :session_public_id, keyword_init: true).new(
+          state: social_auth_state_from_response,
+          user_headers: fx3_user_headers,
+          session_public_id: fx3_session_public_id,
+        )
+      end
+
+    ActionController::Base.allow_forgery_protection = true
     assert_no_difference("ClientGoogleIdentity.count") do
-      get auth_app_social_google_callback_url(ri: "jp"),
-          params: { state: grant_session.state },
-          headers: @callback_headers.merge(grant_session.user_headers)
+      get(
+        auth_app_social_google_callback_url(ri: "jp", protocol: "https"),
+        params: { state: grant_session.state },
+        headers: @callback_headers.merge(grant_session.user_headers),
+      )
     end
 
     assert_response :success
@@ -174,16 +787,64 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
 
     assert_not_nil form
     fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    cookie_key = Rails.application.config.session_options.fetch(:key)
+    grant_session.user_headers["Cookie"] = [
+      grant_session.user_headers.fetch("Cookie").split("; ").reject { |entry| entry.start_with?("#{cookie_key}=") },
+      "#{cookie_key}=#{Rack::Utils.escape(response.cookies.fetch(cookie_key))}",
+    ].flatten.join("; ")
+    grant_session.user_headers["HTTP_COOKIE"] = grant_session.user_headers.fetch("Cookie")
+    local_headers = grant_session.user_headers.merge(
+      "Host" => @host, "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "",
+    )
+    assert_no_difference("ClientGoogleIdentity.count") do
+      post(form["action"], params: fields.except("authenticity_token"), headers: local_headers)
+    end
+    assert_response :unprocessable_content
+    assert_no_difference("ClientGoogleIdentity.count") do
+      post(form["action"], params: fields, headers: local_headers.merge("Origin" => "https://other.example"))
+    end
+    assert_response :unprocessable_content
+    candidate = IdentitySocialCeremonyCandidate.find_by!(ref: fields.fetch("candidate_ref"))
+
+    assert_nil candidate.consumed_at
+
+    foreign_browser = open_session
+    foreign_browser.host!(@host)
+    foreign_browser.https!
+    root_cookie = grant_session.user_headers.fetch("Cookie").split("; ").reject do |entry|
+      entry.start_with?("#{cookie_key}=")
+    end.join("; ")
+    _merged_cookies = foreign_browser.cookies.merge(root_cookie, URI.parse("https://#{@host}/"))
+    foreign_browser.get(auth_app_root_path(ri: "jp"))
+    foreign_csrf = Nokogiri::HTML(foreign_browser.response.body).at_css('meta[name="csrf-token"]')["content"]
+    assert_no_difference("ClientGoogleIdentity.count") do
+      foreign_browser.post(
+        form["action"], params: fields.merge("authenticity_token" => foreign_csrf),
+                        headers: { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "" },
+      )
+    end
+    assert_equal 401, foreign_browser.response.status
+    assert_nil candidate.reload.consumed_at
+
     assert_difference("ClientGoogleIdentity.count", 1) do
-      post form["action"], params: fields,
-                           headers: grant_session.user_headers.merge(
-                             "Host" => @host, "Origin" => "https://#{@host}",
-                           )
+      post(
+        form["action"], params: fields,
+                        headers: grant_session.user_headers.merge(
+                          "Host" => @host, "Origin" => "https://#{@host}",
+                        ),
+      )
     end
 
     assert_redirected_to auth_app_settings_path(ri: "jp")
     assert_equal @user_one.id, ClientGoogleIdentity.find_by!(uid: new_uid).user_id
     assert_not_includes response.body.to_s, "social-completion-form"
+    assert_no_difference("ClientGoogleIdentity.count") do
+      post(form["action"], params: fields, headers: local_headers)
+    end
+    assert_response :unauthorized
+    assert_not_nil candidate.reload.consumed_at
+  ensure
+    ActionController::Base.allow_forgery_protection = previous_forgery if defined?(previous_forgery)
   end
 
   test "guest cannot start Google linking" do
@@ -199,7 +860,118 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
 
   test "Sign-owned Apple link intent creates one social identity" do
     new_uid = "grantless_apple_#{SecureRandom.hex(4)}"
-    grant_session = seed_app_social_link_grant_session(provider: "apple", user: @user_one, ri: "jp")
+    grant_session =
+      begin
+        fx4_provider = "apple"
+        fx4_user = @user_one
+        fx4_ri = "jp"
+        fx4_host = @host
+        host!(fx4_host) if respond_to?(:host!)
+
+        fx4_user_headers =
+          begin
+            f4_headers = as_user_headers(fx4_user, host: fx4_host)
+            f4_host = f4_headers["Host"]
+            f4_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f4_host}/") if f4_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f4_family, f4_surface = f4_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f4_family) && f4_surface == "app"
+              f4_client_id =
+                case f4_family
+                when "base" then "base-#{f4_surface}-ww"
+                when "edit" then "edit-org"
+                else "#{f4_family}-#{f4_surface}"
+                end
+              f4_token = ClientToken.find_by!(public_id: f4_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f4_client = OidcClientRegistry.find!(f4_client_id)
+              f4_key = [f4_client.client_id, f4_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f4_key] && f4_token.currently_usable? &&
+                  !(f4_token.device_session_id && ClientRpSession.exists?(
+                    device_session_id: f4_token.device_session_id,
+                    oidc_client_id: f4_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f4_token.rotate_refresh_token! unless f4_token.device_session.current_refresh_token_id
+                f4_now = Time.current
+                f4_session = ClientRpSession.create!(
+                  client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
+                  refresh_token_expires_at: f4_now + 10.minutes,
+                )
+                f4_access = AuthenticationTokenService.encode(
+                  f4_token.user, host: f4_host, resource_type: "client",
+                                 session_public_id: f4_token.public_id, base_session_public_id: f4_token.public_id,
+                                 oidc_sid: f4_session.public_id, oidc_jti: f4_session.oidc_jti,
+                                 expires_at: f4_now + 10.minutes, scopes: %w(openid profile),
+                                 issuer: OidcIssuer.for_client(f4_client), audiences: [f4_client.aud],
+                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f4_client),
+                                 subject: OidcSubject.for(
+                                   f4_token.user,
+                                   resource_type: "client",
+                                 ), client_id: f4_client.client_id,
+                )
+                @base_browser_rp_credentials[f4_key] =
+                  [f4_access, f4_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f4_key]
+                f4_access, f4_refresh = @base_browser_rp_credentials.fetch(f4_key)
+                f4_cookie = [
+                  f4_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f4_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f4_refresh)}",
+                ].join("; ")
+                f4_headers = f4_headers.merge(
+                  "Cookie" => f4_cookie,
+                  "HTTP_COOKIE" => f4_cookie,
+                )
+              end
+            end
+            f4_headers
+          end
+        fx4_token_public_id = fx4_user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
+        fx4_token = ClientToken.find_by(public_id: fx4_token_public_id)
+        fx4_session_public_id = fx4_token&.try(:device_session)&.public_id.presence || fx4_token_public_id
+        mark_token_step_up_satisfied_for_test(
+          fx4_token,
+          scope: SocialAuth::SOCIAL_LINK_SCOPE,
+        ) if fx4_token
+
+        fx4_issuance = IdentitySocialCeremonyGrantIssuer.issue!(
+          surface: "app",
+          actor_ref: fx4_user.public_id,
+          session_ref: fx4_session_public_id,
+          operation: "link",
+          provider: fx4_provider,
+        )
+
+        fx4_normalized_provider = SocialIdentifiable.normalize_provider(fx4_provider)
+        fx4_continue_path = public_send(
+          :"auth_app_settings_#{fx4_normalized_provider}_path",
+          ri: fx4_ri,
+          social_ceremony_grant: fx4_issuance.grant,
+        )
+
+        fx4_headers = social_callback_headers(fx4_host).merge(fx4_user_headers)
+        post(fx4_continue_path, headers: fx4_headers)
+        fx4_rails_cookie_key = Rails.application.config.session_options.fetch(:key)
+        fx4_rails_cookie = response.cookies.fetch(fx4_rails_cookie_key)
+        fx4_user_headers["Cookie"] = [
+          fx4_user_headers.fetch("Cookie"),
+          "#{fx4_rails_cookie_key}=#{Rack::Utils.escape(fx4_rails_cookie)}",
+        ].join("; ")
+        fx4_user_headers["HTTP_COOKIE"] = fx4_user_headers.fetch("Cookie")
+
+        Struct.new(:state, :user_headers, :session_public_id, keyword_init: true).new(
+          state: social_auth_state_from_response,
+          user_headers: fx4_user_headers,
+          session_public_id: fx4_session_public_id,
+        )
+      end
 
     setup_apple_mock_auth(uid: new_uid)
 
@@ -236,7 +1008,78 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
       user_google_identity_status: client_google_identity_statuses(:active),
     )
 
-    headers = social_link_headers(@user_one)
+    headers =
+      begin
+        fx5_user = @user_one
+        fx5_headers =
+          begin
+            f5_headers = as_user_headers(fx5_user, host: @host)
+            f5_host = f5_headers["Host"]
+            f5_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f5_host}/") if f5_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f5_family, f5_surface = f5_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f5_family) && f5_surface == "app"
+              f5_client_id =
+                case f5_family
+                when "base" then "base-#{f5_surface}-ww"
+                when "edit" then "edit-org"
+                else "#{f5_family}-#{f5_surface}"
+                end
+              f5_token = ClientToken.find_by!(public_id: f5_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f5_client = OidcClientRegistry.find!(f5_client_id)
+              f5_key = [f5_client.client_id, f5_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f5_key] && f5_token.currently_usable? &&
+                  !(f5_token.device_session_id && ClientRpSession.exists?(
+                    device_session_id: f5_token.device_session_id,
+                    oidc_client_id: f5_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f5_token.rotate_refresh_token! unless f5_token.device_session.current_refresh_token_id
+                f5_now = Time.current
+                f5_session = ClientRpSession.create!(
+                  client_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
+                  refresh_token_expires_at: f5_now + 10.minutes,
+                )
+                f5_access = AuthenticationTokenService.encode(
+                  f5_token.user, host: f5_host, resource_type: "client",
+                                 session_public_id: f5_token.public_id, base_session_public_id: f5_token.public_id,
+                                 oidc_sid: f5_session.public_id, oidc_jti: f5_session.oidc_jti,
+                                 expires_at: f5_now + 10.minutes, scopes: %w(openid profile),
+                                 issuer: OidcIssuer.for_client(f5_client), audiences: [f5_client.aud],
+                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f5_client),
+                                 subject: OidcSubject.for(
+                                   f5_token.user,
+                                   resource_type: "client",
+                                 ), client_id: f5_client.client_id,
+                )
+                @base_browser_rp_credentials[f5_key] =
+                  [f5_access, f5_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f5_key]
+                f5_access, f5_refresh = @base_browser_rp_credentials.fetch(f5_key)
+                f5_cookie = [
+                  f5_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f5_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f5_refresh)}",
+                ].join("; ")
+                f5_headers = f5_headers.merge(
+                  "Cookie" => f5_cookie,
+                  "HTTP_COOKIE" => f5_cookie,
+                )
+              end
+            end
+            f5_headers
+          end
+        fx5_token = ClientToken.find_by!(public_id: fx5_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+        mark_token_step_up_satisfied_for_test(fx5_token, scope: SocialAuth::SOCIAL_LINK_SCOPE)
+        fx5_headers
+      end
 
     post auth_app_settings_google_url(ri: "jp"), headers: headers
 
@@ -250,7 +1093,118 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
     new_uid = "brand_new_google_#{SecureRandom.hex(4)}"
     setup_google_mock_auth(uid: new_uid)
 
-    grant_session = seed_app_social_link_grant_session(provider: "google", user: @user_one, ri: "jp")
+    grant_session =
+      begin
+        fx6_provider = "google"
+        fx6_user = @user_one
+        fx6_ri = "jp"
+        fx6_host = @host
+        host!(fx6_host) if respond_to?(:host!)
+
+        fx6_user_headers =
+          begin
+            f6_headers = as_user_headers(fx6_user, host: fx6_host)
+            f6_host = f6_headers["Host"]
+            f6_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f6_host}/") if f6_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f6_family, f6_surface = f6_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f6_family) && f6_surface == "app"
+              f6_client_id =
+                case f6_family
+                when "base" then "base-#{f6_surface}-ww"
+                when "edit" then "edit-org"
+                else "#{f6_family}-#{f6_surface}"
+                end
+              f6_token = ClientToken.find_by!(public_id: f6_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f6_client = OidcClientRegistry.find!(f6_client_id)
+              f6_key = [f6_client.client_id, f6_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f6_key] && f6_token.currently_usable? &&
+                  !(f6_token.device_session_id && ClientRpSession.exists?(
+                    device_session_id: f6_token.device_session_id,
+                    oidc_client_id: f6_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f6_token.rotate_refresh_token! unless f6_token.device_session.current_refresh_token_id
+                f6_now = Time.current
+                f6_session = ClientRpSession.create!(
+                  client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
+                  refresh_token_expires_at: f6_now + 10.minutes,
+                )
+                f6_access = AuthenticationTokenService.encode(
+                  f6_token.user, host: f6_host, resource_type: "client",
+                                 session_public_id: f6_token.public_id, base_session_public_id: f6_token.public_id,
+                                 oidc_sid: f6_session.public_id, oidc_jti: f6_session.oidc_jti,
+                                 expires_at: f6_now + 10.minutes, scopes: %w(openid profile),
+                                 issuer: OidcIssuer.for_client(f6_client), audiences: [f6_client.aud],
+                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f6_client),
+                                 subject: OidcSubject.for(
+                                   f6_token.user,
+                                   resource_type: "client",
+                                 ), client_id: f6_client.client_id,
+                )
+                @base_browser_rp_credentials[f6_key] =
+                  [f6_access, f6_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f6_key]
+                f6_access, f6_refresh = @base_browser_rp_credentials.fetch(f6_key)
+                f6_cookie = [
+                  f6_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f6_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f6_refresh)}",
+                ].join("; ")
+                f6_headers = f6_headers.merge(
+                  "Cookie" => f6_cookie,
+                  "HTTP_COOKIE" => f6_cookie,
+                )
+              end
+            end
+            f6_headers
+          end
+        fx6_token_public_id = fx6_user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
+        fx6_token = ClientToken.find_by(public_id: fx6_token_public_id)
+        fx6_session_public_id = fx6_token&.try(:device_session)&.public_id.presence || fx6_token_public_id
+        mark_token_step_up_satisfied_for_test(
+          fx6_token,
+          scope: SocialAuth::SOCIAL_LINK_SCOPE,
+        ) if fx6_token
+
+        fx6_issuance = IdentitySocialCeremonyGrantIssuer.issue!(
+          surface: "app",
+          actor_ref: fx6_user.public_id,
+          session_ref: fx6_session_public_id,
+          operation: "link",
+          provider: fx6_provider,
+        )
+
+        fx6_normalized_provider = SocialIdentifiable.normalize_provider(fx6_provider)
+        fx6_continue_path = public_send(
+          :"auth_app_settings_#{fx6_normalized_provider}_path",
+          ri: fx6_ri,
+          social_ceremony_grant: fx6_issuance.grant,
+        )
+
+        fx6_headers = social_callback_headers(fx6_host).merge(fx6_user_headers)
+        post(fx6_continue_path, headers: fx6_headers)
+        fx6_rails_cookie_key = Rails.application.config.session_options.fetch(:key)
+        fx6_rails_cookie = response.cookies.fetch(fx6_rails_cookie_key)
+        fx6_user_headers["Cookie"] = [
+          fx6_user_headers.fetch("Cookie"),
+          "#{fx6_rails_cookie_key}=#{Rack::Utils.escape(fx6_rails_cookie)}",
+        ].join("; ")
+        fx6_user_headers["HTTP_COOKIE"] = fx6_user_headers.fetch("Cookie")
+
+        Struct.new(:state, :user_headers, :session_public_id, keyword_init: true).new(
+          state: social_auth_state_from_response,
+          user_headers: fx6_user_headers,
+          session_public_id: fx6_session_public_id,
+        )
+      end
 
     assert_difference("ClientGoogleIdentity.count", 1) do
       perform_grant_backed_link(provider: "google", grant_session: grant_session)
@@ -280,8 +1234,67 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
   test "link intent rejects resource-level step up without token-bound step up" do
     @user_one.update!(last_step_up_at: Time.current)
 
+    http_headers_0 =
+      begin
+        rp_headers = as_user_headers(@user_one, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && ClientRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = ClientRpSession.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.user, host: rp_host, resource_type: "client",
+                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                             subject: OidcSubject.for(
+                               rp_token.user,
+                               resource_type: "client",
+                             ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     post auth_app_settings_google_url(ri: "jp"),
-         headers: as_user_headers(@user_one, host: @host)
+         headers: http_headers_0
 
     assert_response :see_other
     assert_match %r{\Ahttp://#{Regexp.escape(@host)}/verification\?}, response.location
@@ -290,7 +1303,65 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
   end
 
   test "link intent rejects token-bound step up for a different scope" do
-    headers = as_user_headers(@user_one, host: @host)
+    headers =
+      begin
+        rp_headers = as_user_headers(@user_one, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && ClientRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = ClientRpSession.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.user, host: rp_host, resource_type: "client",
+                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                             subject: OidcSubject.for(
+                               rp_token.user,
+                               resource_type: "client",
+                             ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     token = ClientToken.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
     mark_token_step_up_satisfied_for_test(token, scope: "settings_email")
 
@@ -323,7 +1394,118 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
     setup_google_mock_auth(uid: revoked_uid)
 
     # Re-link through the Sign-owned settings ceremony.
-    grant_session = seed_app_social_link_grant_session(provider: "google", user: @user_one, ri: "jp")
+    grant_session =
+      begin
+        fx7_provider = "google"
+        fx7_user = @user_one
+        fx7_ri = "jp"
+        fx7_host = @host
+        host!(fx7_host) if respond_to?(:host!)
+
+        fx7_user_headers =
+          begin
+            f7_headers = as_user_headers(fx7_user, host: fx7_host)
+            f7_host = f7_headers["Host"]
+            f7_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f7_host}/") if f7_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f7_family, f7_surface = f7_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f7_family) && f7_surface == "app"
+              f7_client_id =
+                case f7_family
+                when "base" then "base-#{f7_surface}-ww"
+                when "edit" then "edit-org"
+                else "#{f7_family}-#{f7_surface}"
+                end
+              f7_token = ClientToken.find_by!(public_id: f7_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f7_client = OidcClientRegistry.find!(f7_client_id)
+              f7_key = [f7_client.client_id, f7_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f7_key] && f7_token.currently_usable? &&
+                  !(f7_token.device_session_id && ClientRpSession.exists?(
+                    device_session_id: f7_token.device_session_id,
+                    oidc_client_id: f7_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f7_token.rotate_refresh_token! unless f7_token.device_session.current_refresh_token_id
+                f7_now = Time.current
+                f7_session = ClientRpSession.create!(
+                  client_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f7_now,
+                  refresh_token_expires_at: f7_now + 10.minutes,
+                )
+                f7_access = AuthenticationTokenService.encode(
+                  f7_token.user, host: f7_host, resource_type: "client",
+                                 session_public_id: f7_token.public_id, base_session_public_id: f7_token.public_id,
+                                 oidc_sid: f7_session.public_id, oidc_jti: f7_session.oidc_jti,
+                                 expires_at: f7_now + 10.minutes, scopes: %w(openid profile),
+                                 issuer: OidcIssuer.for_client(f7_client), audiences: [f7_client.aud],
+                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f7_client),
+                                 subject: OidcSubject.for(
+                                   f7_token.user,
+                                   resource_type: "client",
+                                 ), client_id: f7_client.client_id,
+                )
+                @base_browser_rp_credentials[f7_key] =
+                  [f7_access, f7_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f7_key]
+                f7_access, f7_refresh = @base_browser_rp_credentials.fetch(f7_key)
+                f7_cookie = [
+                  f7_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f7_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f7_refresh)}",
+                ].join("; ")
+                f7_headers = f7_headers.merge(
+                  "Cookie" => f7_cookie,
+                  "HTTP_COOKIE" => f7_cookie,
+                )
+              end
+            end
+            f7_headers
+          end
+        fx7_token_public_id = fx7_user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
+        fx7_token = ClientToken.find_by(public_id: fx7_token_public_id)
+        fx7_session_public_id = fx7_token&.try(:device_session)&.public_id.presence || fx7_token_public_id
+        mark_token_step_up_satisfied_for_test(
+          fx7_token,
+          scope: SocialAuth::SOCIAL_LINK_SCOPE,
+        ) if fx7_token
+
+        fx7_issuance = IdentitySocialCeremonyGrantIssuer.issue!(
+          surface: "app",
+          actor_ref: fx7_user.public_id,
+          session_ref: fx7_session_public_id,
+          operation: "link",
+          provider: fx7_provider,
+        )
+
+        fx7_normalized_provider = SocialIdentifiable.normalize_provider(fx7_provider)
+        fx7_continue_path = public_send(
+          :"auth_app_settings_#{fx7_normalized_provider}_path",
+          ri: fx7_ri,
+          social_ceremony_grant: fx7_issuance.grant,
+        )
+
+        fx7_headers = social_callback_headers(fx7_host).merge(fx7_user_headers)
+        post(fx7_continue_path, headers: fx7_headers)
+        fx7_rails_cookie_key = Rails.application.config.session_options.fetch(:key)
+        fx7_rails_cookie = response.cookies.fetch(fx7_rails_cookie_key)
+        fx7_user_headers["Cookie"] = [
+          fx7_user_headers.fetch("Cookie"),
+          "#{fx7_rails_cookie_key}=#{Rack::Utils.escape(fx7_rails_cookie)}",
+        ].join("; ")
+        fx7_user_headers["HTTP_COOKIE"] = fx7_user_headers.fetch("Cookie")
+
+        Struct.new(:state, :user_headers, :session_public_id, keyword_init: true).new(
+          state: social_auth_state_from_response,
+          user_headers: fx7_user_headers,
+          session_public_id: fx7_session_public_id,
+        )
+      end
     perform_grant_backed_link(provider: "google", grant_session: grant_session)
 
     assert_redirected_to auth_app_settings_path(ri: "jp")
@@ -347,7 +1529,118 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
       user_apple_identity_status: client_apple_identity_statuses(:revoked),
     )
 
-    grant_session = seed_app_social_link_grant_session(provider: "apple", user: @user_one, ri: "jp")
+    grant_session =
+      begin
+        fx8_provider = "apple"
+        fx8_user = @user_one
+        fx8_ri = "jp"
+        fx8_host = @host
+        host!(fx8_host) if respond_to?(:host!)
+
+        fx8_user_headers =
+          begin
+            f8_headers = as_user_headers(fx8_user, host: fx8_host)
+            f8_host = f8_headers["Host"]
+            f8_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f8_host}/") if f8_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f8_family, f8_surface = f8_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f8_family) && f8_surface == "app"
+              f8_client_id =
+                case f8_family
+                when "base" then "base-#{f8_surface}-ww"
+                when "edit" then "edit-org"
+                else "#{f8_family}-#{f8_surface}"
+                end
+              f8_token = ClientToken.find_by!(public_id: f8_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f8_client = OidcClientRegistry.find!(f8_client_id)
+              f8_key = [f8_client.client_id, f8_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f8_key] && f8_token.currently_usable? &&
+                  !(f8_token.device_session_id && ClientRpSession.exists?(
+                    device_session_id: f8_token.device_session_id,
+                    oidc_client_id: f8_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f8_token.rotate_refresh_token! unless f8_token.device_session.current_refresh_token_id
+                f8_now = Time.current
+                f8_session = ClientRpSession.create!(
+                  client_token: f8_token, oidc_client_id: f8_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f8_now,
+                  refresh_token_expires_at: f8_now + 10.minutes,
+                )
+                f8_access = AuthenticationTokenService.encode(
+                  f8_token.user, host: f8_host, resource_type: "client",
+                                 session_public_id: f8_token.public_id, base_session_public_id: f8_token.public_id,
+                                 oidc_sid: f8_session.public_id, oidc_jti: f8_session.oidc_jti,
+                                 expires_at: f8_now + 10.minutes, scopes: %w(openid profile),
+                                 issuer: OidcIssuer.for_client(f8_client), audiences: [f8_client.aud],
+                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f8_client),
+                                 subject: OidcSubject.for(
+                                   f8_token.user,
+                                   resource_type: "client",
+                                 ), client_id: f8_client.client_id,
+                )
+                @base_browser_rp_credentials[f8_key] =
+                  [f8_access, f8_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f8_key]
+                f8_access, f8_refresh = @base_browser_rp_credentials.fetch(f8_key)
+                f8_cookie = [
+                  f8_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f8_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f8_refresh)}",
+                ].join("; ")
+                f8_headers = f8_headers.merge(
+                  "Cookie" => f8_cookie,
+                  "HTTP_COOKIE" => f8_cookie,
+                )
+              end
+            end
+            f8_headers
+          end
+        fx8_token_public_id = fx8_user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
+        fx8_token = ClientToken.find_by(public_id: fx8_token_public_id)
+        fx8_session_public_id = fx8_token&.try(:device_session)&.public_id.presence || fx8_token_public_id
+        mark_token_step_up_satisfied_for_test(
+          fx8_token,
+          scope: SocialAuth::SOCIAL_LINK_SCOPE,
+        ) if fx8_token
+
+        fx8_issuance = IdentitySocialCeremonyGrantIssuer.issue!(
+          surface: "app",
+          actor_ref: fx8_user.public_id,
+          session_ref: fx8_session_public_id,
+          operation: "link",
+          provider: fx8_provider,
+        )
+
+        fx8_normalized_provider = SocialIdentifiable.normalize_provider(fx8_provider)
+        fx8_continue_path = public_send(
+          :"auth_app_settings_#{fx8_normalized_provider}_path",
+          ri: fx8_ri,
+          social_ceremony_grant: fx8_issuance.grant,
+        )
+
+        fx8_headers = social_callback_headers(fx8_host).merge(fx8_user_headers)
+        post(fx8_continue_path, headers: fx8_headers)
+        fx8_rails_cookie_key = Rails.application.config.session_options.fetch(:key)
+        fx8_rails_cookie = response.cookies.fetch(fx8_rails_cookie_key)
+        fx8_user_headers["Cookie"] = [
+          fx8_user_headers.fetch("Cookie"),
+          "#{fx8_rails_cookie_key}=#{Rack::Utils.escape(fx8_rails_cookie)}",
+        ].join("; ")
+        fx8_user_headers["HTTP_COOKIE"] = fx8_user_headers.fetch("Cookie")
+
+        Struct.new(:state, :user_headers, :session_public_id, keyword_init: true).new(
+          state: social_auth_state_from_response,
+          user_headers: fx8_user_headers,
+          session_public_id: fx8_session_public_id,
+        )
+      end
     setup_apple_mock_auth(uid: revoked_uid)
     perform_grant_backed_link(provider: "apple", grant_session: grant_session)
 
@@ -362,27 +1655,22 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
   private
 
   def perform_grant_backed_link(provider:, grant_session:)
-    if provider == "apple"
-      get(
-        auth_app_social_apple_callback_url(provider: "apple", ri: "jp"),
-        params: { state: grant_session.state },
-        headers: @callback_headers.merge(grant_session.user_headers),
-      )
-    else
-      get(
-        auth_app_social_google_callback_url(ri: "jp"),
-        params: { state: grant_session.state },
-        headers: @callback_headers.merge(grant_session.user_headers),
-      )
-    end
-    submit_social_completion_if_present!
-  end
+    url =
+      (provider == "apple") ? auth_app_social_apple_callback_url(provider: "apple", ri: "jp") :
+           auth_app_social_google_callback_url(ri: "jp")
+    get(url, params: { state: grant_session.state }, headers: @callback_headers.merge(grant_session.user_headers))
+    form = response.parsed_body.at_css("form#social-completion-form")
 
-  def social_link_headers(user)
-    headers = as_user_headers(user, host: @host)
-    token = ClientToken.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-    mark_token_step_up_satisfied_for_test(token, scope: SocialAuth::SOCIAL_LINK_SCOPE)
-    headers
+    assert_not_nil form
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    cookie_key = Rails.application.config.session_options.fetch(:key)
+    headers = grant_session.user_headers.merge("Host" => @host, "Origin" => "https://#{@host}")
+    headers["Cookie"] = [
+      headers.fetch("Cookie").split("; ").reject { |entry| entry.start_with?("#{cookie_key}=") },
+      "#{cookie_key}=#{Rack::Utils.escape(response.cookies.fetch(cookie_key))}",
+    ].flatten.join("; ")
+    headers["HTTP_COOKIE"] = headers.fetch("Cookie")
+    post(form["action"], params: fields, headers: headers)
   end
 
   # IMPORTANT: Social login authenticates by provider+uid ONLY, NOT email
@@ -539,24 +1827,51 @@ class SocialAuthLinkTest
     true
   end
 
-  def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)
-    return unless token.respond_to?(:update_columns)
-
-    attrs = {
-      last_step_up_at: at,
-      last_step_up_scope: scope.presence || token.try(:last_step_up_scope).presence || "verification",
-      last_step_up_aal: ("aal2" if token.respond_to?(:last_step_up_aal)),
-      last_step_up_method: ("passkey" if token.respond_to?(:last_step_up_method)),
-      last_step_up_session_public_id: (token.public_id if token.respond_to?(:last_step_up_session_public_id)),
-      last_step_up_purpose: ("step_up" if token.respond_to?(:last_step_up_purpose)),
-      last_step_up_audience: (step_up_test_audience_for_token(token) if token.respond_to?(:last_step_up_audience)),
-      last_step_up_credential_ref: ("test-step-up-credential" if token.respond_to?(:last_step_up_credential_ref)),
-      last_step_up_phishing_resistant: (false if token.respond_to?(:last_step_up_phishing_resistant)),
-      last_step_up_user_verified: (true if token.respond_to?(:last_step_up_user_verified)),
-      last_step_up_full_reauthentication: (false if token.respond_to?(:last_step_up_full_reauthentication)),
-      updated_at: Time.current,
-    }.compact
-    token.update_columns(attrs)
+  def mark_token_step_up_satisfied_for_test(token, scope:)
+    actor = token.user
+    token.rotate_refresh_token! unless token.device_session.current_refresh_token_id
+    credential = actor.client_totp_credentials.find_by(
+      user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    ) || ClientTotpCredential.create_for_user!(
+      user: actor, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    requirement = StepUpRequirement.new(
+      step_up_required: true, scope: scope, allowed_methods: [:totp],
+      phishing_resistant_required: false, user_verification_required: false, full_reauthentication_required: false,
+      ttl: 15.minutes, purpose: "step_up", audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
+    )
+    nonce = SecureRandom.urlsafe_base64(32)
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement,
+      return_to: (scope == "settings_email") ? "/identity/emails" : "/settings/google",
+      base_browser_nonce: nonce, base_token: token,
+    )
+    transaction = issuance.transaction
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    attached, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    digest = AuthAdmissionBinding.browser_digest(surface: "app", entry_ref: issuance.reference, nonce: nonce)
+    binding.confirm_base!(base_token: token, browser_digest: digest)
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: issuance.reference, surface: "app", expected_intent: "step_up", binding: binding,
+      raw_auth_sid: raw_sid,
+    )
+    admitted, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", previous_raw_sid: raw_sid,
+      step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
+    # This fixture exercises Social authorization; TOTP code verification has its own public-boundary tests.
+    transaction.record_verification!(
+      method: "totp", aal: "aal1", phishing_resistant: false, user_verified: false,
+      verified_at: transaction.class.database_now, verified_credential_ref: credential.public_id,
+    )
+    proof = BaseAuthAdmissionCoordinator.issue_result!(transaction: transaction, ceremony_session_ref: admitted.id.to_s)
+    IdentityStepUpCeremonyFreshnessCommitter.call!(
+      actor: actor, token: token, transaction: transaction, requirement: requirement, result_reference: proof.reference,
+    )
   end
 
   def step_up_test_audience_for_token(token)
@@ -648,35 +1963,6 @@ class SocialAuthLinkTest
     end
   end
 
-  def seed_social_auth_session(provider:, intent: "login", user: nil, entry: nil, ri: "jp", rt: nil, referer: nil)
-    # Keep the Auth request phase and callback on the same host so the Rack
-    # session carrying the ceremony state is the one the callback reads.
-    host = @host
-    host!(host) if respond_to?(:host!)
-    normalized_provider = SocialIdentifiable.normalize_provider(provider)
-    continue_path =
-      if intent.to_s == "link"
-        public_send(:"auth_app_settings_#{normalized_provider}_path", ri: ri)
-      elsif entry.to_s == "sign_up"
-        public_send(:"auth_app_social_#{normalized_provider}_registration_path", ri: ri, rt: rt)
-      else
-        public_send(:"auth_app_social_#{normalized_provider}_session_path", ri: ri, rt: rt)
-      end
-    headers = social_callback_headers(host)
-    headers["Referer"] = referer if referer.present?
-    if user
-      user_headers = as_user_headers(user, host: host)
-      token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
-      mark_token_step_up_satisfied_for_test(
-        token,
-        scope: SocialAuth::SOCIAL_LINK_SCOPE,
-      ) if intent.to_s == "link" && token
-      headers = headers.merge(user_headers)
-    end
-    post(continue_path, headers: headers)
-    social_auth_state_from_response
-  end
-
   def assert_oidc_authorize_redirect(location, host:, client_id: "base-rails-rp")
     uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
@@ -692,73 +1978,37 @@ end
 class SocialAuthLinkTest
   private
 
-  def seed_app_social_link_grant_session(provider:, user:, ri: "jp")
-    # Keep the Auth request phase and callback on the same host so the Rack
-    # session carrying the ceremony state is the one the callback reads.
-    host = @host
-    host!(host) if respond_to?(:host!)
-
-    user_headers = as_user_headers(user, host: host)
-    token_public_id = user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
-    token = ClientToken.find_by(public_id: token_public_id)
-    session_public_id = token&.try(:device_session)&.public_id.presence || token_public_id
-    mark_token_step_up_satisfied_for_test(token, scope: SocialAuth::SOCIAL_LINK_SCOPE) if token
-
-    issuance = IdentitySocialCeremonyGrantIssuer.issue!(
-      surface: "app",
-      actor_ref: user.public_id,
-      session_ref: session_public_id,
-      operation: "link",
-      provider: provider,
-    )
-
-    normalized_provider = SocialIdentifiable.normalize_provider(provider)
-    continue_path = public_send(
-      :"auth_app_settings_#{normalized_provider}_path",
-      ri: ri,
-      social_ceremony_grant: issuance.grant,
-    )
-
-    headers = social_callback_headers(host).merge(user_headers)
-    post(continue_path, headers: headers)
-
-    Struct.new(:state, :user_headers, :session_public_id, keyword_init: true).new(
-      state: social_auth_state_from_response,
-      user_headers: user_headers,
-      session_public_id: session_public_id,
-    )
-  end
-
   def submit_social_completion_if_present!
-    return if follow_social_completion_redirect_if_present!
+    target = URI.parse(response.location) if response.redirect?
+    continuation = target&.path == "/social/authentication/completion"
+    if continuation
+      host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+      host!(host)
+      https!
+      headers = { "Host" => host, "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+      get(target.request_uri, headers: headers)
+      form = response.parsed_body.at_css("form")
+      raise StandardError, "social completion continuation form missing" unless form
 
-    return unless response.media_type == "text/html"
-    return unless response.body.include?("social-completion-form")
+    else
+      return unless response.media_type == "text/html" && response.body.include?("social-completion-form")
 
-    # A browser only reaches the completion endpoint when CSP allows the form
-    # target. See test/support/form_action_policy_helper.rb.
-    assert_forms_submittable_under_policy
+      assert_forms_submittable_under_policy
+      form = response.parsed_body.at_css("form#social-completion-form")
+      raise StandardError, "social completion form missing" unless form
 
-    form = response.parsed_body.at_css("form#social-completion-form")
-    raise StandardError, "social completion form missing" unless form
-
-    params = {}
-    form.css("input").each do |input|
-      name = input["name"]
-      params[name] = input["value"] if name.present?
-    end
-
-    post(
-      form["action"],
-      params: params,
-      headers: {
-        # A browser sends the form target as the Host, not a separately configured one.
+      headers = {
         "Host" => URI.parse(form["action"]).host,
         "Origin" => "https://#{configured_host(:sign_service)}",
         "Sec-Fetch-Site" => "same-site",
-      },
-    )
-    cookies.to_hash.each_key { |key| cookies.delete(key) }
+      }
+    end
+    params = form.css("input").filter_map do |input|
+      name = input["name"]
+      [name, input["value"]] if continuation ? !name.nil? : name.present?
+    end.to_h
+    post(form["action"], params: params, headers: headers)
+    cookies.to_hash.each_key { |key| cookies.delete(key) } unless continuation
   end
 end
 

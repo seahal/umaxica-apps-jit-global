@@ -11,9 +11,7 @@ class PrimaryDatabaseOwnershipTest < ActiveSupport::TestCase
     config = ActiveRecord::Base.configurations.configs_for(env_name: "test", name: "primary")
 
     assert config
-    # Rails appends a worker suffix (test_primary_db_4) when the suite runs
-    # parallelized, so the base name is asserted rather than the literal.
-    assert_match(/\Atest_primary_db(_\d+)?\z/, config.database)
+    assert_equal config.database, ActiveRecord::Base.connection.select_value("SELECT current_database()")
     assert_equal ["db/migrate"], Array(config.migrations_paths)
     assert_not config.replica?
   end

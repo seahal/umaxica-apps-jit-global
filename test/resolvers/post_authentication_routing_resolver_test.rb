@@ -4,9 +4,10 @@ require "test_helper"
 
 class PostAuthenticationRoutingResolverTest < ActiveSupport::TestCase
   test "routes a completed flow to the signed return target" do
-    flow = Data.define(:return_to) do
-      def sign_in_completed? = true
-    end.new(return_to: "/settings/security")
+    flow = ClientSignInFlow.new(
+      state_id: ClientSignInFlowState::COMPLETED,
+      return_to: "/settings/security",
+    )
 
     decision = PostAuthenticationRoutingResolver.call(flow: flow, default_path: "/dashboard")
 
@@ -15,9 +16,10 @@ class PostAuthenticationRoutingResolverTest < ActiveSupport::TestCase
   end
 
   test "routes a durable OIDC continuation before a signed return target" do
-    flow = Data.define(:return_to) do
-      def sign_in_completed? = true
-    end.new(return_to: "/stale-tab")
+    flow = ClientSignInFlow.new(
+      state_id: ClientSignInFlowState::COMPLETED,
+      return_to: "/stale-tab",
+    )
 
     decision = PostAuthenticationRoutingResolver.call(
       flow: flow,
@@ -30,9 +32,10 @@ class PostAuthenticationRoutingResolverTest < ActiveSupport::TestCase
   end
 
   test "routes a durable RP continuation when no OIDC continuation exists" do
-    flow = Data.define(:return_to) do
-      def sign_in_completed? = true
-    end.new(return_to: nil)
+    flow = ClientSignInFlow.new(
+      state_id: ClientSignInFlowState::COMPLETED,
+      return_to: nil,
+    )
 
     decision = PostAuthenticationRoutingResolver.call(
       flow: flow,
@@ -45,12 +48,14 @@ class PostAuthenticationRoutingResolverTest < ActiveSupport::TestCase
   end
 
   test "routes missing or unsafe return facts to dashboard" do
-    missing = Data.define(:return_to) do
-      def sign_in_completed? = true
-    end.new(return_to: nil)
-    unsafe = Data.define(:return_to) do
-      def sign_in_completed? = true
-    end.new(return_to: "https://evil.example")
+    missing = ClientSignInFlow.new(
+      state_id: ClientSignInFlowState::COMPLETED,
+      return_to: nil,
+    )
+    unsafe = ClientSignInFlow.new(
+      state_id: ClientSignInFlowState::COMPLETED,
+      return_to: "https://evil.example",
+    )
 
     missing_decision = PostAuthenticationRoutingResolver.call(flow: missing, default_path: "/dashboard")
     unsafe_decision = PostAuthenticationRoutingResolver.call(flow: unsafe, default_path: "/dashboard")
@@ -61,17 +66,19 @@ class PostAuthenticationRoutingResolverTest < ActiveSupport::TestCase
   end
 
   test "does not route an incomplete flow or unsafe continuation" do
-    incomplete = Data.define(:return_to) do
-      def sign_in_completed? = false
-    end.new(return_to: "/dashboard")
+    incomplete = ClientSignInFlow.new(
+      state_id: ClientSignInFlowState::PRIMARY_PENDING,
+      return_to: "/dashboard",
+    )
 
     assert_raises ArgumentError do
       PostAuthenticationRoutingResolver.call(flow: incomplete, default_path: "/dashboard")
     end
 
-    completed = Data.define(:return_to) do
-      def sign_in_completed? = true
-    end.new(return_to: nil)
+    completed = ClientSignInFlow.new(
+      state_id: ClientSignInFlowState::COMPLETED,
+      return_to: nil,
+    )
 
     assert_raises ArgumentError do
       PostAuthenticationRoutingResolver.call(

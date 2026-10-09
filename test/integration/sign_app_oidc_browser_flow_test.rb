@@ -19,18 +19,22 @@ class SignAppOidcBrowserFlowTest < ActionDispatch::IntegrationTest
 
   test "auth settings do not initiate an OIDC RP flow" do
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    get auth_app_settings_url(ri: "jp"), headers: browser_headers
+    assert_no_difference [
+      -> { ClientOidcAuthorizationTransaction.count },
+      -> {
+        ClientOidcAuthorizationTransaction.pending.where(
+          actor_ref: nil, session_ref: nil, authenticated_at: nil,
+        ).count
+      },
+    ] do
+      get auth_app_settings_url(ri: "jp"), headers: browser_headers
+    end
 
     assert_response :redirect
     assert_base_sign_handoff_redirect(response.location, surface: :app)
     assert_nil session[:oidc_state]
     assert_nil session[:oidc_nonce]
     assert_nil session[:oidc_code_verifier]
-    assert_empty ClientOidcAuthorizationTransaction.pending.where(
-      actor_ref: nil,
-      session_ref: nil,
-      authenticated_at: nil,
-    )
   end
 
   private

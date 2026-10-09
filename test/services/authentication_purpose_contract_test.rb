@@ -14,13 +14,18 @@ class AuthenticationPurposeContractTest < ActiveSupport::TestCase
   test "special-purpose handoffs and results remain distinct" do
     purposes = %w(invitation step_up reauthentication)
 
-    handoffs = purposes.map { |intent| issued_purpose_for(intent:, kind: :handoff) }
-    results = purposes.map { |intent| issued_purpose_for(intent:, kind: :result) }
+    handoffs = purposes.map { |intent| BaseAuthAdmissionCoordinator::HANDOFF_PURPOSE.fetch(intent) }
+    results = purposes.map { |intent| BaseAuthAdmissionCoordinator::RESULT_PURPOSE.fetch(intent) }
 
     assert_equal %w(invitation_handoff step_up_handoff reauthentication_handoff), handoffs
     assert_equal %w(invitation_result step_up_result reauthentication_result), results
     assert_equal handoffs.length, handoffs.uniq.length
     assert_equal results.length, results.uniq.length
+    assert_equal "invitation_handoff", issued_purpose_for(intent: "invitation", kind: :handoff)
+    assert_equal "invitation_result", issued_purpose_for(intent: "invitation", kind: :result)
+    %w(step_up reauthentication).each do |intent|
+      assert_raises(ActiveRecord::RecordInvalid) { issued_purpose_for(intent: intent, kind: :handoff) }
+    end
   end
 
   test "opaque store allows only the current purpose vocabulary" do
@@ -62,7 +67,7 @@ class AuthenticationPurposeContractTest < ActiveSupport::TestCase
 
     if kind == :handoff
       BaseAuthAdmissionCoordinator.issue_handoff!(
-        transaction:, base_browser_nonce: "test-browser-nonce", base_token: nil, store:,
+        transaction:, base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil, store:,
       )
     else
       BaseAuthAdmissionCoordinator.issue_result!(transaction:, store:)

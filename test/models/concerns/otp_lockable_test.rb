@@ -95,12 +95,17 @@ class OtpLockableTest < ActiveSupport::TestCase
     assert_not OperatorTelephone.new(staff: operators(:none_staff)).respond_to?(:otp_cooldown_active?)
   end
 
-  test "a positive infinity expiry cannot make an OTP usable" do
+  test "the database refuses infinite OTP expiry and the nearest reachable canceled proof is unusable" do
     transaction = ClientEmailCeremonyTransaction.create_transaction!(
       actor_ref: "actor", session_ref: "browser", operation: "sign_in", email_candidate_ref: "candidate",
     )
     code = transaction.issue_email_otp!(purpose: "sign_in")
-    transaction.update_columns(otp_expires_at: Float::INFINITY)
+    assert_raises(ActiveRecord::StatementInvalid) do
+      ClientEmailCeremonyTransaction.transaction(requires_new: true) do
+        transaction.update_columns(otp_expires_at: Float::INFINITY)
+      end
+    end
+    transaction.reload.cancel_email_otp!
 
     assert_not transaction.email_otp_deliverable?(
       generation: transaction.otp_generation, at: transaction.class.database_now,

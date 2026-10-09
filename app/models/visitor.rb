@@ -243,7 +243,10 @@ class Visitor < ComPrincipalRecord
         throw(:abort)
       end
 
-      RetentionCrossDatabaseChildPurge.call(actor: self)
+      if notification_records.exists? || VisitorAccount.exists?(visitor_id: id)
+        errors.add(:base, "Cross-database children require the account purge workflow")
+        throw(:abort)
+      end
     end
   end
 

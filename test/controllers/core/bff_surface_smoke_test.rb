@@ -88,6 +88,7 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
       :oidc_client_id => client.client_id,
       :oidc_scope => "openid profile",
       :oidc_jti => SecureRandom.uuid,
+      :oidc_nonce => SecureRandom.hex(16),
       :oidc_auth_time => 1.minute.ago,
       :refresh_token_expires_at => 10.minutes.from_now,
     )

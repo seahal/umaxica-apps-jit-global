@@ -10,17 +10,49 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
   test "app cancellation closes the admitted ceremony and returns to the Base dashboard" do
     actor = clients(:one)
     token = ClientToken.create!(user: actor)
-    issuance = issue_confirmed_base_step_up_admission!(
-      actor: actor, token: token,
-      requirement: StepUpRequirement.new(
-        step_up_required: true, scope: "settings_email", allowed_methods: %i(email_otp totp passkey),
-        phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-        audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-        require_session_binding: true,
-      ), return_to: base_app_identity_emails_path(ri: "jp"),
-    )
+    issuance =
+      begin
+        admission_issuance = BaseStepUpAdmissionIssuer.call!(
+          actor: actor, token: token,
+          requirement: StepUpRequirement.new(
+            step_up_required: true, scope: "settings_email", allowed_methods: %i(email_otp totp passkey),
+            phishing_resistant_required: false, user_verification_required: false,
+            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
+            audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+            require_session_binding: true,
+          ), return_to: base_app_identity_emails_path(ri: "jp"),
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+        )
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_issuance.transaction.surface,
+            entry_ref: admission_issuance.reference,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        admission_auth_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_issuance.transaction.surface)
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+          URI.parse("https://#{admission_auth_host}/"),
+        )
+        admission_issuance
+      end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
@@ -38,7 +70,7 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
     assert_equal base_app_verification_cancellation_path, destination.path
     assert_equal issuance.transaction.transaction_id, query.fetch("transaction_ref")
     assert_predicate query.fetch("cancellation_ref"), :present?
-    assert_predicate query.fetch("cancellation_handoff"), :present?
+    assert_not query.key?("cancellation_handoff")
     assert_not_includes response.location, "jump.umaxica.net"
     assert_not_includes response.location, "/sign"
     assert_equal "pending", issuance.transaction.reload.status
@@ -52,17 +84,49 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
   test "com cancellation closes the admitted ceremony and returns to the Base dashboard" do
     actor = create_verified_visitor_with_email(email_address: "cancel-com-#{SecureRandom.hex(4)}@example.com")
     token = VisitorToken.create!(visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    issuance = issue_confirmed_base_step_up_admission!(
-      actor: actor, token: token,
-      requirement: StepUpRequirement.new(
-        step_up_required: true, scope: "settings_email", allowed_methods: %i(email_otp passkey),
-        phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-        audience: "step_up:com", session_binding: token.public_id, token_binding: token.public_id,
-        require_session_binding: true,
-      ), return_to: base_com_identity_emails_path(ri: "jp"),
-    )
+    issuance =
+      begin
+        admission_issuance = BaseStepUpAdmissionIssuer.call!(
+          actor: actor, token: token,
+          requirement: StepUpRequirement.new(
+            step_up_required: true, scope: "settings_email", allowed_methods: %i(email_otp passkey),
+            phishing_resistant_required: false, user_verification_required: false,
+            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
+            audience: "step_up:com", session_binding: token.public_id, token_binding: token.public_id,
+            require_session_binding: true,
+          ), return_to: base_com_identity_emails_path(ri: "jp"),
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+        )
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_issuance.transaction.surface,
+            entry_ref: admission_issuance.reference,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        admission_auth_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_issuance.transaction.surface)
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+          URI.parse("https://#{admission_auth_host}/"),
+        )
+        admission_issuance
+      end
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     get auth_com_verification_path(ri: "jp", entry_ref: issuance.reference)
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
@@ -80,7 +144,7 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
     assert_equal base_com_verification_cancellation_path, destination.path
     assert_equal issuance.transaction.transaction_id, query.fetch("transaction_ref")
     assert_predicate query.fetch("cancellation_ref"), :present?
-    assert_predicate query.fetch("cancellation_handoff"), :present?
+    assert_not query.key?("cancellation_handoff")
     assert_not_includes response.location, "jump.umaxica.net"
     assert_not_includes response.location, "/sign"
     assert_equal "pending", issuance.transaction.reload.status
@@ -99,17 +163,49 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
   test "org cancellation closes the admitted ceremony and returns to the Base dashboard" do
     actor = operators(:one)
     token = operator_tokens(:one)
-    issuance = issue_confirmed_base_step_up_admission!(
-      actor: actor, token: token,
-      requirement: StepUpRequirement.new(
-        step_up_required: true, scope: "settings_email", allowed_methods: [:passkey],
-        phishing_resistant_required: false, user_verification_required: false,
-        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-        audience: "step_up:org", session_binding: token.public_id, token_binding: token.public_id,
-        require_session_binding: true,
-      ), return_to: base_org_identity_emails_path(ri: "jp"),
-    )
+    issuance =
+      begin
+        admission_issuance = BaseStepUpAdmissionIssuer.call!(
+          actor: actor, token: token,
+          requirement: StepUpRequirement.new(
+            step_up_required: true, scope: "settings_email", allowed_methods: [:passkey],
+            phishing_resistant_required: false, user_verification_required: false,
+            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
+            audience: "step_up:org", session_binding: token.public_id, token_binding: token.public_id,
+            require_session_binding: true,
+          ), return_to: base_org_identity_emails_path(ri: "jp"),
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+        )
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_issuance.transaction.surface,
+            entry_ref: admission_issuance.reference,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        admission_auth_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_issuance.transaction.surface)
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+        cookies.merge( # rubocop:disable Lint/Void
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+          URI.parse("https://#{admission_auth_host}/"),
+        )
+        admission_issuance
+      end
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
@@ -127,7 +223,7 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
     assert_equal base_org_verification_cancellation_path, destination.path
     assert_equal issuance.transaction.transaction_id, query.fetch("transaction_ref")
     assert_predicate query.fetch("cancellation_ref"), :present?
-    assert_predicate query.fetch("cancellation_handoff"), :present?
+    assert_not query.key?("cancellation_handoff")
     assert_not_includes response.location, "jump.umaxica.net"
     assert_not_includes response.location, "/sign"
     assert_equal "pending", issuance.transaction.reload.status
@@ -151,17 +247,49 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
     ].each do |posted_return_to|
       actor = Client.create!(status_id: ClientStatus::ACTIVE)
       token = ClientToken.create!(user: actor)
-      issuance = issue_confirmed_base_step_up_admission!(
-        actor: actor, token: token,
-        requirement: StepUpRequirement.new(
-          step_up_required: true, scope: "settings_email", allowed_methods: %i(email_otp totp passkey),
-          phishing_resistant_required: false, user_verification_required: false,
-          full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
-          resource_ref: nil, tenant_ref: nil, purpose: "step_up",
-          audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-          require_session_binding: true,
-        ), return_to: base_app_identity_emails_path(ri: "jp"),
-      )
+      issuance =
+        begin
+          admission_issuance = BaseStepUpAdmissionIssuer.call!(
+            actor: actor, token: token,
+            requirement: StepUpRequirement.new(
+              step_up_required: true, scope: "settings_email", allowed_methods: %i(email_otp totp passkey),
+              phishing_resistant_required: false, user_verification_required: false,
+              full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+              resource_ref: nil, tenant_ref: nil, purpose: "step_up",
+              audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+              require_session_binding: true,
+            ), return_to: base_app_identity_emails_path(ri: "jp"),
+            base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
+          )
+          admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+            surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+          )
+          admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+          admission_binding.attach_auth_session!(
+            auth_session: admission_session,
+            confirmation_ref: SecureRandom.uuid,
+          )
+          admission_binding.confirm_base!(
+            base_token: token,
+            browser_digest: AuthAdmissionBinding.browser_digest(
+              surface: admission_issuance.transaction.surface,
+              entry_ref: admission_issuance.reference,
+              nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            ),
+          )
+          admission_auth_host = {
+            "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+            "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+            "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+          }.fetch(admission_issuance.transaction.surface)
+          admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+          # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+          cookies.merge( # rubocop:disable Lint/Void
+            "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+            URI.parse("https://#{admission_auth_host}/"),
+          )
+          admission_issuance
+        end
       host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
       csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
@@ -179,7 +307,7 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
       assert_equal base_app_verification_cancellation_path, destination.path, posted_return_to
       assert_equal issuance.transaction.transaction_id, query.fetch("transaction_ref"), posted_return_to
       assert_predicate query.fetch("cancellation_ref"), :present?, posted_return_to
-      assert_predicate query.fetch("cancellation_handoff"), :present?, posted_return_to
+      assert_not query.key?("cancellation_handoff"), posted_return_to
       assert_not_includes response.location, "jump.umaxica.net", posted_return_to
       assert_not_includes response.location, "/sign", posted_return_to
     end
@@ -208,11 +336,11 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
   end
 
   test "step-up cancellation is not reachable by GET" do
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(
-        "http://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}/verification/cancellation",
+        "http://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}/verification/cancellation",
         method: :get,
       )
     end

@@ -184,8 +184,13 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
       resource_ref: nil, tenant_ref: nil, audience: "step_up:app", allowed_methods: [:totp],
       session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
     )
-    transaction = issue_base_step_up_admission!(
-      actor: actor, token: token, requirement: bootstrap_requirement, return_to: "/identity/birthdate",
+    transaction = BaseStepUpAdmissionIssuer.call!(
+      actor: actor,
+      token: token,
+      requirement: bootstrap_requirement,
+      return_to: "/identity/birthdate",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: token,
     ).transaction
     candidate = IdentityTotpEnrollmentIssuer.call!(actor: actor, token: token, transaction: transaction)
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
@@ -222,8 +227,13 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
     # The registration window is consumed; independent reauthentication requires a new window.
     next_window = now + 30.seconds
     ClientStepUpCeremonyTransaction.stub(:database_now, next_window) do
-      step_up = issue_base_step_up_admission!(
-        actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+      step_up = BaseStepUpAdmissionIssuer.call!(
+        actor: actor,
+        token: token,
+        requirement: requirement,
+        return_to: "/identity/birthdate",
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: token,
       ).transaction
       record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: step_up.transaction_id)
       continuity, = ClientAuthCeremonySession.rotate_and_admit!(

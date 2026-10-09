@@ -31,27 +31,66 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     )
     credential = WebAuthn::Credential.from_create(registration, relying_party: relying_party)
     operator.staff_passkeys.create!(webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0)
+    BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
+    base_issuer = JitSecurityJwtRegistry.surface("BASE_ORG")
+    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
     https!
     host!(base_host)
-    destination = nil
-    JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
-      RedirectsJumpGatewayUrl.stub(
-        :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
-      ) do
-        post(base_org_sign_show_path, params: { ri: "jp" })
-      end
+    get(base_org_sign_show_path(ri: "jp", pt: "/dashboard?ri=jp"))
+    form = response.parsed_body.at_css("form")
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    post(form["action"], params: fields, headers: base_headers)
+    rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
+    payload, = JWT.decode(
+      rt, JitSecurityJwtRegistry.public_key_for(base_issuer.id, base_issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    target = URI.parse(payload.fetch("url"))
+
+    assert_equal base_host, target.host
+    get(target.request_uri)
+    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    post(
+      form["action"], params: fields, headers: {
+        "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
+      },
+    )
+    handoff_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
+    handoff_payload, = JWT.decode(
+      handoff_rt, JitSecurityJwtRegistry.public_key_for(base_issuer.id, base_issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    target = URI.parse(handoff_payload.fetch("url"))
+
+    assert_equal auth_host, target.host
+    entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_ref)
+    flow = binding.authorization_transaction
+    auth_browser = open_session
+    auth_browser.host!(auth_host)
+    auth_browser.https!
+    auth_browser.get(target.request_uri)
+    3.times do |index|
+      sender = (index == 1) ? self : auth_browser
+      form = Nokogiri::HTML(sender.response.body).at_css("form")
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      sender.post(
+        form["action"], params: fields, headers: {
+          "Origin" => "https://#{(index == 1) ? base_host : auth_host}", "Sec-Fetch-Site" => "same-origin",
+        },
+      )
+      raise RuntimeError, "Admission failed at step #{index}" unless sender.response.status == 303
+      next if index == 2
+
+      receiver = index.zero? ? self : auth_browser
+      receiver.get(URI.parse(sender.response.location).request_uri)
     end
 
-    assert_response :see_other
-    reference = Rack::Utils.parse_nested_query(URI.parse(destination).query).fetch("entry_ref")
-    flow = OperatorSignInFlow.find_by!(public_id: reference)
-    auth_browser = open_session
-    auth_browser.https!
-    auth_browser.host!(auth_host)
-    auth_browser.get(auth_org_sign_in_path, params: { entry_ref: reference, ri: "jp" })
-    csrf = Nokogiri::HTML(auth_browser.response.body).at_css('input[name="authenticity_token"]')["value"]
-    auth_browser.post(auth_org_sign_in_path, params: { entry_ref: reference, authenticity_token: csrf, ri: "jp" })
-
+    assert_predicate binding.reload, :redeemed?
     previous_test_mode = OmniAuth.config.test_mode
     OmniAuth.config.test_mode = false
     registry = ExternalAuthentication::ProviderRegistry
@@ -142,20 +181,18 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     assert_no_difference(-> { OperatorToken.where(staff_id: operator.id).count }) do
       auth_browser.get(auth_browser.response.parsed_body.fetch("redirect_url"))
       auth_browser.follow_redirect!
-      auth_browser.post(auth_org_sign_handoff_path, params: { ri: "jp" })
+      auth_browser.post(auth_org_sign_oidc_handoff_path, params: { ri: "jp" })
     end
 
-    assert_equal 200, auth_browser.response.status
+    assert_equal 303, auth_browser.response.status
     assert_nil auth_browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil auth_browser.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
-    document = Nokogiri::HTML(auth_browser.response.body)
-    result = document.at_css('input[name="result"]')["value"]
+    target = URI.parse(auth_browser.response.location)
+    get(target.request_uri)
+    form = response.parsed_body.at_css("form")
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
     assert_difference(-> { OperatorToken.where(staff_id: operator.id).count }, 1) do
-      post(
-        base_org_sign_completion_path,
-        params: { result: result, transaction_ref: flow.public_id, ri: "jp" },
-        headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-site" },
-      )
+      post(form["action"], params: fields, headers: base_headers)
     end
 
     assert_response :see_other
@@ -163,19 +200,100 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
 
     assert_equal AuthenticationContextValue::NORMAL_KEY, token.authentication_context
     assert_not_nil token.root_login_established_at
-    assert_not_nil flow.reload.base_finalized_at
-    assert_equal token.id, flow.token_id
+    assert_predicate flow.reload, :consumed?
+    assert_equal token.public_id, flow.browser_session_ref
     assert_predicate cookies[AuthenticationBase::ACCESS_COOKIE_KEY].to_s, :present?
     established_at = token.root_login_established_at
     assert_no_difference(-> { OperatorToken.where(staff_id: operator.id).count }) do
-      post(
-        base_org_sign_completion_path,
-        params: { result: result, transaction_ref: flow.public_id, ri: "jp" },
-        headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-site" },
-      )
+      post(form["action"], params: fields, headers: base_headers)
+    end
+    assert_response :see_other
+    assert_equal token.public_id, flow.reload.browser_session_ref
+    assert_equal established_at, token.reload.root_login_established_at
+    callback_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
+    callback_payload, = JWT.decode(
+      callback_rt, JitSecurityJwtRegistry.public_key_for(base_issuer.id, base_issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    callback_uri = URI.parse(callback_payload.fetch("url"))
+    protocol_browser = open_session
+    protocol_browser.host!(base_host)
+    protocol_browser.https!
+    # Substitute network transport only: the token and UserInfo requests still run
+    # through their real public controllers, including PKCE and client authentication.
+    transport =
+      Faraday::Adapter::Test::Stubs.new do |stub|
+        stub.post(/.*/) do |env|
+          # The nested Rack executor must not complete the in-flight callback.
+          outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
+          outer_actor = Actor.context
+          executor_key = Rails.application.executor.active_key
+          outer_execution = ActiveSupport::IsolatedExecutionState.delete(executor_key)
+          begin
+            protocol_browser.host!(env.url.authority)
+            protocol_browser.https!(env.url.scheme == "https")
+            protocol_browser.post(
+              env.url.request_uri, params: Rack::Utils.parse_query(env.body),
+                                   headers: { "Accept" => "application/json" },
+            )
+          ensure
+            ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
+          end
+
+          # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+          assert ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller)
+          assert Actor.context.equal?(outer_actor)
+          # rubocop:enable Minitest/AssertSame
+          assert_equal 200, protocol_browser.response.status
+          [protocol_browser.response.status, { "Content-Type" => "application/json" },
+           protocol_browser.response.body,]
+        end
+        stub.get(/.*/) do |env|
+          outer_controller = ActiveSupport::ExecutionContext.to_h.fetch(:controller)
+          outer_actor = Actor.context
+          executor_key = Rails.application.executor.active_key
+          outer_execution = ActiveSupport::IsolatedExecutionState.delete(executor_key)
+          begin
+            protocol_browser.host!(env.url.authority)
+            protocol_browser.https!(env.url.scheme == "https")
+            protocol_browser.get(
+              env.url.request_uri, headers: { "Authorization" => env.request_headers.fetch("Authorization"),
+                                              "Accept" => "application/json", },
+            )
+          ensure
+            ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
+          end
+
+          # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+          assert ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller)
+          assert Actor.context.equal?(outer_actor)
+          # rubocop:enable Minitest/AssertSame
+          assert_equal 200, protocol_browser.response.status
+          [protocol_browser.response.status, { "Content-Type" => "application/json" },
+           protocol_browser.response.body,]
+        end
+      end
+    connection =
+      Faraday.new do |builder|
+        builder.request(:url_encoded)
+        builder.adapter(:test, transport)
+      end
+    OutboundHttp::Connection.stub(
+      :build, ->(**args) {
+        assert_equal base_host, args.fetch(:url).host
+        connection
+      },
+    ) do
+      TestSupport::OutboundHttpGuard.allow do
+        get(callback_uri.request_uri)
+      end
     end
 
-    assert_equal established_at, token.reload.root_login_established_at
+    assert_response :redirect
+    assert_predicate cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s, :present?
+    assert_predicate cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s, :present?
+    transport.verify_stubbed_calls
     assert_no_difference(-> { OperatorSignInFlow.count }) do
       post(base_org_sign_show_path, params: { ri: "jp" })
     end
@@ -196,16 +314,21 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     gateway = URI.parse(response.location)
     jump_payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
     auth_location = jump_payload.fetch("url")
-    step_up_reference = Rack::Utils.parse_query(URI.parse(auth_location).query).fetch("entry_ref")
+    Rack::Utils.parse_query(URI.parse(auth_location).query).fetch("entry_ref")
     auth_browser.get(auth_location)
-    admission_form = Nokogiri::HTML(auth_browser.response.body).at_css("form")
-    csrf = admission_form.at_css('input[name="authenticity_token"]')["value"]
-    auth_browser.post(
-      auth_org_verification_path(ri: "jp"),
-      params: { entry_ref: step_up_reference, authenticity_token: csrf },
-    )
+    3.times do |index|
+      sender = (index == 1) ? self : auth_browser
+      form = Nokogiri::HTML(sender.response.body).at_css("form")
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      sender.post(form["action"], params: fields, headers: (index == 1) ? base_headers : auth_headers)
 
-    assert_equal 303, auth_browser.response.status
+      assert_equal 303, sender.response.status
+      next if index == 2
+
+      receiver = index.zero? ? self : auth_browser
+      receiver.get(URI.parse(sender.response.location).request_uri)
+    end
+    csrf = nil
     auth_browser.get(new_auth_org_verification_passkey_path(ri: "jp"))
     page = Nokogiri::HTML(auth_browser.response.body)
     panel = JSON.parse(page.at_css("script[data-page='app']").text).fetch("props").fetch("panel")
@@ -232,17 +355,15 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
       params: { authenticity_token: handoff_form.at_css('input[name="authenticity_token"]')["value"] },
     )
 
-    assert_equal 200, auth_browser.response.status
+    assert_equal 303, auth_browser.response.status
     assert_nil auth_browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil auth_browser.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
-    result_form = Nokogiri::HTML(auth_browser.response.body).at_css("form")
-    transaction_ref = result_form.at_css('input[name="transaction_ref"]')["value"]
-    transaction = OperatorStepUpCeremonyTransaction.find_by!(transaction_id: transaction_ref)
-    post(
-      result_form["action"],
-      params: { result: result_form.at_css('input[name="result"]')["value"], transaction_ref: transaction_ref },
-      headers: { "Origin" => fake.origin, "Sec-Fetch-Site" => "same-site" },
-    )
+    target = URI.parse(auth_browser.response.location)
+    get(target.request_uri)
+    result_form = response.parsed_body.at_css("form")
+    fields = result_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    transaction = OperatorStepUpCeremonyTransaction.find_by!(transaction_id: fields.fetch("transaction_ref"))
+    post(result_form["action"], params: fields, headers: base_headers)
 
     assert_response :see_other
     assert_equal "consumed", transaction.reload.status

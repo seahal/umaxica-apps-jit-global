@@ -79,8 +79,8 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   class Harness
-    # Production controllers get this from SessionLimitGate; this double has no open resolution.
-    def session_limit_resolution = nil
+    include SessionLimitGate
+    include Rails.application.routes.url_helpers
 
     include CommonRedirect
     include AuthenticationSequenceGate
@@ -203,12 +203,6 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
 
     def sign_in_welcome_path(pt: nil) = "/welcome?pt=#{pt}"
 
-    def base_app_sign_in_limitation_path(**attrs) = "/app/limitation?#{attrs.compact.to_query}"
-
-    def base_com_sign_in_limitation_path(**attrs) = "/com/limitation?#{attrs.compact.to_query}"
-
-    def base_org_sign_in_limitation_path(**attrs) = "/org/limitation?#{attrs.compact.to_query}"
-
     def sign_app_selector_path(**attrs) = "/app/selector?#{attrs.compact.to_query}"
 
     def sign_in_sequence_required_for_participant?(_participant) = true
@@ -269,9 +263,9 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   test "sign_in_session_limit_path names the Base limitation page of each surface and refuses an unknown one" do
-    assert_equal "/app/limitation?ri=jp", @harness.sign_in_session_limit_path
-    assert_equal "/org/limitation?ri=jp", OrgHarness.new.sign_in_session_limit_path
-    assert_equal "/com/limitation?ri=jp", ComHarness.new.sign_in_session_limit_path
+    assert_equal "/sign/in/limitation?ri=jp", @harness.sign_in_session_limit_path
+    assert_equal "/sign/in/limitation?ri=jp", OrgHarness.new.sign_in_session_limit_path
+    assert_equal "/sign/in/limitation?ri=jp", ComHarness.new.sign_in_session_limit_path
 
     unknown = Harness.new
     unknown.define_singleton_method(:sign_in_sequence_surface) { :net }
@@ -301,7 +295,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     harness = FallbackHarness.new
     harness.params_hash = { ri: "https://evil.example" }
 
-    assert_equal "/app/limitation?ri=jp", harness.sign_in_session_limit_path
+    assert_equal "/sign/in/limitation?ri=jp", harness.sign_in_session_limit_path
     assert_equal "/selector?pt=pt%3Atarget&ri=jp", harness.sign_in_selector_path(pt: "target")
   end
 
@@ -417,7 +411,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     @harness.cycle = FakeCycle.new
     @harness.define_singleton_method(:session_limit_resolution) { Object.new }
 
-    assert_equal "/app/limitation?ri=jp", @harness.sign_in_sequence_redirect_path
+    assert_equal "/sign/in/limitation?ri=jp", @harness.sign_in_sequence_redirect_path
 
     @harness.define_singleton_method(:session_limit_resolution) { nil }
 
@@ -552,7 +546,23 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     ].each do |surface, actor, cycle_class, pending_key|
       harness = LocatorHarness.new
       harness.surface = surface
-      cycle = create_issuance_pending_flow(cycle_class, actor)
+      cycle =
+        begin
+          fv5001 = cycle_class
+          fv5002 = actor
+          fv5000 = fv5001.database_now
+          fv5001.create!(
+            principal_id: fv5002.id,
+            state_id: fv5001.state_id_for("SESSION_ISSUANCE_PENDING"),
+            return_to: "/dashboard",
+            nonce_digest: fv5001.digest_nonce("unused"),
+            issued_at: fv5000,
+            expires_at: fv5000 + 15.minutes,
+            authentication_method: "email",
+            authentication_event_at: fv5000,
+            authentication_context: AuthenticationContextValue::NORMAL_KEY,
+          )
+        end
 
       SignInCycleLocator.new(harness.session, surface: surface, actor: actor).issue!(cycle, nonce: "pending-#{surface}")
       # A retired pending-actor session key names no one: it must not locate the flow.
@@ -700,7 +710,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
 
     @harness.continue_welcome_sequence_without_content!
 
-    assert_equal "/app/limitation?ri=jp", @harness.redirected.first
+    assert_equal "/sign/in/limitation?ri=jp", @harness.redirected.first
 
     @harness.define_singleton_method(:session_limit_resolution) { nil }
 
@@ -911,20 +921,6 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   private
 
   # The parent flow waits in SESSION_ISSUANCE_PENDING while its session limit is resolved (D-30).
-  def create_issuance_pending_flow(cycle_class, actor)
-    now = cycle_class.database_now
-    cycle_class.create!(
-      principal_id: actor.id,
-      state_id: cycle_class.state_id_for("SESSION_ISSUANCE_PENDING"),
-      return_to: "/dashboard",
-      nonce_digest: cycle_class.digest_nonce("unused"),
-      issued_at: now,
-      expires_at: now + 15.minutes,
-      authentication_method: "email",
-      authentication_event_at: now,
-      authentication_context: AuthenticationContextValue::NORMAL_KEY,
-    )
-  end
 end
 
 # DAMP local route helper aliases for former shared test support.

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "concurrent/executor/simple_executor_service"
 require "timeout"
 
 class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
@@ -54,7 +55,55 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
       base = open_session
       base.host!(base_host)
       base.https!
-      target = app_oidc_auth_target!(base, base_host: base_host)
+      target =
+        begin
+          fv5069 = base
+          fv5065 = base_host
+          fv5069.get("/sign", params: { ri: "jp" })
+          fv5075 = Nokogiri::HTML(fv5069.response.body).at_css('input[name="authenticity_token"]')["value"]
+          fv5069.post(
+            "/sign", params: { ri: "jp", authenticity_token: fv5075 }, headers: {
+              "Origin" => "https://#{fv5065}", "Sec-Fetch-Site" => "same-origin",
+            },
+          )
+          fv5074 = URI.parse(fv5069.response.location)
+          fv5073 = Rack::Utils.parse_query(fv5074.query).fetch("rt")
+          fv5066 = JitSecurityJwtRegistry.surface("BASE_APP")
+          fv5072, = JWT.decode(
+            fv5073, JitSecurityJwtRegistry.public_key_for(
+              fv5066.id,
+              fv5066.current_kid,
+            ), true,
+            algorithms: ["ES384"], verify_iss: true, iss: "https://#{fv5065}",
+            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+          )
+          fv5071 = URI.parse(fv5072.fetch("url"))
+          fv5069.host!(fv5071.host)
+          fv5069.https!
+          fv5069.get(fv5071.request_uri)
+          fv5007 = Nokogiri::HTML(fv5069.response.body).at_css("form#base-authorization-ceremony-start-form")
+          fv5069.post(
+            fv5007["action"],
+            params: fv5007.css("input[name]").to_h { |fv5070|
+              [fv5070["name"], fv5070["value"]]
+            },
+            headers: {
+              "Origin" => "https://#{fv5065}",
+              "Sec-Fetch-Site" => "same-origin",
+            },
+          )
+          fv5068 = URI.parse(fv5069.response.location)
+          fv5067 = Rack::Utils.parse_query(fv5068.query).fetch("rt")
+          fv5064, = JWT.decode(
+            fv5067, JitSecurityJwtRegistry.public_key_for(
+              fv5066.id,
+              fv5066.current_kid,
+            ), true,
+            algorithms: ["ES384"], verify_iss: true, iss: "https://#{fv5065}",
+            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+          )
+          URI.parse(fv5064.fetch("url"))
+        end
       entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
       admission = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
       transaction = admission.authorization_transaction
@@ -64,10 +113,201 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
       auth_headers = {
         "Host" => auth_host, "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin",
       }
-      redeem_auth_ceremony_session!(
-        auth, target.path, reference: entry_ref, params: { ri: "jp" }, headers: auth_headers,
-                           confirm_via_http: true, base_browser: base,
-      )
+      begin
+        fv5063 = auth
+        fv5062 = target.path
+        fv5061 = entry_ref
+        fv5060 = :entry_ref
+        fv5059 = { ri: "jp" }
+        fv5058 = auth_headers
+        fv5057 = true
+        fv5056 = base
+        begin
+          fv5004 = fv5063
+          fv5011 = fv5062
+          fv5054 = fv5061
+          fv5055 = fv5060
+          fv5020 = fv5059
+          fv5013 = fv5058
+          fv5042 = fv5057
+          fv5041 = fv5056
+          fv5016 = nil
+          fv5010 = fv5020.merge(fv5055 => fv5054)
+          fv5004.get(fv5011, params: fv5010, headers: fv5013)
+          fv5048 =
+            begin
+              fv5053 = fv5004.response.body
+              fv5052 = true
+              fv5051 = Nokogiri::HTML(fv5053).at_css("form")
+              if fv5051.nil? && fv5052
+                nil
+              else
+                raise RuntimeError, "Auth continuation form is missing" unless fv5051
+
+                fv5050 = fv5051.at_css("input[name='authenticity_token']")&.[]("value")
+                raise RuntimeError,
+                      "Auth continuation is missing its CSRF token" if fv5050.blank?
+
+                fv5049 = fv5051.css("input[type='hidden']").to_h do |input|
+                  [input["name"], input["value"]]
+                end.except("authenticity_token")
+                [fv5051["action"], fv5050, fv5049]
+              end
+            end
+          if fv5048
+
+            fv5047, fv5045, fv5046 = fv5048
+
+            fv5004.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
+              "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+            fv5004.post(fv5047, params: fv5046.merge(authenticity_token: fv5045), headers: fv5013)
+            fv5044 = fv5004.response.location
+            if fv5044.present?
+
+              fv5040 = URI.parse(fv5044)
+              fv5039 = fv5040.host
+              fv5015 =
+                begin
+                  fv5043 = fv5039
+                  {
+                    ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
+                    ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
+                    ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                  }.fetch(fv5043)
+                end
+              fv5014 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
+                surface: fv5015, reference: fv5040.path.split("/").fetch(-2),
+              )
+
+              if fv5042
+                fv5022 = fv5041 || fv5004
+                fv5022.host!(fv5039)
+                fv5022.https!
+                fv5022.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
+                  "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+                fv5038 = fv5040.request_uri
+                fv5029 = fv5013.merge(
+                  "Host" => fv5039,
+                  "Origin" => "https://#{fv5039}",
+                  "Sec-Fetch-Site" => "same-origin",
+                )
+                fv5022.get(fv5038, headers: fv5029)
+                fv5032, fv5030, fv5031 =
+                  begin
+                    fv5037 = fv5022.response.body
+                    fv5036 = false
+                    fv5035 = Nokogiri::HTML(fv5037).at_css("form")
+                    if fv5035.nil? && fv5036
+                      nil
+                    else
+                      raise RuntimeError, "Auth continuation form is missing" unless fv5035
+
+                      fv5034 = fv5035.at_css("input[name='authenticity_token']")&.[]("value")
+                      raise RuntimeError,
+                            "Auth continuation is missing its CSRF token" if fv5034.blank?
+
+                      fv5033 = fv5035.css("input[type='hidden']").to_h do |input|
+                        [input["name"], input["value"]]
+                      end.except("authenticity_token")
+                      [fv5035["action"], fv5034, fv5033]
+                    end
+                  end
+                fv5022.post(
+                  fv5032,
+                  params: fv5031.merge(authenticity_token: fv5030),
+                  headers: fv5029,
+                )
+                begin
+                  fv5023 = fv5022
+                  fv5025 = "session"
+                  fv5024 = fv5023.response.cookies[fv5025]
+                  if fv5024.nil?
+                    fv5028 = fv5023.response.headers["Set-Cookie"] || fv5023.response.headers["set-cookie"]
+                    fv5027 =
+                      if fv5028.is_a?(String) && fv5028.start_with?("[")
+                        JSON.parse(fv5028)
+                      else
+                        Array(fv5028)
+                      end
+                    fv5026 =
+                      fv5027.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
+                        entry.split(";", 2).first.to_s.start_with?("#{fv5025}=")
+                      end
+                    if fv5026
+
+                      _, fv5024 = fv5026.split(";", 2).first.to_s.split("=", 2)
+                      fv5024 = Rack::Utils.unescape(fv5024.to_s)
+                    end
+                  end
+
+                  unless fv5024.nil?
+                    fv5023.cookies.delete(fv5025)
+                    # Rack::Test's []= uses its default host. The current request may target a
+                    # different surface, so install the cookie against the browser's active host.
+                    fv5023.cookies.merge( # rubocop:disable Lint/Void
+                      "#{fv5025}=#{Rack::Utils.escape(fv5024)}",
+                      URI.parse("https://#{fv5023.host}/"),
+                    )
+                  end
+                end
+                fv5021 = fv5022.response.location
+                raise RuntimeError, "Base confirmation did not return to Auth" if fv5021.blank?
+
+                fv5018 = URI.parse(fv5021)
+                if fv5020[:ri].present?
+                  fv5019 = Rack::Utils.parse_nested_query(fv5018.query.to_s)
+                  fv5019["ri"] ||= fv5020[:ri].to_s
+                  fv5018.query = URI.encode_www_form(fv5019)
+                end
+                fv5004.host!(fv5018.host)
+                fv5004.https!
+                fv5017 = fv5018.request_uri
+                fv5000 = fv5013.merge("Host" => fv5018.host)
+                fv5004.get(fv5017, headers: fv5000)
+              else
+                fv5014.confirm_base!(
+                  base_token: fv5016,
+                  browser_digest: AuthAdmissionBinding.browser_digest(
+                    surface: fv5015,
+                    entry_ref: fv5014.entry_ref,
+                    nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+                  ),
+                )
+                fv5012 = fv5004.host
+                fv5004.host!(fv5012)
+                fv5004.https!
+                fv5000 = fv5013.merge("Host" => fv5012)
+                fv5004.get(fv5011, params: fv5010, headers: fv5000)
+              end
+              fv5003, fv5001, fv5002 =
+                begin
+                  fv5009 = fv5004.response.body
+                  fv5008 = false
+                  fv5007 = Nokogiri::HTML(fv5009).at_css("form")
+                  if fv5007.nil? && fv5008
+                    nil
+                  else
+                    raise RuntimeError, "Auth continuation form is missing" unless fv5007
+
+                    fv5006 = fv5007.at_css("input[name='authenticity_token']")&.[]("value")
+                    raise RuntimeError,
+                          "Auth continuation is missing its CSRF token" if fv5006.blank?
+
+                    fv5005 = fv5007.css("input[type='hidden']").to_h do |input|
+                      [input["name"], input["value"]]
+                    end.except("authenticity_token")
+                    [fv5007["action"], fv5006, fv5005]
+                  end
+                end
+              fv5004.post(
+                fv5003,
+                params: fv5002.merge(authenticity_token: fv5001),
+                headers: fv5000,
+              )
+            end
+          end
+        end
+      end
       auth.get(new_auth_app_sign_in_secret_path(ri: "jp"))
       page = JSON.parse(Nokogiri::HTML(auth.response.body).at_css("script[data-page='app']").text)
       auth.post(
@@ -109,24 +349,33 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
       if outcome == :completion
         futures =
           [base, duplicate].map do |browser|
-            Concurrent::Future.execute do
-              AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
-                connection.execute("SET lock_timeout = '10000'")
-                ready << connection.select_value("SELECT pg_backend_pid()")
-                release.pop
-                browser.post(
-                  result_action, params: { result_ref: result_ref, transaction_ref: transaction_ref },
-                                 headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
-                )
-                browser.response.status
+            Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
+              # Rack completion runs after the explicit connection scope returns its lease.
+              response_finished = []
+              begin
+                AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+                  connection.execute("SET lock_timeout = '10000'")
+                  ready << connection.select_value("SELECT pg_backend_pid()")
+                  release.pop
+                  browser.post(
+                    result_action, params: { result_ref: result_ref, transaction_ref: transaction_ref },
+                                   headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
+                                   env: { "rack.response_finished" => response_finished },
+                  )
+                  browser.response.status
+                ensure
+                  connection.execute("RESET lock_timeout")
+                end
               ensure
-                connection.execute("RESET lock_timeout")
+                response_finished.reverse_each do |callback|
+                  callback.call(browser.request.env, browser.response.status, browser.response.headers, nil)
+                end
               end
             rescue StandardError => e
               ready << e
               raise
             ensure
-              # Leases taken on this pooled thread outlive the future unless released here.
+              # Release model-clock leases before the dedicated worker exits.
               ActiveRecord::Base.connection_handler.clear_active_connections!
             end
           end
@@ -140,24 +389,33 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
         # blocked HTTP request. The second stale callback is sent afterward.
         actor.with_lock do
           futures = [
-            Concurrent::Future.execute do
-              AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
-                connection.execute("SET lock_timeout = '10000'")
-                ready << connection.select_value("SELECT pg_backend_pid()")
-                release.pop
-                base.post(
-                  result_action, params: { result_ref: result_ref, transaction_ref: transaction_ref },
-                                 headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
-                )
-                base.response.status
+            Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
+              # Rack completion runs after the explicit connection scope returns its lease.
+              response_finished = []
+              begin
+                AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+                  connection.execute("SET lock_timeout = '10000'")
+                  ready << connection.select_value("SELECT pg_backend_pid()")
+                  release.pop
+                  base.post(
+                    result_action, params: { result_ref: result_ref, transaction_ref: transaction_ref },
+                                   headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
+                                   env: { "rack.response_finished" => response_finished },
+                  )
+                  base.response.status
+                ensure
+                  connection.execute("RESET lock_timeout")
+                end
               ensure
-                connection.execute("RESET lock_timeout")
+                response_finished.reverse_each do |callback|
+                  callback.call(base.request.env, base.response.status, base.response.headers, nil)
+                end
               end
             rescue StandardError => e
               ready << e
               raise
             ensure
-              # Leases taken on this pooled thread outlive the future unless released here.
+              # Release model-clock leases before the dedicated worker exits.
               ActiveRecord::Base.connection_handler.clear_active_connections!
             end,
           ]
@@ -201,7 +459,7 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
         )
         statuses << duplicate.response.status
       end
-      expected = (outcome == :completion) ? [302, 302] : [400, 400]
+      expected = (outcome == :completion) ? [303, 303] : [400, 400]
 
       assert_equal expected, statuses.sort
       assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
@@ -256,39 +514,6 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
   private
 
   # rubocop:disable Metrics/AbcSize -- This fixture walks the complete Base-to-Auth browser handoff.
-  def app_oidc_auth_target!(base, base_host:)
-    base.get("/sign", params: { ri: "jp" })
-    csrf = Nokogiri::HTML(base.response.body).at_css('input[name="authenticity_token"]')["value"]
-    base.post(
-      "/sign", params: { ri: "jp", authenticity_token: csrf }, headers: {
-        "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
-      },
-    )
-    gateway = URI.parse(base.response.location)
-    rt = Rack::Utils.parse_query(gateway.query).fetch("rt")
-    issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    payload, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    authorization = URI.parse(payload.fetch("url"))
-    base.host!(authorization.host)
-    base.https!
-    base.get(authorization.request_uri)
-    form = Nokogiri::HTML(base.response.body).at_css("form#base-authorization-ceremony-start-form")
-    base.post(
-      form["action"], params: form.css("input[name]").to_h { |input| [input["name"], input["value"]] },
-                      headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
-    )
-    result_gateway = URI.parse(base.response.location)
-    result_rt = Rack::Utils.parse_query(result_gateway.query).fetch("rt")
-    result_payload, = JWT.decode(
-      result_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    URI.parse(result_payload.fetch("url"))
-  end
+
   # rubocop:enable Metrics/AbcSize
 end

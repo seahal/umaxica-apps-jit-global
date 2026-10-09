@@ -70,7 +70,7 @@ class OpenapiCoreSessionContractTest < ActionDispatch::IntegrationTest
     csrf = fetch_csrf_token
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = oidc_refresh_token_for_client
 
-    post "/api/v0/token/refresh", headers: json_headers.merge("X-CSRF-Token" => csrf)
+    post "/api/v0/token/refresh", headers: json_headers.merge("X-CSRF-Token" => csrf, "Origin" => "https://#{HOST}")
 
     # The rotated credentials travel as Set-Cookie, so there is no representation to return.
     assert_response :no_content

@@ -4,10 +4,16 @@ class AddVisitorContactBindingFacts < ActiveRecord::Migration[8.2]
   disable_ddl_transaction!
 
   CONTACTS = {
-    visitor_emails: { owner: "visitor_id", digest: "address_digest", status: "visitor_email_status_id",
-                      effective_statuses: [2, 3], signup_status: 7 },
-    visitor_telephones: { owner: "visitor_id", digest: "number_digest", status: "visitor_telephone_status_id",
-                          effective_statuses: [2, 3], signup_status: 7 },
+    visitor_emails: { owner: "visitor_id",
+                      digest: "address_digest",
+                      status: "visitor_email_status_id",
+                      effective_statuses: [2, 3],
+                      signup_status: 7, },
+    visitor_telephones: { owner: "visitor_id",
+                          digest: "number_digest",
+                          status: "visitor_telephone_status_id",
+                          effective_statuses: [2, 3],
+                          signup_status: 7, },
   }.freeze
 
   def up
@@ -43,7 +49,7 @@ class AddVisitorContactBindingFacts < ActiveRecord::Migration[8.2]
 
   def classify_existing_rows!(table, facts)
     statuses = facts.fetch(:effective_statuses).join(",")
-    execute <<~SQL
+    execute(<<~SQL.squish)
       UPDATE #{table}
          SET binding_finalized_at = CURRENT_TIMESTAMP
        WHERE #{facts.fetch(:status)} IN (#{statuses})
@@ -52,14 +58,14 @@ class AddVisitorContactBindingFacts < ActiveRecord::Migration[8.2]
   end
 
   def reject_effective_conflicts!(table, facts)
-    digest_conflicts = connection.select_values(<<~SQL)
+    digest_conflicts = connection.select_values(<<~SQL.squish)
       SELECT string_agg(id::text, ',' ORDER BY id)
         FROM #{table}
        WHERE binding_finalized_at IS NOT NULL AND binding_released_at IS NULL
        GROUP BY #{facts.fetch(:digest)}
       HAVING #{facts.fetch(:digest)} IS NULL OR COUNT(*) > 1
     SQL
-    owner_conflicts = connection.select_values(<<~SQL)
+    owner_conflicts = connection.select_values(<<~SQL.squish)
       SELECT string_agg(id::text, ',' ORDER BY id)
         FROM #{table}
        WHERE binding_finalized_at IS NOT NULL AND binding_released_at IS NULL
@@ -70,30 +76,40 @@ class AddVisitorContactBindingFacts < ActiveRecord::Migration[8.2]
 
     raise ActiveRecord::MigrationError,
           "#{table} has unresolved effective contact binding conflicts: " \
-          "digest rows=#{digest_conflicts.join(';')} owner rows=#{owner_conflicts.join(';')}"
+          "digest rows=#{digest_conflicts.join(";")} owner rows=#{owner_conflicts.join(";")}"
   end
 
   def replace_legacy_indexes!(table, facts)
-    remove_index(table, name: "index_#{table}_on_active_#{facts.fetch(:digest).delete_suffix('_digest')}_digest",
-                 algorithm: :concurrently, if_exists: true)
-    add_index(table, facts.fetch(:digest), unique: true,
-              where: "binding_finalized_at IS NOT NULL AND binding_released_at IS NULL",
-              name: "#{table}_effective_digest", algorithm: :concurrently)
-    add_index(table, facts.fetch(:owner), unique: true,
-              where: "binding_finalized_at IS NOT NULL AND binding_released_at IS NULL",
-              name: "#{table}_effective_owner", algorithm: :concurrently)
+    remove_index(
+      table, name: "index_#{table}_on_active_#{facts.fetch(:digest).delete_suffix("_digest")}_digest",
+             algorithm: :concurrently, if_exists: true,
+    )
+    add_index(
+      table, facts.fetch(:digest), unique: true,
+                                   where: "binding_finalized_at IS NOT NULL AND binding_released_at IS NULL",
+                                   name: "#{table}_effective_digest", algorithm: :concurrently,
+    )
+    add_index(
+      table, facts.fetch(:owner), unique: true,
+                                  where: "binding_finalized_at IS NOT NULL AND binding_released_at IS NULL",
+                                  name: "#{table}_effective_owner", algorithm: :concurrently,
+    )
   end
 
   def restore_legacy_indexes!(table, facts)
-    add_index(table, facts.fetch(:digest), unique: true,
-              where: "#{facts.fetch(:digest)} IS NOT NULL AND #{facts.fetch(:status)} <> 4",
-              name: "index_#{table}_on_active_#{facts.fetch(:digest).delete_suffix('_digest')}_digest",
-              algorithm: :concurrently, if_not_exists: true)
+    add_index(
+      table, facts.fetch(:digest), unique: true,
+                                   where: "#{facts.fetch(:digest)} IS NOT NULL AND #{facts.fetch(:status)} <> 4",
+                                   name: "index_#{table}_on_active_#{facts.fetch(:digest).delete_suffix("_digest")}_digest",
+                                   algorithm: :concurrently, if_not_exists: true,
+    )
   end
 
   def add_fact_constraints!(table, facts)
-    add_check_constraint(table, "binding_released_at IS NULL OR binding_finalized_at IS NOT NULL",
-                        name: "#{table}_binding_release_requires_finalization")
+    add_check_constraint(
+      table, "binding_released_at IS NULL OR binding_finalized_at IS NOT NULL",
+      name: "#{table}_binding_release_requires_finalization",
+    )
     add_check_constraint(
       table,
       "binding_finalized_at IS NULL OR (#{facts.fetch(:digest)} IS NOT NULL AND #{facts.fetch(:digest)} <> '')",
@@ -103,7 +119,9 @@ class AddVisitorContactBindingFacts < ActiveRecord::Migration[8.2]
 
   def add_fact_trigger!(table, facts)
     function = "enforce_#{table}_binding_facts"
-    execute <<~SQL
+    # Database statements and invariant diagnostics are not localized browser copy.
+    # rubocop:disable I18n/RailsI18n/DecorateString
+    execute(<<~SQL.squish)
       CREATE OR REPLACE FUNCTION #{function}() RETURNS trigger
       LANGUAGE plpgsql AS $$
       BEGIN
@@ -124,7 +142,8 @@ class AddVisitorContactBindingFacts < ActiveRecord::Migration[8.2]
       END;
       $$;
     SQL
-    execute <<~SQL
+    # rubocop:enable I18n/RailsI18n/DecorateString
+    execute(<<~SQL.squish)
       CREATE TRIGGER #{table}_binding_facts_trigger
       BEFORE UPDATE ON #{table}
       FOR EACH ROW EXECUTE FUNCTION #{function}();
@@ -132,7 +151,7 @@ class AddVisitorContactBindingFacts < ActiveRecord::Migration[8.2]
   end
 
   def remove_fact_trigger!(table)
-    execute "DROP TRIGGER IF EXISTS #{table}_binding_facts_trigger ON #{table}"
-    execute "DROP FUNCTION IF EXISTS enforce_#{table}_binding_facts()"
+    execute("DROP TRIGGER IF EXISTS #{table}_binding_facts_trigger ON #{table}")
+    execute("DROP FUNCTION IF EXISTS enforce_#{table}_binding_facts()")
   end
 end

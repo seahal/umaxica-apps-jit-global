@@ -7,8 +7,8 @@ require "test_helper"
 # bearer-authenticated Palm API, and the public content endpoints. Each includes the same concern, so
 # a regression in one would otherwise be caught in only one place.
 class ApiContentNegotiationTest < ActionDispatch::IntegrationTest
-  CORE_HOST = ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")
-  DOCS_HOST = ENV.fetch("PRIVATE_DOCS_SERVICE_URL", "docs.app.localhost")
+  CORE_HOST = ENV.fetch("PUBLIC_CORE_SERVICE_URL")
+  DOCS_HOST = ENV.fetch("PRIVATE_DOCS_SERVICE_URL")
   PALM_HOST = ENV.fetch("PUBLIC_PALM_SERVICE_URL")
 
   setup do
@@ -113,7 +113,8 @@ class ApiContentNegotiationTest < ActionDispatch::IntegrationTest
     csrf_token = response.parsed_body.fetch("csrf_token")
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = oidc_refresh_token_for_client
 
-    post "/api/v0/token/refresh", headers: { "Accept" => "application/json", "X-CSRF-Token" => csrf_token }
+    post "/api/v0/token/refresh",
+         headers: { "Accept" => "application/json", "X-CSRF-Token" => csrf_token, "Origin" => "https://#{CORE_HOST}" }
 
     # The refresh endpoint carries its credential in a cookie and its CSRF token in a header, so it
     # sends no body at all. Refusing it for declaring nothing would break the endpoint.
@@ -132,6 +133,7 @@ class ApiContentNegotiationTest < ActionDispatch::IntegrationTest
            "Accept" => "application/json",
            "Content-Type" => "application/json",
            "X-CSRF-Token" => csrf_token,
+           "Origin" => "https://#{CORE_HOST}",
          }
 
     assert_response :success

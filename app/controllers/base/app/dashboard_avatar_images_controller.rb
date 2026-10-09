@@ -30,10 +30,6 @@ module Base
 
       protected
 
-      def authentication_redirect_allowed?
-        false
-      end
-
       def track_authenticated_session_activity?
         return false if request.get? || request.head?
 
@@ -41,6 +37,13 @@ module Base
       end
 
       private
+
+      def render_browser_rp_unauthenticated!
+        response.set_header("Cache-Control", "no-store")
+        return render(json: { error: "unauthorized" }, status: :unauthorized) if request.format.json?
+
+        head :unauthorized
+      end
 
       def send_default_image
         # An ETag with public: false yields "max-age=0, private, must-revalidate": every use

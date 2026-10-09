@@ -4,8 +4,8 @@ require "test_helper"
 
 class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
   setup do
-    @core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")
-    @base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    @core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL")
+    @base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     https!
     host! @core_host
   end
@@ -17,14 +17,63 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    core_session, core_refresh = issue_rp_session!(root_token, client_id: "core-app")
-    sibling_session, sibling_refresh = issue_rp_session!(root_token, client_id: "warp-app")
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = issue_access_token!(
-      user,
-      root_token: root_token,
-      rp_session: core_session,
-      client_id: "core-app",
-    )
+    core_session, core_refresh =
+      begin
+        fv5040 = root_token
+        fv5041 = "core-app"
+        fv5039 = OidcClientRegistry.find!(fv5041)
+        fv5038 = ClientRpSession.create!(
+          client_token: fv5040,
+          oidc_client_id: fv5039.client_id,
+          oidc_scope: "openid profile",
+          oidc_jti: SecureRandom.uuid,
+          oidc_nonce: SecureRandom.hex(16),
+          oidc_auth_time: 1.minute.ago,
+          refresh_token_expires_at: 10.minutes.from_now,
+        )
+        [fv5038, fv5038.issue_refresh_token!]
+      end
+    sibling_session, sibling_refresh =
+      begin
+        fv5036 = root_token
+        fv5037 = "warp-app"
+        fv5035 = OidcClientRegistry.find!(fv5037)
+        fv5034 = ClientRpSession.create!(
+          client_token: fv5036,
+          oidc_client_id: fv5035.client_id,
+          oidc_scope: "openid profile",
+          oidc_jti: SecureRandom.uuid,
+          oidc_nonce: SecureRandom.hex(16),
+          oidc_auth_time: 1.minute.ago,
+          refresh_token_expires_at: 10.minutes.from_now,
+        )
+        [fv5034, fv5034.issue_refresh_token!]
+      end
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+      begin
+        fv5029 = user
+        fv5031 = root_token
+        fv5030 = core_session
+        fv5033 = "core-app"
+        fv5032 = @core_host
+        fv5028 = OidcClientRegistry.find!(fv5033)
+        AuthenticationTokenService.encode(
+          fv5029,
+          host: fv5032,
+          resource_type: "client",
+          session_public_id: fv5031.public_id,
+          base_session_public_id: fv5031.public_id,
+          oidc_sid: fv5030.public_id,
+          oidc_jti: fv5030.oidc_jti,
+          expires_at: 10.minutes.from_now,
+          scopes: %w(openid profile),
+          issuer: OidcIssuer.for_client(fv5028),
+          audiences: [fv5028.aud],
+          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5028),
+          subject: OidcSubject.for(fv5029, resource_type: "client"),
+          client_id: fv5028.client_id,
+        )
+      end
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = core_refresh
 
     post core_app_sign_out_url(ri: "jp")
@@ -119,29 +168,69 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    core_session, = issue_rp_session!(root_token, client_id: "core-app")
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = issue_access_token!(
-      user,
-      root_token: root_token,
-      rp_session: core_session,
-      client_id: "core-app",
-    )
+    core_session, =
+      begin
+        fv5026 = root_token
+        fv5027 = "core-app"
+        fv5025 = OidcClientRegistry.find!(fv5027)
+        fv5024 = ClientRpSession.create!(
+          client_token: fv5026,
+          oidc_client_id: fv5025.client_id,
+          oidc_scope: "openid profile",
+          oidc_jti: SecureRandom.uuid,
+          oidc_nonce: SecureRandom.hex(16),
+          oidc_auth_time: 1.minute.ago,
+          refresh_token_expires_at: 10.minutes.from_now,
+        )
+        [fv5024, fv5024.issue_refresh_token!]
+      end
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+      begin
+        fv5019 = user
+        fv5021 = root_token
+        fv5020 = core_session
+        fv5023 = "core-app"
+        fv5022 = @core_host
+        fv5018 = OidcClientRegistry.find!(fv5023)
+        AuthenticationTokenService.encode(
+          fv5019,
+          host: fv5022,
+          resource_type: "client",
+          session_public_id: fv5021.public_id,
+          base_session_public_id: fv5021.public_id,
+          oidc_sid: fv5020.public_id,
+          oidc_jti: fv5020.oidc_jti,
+          expires_at: 10.minutes.from_now,
+          scopes: %w(openid profile),
+          issuer: OidcIssuer.for_client(fv5018),
+          audiences: [fv5018.aud],
+          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5018),
+          subject: OidcSubject.for(fv5019, resource_type: "client"),
+          client_id: fv5018.client_id,
+        )
+      end
 
-    post core_app_sign_out_path(ri: "jp")
+    post(core_app_sign_out_path(ri: "jp"))
 
     authority_query = Rack::Utils.parse_nested_query(URI.parse(response.location).query.to_s)
     challenge = authority_query.fetch("logout_challenge")
 
-    host! @base_host
-    post base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: {
-      "Origin" => "https://attacker.example",
-      "Sec-Fetch-Site" => "cross-site",
-    }
+    previous_forgery_protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    host!(@base_host)
+    post(
+      base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: {
+        "Origin" => "https://attacker.example",
+        "Sec-Fetch-Site" => "cross-site",
+      },
+    )
 
-    assert_response :forbidden
+    assert_response :unprocessable_entity
     assert_predicate root_token.reload, :currently_usable?
     assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
                  AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: challenge).expected_step
+  ensure
+    ActionController::Base.allow_forgery_protection = previous_forgery_protection
   end
 
   test "Base self-RP logout returns to Base without an Auth hop" do
@@ -151,15 +240,48 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    rp_session, refresh_token = issue_rp_session!(root_token, client_id: "base-app-ww")
+    rp_session, refresh_token =
+      begin
+        fv5016 = root_token
+        fv5017 = "base-app-ww"
+        fv5015 = OidcClientRegistry.find!(fv5017)
+        fv5014 = ClientRpSession.create!(
+          client_token: fv5016,
+          oidc_client_id: fv5015.client_id,
+          oidc_scope: "openid profile",
+          oidc_jti: SecureRandom.uuid,
+          oidc_nonce: SecureRandom.hex(16),
+          oidc_auth_time: 1.minute.ago,
+          refresh_token_expires_at: 10.minutes.from_now,
+        )
+        [fv5014, fv5014.issue_refresh_token!]
+      end
     host! @base_host
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = issue_access_token!(
-      user,
-      root_token: root_token,
-      rp_session: rp_session,
-      client_id: "base-app-ww",
-      host: @base_host,
-    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+      begin
+        fv5009 = user
+        fv5011 = root_token
+        fv5010 = rp_session
+        fv5013 = "base-app-ww"
+        fv5012 = @base_host
+        fv5008 = OidcClientRegistry.find!(fv5013)
+        AuthenticationTokenService.encode(
+          fv5009,
+          host: fv5012,
+          resource_type: "client",
+          session_public_id: fv5011.public_id,
+          base_session_public_id: fv5011.public_id,
+          oidc_sid: fv5010.public_id,
+          oidc_jti: fv5010.oidc_jti,
+          expires_at: 10.minutes.from_now,
+          scopes: %w(openid profile),
+          issuer: OidcIssuer.for_client(fv5008),
+          audiences: [fv5008.aud],
+          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5008),
+          subject: OidcSubject.for(fv5009, resource_type: "client"),
+          client_id: fv5008.client_id,
+        )
+      end
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = refresh_token
 
     post base_app_sign_out_path(ri: "jp")
@@ -199,7 +321,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_predicate AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: challenge), :finalized?
     assert_predicate root_token.reload, :revoked?
     assert_predicate rp_session.reload, :revoked?
-    assert_not_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), response.location.to_s
+    assert_not_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), response.location.to_s
   end
 
   test "Edit RP logout returns through the staff Base authority" do
@@ -209,16 +331,48 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
     )
-    rp_session, refresh_token = issue_operator_rp_session!(root_token)
-    edit_host = ENV.fetch("PUBLIC_EDIT_STAFF_URL", "edit.org.localhost")
-    base_staff_host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    rp_session, refresh_token =
+      begin
+        fv5007 = root_token
+        fv5006 = OidcClientRegistry.find!("edit-org")
+        fv5005 = OperatorRpSession.create!(
+          operator_token: fv5007,
+          oidc_client_id: fv5006.client_id,
+          oidc_scope: "openid profile",
+          oidc_jti: SecureRandom.uuid,
+          oidc_nonce: SecureRandom.hex(16),
+          oidc_auth_time: 1.minute.ago,
+          refresh_token_expires_at: 10.minutes.from_now,
+        )
+        [fv5005, fv5005.issue_refresh_token!]
+      end
+    edit_host = ENV.fetch("PUBLIC_EDIT_STAFF_URL")
+    base_staff_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! edit_host
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = issue_operator_access_token!(
-      operator,
-      root_token: root_token,
-      rp_session: rp_session,
-      host: edit_host,
-    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+      begin
+        fv5001 = operator
+        fv5003 = root_token
+        fv5002 = rp_session
+        fv5004 = edit_host
+        fv5000 = OidcClientRegistry.find!("edit-org")
+        AuthenticationTokenService.encode(
+          fv5001,
+          host: fv5004,
+          resource_type: "operator",
+          session_public_id: fv5003.public_id,
+          base_session_public_id: fv5003.public_id,
+          oidc_sid: fv5002.public_id,
+          oidc_jti: fv5002.oidc_jti,
+          expires_at: 10.minutes.from_now,
+          scopes: %w(openid profile),
+          issuer: OidcIssuer.for_client(fv5000),
+          audiences: [fv5000.aud],
+          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5000),
+          subject: OidcSubject.for(fv5001, resource_type: "operator"),
+          client_id: fv5000.client_id,
+        )
+      end
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = refresh_token
 
     post edit_org_sign_out_path(ri: "jp")
@@ -263,72 +417,4 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
   end
 
   private
-
-  def issue_rp_session!(root_token, client_id:)
-    client = OidcClientRegistry.find!(client_id)
-    session = ClientRpSession.create!(
-      client_token: root_token,
-      oidc_client_id: client.client_id,
-      oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid,
-      oidc_nonce: SecureRandom.hex(16),
-      oidc_auth_time: 1.minute.ago,
-      refresh_token_expires_at: 10.minutes.from_now,
-    )
-    [session, session.issue_refresh_token!]
-  end
-
-  def issue_operator_rp_session!(root_token)
-    client = OidcClientRegistry.find!("edit-org")
-    session = OperatorRpSession.create!(
-      operator_token: root_token,
-      oidc_client_id: client.client_id,
-      oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid,
-      oidc_nonce: SecureRandom.hex(16),
-      oidc_auth_time: 1.minute.ago,
-      refresh_token_expires_at: 10.minutes.from_now,
-    )
-    [session, session.issue_refresh_token!]
-  end
-
-  def issue_access_token!(user, root_token:, rp_session:, client_id:, host: @core_host)
-    client = OidcClientRegistry.find!(client_id)
-    AuthenticationTokenService.encode(
-      user,
-      host: host,
-      resource_type: "client",
-      session_public_id: root_token.public_id,
-      base_session_public_id: root_token.public_id,
-      oidc_sid: rp_session.public_id,
-      oidc_jti: rp_session.oidc_jti,
-      expires_at: 10.minutes.from_now,
-      scopes: %w(openid profile),
-      issuer: OidcIssuer.for_client(client),
-      audiences: [client.aud],
-      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
-      subject: OidcSubject.for(user, resource_type: "client"),
-      client_id: client.client_id,
-    )
-  end
-
-  def issue_operator_access_token!(operator, root_token:, rp_session:, host:)
-    client = OidcClientRegistry.find!("edit-org")
-    AuthenticationTokenService.encode(
-      operator,
-      host: host,
-      resource_type: "operator",
-      session_public_id: root_token.public_id,
-      base_session_public_id: root_token.public_id,
-      oidc_sid: rp_session.public_id,
-      oidc_jti: rp_session.oidc_jti,
-      expires_at: 10.minutes.from_now,
-      scopes: %w(openid profile),
-      issuer: OidcIssuer.for_client(client),
-      audiences: [client.aud],
-      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
-      subject: OidcSubject.for(operator, resource_type: "operator"),
-      client_id: client.client_id,
-    )
-  end
 end

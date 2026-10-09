@@ -8,7 +8,7 @@ require "minitest/mock"
 # forced session revocation. Every test grants the capabilities it relies on in its own body.
 class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTest
   setup do
-    @host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     @operator = operators(:one)
     @granter = operators(:two)
     @operator_token = OperatorToken.create!(
@@ -34,7 +34,6 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       Rails.application.routes.recognize_path(
         "https://#{ENV.fetch(
           "PUBLIC_BASE_SERVICE_URL",
-          "base.app.localhost",
         )}/support/clients/#{@client.public_id}/revocations",
         method: :post,
       )
@@ -50,8 +49,67 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
   end
 
   test "an operator with no grant cannot list clients" do
+    http_headers_17 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get base_org_support_clients_url(ri: "jp", host: @host),
-        headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id),
+        headers: http_headers_17,
         as: :json
 
     assert_response :forbidden
@@ -68,8 +126,67 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       expires_at: 1.day.from_now,
     )
 
+    http_headers_16 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get base_org_support_clients_url(q: @client.public_id, ri: "jp", host: @host),
-        headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        headers: http_headers_16
 
     assert_response :ok
     assert_equal "base/org/support/clients/index", inertia_component
@@ -77,8 +194,67 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
     assert_equal @operator.public_id, inertia_props.dig("context", "operator_public_id")
     assert_equal "app", inertia_props.dig("context", "realm")
 
+    http_headers_15 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get base_org_support_client_url(@client.public_id, ri: "jp", host: @host),
-        headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        headers: http_headers_15
 
     assert_response :ok
     assert_equal "private, no-store", response.headers["Cache-Control"]
@@ -97,8 +273,67 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       expires_at: 1.day.from_now,
     )
 
+    http_headers_14 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get base_org_support_visitor_url(visitors(:reserved_visitor).public_id, ri: "jp", host: @host),
-        headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id),
+        headers: http_headers_14,
         as: :json
 
     assert_response :forbidden
@@ -115,8 +350,67 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       expires_at: 1.day.from_now,
     )
 
+    http_headers_13 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get base_org_support_client_url(visitors(:reserved_visitor).public_id, ri: "jp", host: @host),
-        headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        headers: http_headers_13
 
     assert_response :not_found
   end
@@ -131,7 +425,65 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       starts_at: 1.minute.ago,
       expires_at: 1.day.from_now,
     )
-    headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+    headers =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
 
     [{ q: "a b" }, { q: "x\u0000" }, { q: " x" }, { q: "a" * 65 }, { page: "0" }, { page: "-1" }, { page: "401" },
      { page: "abc" },].each do |query|
@@ -151,7 +503,65 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       starts_at: 1.minute.ago,
       expires_at: 1.day.from_now,
     )
-    headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+    headers =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
 
     [63, 64].each do |length|
       get base_org_support_clients_url(q: "a" * length, ri: "jp", host: @host), headers: headers
@@ -170,7 +580,65 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       starts_at: 1.minute.ago,
       expires_at: 1.day.from_now,
     )
-    headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+    headers =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
 
     %w(399 400 1).each do |page|
       get base_org_support_clients_url(page: page, ri: "jp", host: @host), headers: headers
@@ -193,8 +661,67 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       expires_at: 1.day.from_now,
     )
 
+    http_headers_12 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get new_base_org_support_client_revocation_url(@client.public_id, ri: "jp", host: @host),
-        headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id),
+        headers: http_headers_12,
         as: :json
 
     assert_response :forbidden
@@ -214,8 +741,67 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       )
     end
 
+    http_headers_11 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get new_base_org_support_client_revocation_url(@client.public_id, ri: "jp", host: @host),
-        headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        headers: http_headers_11
 
     assert_response :redirect
     assert_includes response.location, "scope=support_session_revoke"
@@ -258,9 +844,68 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
     token = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     operation_id = SecureRandom.uuid
 
+    http_headers_10 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     post base_org_support_client_revocations_url(@client.public_id, host: @host),
          params: { reason_code: "security_incident", ticket_id: "SEC-635", operation_id: operation_id },
-         headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+         headers: http_headers_10
 
     assert_response :see_other
     assert_redirected_to base_org_support_client_revocation_url(@client.public_id, operation_id, host: @host)
@@ -275,8 +920,67 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
     assert_equal 1, chronicle.changeset.fetch("revoked_count")
     assert_equal "enabled", @client.reload.access_state, "a revocation is not an access lock"
 
+    http_headers_9 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get base_org_support_client_revocation_url(@client.public_id, operation_id, ri: "jp", host: @host),
-        headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        headers: http_headers_9
 
     assert_response :ok
     assert_empty inertia_props.fetch("notices")
@@ -309,9 +1013,68 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
     )
     before = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
+    http_headers_8 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     post base_org_support_client_revocations_url(@client.public_id, host: @host),
          params: { reason_code: "support_request", operation_id: SecureRandom.uuid },
-         headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+         headers: http_headers_8
     after = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     assert_predicate before.reload, :revoked?
@@ -345,7 +1108,65 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       last_step_up_audience: "step_up:org",
     )
     operation_id = SecureRandom.uuid
-    headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+    headers =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
 
     assert_difference -> { AccountAccessEvent.count }, 1 do
       2.times do
@@ -389,7 +1210,65 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       last_step_up_audience: "step_up:org",
     )
     token = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+    headers =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     valid = { reason_code: "security_incident", operation_id: SecureRandom.uuid }
 
     [
@@ -429,7 +1308,65 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:org",
     )
-    headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+    headers =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
 
     [63, 64].each do |length|
       post base_org_support_client_revocations_url(@client.public_id, host: @host),
@@ -466,9 +1403,68 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
     )
     token = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
+    http_headers_7 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     post base_org_support_client_revocations_url(@client.public_id, host: @host),
          params: { reason_code: "security_incident", operation_id: SecureRandom.uuid },
-         headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id),
+         headers: http_headers_7,
          as: :json
 
     assert_response :forbidden
@@ -494,8 +1490,67 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       admin_locked_reason_code: "security_incident",
     )
 
+    http_headers_6 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get base_org_support_clients_url(ri: "jp", host: @host),
-        headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        headers: http_headers_6
 
     assert_not_equal 200, response.status
   end
@@ -524,9 +1579,68 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
     )
     token = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
+    http_headers_5 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: emergency_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     post base_org_support_client_revocations_url(@client.public_id, host: @host),
          params: { reason_code: "security_incident", operation_id: SecureRandom.uuid },
-         headers: as_staff_headers(@operator, host: @host, session_public_id: emergency_token.public_id)
+         headers: http_headers_5
 
     assert_not_includes [200, 303], response.status
     assert_not_predicate token.reload, :revoked?
@@ -560,9 +1674,70 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
     chronicle_down = ->(**) { raise ActiveRecord::ConnectionNotEstablished, "chronicle unavailable" }
 
     ChronicleIntentWriter.stub(:call, chronicle_down) do
+      http_headers_4 =
+        begin
+          rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+          rp_host = rp_headers["Host"]
+          rp_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+            rp_client_id =
+              case rp_family
+              when "base" then "base-#{rp_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{rp_family}-#{rp_surface}"
+              end
+            rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            rp_client = OidcClientRegistry.find!(rp_client_id)
+            rp_key = [rp_client.client_id, rp_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                !(rp_token.device_session_id && OperatorRpSession.exists?(
+                  device_session_id: rp_token.device_session_id,
+                  oidc_client_id: rp_client.client_id,
+                  revoked_at: nil,
+                ))
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = OperatorRpSession.create!(
+                operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                rp_token.staff, host: rp_host, resource_type: "operator",
+                                session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                subject: OidcSubject.for(
+                                  rp_token.staff,
+                                  resource_type: "operator",
+                                ), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[rp_key]
+              rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+              rp_cookie = [
+                rp_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              ].join("; ")
+              rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+            end
+          end
+          rp_headers
+        end
       post base_org_support_client_revocations_url(@client.public_id, host: @host),
            params: { reason_code: "security_incident", operation_id: SecureRandom.uuid },
-           headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+           headers: http_headers_4
     end
 
     assert_response :service_unavailable
@@ -597,16 +1772,136 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
     result_write_fails = ->(**) { raise ActiveRecord::ConnectionNotEstablished, "chronicle unavailable" }
 
     ChronicleResultWriter.stub(:call, result_write_fails) do
+      http_headers_3 =
+        begin
+          rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+          rp_host = rp_headers["Host"]
+          rp_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+            rp_client_id =
+              case rp_family
+              when "base" then "base-#{rp_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{rp_family}-#{rp_surface}"
+              end
+            rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            rp_client = OidcClientRegistry.find!(rp_client_id)
+            rp_key = [rp_client.client_id, rp_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                !(rp_token.device_session_id && OperatorRpSession.exists?(
+                  device_session_id: rp_token.device_session_id,
+                  oidc_client_id: rp_client.client_id,
+                  revoked_at: nil,
+                ))
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = OperatorRpSession.create!(
+                operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                rp_token.staff, host: rp_host, resource_type: "operator",
+                                session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                subject: OidcSubject.for(
+                                  rp_token.staff,
+                                  resource_type: "operator",
+                                ), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[rp_key]
+              rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+              rp_cookie = [
+                rp_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              ].join("; ")
+              rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+            end
+          end
+          rp_headers
+        end
       post base_org_support_client_revocations_url(@client.public_id, host: @host),
            params: { reason_code: "security_incident", operation_id: operation_id },
-           headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+           headers: http_headers_3
     end
 
     assert_response :see_other
     assert_equal "manual_recovery_required", Chronicle.find_by!(event_uuid: operation_id).result
 
+    http_headers_2 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get base_org_support_client_revocation_url(@client.public_id, operation_id, ri: "jp", host: @host),
-        headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        headers: http_headers_2
 
     assert_equal ["warning"], inertia_props.fetch("notices").map { |notice| notice.fetch("tone") }
   end
@@ -636,12 +1931,130 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       last_step_up_audience: "step_up:org",
     )
     operation_id = SecureRandom.uuid
+    http_headers_1 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     post base_org_support_client_revocations_url(@client.public_id, host: @host),
          params: { reason_code: "security_incident", operation_id: operation_id },
-         headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+         headers: http_headers_1
 
+    http_headers_0 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OperatorRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OperatorRpSession.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.staff, host: rp_host, resource_type: "operator",
+                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                              subject: OidcSubject.for(
+                                rp_token.staff,
+                                resource_type: "operator",
+                              ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get base_org_support_client_revocation_url(clients(:two).public_id, operation_id, ri: "jp", host: @host),
-        headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        headers: http_headers_0
 
     assert_response :not_found
   end
@@ -672,7 +2085,64 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       post(
         base_org_support_client_revocations_url(@client.public_id, host: @host),
         params: { reason_code: "security_incident", operation_id: SecureRandom.uuid },
-        headers: as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+        headers: begin
+          rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+          rp_host = rp_headers["Host"]
+          rp_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+            rp_client_id =
+              case rp_family
+              when "base" then "base-#{rp_surface}-ww"
+              when "edit" then "edit-org"
+              else "#{rp_family}-#{rp_surface}"
+              end
+            rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            rp_client = OidcClientRegistry.find!(rp_client_id)
+            rp_key = [rp_client.client_id, rp_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                !(rp_token.device_session_id && OperatorRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                ))
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = OperatorRpSession.create!(
+                operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                rp_token.staff, host: rp_host, resource_type: "operator",
+                                session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                subject: OidcSubject.for(
+                                  rp_token.staff,
+                                  resource_type: "operator",
+                                ), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[rp_key]
+              rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+              rp_cookie = [
+                rp_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              ].join("; ")
+              rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+            end
+          end
+          rp_headers
+        end
           .merge("Sec-Fetch-Site" => "cross-site", "Origin" => "https://attacker.example"),
       )
     ensure

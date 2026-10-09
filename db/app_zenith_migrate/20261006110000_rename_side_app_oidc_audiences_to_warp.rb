@@ -6,7 +6,7 @@ class RenameSideAppOidcAudiencesToWarp < ActiveRecord::Migration[8.2]
     raise ActiveRecord::MigrationError, "conflicting app identity audiences" if conflicting_audiences?
 
     safety_assured do
-      execute <<~SQL
+      execute(<<~SQL.squish)
         UPDATE client_identities
         SET audience = 'warp-app', updated_at = CURRENT_TIMESTAMP
         WHERE audience = 'side-app'
@@ -21,7 +21,7 @@ class RenameSideAppOidcAudiencesToWarp < ActiveRecord::Migration[8.2]
   private
 
   def conflicting_audiences?
-    connection.select_value(<<~SQL).to_i.positive?
+    connection.select_value(<<~SQL.squish).to_i.positive?
       SELECT COUNT(*)
       FROM client_identities old_rows
       JOIN client_identities new_rows

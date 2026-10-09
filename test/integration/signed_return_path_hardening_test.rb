@@ -9,6 +9,7 @@ require "test_helper"
 # backslashes, control characters, embedded credentials, fragments, relative paths) is dropped.
 class SignedReturnPathHardeningTest < ActionDispatch::IntegrationTest
   setup do
+    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     Prosopite.pause do
@@ -16,6 +17,28 @@ class SignedReturnPathHardeningTest < ActionDispatch::IntegrationTest
       [0, 1, 2, 3].each { |id| VisitorVisibility.find_or_create_by!(id: id) }
       VisitorEmailStatus::DEFAULTS.each { |id| VisitorEmailStatus.find_or_create_by!(id: id) }
     end
+    nonce = SecureRandom.urlsafe_base64(32)
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_up", base_browser_nonce: nonce, base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
+    attached, raw_sid = VisitorAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: attached, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(
+      base_token: nil, browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "com", entry_ref: issuance.reference, nonce: nonce,
+      ),
+    )
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: issuance.reference, surface: "com", expected_intent: "sign_up", binding: binding,
+      raw_auth_sid: raw_sid,
+    )
+    admitted, admitted_sid = VisitorAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "local_sign_up", previous_raw_sid: raw_sid,
+      local_sign_in_flow_ref: issuance.transaction.public_id,
+    )
+    binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
+    cookies[JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"] = admitted_sid
   end
 
   teardown do

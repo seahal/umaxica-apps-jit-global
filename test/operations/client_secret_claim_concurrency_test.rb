@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "concurrent/executor/simple_executor_service"
 require "timeout"
 
 class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
@@ -30,10 +31,30 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     @browsers =
       Array.new(2) do
         admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
-          surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+          surface: "app",
+          intent: "sign_in",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: nil,
         )
         binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
-        _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+        _auth_session, raw_sid =
+          begin
+            admission_binding = binding
+            admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+            admission_binding.attach_auth_session!(
+              auth_session: admission_session,
+              confirmation_ref: SecureRandom.uuid,
+            )
+            admission_binding.confirm_base!(
+              base_token: nil,
+              browser_digest: AuthAdmissionBinding.browser_digest(
+                surface: admission_binding.class.auth_admission_surface_name,
+                entry_ref: admission_binding.entry_ref,
+                nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+              ),
+            )
+            [admission_session, admission_raw_sid]
+          end
         payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
           reference: admission.reference, surface: "app", expected_intent: "sign_in",
           binding:, raw_auth_sid: raw_sid,
@@ -52,7 +73,7 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     ActiveRecord::Base.connection_handler.clear_active_connections!
     futures =
       @browsers.map do |flow, ceremony|
-        Concurrent::Future.execute do
+        Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
           AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |source|
             source.execute("SET lock_timeout = '5000'")
             AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |ticket|
@@ -70,7 +91,7 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
             source.execute("RESET lock_timeout")
           end
         ensure
-          # Leases taken on this pooled thread outlive the future unless released here.
+          # Release model-clock leases before the dedicated worker exits.
           ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end

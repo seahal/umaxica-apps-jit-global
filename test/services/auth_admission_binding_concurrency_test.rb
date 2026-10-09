@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "concurrent/executor/simple_executor_service"
 require "timeout"
 
 class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
@@ -24,7 +25,7 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
       ActiveRecord::Base.connection_handler.clear_active_connections!
       workers =
         Array.new(2) do
-          Concurrent::Future.execute do
+          Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
             model.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
               ready << connection.select_value("SELECT pg_backend_pid()")
               release.pop
@@ -35,7 +36,7 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
               end
             end
           ensure
-            # Leases taken on this pooled thread outlive the future unless released here.
+            # Release model-clock leases before the dedicated worker exits.
             ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         end
@@ -62,10 +63,10 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
 
     test "#{surface} concurrent confirmed redemption rotates once and preserves the other tab's parent" do
       first = BaseAuthAdmissionCoordinator.issue_local_entry!(
-        surface:, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        surface:, intent: "sign_in", base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
       )
       sibling = BaseAuthAdmissionCoordinator.issue_local_entry!(
-        surface:, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        surface:, intent: "sign_in", base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
       )
       model = BaseAuthAdmissionCoordinator.admission_binding_model(surface)
       auth_model = model.auth_admission_session_class
@@ -80,7 +81,7 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
       ActiveRecord::Base.connection_handler.clear_active_connections!
       workers =
         Array.new(2) do
-          Concurrent::Future.execute do
+          Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
             model.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
               ready << connection.select_value("SELECT pg_backend_pid()")
               release.pop
@@ -100,7 +101,7 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
               [:refused, nil]
             end
           ensure
-            # Leases taken on this pooled thread outlive the future unless released here.
+            # Release model-clock leases before the dedicated worker exits.
             ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         end
@@ -145,7 +146,7 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
       ActiveRecord::Base.connection_handler.clear_active_connections!
       workers =
         sessions.map do |session_record|
-          Concurrent::Future.execute do
+          Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
             model.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
               ready << connection.select_value("SELECT pg_backend_pid()")
               release.pop
@@ -160,7 +161,7 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
               [:refused, e.class]
             end
           ensure
-            # Leases taken on this pooled thread outlive the future unless released here.
+            # Release model-clock leases before the dedicated worker exits.
             ActiveRecord::Base.connection_handler.clear_active_connections!
           end
         end

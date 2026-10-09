@@ -27,8 +27,13 @@ class OrgStepUpPasskeyCommittersTest < ActiveSupport::TestCase
       audience: "step_up:org", session_binding: @token.public_id, token_binding: @token.public_id,
       require_session_binding: true,
     )
-    @transaction = issue_base_step_up_admission!(
-      actor: @actor, token: @token, requirement: @requirement, return_to: "/identity/passkeys",
+    @transaction = BaseStepUpAdmissionIssuer.call!(
+      actor: @actor,
+      token: @token,
+      requirement: @requirement,
+      return_to: "/identity/passkeys",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: @token,
     ).transaction
     @record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: @transaction.transaction_id)
     @config = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.org", origin: @fake.origin)

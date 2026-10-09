@@ -2,7 +2,7 @@
 
 require "test_helper"
 
-class BaseSelfRpCredentialReissuerTest < ActiveSupport::TestCase
+class BaseSelfRpCredentialIssuerTest < ActiveSupport::TestCase
   fixtures :clients, :client_statuses
 
   setup do
@@ -21,14 +21,14 @@ class BaseSelfRpCredentialReissuerTest < ActiveSupport::TestCase
   end
 
   test "refreshability requires the exact active Base self-RP chain" do
-    assert BaseSelfRpCredentialReissuer.refreshable?(
+    assert BaseSelfRpCredentialIssuer.refreshable?(
       resource: @client, rp_session: @rp_session, raw_refresh_token: @refresh_token,
       client_id: "base-app-ww",
     )
 
     @root_token.update!(discard_at: ClientToken.database_now)
 
-    assert_not BaseSelfRpCredentialReissuer.refreshable?(
+    assert_not BaseSelfRpCredentialIssuer.refreshable?(
       resource: @client, rp_session: @rp_session, raw_refresh_token: @refresh_token,
       client_id: "base-app-ww",
     )
@@ -49,7 +49,7 @@ class BaseSelfRpCredentialReissuerTest < ActiveSupport::TestCase
 
     OidcClientAssertionJwt.stub(:issue, "assertion") do
       OidcTokenExchangeCoordinator.stub(:call, response) do
-        result = BaseSelfRpCredentialReissuer.call!(
+        result = BaseSelfRpCredentialIssuer.call!(
           resource: @client, rp_session: @rp_session, raw_refresh_token: @refresh_token,
           client_id: "base-app-ww", authentication_event_at: 1.minute.ago,
           acr: "aal2", amr: ["otp"],
@@ -73,7 +73,7 @@ class BaseSelfRpCredentialReissuerTest < ActiveSupport::TestCase
 
   test "a missing or whitespace refresh credential is unavailable" do
     [nil, "", " refresh-token", "refresh-token "].each do |raw_refresh_token|
-      assert_not BaseSelfRpCredentialReissuer.refreshable?(
+      assert_not BaseSelfRpCredentialIssuer.refreshable?(
         resource: @client, rp_session: @rp_session, raw_refresh_token:, client_id: "base-app-ww",
       )
     end

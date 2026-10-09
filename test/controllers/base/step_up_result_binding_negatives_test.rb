@@ -67,7 +67,13 @@ class BaseStepUpResultBindingNegativesTest < ActiveSupport::TestCase
         before = transaction.reload.attributes
         token_before = token.reload.attributes
         ceremony_before = ceremony.reload.attributes
-        changed = StepUpRequirement.new(**requirement.to_h.merge(field => replacement))
+        changed = StepUpRequirement.new(
+          step_up_required: true,
+          phishing_resistant_required: false,
+          user_verification_required: false,
+          full_reauthentication_required: false,
+          **requirement.to_h.merge(field => replacement),
+        )
 
         assert_raises(IdentityStepUpCeremonyContract::Error) do
           IdentityStepUpCeremonyFreshnessCommitter.call!(

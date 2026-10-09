@@ -36,10 +36,39 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
         "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
                             headers:,
       )
-      sync_response_cookie!(
-        owner,
-        JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
-      )
+      begin
+        fv5006 = owner
+        fv5008 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+        fv5007 = fv5006.response.cookies[fv5008]
+        if fv5007.nil?
+          fv5011 = fv5006.response.headers["Set-Cookie"] || fv5006.response.headers["set-cookie"]
+          fv5010 =
+            if fv5011.is_a?(String) && fv5011.start_with?("[")
+              JSON.parse(fv5011)
+            else
+              Array(fv5011)
+            end
+          fv5009 =
+            fv5010.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
+              entry.split(";", 2).first.to_s.start_with?("#{fv5008}=")
+            end
+          if fv5009
+
+            _, fv5007 = fv5009.split(";", 2).first.to_s.split("=", 2)
+            fv5007 = Rack::Utils.unescape(fv5007.to_s)
+          end
+        end
+
+        unless fv5007.nil?
+          fv5006.cookies.delete(fv5008)
+          # Rack::Test's []= uses its default host. The current request may target a
+          # different surface, so install the cookie against the browser's active host.
+          fv5006.cookies.merge( # rubocop:disable Lint/Void
+            "#{fv5008}=#{Rack::Utils.escape(fv5007)}",
+            URI.parse("https://#{fv5006.host}/"),
+          )
+        end
+      end
       parent = OidcAuthorizationTransactionCoordinator.model_for(surface).find_by!(state: parameters.fetch(:state))
       binding = BaseAuthAdmissionCoordinator.admission_binding_model(surface).find_by!(
         authorization_transaction_id: parent.id,
@@ -103,16 +132,45 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
                      authenticity_token: csrf, }
       owner.post("/oauth/authorize", params: submission, headers:)
 
-      assert_equal 302, owner.response.status
+      assert_equal 303, owner.response.status
       assert_predicate parent.reload.base_finalized_at, :present?
       finalized_root = parent.browser_session_ref
-      sync_response_cookie!(
-        owner,
-        JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?),
-      )
+      begin
+        fv5000 = owner
+        fv5002 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+        fv5001 = fv5000.response.cookies[fv5002]
+        if fv5001.nil?
+          fv5005 = fv5000.response.headers["Set-Cookie"] || fv5000.response.headers["set-cookie"]
+          fv5004 =
+            if fv5005.is_a?(String) && fv5005.start_with?("[")
+              JSON.parse(fv5005)
+            else
+              Array(fv5005)
+            end
+          fv5003 =
+            fv5004.flat_map { |cookie_entry| cookie_entry.to_s.split("\n") }.find do |cookie_entry|
+              cookie_entry.split(";", 2).first.to_s.start_with?("#{fv5002}=")
+            end
+          if fv5003
+
+            _, fv5001 = fv5003.split(";", 2).first.to_s.split("=", 2)
+            fv5001 = Rack::Utils.unescape(fv5001.to_s)
+          end
+        end
+
+        unless fv5001.nil?
+          fv5000.cookies.delete(fv5002)
+          # Rack::Test's []= uses its default host. The current request may target a
+          # different surface, so install the cookie against the browser's active host.
+          fv5000.cookies.merge( # rubocop:disable Lint/Void
+            "#{fv5002}=#{Rack::Utils.escape(fv5001)}",
+            URI.parse("https://#{fv5000.host}/"),
+          )
+        end
+      end
       owner.post("/oauth/authorize", params: submission, headers:)
 
-      assert_equal 302, owner.response.status
+      assert_equal 303, owner.response.status
       assert_equal finalized_root, parent.reload.browser_session_ref
     end
   ensure

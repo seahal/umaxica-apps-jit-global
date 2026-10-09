@@ -20,7 +20,7 @@ class RenameSideOrgOidcOperationalIdsToWarp < ActiveRecord::Migration[8.2]
   private
 
   def conflicting_connection_ids?
-    connection.select_value(<<~SQL).to_i.positive?
+    connection.select_value(<<~SQL.squish).to_i.positive?
       SELECT COUNT(*)
       FROM operator_oidc_connections old_rows
       JOIN operator_oidc_connections new_rows
@@ -31,7 +31,7 @@ class RenameSideOrgOidcOperationalIdsToWarp < ActiveRecord::Migration[8.2]
   end
 
   def terminate_live_authorization_transactions!
-    execute <<~SQL
+    execute(<<~SQL.squish)
       UPDATE operator_oidc_authorization_transactions
       SET expires_at = LEAST(expires_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
       WHERE client_id = 'side-org' AND status IN ('pending', 'authenticated')
@@ -39,7 +39,7 @@ class RenameSideOrgOidcOperationalIdsToWarp < ActiveRecord::Migration[8.2]
   end
 
   def rename_connection_ids!
-    execute <<~SQL
+    execute(<<~SQL.squish)
       UPDATE operator_oidc_connections
       SET client_id = 'warp-org', updated_at = CURRENT_TIMESTAMP
       WHERE client_id = 'side-org'
@@ -47,7 +47,7 @@ class RenameSideOrgOidcOperationalIdsToWarp < ActiveRecord::Migration[8.2]
   end
 
   def rename_rp_session_ids!
-    execute <<~SQL
+    execute(<<~SQL.squish)
       UPDATE operator_rp_sessions
       SET oidc_client_id = 'warp-org', updated_at = CURRENT_TIMESTAMP
       WHERE oidc_client_id = 'side-org'
@@ -55,7 +55,7 @@ class RenameSideOrgOidcOperationalIdsToWarp < ActiveRecord::Migration[8.2]
   end
 
   def rename_authorization_transaction_ids!
-    execute <<~SQL
+    execute(<<~SQL.squish)
       UPDATE operator_oidc_authorization_transactions
       SET client_id = 'warp-org', updated_at = CURRENT_TIMESTAMP
       WHERE client_id = 'side-org'

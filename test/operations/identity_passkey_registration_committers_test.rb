@@ -21,7 +21,7 @@ class IdentityPasskeyRegistrationCommittersTest < ActiveSupport::TestCase
       audience: "step_up:app", session_binding: @token.public_id, token_binding: @token.public_id,
       require_session_binding: true,
     )
-    @transaction = issue_base_step_up_admission!(
+    @transaction = BaseStepUpAdmissionIssuer.call!(
       actor: @actor, token: @token, requirement: @requirement, return_to: "/identity/birthdate",
       base_browser_nonce: SecureRandom.urlsafe_base64, base_token: @token,
     ).transaction
@@ -108,7 +108,7 @@ class IdentityPasskeyRegistrationCommittersTest < ActiveSupport::TestCase
   test "a registration challenge cannot be issued for an ordinary step-up transaction" do
     stranger = Client.create!(status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: stranger)
-    transaction = issue_base_step_up_admission!(
+    transaction = BaseStepUpAdmissionIssuer.call!(
       actor: stranger, token: token,
       requirement: StepUpRequirement.new(
         scope: "settings_birthdate", step_up_required: true, allowed_methods: [:passkey],

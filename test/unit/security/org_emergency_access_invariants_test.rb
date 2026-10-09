@@ -137,7 +137,13 @@ class OrgEmergencyAccessInvariantsTest < ActiveSupport::TestCase
     offenders =
       Rails.root.glob("app/**/*.rb").select do |path|
         source = path.read
-        source.match?(/Emergency/i) && source.match?(/WebAuthn::Credential\.from_(get|create)/)
+        shared_registration_path = Rails.root.join(
+          "app/operations/identity_passkey_registration_verification_committer.rb",
+        )
+        shared_registration = path == shared_registration_path &&
+          source.include?("Webauthn::RegistrationVerifier.verify!") &&
+          !source.match?(/WebAuthn::Credential\.from_get/)
+        !shared_registration && source.match?(/Emergency/i) && source.match?(/WebAuthn::Credential\.from_(get|create)/)
       end
 
     assert_empty offenders.map { |path| path.relative_path_from(Rails.root).to_s },

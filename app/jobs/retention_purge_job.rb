@@ -249,6 +249,8 @@ class RetentionPurgeJob < ApplicationJob
     klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
       klass.transaction do
         batch.lock.to_a.each do |flow|
+          next if klass == ClientSignInFlow &&
+            ClientOidcAuthorizationTransaction.exists?(secret_sign_in_flow_id: flow.id)
           next unless AuthAdmissionBindingPurger.purge_for_parent!(
             # The flow itself is selected only after its model-owned retention
             # deadline. Admission terminal facts need only cross the same
@@ -354,6 +356,7 @@ class RetentionPurgeJob < ApplicationJob
               next false
             end
 
+            RetentionCrossDatabaseChildPurge.call(actor: actor)
             WithdrawalPersonalDataAnonymizer.call(actor: actor)
             next false unless collect_actor_identifiers(actor)
 

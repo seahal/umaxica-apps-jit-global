@@ -12,7 +12,7 @@ class CredentialRelationScopeTest < ActiveSupport::TestCase
 
   CLIENT_SCOPED = {
     ClientPasskeyPolicy => [ClientPasskey, :user_id],
-    ClientSecretCredentialPolicy => [ClientSecretCredential, :user_id],
+    ClientSecretCredentialPolicy => [ClientSecretCredential, :client_id],
     ClientTotpCredentialPolicy => [ClientTotpCredential, :user_id],
   }.freeze
 
@@ -32,10 +32,15 @@ class CredentialRelationScopeTest < ActiveSupport::TestCase
     end
 
     test "#{policy_class} scopes the list to the actor's own #{foreign_key}" do
-      actor = Struct.new(:id).new(4_242)
+      actor =
+        case model.name
+        when /\AClient/ then clients(:one)
+        when /\AOperator/ then operators(:one)
+        when /\AVisitor/ then Visitor.create!(status_id: VisitorStatus::ACTIVE)
+        end
 
       assert_includes scoped(policy_class, model.all, user: actor).to_sql, foreign_key.to_s
-      assert_includes scoped(policy_class, model.all, user: actor).to_sql, "4242"
+      assert_includes scoped(policy_class, model.all, user: actor).to_sql, actor.id.to_s
     end
   end
 end

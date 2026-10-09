@@ -6,7 +6,6 @@
 require "digest"
 
 class BaseAuthAdmissionCoordinator < ApplicationService
-  ADMISSION_REFERENCE_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i.freeze
   CLIENT_BINDING_PROOF_PARAMS = %w(
     auth_sid sid auth_ceremony_session_id admitted_auth_ceremony_session_id base_token_id
     base_browser_digest confirmation_ref sign_in_flow_id authorization_transaction_id
@@ -159,6 +158,51 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       binding
     rescue ActiveRecord::RecordNotFound
       raise Denied.new("result browser binding is unavailable", code: "return_binding_mismatch")
+    end
+
+    def validate_social_result_browser_binding!(reference:, surface:, provider:, base_browser_nonce:, base_token:)
+      binding = find_admission_binding!(surface:, reference:)
+      unless binding.redeemed? && !binding.retired? && !binding.expired? &&
+          %w(authentication_handoff local_sign_in local_sign_up).include?(binding.purpose) &&
+          base_browser_nonce.is_a?(String) && base_browser_nonce.present?
+        raise Denied.new("social result admission is unavailable", code: "return_binding_mismatch")
+      end
+
+      ensure_binding_browser_matches!(binding, surface:, nonce: base_browser_nonce)
+      ensure_binding_token_matches!(binding, base_token)
+      validate_admission_parent!(binding)
+      validate_admission_root!(binding)
+      ceremony = binding.admitted_auth_ceremony_session
+      unless ceremony&.active? && ceremony.admitted? && ceremony.authentication_evidence_recorded? &&
+          ceremony.authentication_method == provider.to_s
+        raise Denied.new("social authentication evidence is unavailable", code: "return_binding_mismatch")
+      end
+
+      binding
+    rescue ActiveRecord::RecordNotFound, ArgumentError
+      raise Denied.new("social result admission is unavailable", code: "return_binding_mismatch")
+    end
+
+    def validate_completed_social_signup_browser_binding!(commit:, surface:, base_browser_nonce:, base_token:,
+                                                          allow_incomplete: false)
+      binding = find_admission_binding!(surface:, reference: commit.result["session_ref"])
+      unless binding.redeemed? && !binding.retired? && !binding.expired? &&
+          %w(authentication_handoff local_sign_in local_sign_up).include?(binding.purpose)
+        raise Denied.new("social receipt admission is unavailable", code: "return_binding_mismatch")
+      end
+
+      ensure_binding_browser_matches!(binding, surface:, nonce: base_browser_nonce)
+      ceremony = binding.admitted_auth_ceremony_session
+      unless ceremony && (ceremony.completed? || (allow_incomplete && ceremony.active?)) &&
+          !ceremony.cancelled? && !ceremony.revoked_at &&
+          ceremony.authentication_method == commit.identity.provider && ceremony.authentication_evidence_recorded?
+        raise Denied.new("social receipt evidence is unavailable", code: "return_binding_mismatch")
+      end
+
+      validate_completed_social_parent!(binding, commit, base_token, allow_incomplete:)
+      binding
+    rescue ActiveRecord::RecordNotFound, ArgumentError
+      raise Denied.new("social receipt browser binding is unavailable", code: "return_binding_mismatch")
     end
 
     def validate_registration_restart_browser!(binding:, surface:, base_browser_nonce:, base_token:, scope:, method:)
@@ -333,7 +377,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       end
 
       reference = payload.fetch("reference")
-      unless reference.is_a?(String) && reference.match?(ADMISSION_REFERENCE_PATTERN)
+      unless reference.is_a?(String) && reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
         raise Denied.new("cancellation reference is invalid", code: "invalid_admission")
       end
 
@@ -437,7 +481,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def read_result_reference!(reference:, surface:, transaction_ref:, expected_intent:, store: default_store)
-      unless reference.is_a?(String) && reference.match?(ADMISSION_REFERENCE_PATTERN) &&
+      unless reference.is_a?(String) && reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN) &&
           transaction_ref.is_a?(String) && transaction_ref.present?
         raise Denied.new("admission binding mismatch", code: "invalid_admission")
       end
@@ -523,7 +567,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def find_admission_binding!(surface:, reference:)
       raise Denied.new("admission reference is invalid", code: "invalid_admission") unless
-        reference.is_a?(String) && reference.match?(ADMISSION_REFERENCE_PATTERN)
+        reference.is_a?(String) && reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
 
       admission_binding_model(surface).connection_owner.connected_to(role: :writing) do
         admission_binding_model(surface).find_by!(entry_ref: reference)
@@ -534,7 +578,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def find_admission_binding_by_confirmation!(surface:, reference:)
       raise Denied.new("confirmation reference is invalid", code: "invalid_admission") unless
-        reference.is_a?(String) && reference.match?(ADMISSION_REFERENCE_PATTERN)
+        reference.is_a?(String) && reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
 
       admission_binding_model(surface).connection_owner.connected_to(role: :writing) do
         admission_binding_model(surface).find_by!(confirmation_ref: reference)
@@ -688,7 +732,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def validate_admission_reference!(reference, label:)
-      return if reference.is_a?(String) && reference.match?(ADMISSION_REFERENCE_PATTERN)
+      return if reference.is_a?(String) && reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
 
       raise Denied.new("#{label} is invalid", code: "invalid_admission")
     end
@@ -823,6 +867,49 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       raise Denied.new("Base token binding is invalid", code: "session_binding_mismatch")
     end
 
+    def validate_completed_social_parent!(binding, commit, token, allow_incomplete: false)
+      parent = admission_parent_record(binding)
+      valid =
+        if binding.parent_kind == :authorization_transaction
+          completed_social_authorization_parent_valid?(binding, commit, token, parent, allow_incomplete:)
+        else
+          completed_social_sign_in_parent_valid?(binding, commit, token, parent, allow_incomplete:)
+        end
+      return if valid
+
+      raise Denied.new("social receipt parent is unavailable", code: "return_binding_mismatch")
+    end
+
+    def completed_social_authorization_parent_valid?(binding, commit, token, parent, allow_incomplete:)
+      return false unless parent
+
+      pending_resume = allow_incomplete && parent.status == OidcAuthorizationTransactionable::STATUS_PENDING &&
+        parent.actor_ref.nil? && binding.base_token_id == token&.id
+      established = (parent.authenticated? || parent.consumed?) &&
+        parent.actor_ref == commit.user.public_id && result_root_context_matches?(binding, parent, token)
+      now = parent.class.database_now
+      (pending_resume || established) && !parent.expired?(now:) && !parent.login_challenge_expired?(now:)
+    end
+
+    def completed_social_sign_in_parent_valid?(binding, commit, token, parent, allow_incomplete:)
+      return false unless parent
+
+      pending_resume = allow_incomplete && binding.base_token_id == token&.id &&
+        completed_social_sign_in_parent_pending?(binding, commit, parent)
+      completed = parent.sign_in_completed? && parent.principal_id == commit.user.id &&
+        token&.id == parent.token_id && token.currently_usable?(token.class.database_now)
+      (pending_resume || completed) && !parent.expired?(parent.class.database_now)
+    end
+
+    def completed_social_sign_in_parent_pending?(binding, commit, parent)
+      return true if parent.sign_in_primary_pending? && parent.principal_id.nil?
+
+      ceremony = binding.admitted_auth_ceremony_session
+      (parent.sign_in_primary_pending? || parent.sign_in_session_issuance_pending?) &&
+        parent.principal_id == commit.user.id && parent.authentication_method == ceremony.authentication_method &&
+        parent.authentication_event_at == ceremony.authentication_event_at
+    end
+
     def ensure_binding_token_matches!(binding, base_token)
       return if binding.base_token_id == base_token&.id
 
@@ -838,7 +925,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def validate_entry_binding!(reference:, surface:, allowed_purposes:, binding:, raw_auth_sid:)
       model = admission_binding_model(surface)
-      unless reference.is_a?(String) && reference.match?(ADMISSION_REFERENCE_PATTERN) &&
+      unless reference.is_a?(String) && reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN) &&
           binding.is_a?(model) && binding.entry_ref == reference && binding.live? &&
           binding.confirmed? && binding.attached?
         raise Denied.new("admission binding is unavailable", code: "invalid_admission")

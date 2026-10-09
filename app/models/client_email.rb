@@ -72,8 +72,6 @@ class ClientEmail < AppPrincipalRecord
 
   self.filter_attributes += %w(address sign_up_otp_context credential_registration_otp_context)
 
-  MAX_EMAILS_PER_USER = 4
-
   attribute :user_email_status_id, default: ClientEmailStatus::UNVERIFIED
   belongs_to :user_email_status, class_name: "ClientEmailStatus",
                                  inverse_of: :client_emails
@@ -85,14 +83,6 @@ class ClientEmail < AppPrincipalRecord
   validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :user_email_status_id, numericality: { only_integer: true }
   validates :address_digest, presence: true, if: :binding_effective?
-  validates_with AssociatedRecordLimitValidator,
-                 on: :create,
-                 owner: :user,
-                 association: :client_emails,
-                 foreign_key: :user_id,
-                 limit: :MAX_EMAILS_PER_USER,
-                 record_name: "emails",
-                 owner_name: "user"
   before_destroy :prevent_destroy_when_undeletable
 
   public

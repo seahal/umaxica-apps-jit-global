@@ -22,7 +22,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
   end
 
   test "visitor browses and mutates identity telephones and telephone registration failures" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     host! host
     visitor = visitors(:reserved_visitor)
     token = VisitorToken.create!(
@@ -55,9 +55,49 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
     # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
-    install_base_browser_rp_credentials!(
-      surface: "com", host: host, actor: visitor, token: token,
-    )
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = host
+          rp_token = token
+          rp_client = OidcClientRegistry.find!("base-com-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && VisitorRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = VisitorRpSession.create!(
+                visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                visitor, host: rp_host, resource_type: "visitor",
+                         session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                         subject: OidcSubject.for(visitor, resource_type: "visitor"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
+    end
     headers = {
       "Authorization" => "Bearer #{access_token}",
       "Accept" => "text/html,application/xhtml+xml",
@@ -70,7 +110,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
       visitor: visitor,
       number: "+819055510001",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
-    )
+    ).finalize_binding!
     unverified = VisitorTelephone.create!(
       visitor: visitor,
       number: "+819055510002",
@@ -79,7 +119,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
     extra = VisitorTelephone.create!(
       visitor: visitor,
       number: "+819055510003",
-      visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+      visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
     )
 
     get base_com_identity_telephones_url(ri: "jp", host: host), headers: headers
@@ -93,7 +133,8 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
     delete base_com_identity_telephone_url(extra.public_id, ri: "jp", host: host), headers: headers
 
     assert_response :redirect
-    assert_nil VisitorTelephone.find_by(id: extra.id)
+    assert_equal extra.id, VisitorTelephone.find(extra.id).id
+    assert_nil extra.reload.binding_released_at
 
     fake_adapter = Object.new
     fake_adapter.define_singleton_method(:deliver) { |**_args| true }
@@ -114,14 +155,14 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
     assert_response :redirect
 
     patch base_com_identity_telephones_registration_url(ri: "jp", host: host),
-          params: { user_telephone: { pass_code: "123456" } },
+          params: { visitor_telephone: { pass_code: "123456" } },
           headers: headers
 
     assert_response :redirect
 
     TurnstileVerifierStub.challenge_response = { "success" => false }
     post base_com_identity_telephones_registration_url(ri: "jp", host: host),
-         params: { user_telephone: { raw_number: "+819055510011" } },
+         params: { visitor_telephone: { raw_number: "+819055510011" } },
          headers: headers
 
     assert_response :unprocessable_content
@@ -129,7 +170,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.challenge_response = { "success" => true }
     OtpAdapter.stub(:for, fake_adapter) do
       post base_com_identity_telephones_registration_url(ri: "jp", host: host),
-           params: { user_telephone: { raw_number: "+819055510012" } },
+           params: { visitor_telephone: { raw_number: "+819055510012" } },
            headers: headers
     end
 
@@ -137,20 +178,20 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
 
     TurnstileVerifierStub.challenge_response = { "success" => false }
     patch base_com_identity_telephones_registration_url(ri: "jp", host: host),
-          params: { user_telephone: { pass_code: "123456" } },
+          params: { visitor_telephone: { pass_code: "123456" } },
           headers: headers
 
     assert_response :unprocessable_content
 
     TurnstileVerifierStub.challenge_response = { "success" => true }
     patch base_com_identity_telephones_registration_url(ri: "jp", host: host),
-          params: { user_telephone: { pass_code: "" } },
+          params: { visitor_telephone: { pass_code: "" } },
           headers: headers
 
     assert_response :unprocessable_content
 
     patch base_com_identity_telephones_registration_url(ri: "jp", host: host),
-          params: { user_telephone: { pass_code: "000000" } },
+          params: { visitor_telephone: { pass_code: "000000" } },
           headers: headers
 
     assert_includes [302, 303, 422], response.status
@@ -174,7 +215,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
   end
 
   test "visitor browses identity secrets and email registration failure paths" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     host! host
     visitor = visitors(:reserved_visitor)
     token = VisitorToken.create!(
@@ -207,9 +248,49 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
     # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
-    install_base_browser_rp_credentials!(
-      surface: "com", host: host, actor: visitor, token: token,
-    )
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = host
+          rp_token = token
+          rp_client = OidcClientRegistry.find!("base-com-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && VisitorRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = VisitorRpSession.create!(
+                visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                visitor, host: rp_host, resource_type: "visitor",
+                         session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                         subject: OidcSubject.for(visitor, resource_type: "visitor"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
+    end
     headers = {
       "Authorization" => "Bearer #{access_token}",
       "Accept" => "text/html,application/xhtml+xml",
@@ -223,7 +304,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
       address: "coverage-visitor-#{SecureRandom.hex(4)}@example.test",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       confirm_policy: true,
-    )
+    ).finalize_binding!
     extra_visitor_email = VisitorEmail.create!(
       visitor: visitor,
       address: "coverage-visitor-extra-#{SecureRandom.hex(4)}@example.test",
@@ -238,7 +319,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
       visitor: visitor,
       number: "+819055520001",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
-    )
+    ).finalize_binding!
     secret = VisitorSecretCredential.create!(
       visitor: visitor,
       name: "Coverage secret",
@@ -372,7 +453,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
   end
 
   test "operator browses identity sessions secrets and telephones" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! host
     operator = operators(:one)
     token = OperatorToken.create!(
@@ -405,9 +486,49 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
     # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
-    install_base_browser_rp_credentials!(
-      surface: "org", host: host, actor: operator, token: token,
-    )
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = host
+          rp_token = token
+          rp_client = OidcClientRegistry.find!("base-org-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && OperatorRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = OperatorRpSession.create!(
+                operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                operator, host: rp_host, resource_type: "operator",
+                          session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                          oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                          expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                          issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                          subject: OidcSubject.for(operator, resource_type: "operator"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
+    end
     headers = {
       "Authorization" => "Bearer #{access_token}",
       "Accept" => "text/html,application/xhtml+xml",
@@ -619,7 +740,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
   end
 
   test "client browses identity telephones" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
     user = clients(:one)
     token = ClientToken.create!(
@@ -652,9 +773,49 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
     # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
-    install_base_browser_rp_credentials!(
-      surface: "app", host: host, actor: user, token: token,
-    )
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = host
+          rp_token = token
+          rp_client = OidcClientRegistry.find!("base-app-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && ClientRpSession.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = ClientRpSession.create!(
+                client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                user, host: rp_host, resource_type: "client",
+                      session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                      oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                      expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                      issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                      subject: OidcSubject.for(user, resource_type: "client"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
+    end
     headers = {
       "Authorization" => "Bearer #{access_token}",
       "Accept" => "text/html,application/xhtml+xml",
@@ -668,7 +829,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
       address: "app-coverage-#{SecureRandom.hex(4)}@example.test",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: true,
-    )
+    ).finalize_binding!
     ClientPasskeyStatus.find_or_create_by!(id: ClientPasskeyStatus::ACTIVE)
     ClientPasskey.create!(
       user: user,
@@ -682,7 +843,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
       user: user,
       number: "+819077710001",
       user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).finalize_binding!
     extra_telephone = ClientTelephone.create!(
       user: user,
       number: "+819077710002",

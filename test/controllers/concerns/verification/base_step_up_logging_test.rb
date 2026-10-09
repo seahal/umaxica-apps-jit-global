@@ -2,119 +2,83 @@
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
 
-class VerificationBaseStepUpLoggingTest < ActiveSupport::TestCase
-  Request =
-    Struct.new(:request_method, :format, keyword_init: true) do
-      def get? = false
-
-      def head? = false
-    end
-
-  Format =
-    Struct.new(:value) do
-      def to_s = value
-
-      def json? = false
-    end
-
-  Token =
-    Struct.new(
-      :public_id,
-      :last_step_up_at,
-      :last_step_up_scope,
-      :last_step_up_aal,
-      :last_step_up_method,
-      :last_step_up_session_public_id,
-      :last_step_up_purpose,
-      :last_step_up_audience,
-      keyword_init: true,
-    ) do
-      def currently_usable?(_now = Time.current) = true
-
-      def has_attribute?(name)
-        members.include?(name.to_sym)
-      end
-    end
-
-  class Harness
-    class << self
-      def before_action(*) = nil
-
-      def helper_method(*) = nil
-    end
-
-    include CommonRedirect
-    include VerificationBase
-
-    attr_accessor :session_token
-
-    def request = Request.new(request_method: "POST", format: Format.new("text/html"))
-
-    def params = {}.with_indifferent_access
-
-    def action_name = "update"
-
-    def current_session_token = session_token
-
-    def enforce_step_up_prereqs!(*) = false
-
-    def render(*) = nil
-
-    def log_out = nil
-  end
-
-  setup do
-    Actor.reset
-    Actor.install_context!(tld: :app, actor_type: :client)
-  end
-
-  teardown { Actor.reset }
-
-  test "require_step_up logs diagnostic fields without token identifiers" do
-    token = Token.new(
-      public_id: "session-public-id-must-not-be-logged",
-      last_step_up_at: 1.minute.ago,
-      last_step_up_scope: "settings_email",
-      last_step_up_aal: "aal2",
-      last_step_up_method: "passkey",
+class VerificationBaseStepUpLoggingTest < ActionDispatch::IntegrationTest
+  test "a real denied credential mutation logs policy properties without token or actor identifiers" do
+    https!
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! host
+    actor = clients(:one)
+    headers = as_user_headers(actor, host: host)
+    token = ClientToken.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
+    BaseSelectorAuthority.prepare(surface: :app, principal: actor, session: token)
+    token.update!(
+      last_step_up_at: Time.current, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
+      last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:app", last_step_up_credential_ref: SecureRandom.uuid,
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-      last_step_up_credential_ref: "test-step-up-credential", last_step_up_full_reauthentication: false,
-      last_step_up_session_public_id: "session-public-id-must-not-be-logged",
-      last_step_up_purpose: "step_up",
-      last_step_up_audience: "step_up:app",
+      last_step_up_full_reauthentication: false,
     )
-    harness = Harness.new
-    harness.session_token = token
-    logs = []
+    token.rotate_refresh_token!
+    rp_client = OidcClientRegistry.find!("base-app-ww")
+    rp_session = ClientRpSession.create!(
+      client_token: token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.current,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    access = AuthenticationTokenService.encode(
+      actor, host: host, resource_type: "client", session_public_id: token.public_id,
+             base_session_public_id: token.public_id, oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+             expires_at: 10.minutes.from_now, scopes: %w(openid profile), issuer: OidcIssuer.for_client(rp_client),
+             audiences: [rp_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+             subject: OidcSubject.for(actor, resource_type: "client"), client_id: rp_client.client_id,
+    )
+    cookie = [
+      headers.fetch("Cookie"),
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access)}",
+      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_session.issue_refresh_token!)}",
+    ].join("; ")
+    headers = headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
 
-    Rails.logger.stub(:info, ->(message) { logs << JSON.parse(message, symbolize_names: true) }) do
-      assert_not harness.require_step_up!(scope: "settings_passkey")
+    contact = actor.client_emails.create!(
+      address: "log-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    ).tap(&:finalize_binding!)
+    logs = []
+    Rails.logger.stub(:info, ->(message = nil, &block) { logs << (message || block.call) }) do
+      delete base_app_identity_email_path(contact.public_id, ri: "jp"), headers: headers
     end
 
-    event = logs.find { |entry| entry[:event] == "auth.step_up.required" }
+    assert_response :unauthorized
+    assert_not_predicate contact.reload, :binding_released?
+    event =
+      logs.filter_map { |entry| JSON.parse(entry, symbolize_names: true) if entry.start_with?("{") }
+        .find { |entry| entry[:event] == "auth.step_up.required" }
 
-    assert event, "expected auth.step_up.required diagnostic log"
+    assert event, "expected the diagnostic log from the refused public request"
     data = event.fetch(:data)
 
-    assert_equal "VerificationBaseStepUpLoggingTest::Harness", data[:controller]
-    assert_equal "update", data[:action]
-    assert_equal "POST", data[:method]
+    assert_equal "Base::App::Identity::EmailsController", data[:controller]
+    assert_equal "destroy", data[:action]
+    assert_equal "DELETE", data[:method]
     assert_equal "text/html", data[:format]
     assert_equal "app", data[:surface]
     assert_equal "client", data[:actor_type]
-    assert_equal "settings_passkey", data[:scope]
-    assert_equal StepUpRequirement::NO_AAL, data[:required_aal]
+    assert_equal "settings_email", data[:scope]
     assert_not data[:step_up_satisfied]
     assert data[:step_up_usable_token]
     assert_equal "passkey", data[:step_up_method]
-    assert_equal "settings_passkey", data[:step_up_scope]
-    assert_match(/\A\d{4}-\d{2}-\d{2}T/, data[:step_up_expires_at])
-
+    assert_equal "settings_email", data[:step_up_scope]
+    assert_match(/\A\d{4}-\d{2}-\d{2}T/, data.fetch(:step_up_expires_at))
+    assert_not data.key?(:required_aal)
+    assert data.key?(:phishing_resistant_required)
+    assert data.key?(:user_verification_required)
+    assert data.key?(:full_reauthentication_required)
     serialized = event.to_json
 
-    assert_not_includes serialized, token.public_id
-    assert_not_includes serialized, token.last_step_up_session_public_id
+    [token.public_id, actor.public_id, rp_session.public_id, access].each do |private_value|
+      assert_not_includes serialized, private_value
+    end
   end
 end

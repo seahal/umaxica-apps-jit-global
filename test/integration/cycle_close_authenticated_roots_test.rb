@@ -36,12 +36,12 @@ class CycleCloseAuthenticatedRootsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "anonymous Base dashboard and retired lobby return 404 without redirect" do
+  test "anonymous Base Dashboard enters passive sign and the retired lobby remains absent" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     get "/dashboard", params: { ri: "jp" }, headers: { "Host" => host }
 
-    assert_response :not_found, "/dashboard"
-    assert_nil response.location
+    assert_response :redirect, "/dashboard"
+    assert_equal "/sign", URI.parse(response.location).path
 
     get "/lobby", params: { ri: "jp" }, headers: { "Host" => host }
 

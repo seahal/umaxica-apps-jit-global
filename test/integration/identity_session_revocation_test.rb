@@ -18,7 +18,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     ensure_token_reference_records!
 
     @app_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    @com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+    @com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
   end
 
   test "self-service routes cannot revoke every session" do
@@ -147,10 +147,9 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     gateway = URI.parse(response.location)
 
-    assert_equal "jump.umaxica.net", gateway.host
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-
-    assert_equal "https://auth.umaxica.com/verification/setup/new", payload.fetch("url").split("?").first
+    assert_equal @com_host, gateway.host
+    assert_equal "/verification/setup", gateway.path
+    assert_nil Rack::Utils.parse_nested_query(gateway.query)["rt"]
     assert_predicate @current_token.reload, :currently_usable?
     assert_predicate @other_token.reload, :currently_usable?
   end
@@ -192,10 +191,35 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
   end
 
   def bearer_session_headers(actor, token, host:, resource_type:)
-    bearer_headers(
-      jwt_access_token_for(actor, host: host, session_public_id: token.public_id, resource_type: resource_type),
-      host: host,
-    ).merge("X-TEST-SESSION-PUBLIC-ID" => token.public_id)
+    https!
+    client_id = (resource_type == "client") ? "base-app-ww" : "base-com-ww"
+    client = OidcClientRegistry.find!(client_id)
+    attributes = {
+      oidc_client_id: client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.current,
+      refresh_token_expires_at: 10.minutes.from_now,
+    }
+    rp_session =
+      case token
+      when ClientToken then ClientRpSession.create!(attributes.merge(client_token: token))
+      when VisitorToken then VisitorRpSession.create!(attributes.merge(visitor_token: token))
+      end
+    access = AuthenticationTokenService.encode(
+      actor, host: host, resource_type: resource_type, session_public_id: token.public_id,
+             base_session_public_id: token.public_id, oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+             expires_at: 10.minutes.from_now, scopes: %w(openid profile), issuer: OidcIssuer.for_client(client),
+             audiences: [client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
+             subject: OidcSubject.for(actor, resource_type: resource_type), client_id: client.client_id,
+    )
+    {
+      "Host" => host,
+      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
+      "Cookie" => "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access)}; " \
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_session.issue_refresh_token!)}",
+    }
   end
 
   def create_client_token

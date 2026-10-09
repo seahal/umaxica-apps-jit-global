@@ -100,7 +100,7 @@ module Base
           )
 
           if result.success?
-            redirect_to_jump_url(result.redirect_url)
+            redirect_to_jump_url(result.redirect_url, status: request.post? ? :see_other : :found)
           else
             render json: { error: result.error, error_description: result.error_description },
                    status: :bad_request

@@ -148,12 +148,11 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     post auth_org_sign_out_url(ri: "jp", host: host, logout_challenge: transaction.logout_challenge)
 
-    assert_response :success
-    handoff = css_select("form#sign-out-handoff-form").first
-    location = URI.parse(handoff["action"])
+    assert_response :see_other
+    location = URI.parse(response.location)
 
     assert_equal [acme_host, "/oidc/logout"], [location.host, location.path]
-    assert_equal transaction.logout_challenge, handoff.css('input[name="logout_challenge"]').first["value"]
+    assert_equal transaction.logout_challenge, Rack::Utils.parse_query(location.query).fetch("logout_challenge")
   end
 
   test "post with a challenge that has not reached this step renders the unavailable page" do

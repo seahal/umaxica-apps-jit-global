@@ -2937,7 +2937,7 @@ module AuthenticationBase
       end
     return if latest_at.nil?
 
-    raise LoginCooldownError if latest_at + cooldown > Time.current
+    raise LoginCooldownError if latest_at + cooldown > token_class.database_now
   end
 
   # A cooldown refusal is not a dead end: it says where a new sign-in starts.

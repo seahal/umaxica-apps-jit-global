@@ -54,6 +54,8 @@ class AuditRecordIntegrityTest < ActiveSupport::TestCase
         record: email,
         otp_code: "123456",
         purpose: :sign_in,
+        auth_ceremony_session_ref: "1",
+        auth_email_otp_generation: SecureRandom.uuid,
       )
     end
 

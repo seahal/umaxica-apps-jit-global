@@ -234,19 +234,34 @@ class ClientTelephoneTest < ActiveSupport::TestCase
     assert_raise(ActiveRecord::RecordNotFound) { phone.reload }
   end
 
-  test "enforce_user_telephone_limit validation on create" do
-    # Create maximum allowed telephones
-    Prosopite.pause do
-      ClientTelephone::MAX_TELEPHONES_PER_USER.times do |i|
-        ClientTelephone.create!(@valid_attributes.merge(raw_number: "+155512310#{i}"))
+  test "pending telephone rows do not reserve capacity and the database permits only one effective binding" do
+    owner = Client.create!
+
+    assert_equal 0, owner.client_telephones.effective_binding.count
+    candidates =
+      5.times.map do |index|
+        ClientTelephone.create!(user: owner, number: "+81903333000#{index}", confirm_policy: "1")
       end
+
+    assert candidates.none?(&:binding_effective?)
+    first, second = candidates
+    first.update!(user_telephone_status_id: ClientTelephoneStatus::VERIFIED)
+    assert_difference -> { ClientTelephone.effective_binding.where(user_id: owner.id).count }, 1 do
+      first.finalize_binding!
     end
+    second.update!(user_telephone_status_id: ClientTelephoneStatus::VERIFIED)
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      ClientTelephone.transaction(requires_new: true) { second.finalize_binding! }
+    end
+    assert_predicate first.reload, :binding_effective?
+    assert_not_predicate second.reload, :binding_effective?
+    assert_equal 1, ClientTelephone.effective_binding.where(user_id: owner.id).count
+    first.release_binding!
+    second.finalize_binding!
 
-    # Try to create one more
-    extra_phone = ClientTelephone.new(@valid_attributes.merge(raw_number: "+15559999999"))
-
-    assert_not extra_phone.valid?
-    assert_includes extra_phone.errors[:base], "exceeds maximum telephones per user (#{ClientTelephone::MAX_TELEPHONES_PER_USER})"
+    assert_predicate first.reload, :binding_released?
+    assert_predicate second.reload, :binding_effective?
+    assert_equal 1, ClientTelephone.effective_binding.where(user_id: owner.id).count
   end
 
   # E.164 normalization tests
@@ -430,7 +445,26 @@ class ClientTelephoneTest < ActiveSupport::TestCase
     number = "+1555#{SecureRandom.random_number(10_000_000).to_s.rjust(7, "0")}"
     results = create_telephones_concurrently(number, number)
 
-    assert_pending_candidates_are_independent(results, IdentifierBlindIndex.bidx_for_telephone(number, realm: :app))
+    begin
+      fv5021 = results
+      fv5019 = IdentifierBlindIndex.bidx_for_telephone(
+        number,
+        realm: :app,
+      )
+
+      assert_equal 2, fv5021.size
+      assert fv5021.none? { |fv5020|
+        fv5020[:status] == :error
+      }
+      assert_equal 2, fv5021.count { |fv5020|
+        fv5020[:status] == :created
+      }, fv5021.inspect
+      assert_empty fv5021.select { |fv5020|
+        fv5020[:status] == :conflict
+      }
+      assert_equal 2,
+                   ClientTelephone.where(number_digest: fv5019).where(binding_finalized_at: nil).count
+    end
   end
 
   test "concurrent creates for equivalent formatted number commit at most one active telephone" do
@@ -439,7 +473,26 @@ class ClientTelephoneTest < ActiveSupport::TestCase
     normalized = "+1555777#{suffix}"
     results = create_telephones_concurrently(formatted, normalized)
 
-    assert_pending_candidates_are_independent(results, IdentifierBlindIndex.bidx_for_telephone(normalized, realm: :app))
+    begin
+      fv5018 = results
+      fv5016 = IdentifierBlindIndex.bidx_for_telephone(
+        normalized,
+        realm: :app,
+      )
+
+      assert_equal 2, fv5018.size
+      assert fv5018.none? { |fv5017|
+        fv5017[:status] == :error
+      }
+      assert_equal 2, fv5018.count { |fv5017|
+        fv5017[:status] == :created
+      }, fv5018.inspect
+      assert_empty fv5018.select { |fv5017|
+        fv5017[:status] == :conflict
+      }
+      assert_equal 2,
+                   ClientTelephone.where(number_digest: fv5016).where(binding_finalized_at: nil).count
+    end
   end
 
   test "concurrent finalization for one destination leaves one effective telephone binding" do
@@ -447,7 +500,44 @@ class ClientTelephoneTest < ActiveSupport::TestCase
     first = create_telephone_record(number)
     second = create_telephone_record(number)
 
-    results = finalize_telephones_concurrently(first, second)
+    results =
+      begin
+        fv5015 = first
+        fv5014 = second
+        track_telephone_race_number(fv5015.number)
+        track_telephone_race_number(fv5014.number)
+        fv5011 = Queue.new
+        fv5010 = Queue.new
+        fv5008 = Queue.new
+        ActiveRecord::Base.connection_handler.clear_active_connections!
+
+        fv5009 =
+          [fv5015.id, fv5014.id].map do |fv5012|
+            Thread.new do # rubocop:disable ThreadSafety/NewThread
+              ClientTelephone.connection_pool.with_connection do |fv5013|
+                configure_identifier_race_connection!(fv5013)
+                fv5011 << true
+                fv5010.pop
+                ClientTelephone.find(fv5012).finalize_binding!
+                fv5008 << { status: :finalized }
+              rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique, ActiveRecord::LockWaitTimeout => e
+                fv5008 << {
+                  status: :conflict,
+                  error: "#{e.class}: #{e.message}",
+                }
+              rescue StandardError => e
+                fv5008 << {
+                  status: :error,
+                  error: "#{e.class}: #{e.message}",
+                }
+              end
+            end
+          end
+        2.times { fv5011.pop }
+        2.times { fv5010 << true }
+        fv5009.each(&:join)
+        2.times.map { fv5008.pop }
+      end
 
     assert_equal 1, results.count { |result| result[:status] == :finalized }, results.inspect
     assert_equal 1, results.count { |result| result[:status] == :conflict }, results.inspect
@@ -470,7 +560,44 @@ class ClientTelephoneTest < ActiveSupport::TestCase
       ),
     )
 
-    results = finalize_telephones_concurrently(first, second)
+    results =
+      begin
+        fv5007 = first
+        fv5006 = second
+        track_telephone_race_number(fv5007.number)
+        track_telephone_race_number(fv5006.number)
+        fv5003 = Queue.new
+        fv5002 = Queue.new
+        fv5000 = Queue.new
+        ActiveRecord::Base.connection_handler.clear_active_connections!
+
+        fv5001 =
+          [fv5007.id, fv5006.id].map do |fv5004|
+            Thread.new do # rubocop:disable ThreadSafety/NewThread
+              ClientTelephone.connection_pool.with_connection do |fv5005|
+                configure_identifier_race_connection!(fv5005)
+                fv5003 << true
+                fv5002.pop
+                ClientTelephone.find(fv5004).finalize_binding!
+                fv5000 << { status: :finalized }
+              rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique, ActiveRecord::LockWaitTimeout => e
+                fv5000 << {
+                  status: :conflict,
+                  error: "#{e.class}: #{e.message}",
+                }
+              rescue StandardError => e
+                fv5000 << {
+                  status: :error,
+                  error: "#{e.class}: #{e.message}",
+                }
+              end
+            end
+          end
+        2.times { fv5003.pop }
+        2.times { fv5002 << true }
+        fv5001.each(&:join)
+        2.times.map { fv5000.pop }
+      end
 
     assert_equal 1, results.count { |result| result[:status] == :finalized }, results.inspect
     assert_equal 1, results.count { |result| result[:status] == :conflict }, results.inspect
@@ -661,44 +788,6 @@ class ClientTelephoneTest < ActiveSupport::TestCase
 
   def configure_identifier_race_connection!(connection)
     connection.execute("SET lock_timeout = '2000ms'")
-  end
-
-  def finalize_telephones_concurrently(first, second)
-    track_telephone_race_number(first.number)
-    track_telephone_race_number(second.number)
-    ready = Queue.new
-    release = Queue.new
-    results = Queue.new
-    ActiveRecord::Base.connection_handler.clear_active_connections!
-
-    threads =
-      [first.id, second.id].map do |id|
-        Thread.new do # rubocop:disable ThreadSafety/NewThread
-          ClientTelephone.connection_pool.with_connection do |connection|
-            configure_identifier_race_connection!(connection)
-            ready << true
-            release.pop
-            ClientTelephone.find(id).finalize_binding!
-            results << { status: :finalized }
-          rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique, ActiveRecord::LockWaitTimeout => e
-            results << { status: :conflict, error: "#{e.class}: #{e.message}" }
-          rescue StandardError => e
-            results << { status: :error, error: "#{e.class}: #{e.message}" }
-          end
-        end
-      end
-    2.times { ready.pop }
-    2.times { release << true }
-    threads.each(&:join)
-    2.times.map { results.pop }
-  end
-
-  def assert_pending_candidates_are_independent(results, digest)
-    assert_equal 2, results.size
-    assert results.none? { |result| result[:status] == :error }
-    assert_equal 2, results.count { |result| result[:status] == :created }, results.inspect
-    assert_empty results.select { |result| result[:status] == :conflict }
-    assert_equal 2, ClientTelephone.where(number_digest: digest).where(binding_finalized_at: nil).count
   end
 
   def active_telephone_digest_count(number)

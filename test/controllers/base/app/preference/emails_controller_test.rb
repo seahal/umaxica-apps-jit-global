@@ -11,7 +11,7 @@ module Base
         self.fixture_table_names = []
 
         setup do
-          @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+          @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
           email_address = "client-unsubscribe-#{SecureRandom.hex(4)}@example.com"
           @user = create_verified_user_with_email(email_address: email_address)
           @email = @user.client_emails.first
@@ -341,7 +341,8 @@ class Base::App::Preference::EmailsControllerTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,

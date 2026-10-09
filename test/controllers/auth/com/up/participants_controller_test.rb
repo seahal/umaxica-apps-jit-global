@@ -43,7 +43,13 @@ class Auth::Com::Sign::Up::ParticipantsControllerTest < ActionDispatch::Integrat
       controller.show
     end
 
-    assert_equal "/sign/up/check/email/birthdate?ri=jp", controller.redirected_to
+    destination = URI.parse(controller.redirected_to)
+
+    assert_equal "/sign/up/check/email/birthdate", destination.path
+    binding = SignFlowBindingCodec.decode(Rack::Utils.parse_query(destination.query).fetch("fb"))
+
+    assert_equal ticket.public_id, binding.flow_public_id
+    assert_equal "com", binding.surface
     assert_equal before_attrs, guarded_ticket_attrs(ticket.reload)
   end
 
@@ -52,9 +58,9 @@ class Auth::Com::Sign::Up::ParticipantsControllerTest < ActionDispatch::Integrat
 
     get auth_com_sign_up_check_email_birthdate_url(ri: "jp", sid: ticket.public_id), headers: default_headers
 
-    # The unbound ticket id is ignored, so the request restarts sign-up instead of loading it.
-    assert_response :see_other
-    assert_redirected_to auth_com_sign_up_path(ri: "jp")
+    assert_response :conflict
+    assert_nil response.location
+    assert_equal I18n.t("errors.messages.phase_violation_refused", locale: :ja), response.body
     assert_empty flash.to_hash
   end
 
@@ -63,8 +69,9 @@ class Auth::Com::Sign::Up::ParticipantsControllerTest < ActionDispatch::Integrat
           params: { requirement: "birthdate" },
           headers: default_headers
 
-    assert_response :see_other
-    assert_redirected_to auth_com_sign_up_path(ri: "jp")
+    assert_response :conflict
+    assert_nil response.location
+    assert_equal I18n.t("errors.messages.phase_violation_refused", locale: :ja), response.body
   end
 
   test "checkpoint destroy is routed for sign up cancellation" do
@@ -131,8 +138,8 @@ class Auth::Com::Sign::Up::ParticipantsControllerTest < ActionDispatch::Integrat
     controller.define_singleton_method(:path_target_value) { nil }
     controller.define_singleton_method(:signed_pt_param) { nil }
     controller.define_singleton_method(:signed_pt_token) { |path| path.presence && "signed-pt" }
-    controller.define_singleton_method(:auth_com_sign_up_check_email_birthdate_path) { |ri: nil, pt: nil|
-      "/sign/up/check/email/birthdate?ri=#{ri}#{pt ? "&pt=#{pt}" : ""}"
+    controller.define_singleton_method(:auth_com_sign_up_check_email_birthdate_path) { |ri: nil, pt: nil, fb: nil|
+      "/sign/up/check/email/birthdate?ri=#{ri}#{pt ? "&pt=#{pt}" : ""}#{fb ? "&fb=#{CGI.escape(fb)}" : ""}"
     }
     controller.define_singleton_method(:redirect_to) { |path, **_options| @redirected_to = path }
     controller.define_singleton_method(:redirected_to) { @redirected_to }

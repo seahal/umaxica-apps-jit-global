@@ -3,9 +3,7 @@
 
 require "test_helper"
 
-# Base's neutral entry: GET /sign only renders, POST /sign starts Auth at /sign/in, and the old
-# root POST with its Sign in / Sign up choice is gone
-# (adr/sign-neutral-entry-and-logout-target-authorization.md).
+# Base starts its own RP authorization from the neutral entry; Auth remains a separate ceremony.
 class BaseLocalAuthenticationEntryTest < ActionDispatch::IntegrationTest
   SURFACES = [
     {
@@ -62,10 +60,10 @@ class BaseLocalAuthenticationEntryTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "POST sign starts Auth at sign in with a Base-issued admission, ignoring a sign up intent" do
+  test "POST sign starts Base self-RP authorization with PKCE and ignores a sign up intent" do
     SURFACES.each do |surface|
-      auth_host = ENV.fetch(surface.fetch(:auth_host_env))
-      host! ENV.fetch(surface.fetch(:host_env))
+      base_host = ENV.fetch(surface.fetch(:host_env))
+      host! base_host
 
       target_url = nil
       JumpRtIssuer.stub(:call, ->(**args) { target_url = args.fetch(:url); "signed-jump-token" }) do
@@ -80,12 +78,20 @@ class BaseLocalAuthenticationEntryTest < ActionDispatch::IntegrationTest
       assert_response :see_other, surface.fetch(:name)
       location = URI.parse(response.location)
 
-      assert_equal auth_host, location.host
-      assert_equal public_send(surface.fetch(:auth_path)), location.path
+      assert_equal base_host, location.host
+      assert_equal "/oauth/authorize", location.path
       query = Rack::Utils.parse_nested_query(location.query)
 
-      assert_predicate query["entry_ref"], :present?
+      assert_equal "base-#{surface.fetch(:name)}-ww", query["client_id"]
+      assert_equal "https://#{base_host}/oidc/callback", query["redirect_uri"]
+      assert_equal "code", query["response_type"]
+      assert_equal "S256", query["code_challenge_method"]
+      assert_match(/\A[A-Za-z0-9_-]{43}\z/, query.fetch("code_challenge"))
+      assert_predicate query["state"], :present?
+      assert_predicate query["nonce"], :present?
+      assert_nil query["entry_ref"]
       assert_nil query["intent"]
+      assert_nil query["screen_hint"]
     end
   end
 
@@ -103,9 +109,32 @@ class BaseLocalAuthenticationEntryTest < ActionDispatch::IntegrationTest
   test "POST sign from an authenticated browser is refused with a plain 403 and issues nothing" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
+    actor = clients(:one)
+    headers = as_user_headers(actor, host: host)
+    token = ClientToken.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+    token.rotate_refresh_token!
+    rp_client = OidcClientRegistry.find!("base-app-ww")
+    rp_session = ClientRpSession.create!(
+      client_token: token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.current,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    access = AuthenticationTokenService.encode(
+      actor, host: host, resource_type: "client", session_public_id: token.public_id,
+             base_session_public_id: token.public_id, oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+             expires_at: 10.minutes.from_now, scopes: %w(openid profile), issuer: OidcIssuer.for_client(rp_client),
+             audiences: [rp_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+             subject: OidcSubject.for(actor, resource_type: "client"), client_id: rp_client.client_id,
+    )
+    cookie = [
+      headers.fetch("Cookie"),
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access)}",
+      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_session.issue_refresh_token!)}",
+    ].join("; ")
+    headers = headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
 
     BaseAuthAdmissionCoordinator.stub(:issue_local_entry!, ->(**) { flunk("must not issue") }) do
-      post base_app_sign_show_path(ri: "jp"), headers: as_user_headers(clients(:one), host: host)
+      post base_app_sign_show_path(ri: "jp"), headers: headers
     end
 
     assert_response :forbidden

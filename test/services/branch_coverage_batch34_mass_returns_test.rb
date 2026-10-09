@@ -116,9 +116,9 @@ class BranchCoverageBatch34MassReturnsTest < ActiveSupport::TestCase
   end
 
   test "SignUpStepGate blank and terminal cycle" do
-    controller = Object.new
-    controller.define_singleton_method(:current_sign_up_flow_ticket) { nil }
-    controller.define_singleton_method(:session) { {} }
+    controller = ApplicationController.new
+    controller.set_request!(ActionDispatch::TestRequest.create)
+    controller.set_response!(ActionDispatch::TestResponse.new)
     missing_ticket = SignUpStepGate.new(
       controller: controller, surface: :app, family: "email", step: :otp, mode: :show,
     ).call
@@ -126,8 +126,8 @@ class BranchCoverageBatch34MassReturnsTest < ActiveSupport::TestCase
       controller: controller, surface: :app, family: "nope", step: :otp, mode: :show,
     ).call
 
-    assert_equal :invalid, missing_ticket.status
-    assert_includes missing_ticket.errors, "ticket is required"
+    assert_equal :refused, missing_ticket.status
+    assert_equal :no_active_flow, missing_ticket.refusal
     assert_equal :invalid, unsupported.status
     assert_includes unsupported.errors, "unsupported sign-up route"
   end

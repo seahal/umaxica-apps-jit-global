@@ -148,7 +148,7 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         assert_equal 200, browser.response.status
         nonce = browser.request.session.fetch("auth_admission_browser_nonce")
         locator = browser.request.session.fetch("base_step_up_marker_locator")
-        marker = Valkey::AuthState::BaseStepUpMarkerStore.new.read(locator:, transaction_ref: parent.transaction_id)
+        marker = BaseStepUpMarkerAdapter.new.read(locator:, transaction_ref: parent.transaction_id)
 
         assert_not_nil marker
         assert marker.fetch("session_ref") == token.public_id, "Original marker must bind the current Root"
@@ -213,7 +213,7 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
 
         assert_includes StepUpConfiguredMethodsQuery.call(actor), :email_otp
         assert_nil token.reload.last_step_up_at
-        pending_marker = Valkey::AuthState::BaseStepUpMarkerStore.new.read(
+        pending_marker = BaseStepUpMarkerAdapter.new.read(
           locator:, transaction_ref: parent.transaction_id,
         )
 
@@ -252,7 +252,7 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
                "Retry must retain original nonce"
         assert locator == browser.request.session.fetch("base_step_up_marker_locator"),
                "Retry must retain original locator"
-        completed_marker = Valkey::AuthState::BaseStepUpMarkerStore.new.read(
+        completed_marker = BaseStepUpMarkerAdapter.new.read(
           locator:, transaction_ref: parent.transaction_id,
         )
 

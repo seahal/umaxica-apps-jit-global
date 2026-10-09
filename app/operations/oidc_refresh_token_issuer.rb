@@ -325,7 +325,7 @@ class OidcRefreshTokenIssuer
   end
 
   def coordination_store
-    @coordination_store ||= Valkey::AuthState::OidcRpRefreshCoordinationStore.new
+    @coordination_store ||= OidcRpRefreshCoordinationAdapter.new
   end
 
   def encoded_refresh_token_digest(usage, verifier)

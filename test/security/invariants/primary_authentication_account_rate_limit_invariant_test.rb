@@ -9,20 +9,29 @@ module Security
       self.fixture_table_names = []
 
       RETIRED_CONTROLLERS = %w(
-        app/controllers/auth/app/sign/in/secrets_controller.rb
         app/controllers/auth/com/sign/in/secrets_controller.rb
         app/controllers/auth/org/sign/in/secrets_controller.rb
       ).freeze
 
-      test "legacy secret sign-in controllers are removed" do
+      test "com and org permanent secret sign-in controllers are removed" do
         offenders = RETIRED_CONTROLLERS.select { |path| Rails.root.join(path).exist? }
 
         assert_empty offenders
       end
 
-      test "legacy secret sign-in path is absent from every Auth surface" do
+      test "app publishes its admitted secret credential ceremony" do
+        host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+        { get: ["/sign/in/secret/new", "new"], post: ["/sign/in/secret", "create"] }.each do |method, (path, action)|
+          route = Rails.application.routes.recognize_path("https://#{host}#{path}", method: method)
+
+          assert_equal "auth/app/sign/in/secrets", route.fetch(:controller)
+          assert_equal action, route.fetch(:action)
+        end
+      end
+
+      test "com and org permanent secret sign-in paths are absent" do
         hosts = Rails.configuration.x.boot_config.fetch(:hosts)
-        sign_hosts = [hosts.sign_service.host, hosts.sign_corporate.host, hosts.sign_staff.host]
+        sign_hosts = [hosts.sign_corporate.host, hosts.sign_staff.host]
 
         sign_hosts.each do |host|
           %i(get post).each do |method|

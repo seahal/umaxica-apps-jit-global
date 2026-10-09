@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "concurrent/executor/simple_executor_service"
 require "concurrent"
 
 class LogoutTransactionTest < ActiveSupport::TestCase
@@ -157,7 +158,7 @@ class LogoutTransactionTest < ActiveSupport::TestCase
 
     futures =
       2.times.map do
-        Concurrent::Future.execute do
+        Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
           ActiveRecord::Base.connection_pool.with_connection do
             gate.pop
             LogoutTransaction.consume_one_time_url_token!(
@@ -168,7 +169,7 @@ class LogoutTransactionTest < ActiveSupport::TestCase
             )
           end
         ensure
-          # Leases taken on this pooled thread outlive the future unless released here.
+          # Release model-clock leases before the dedicated worker exits.
           ActiveRecord::Base.connection_handler.clear_active_connections!
         end
       end
