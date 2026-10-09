@@ -2,7 +2,6 @@
 # frozen_string_literal: true
 
 # Snapshot diffs would expose OTP material and token state on assertion failure.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 
 require "test_helper"
 # require "helpers/global_test_support"
@@ -140,7 +139,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_response :success
-    assert(original_token_facts == token.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { original_token_facts == token.reload.attributes }
   end
 
   test "create keeps an admitted ceremony independent of a presented root token" do
@@ -180,7 +179,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_nil candidate.binding_finalized_at
     assert_equal flow.public_id,
                  SignFlowBindingCodec.decode(Rack::Utils.parse_query(target.query).fetch("fb")).flow_public_id
-    assert(original_token_facts == token.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { original_token_facts == token.reload.attributes }
   end
 
   test "collection get is not routed" do
@@ -293,8 +292,8 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_not_equal existing_email.visitor_id, candidate.visitor_id
     assert_equal existing_email.address_digest, candidate.address_digest
     assert_nil candidate.binding_finalized_at
-    assert(original_facts == existing_email.reload.attributes, "protected record facts remain unchanged")
-    assert(original_owner_facts == visitor.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { original_facts == existing_email.reload.attributes }
+    assert_withheld("protected record facts remain unchanged") { original_owner_facts == visitor.reload.attributes }
   end
 
   test "replacement email signup retains the halted candidate and Identity until retention purge" do
@@ -397,15 +396,19 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal 1, responses.uniq.length
     assert_equal 4, candidates.map(&:id).uniq.length
     assert_equal 4, candidates.map(&:visitor_id).uniq.length
-    assert(existing_facts == existing.reload.attributes, "protected record facts remain unchanged")
-    assert(existing_owner_facts == visitor.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
+    assert_withheld("protected record facts remain unchanged") { existing_owner_facts == visitor.reload.attributes }
     own_candidate_facts = candidates.last.attributes
     foreign_candidate_facts = candidates.first.attributes
     browsers.last.get(targets.first.request_uri)
 
     assert_equal 409, browsers.last.response.status
-    assert(own_candidate_facts == candidates.last.reload.attributes, "protected record facts remain unchanged")
-    assert(foreign_candidate_facts == candidates.first.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") {
+      own_candidate_facts == candidates.last.reload.attributes
+    }
+    assert_withheld("protected record facts remain unchanged") {
+      foreign_candidate_facts == candidates.first.reload.attributes
+    }
     foreign_delivery =
       (enqueued_jobs + performed_jobs).find do |entry|
         next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
@@ -426,8 +429,12 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_equal 409, browsers.last.response.status
-    assert(own_candidate_facts == candidates.last.reload.attributes, "foreign proof cannot affect this candidate")
-    assert(foreign_candidate_facts == candidates.first.reload.attributes, "foreign proof cannot consume its candidate")
+    assert_withheld("foreign proof cannot affect this candidate") {
+      own_candidate_facts == candidates.last.reload.attributes
+    }
+    assert_withheld("foreign proof cannot consume its candidate") {
+      foreign_candidate_facts == candidates.first.reload.attributes
+    }
     browsers.last.get(targets.last.request_uri)
 
     assert_equal 200, browsers.last.response.status
@@ -558,12 +565,12 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_not_equal first_candidate.id, second_candidate.id
     assert_not_equal first_candidate.visitor_id, second_candidate.visitor_id
     assert_equal first_candidate.address_digest, second_candidate.address_digest
-    assert(
+    assert_withheld("owned supersession preserves binding facts") {
       original_candidate_facts == first_candidate.reload.attributes.slice(
         "visitor_id", "address_digest",
         "binding_finalized_at", "binding_released_at",
-      ), "owned supersession preserves binding facts",
-    )
+      )
+    }
     assert_predicate first_flow, :cleanup_completed?
     assert_operator first_candidate.discard_at, :<=, first_flow.cleanup_completed_at
     assert_operator original_owner.reload.discard_at, :<=, first_flow.cleanup_completed_at
@@ -572,7 +579,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     get first_target.request_uri
 
     assert_response :conflict
-    assert(replacement_facts == second_flow.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { replacement_facts == second_flow.reload.attributes }
   end
 
   test "a new email registration after the old window preserves the original candidate and owner" do
@@ -609,12 +616,12 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_not_equal first_candidate.id, replacement.id
     assert_not_equal first_candidate.visitor_id, replacement.visitor_id
     assert_equal first_candidate.address_digest, replacement.address_digest
-    assert(
+    assert_withheld("owned supersession preserves binding facts") {
       first_facts == first_candidate.reload.attributes.slice(
         "visitor_id", "address_digest", "binding_finalized_at",
         "binding_released_at",
-      ), "owned supersession preserves binding facts",
-    )
+      )
+    }
     assert_predicate first_flow.reload, :sign_up_halted?
     assert_predicate first_flow, :cleanup_completed?
     assert_operator first_candidate.discard_at, :<=, first_flow.cleanup_completed_at

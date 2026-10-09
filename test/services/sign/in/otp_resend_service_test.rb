@@ -5,7 +5,6 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 # Boolean snapshot comparisons keep identifier attributes out of failure output.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 module Sign
   module In
     class OtpResendServiceTest < ActiveSupport::TestCase
@@ -48,7 +47,10 @@ module Sign
           )
           delivered = []
           adapter = Minitest::Mock.new
-          adapter.expect(:deliver, nil) { |**arguments| delivered << arguments.fetch(:record).id; true }
+          adapter.expect(:deliver, nil) { |**arguments|
+            delivered << arguments.fetch(:record).id
+            true
+          }
           OtpAdapter.stub(:for, adapter) do
             result = SignInOtpResender.new(
               kind: :email, state: state, surface:, browser_binding: ceremony.sid_digest,
@@ -59,8 +61,8 @@ module Sign
           end
 
           assert_equal [effective.id], delivered
-          assert snapshots == candidates.map { |contact| contact.reload.attributes }
-          assert source_generation == effective.reload.attributes.slice(*source_generation.keys)
+          assert_withheld { snapshots == candidates.map { |contact| contact.reload.attributes } }
+          assert_withheld { source_generation == effective.reload.attributes.slice(*source_generation.keys) }
           assert_not_equal generation, ceremony.reload.email_otp_context.fetch("generation")
           adapter.verify
         end
@@ -208,7 +210,7 @@ module Sign
 
         assert_equal :ok, result.status
         assert_predicate result, :resendable
-        assert unchanged == email.reload.attributes
+        assert_withheld { unchanged == email.reload.attributes }
       end
 
       test "known email resend refreshes Ticket challenge, preserves identifier state and uses the email adapter" do
@@ -228,7 +230,10 @@ module Sign
         )
         delivery = nil
         adapter = Minitest::Mock.new
-        adapter.expect(:deliver, nil) { |**arguments| delivery = arguments; true }
+        adapter.expect(:deliver, nil) { |**arguments|
+          delivery = arguments
+          true
+        }
 
         requested_surface = nil
         adapter_factory =
@@ -253,7 +258,7 @@ module Sign
         assert_predicate delivery.fetch(:otp_code), :present?
         assert_equal :app, requested_surface
         assert_equal :sign_in, delivery.fetch(:purpose)
-        assert source_generation == email.reload.attributes.slice(*source_generation.keys)
+        assert_withheld { source_generation == email.reload.attributes.slice(*source_generation.keys) }
         assert_not_equal generation, ceremony.reload.email_otp_context.fetch("generation")
         adapter.verify
       end
@@ -289,7 +294,7 @@ module Sign
         end
 
         assert_equal 1, email.reload.otp_attempts_count
-        assert source_generation == email.attributes.slice(*source_generation.keys)
+        assert_withheld { source_generation == email.attributes.slice(*source_generation.keys) }
         adapter.verify
       end
 
@@ -345,7 +350,7 @@ module Sign
 
         assert_match(/purpose=in issued=/, occurrence.memo)
         assert_equal 1, delivery_attempts
-        assert source_generation == email.reload.attributes.slice(*source_generation.keys)
+        assert_withheld { source_generation == email.reload.attributes.slice(*source_generation.keys) }
       end
 
       test "corporate resend selects the visitor email and corporate adapter" do
@@ -369,7 +374,10 @@ module Sign
         delivery = nil
         requested_surface = nil
         adapter = Minitest::Mock.new
-        adapter.expect(:deliver, nil) { |**arguments| delivery = arguments; true }
+        adapter.expect(:deliver, nil) { |**arguments|
+          delivery = arguments
+          true
+        }
 
         OtpAdapter.stub(
           :for,
@@ -391,7 +399,7 @@ module Sign
         assert_equal :com, requested_surface
         assert_equal email, delivery.fetch(:record)
         assert_equal :sign_in, delivery.fetch(:purpose)
-        assert source_generation == email.reload.attributes.slice(*source_generation.keys)
+        assert_withheld { source_generation == email.reload.attributes.slice(*source_generation.keys) }
         adapter.verify
       end
 
@@ -413,4 +421,3 @@ module Sign
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator

@@ -63,7 +63,6 @@ class ClientPersonaCreatorConcurrencyTest < ActiveSupport::TestCase
 
   # Separate checked-out connections are required; one connection cannot observe
   # the PostgreSQL lock/unique-index race this test is intended to cover.
-  # rubocop:disable ThreadSafety/NewThread
   def concurrently(count)
     ready = Queue.new
     release = Queue.new
@@ -84,7 +83,6 @@ class ClientPersonaCreatorConcurrencyTest < ActiveSupport::TestCase
     count.times { release << true }
     threads.map(&:value)
   end
-  # rubocop:enable ThreadSafety/NewThread
 
   def unique_client_id
     loop do

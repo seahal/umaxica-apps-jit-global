@@ -6,7 +6,7 @@ require "webauthn/fake_client"
 require "faraday"
 
 # Keep browser/proof values out of assertion output and the whole journey in one browser context.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertPredicate, Minitest/MultipleAssertions
+# rubocop:disable Minitest/MultipleAssertions
 class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
   %i(complete missing_primary missing_mfa expired_mfa).each do |outcome|
     test "org real OIDC Entra and Passkey #{outcome} preserves Base root authority" do
@@ -101,7 +101,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         )
 
         assert_equal 303, browser.response.status
-        assert binding.reload.base_confirmed_at.present? if index == 1
+        assert_withheld { binding.reload.base_confirmed_at.present? } if index == 1
         next if index == 2
 
         target = URI.parse(browser.response.location)
@@ -112,11 +112,12 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         browser.get(target.request_uri, params: { ri: "jp" })
       end
 
-      assert binding.reload.redeemed?
+      assert_withheld { binding.reload.redeemed? }
       ceremony = OperatorAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
 
-      assert ceremony.authorization_transaction_ref == parent.transaction_id,
-             "Admission must retain its original parent"
+      assert_withheld("Admission must retain its original parent") {
+        ceremony.authorization_transaction_ref == parent.transaction_id
+      }
       browser.get("/sign/in", params: { ri: "jp" })
 
       assert_equal 200, browser.response.status
@@ -131,9 +132,13 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         browser.post("/sign/oidc/handoff", params: { ri: "jp", authenticity_token: csrf }, headers: auth_headers)
 
         assert_equal 400, browser.response.status
-        assert before_parent == parent.reload.attributes, "Missing Entra must not authenticate or consume the parent"
-        assert before_identity == identity.reload.attributes, "Missing Entra must preserve the provisioned identity"
-        assert before_passkey == passkey.reload.attributes, "Missing Entra must preserve the credential"
+        assert_withheld("Missing Entra must not authenticate or consume the parent") {
+          before_parent == parent.reload.attributes
+        }
+        assert_withheld("Missing Entra must preserve the provisioned identity") {
+          before_identity == identity.reload.attributes
+        }
+        assert_withheld("Missing Entra must preserve the credential") { before_passkey == passkey.reload.attributes }
         assert_equal 0, OperatorToken.where(staff_id: actor.id).count
         next
       end
@@ -175,9 +180,11 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
           assert_equal 302, browser.response.status
           refusal = URI.parse(browser.response.location)
 
-          assert refusal.path == "/social/entra/failure"
-          assert Rack::Utils.parse_query(refusal.query).fetch("message") == "csrf_detected"
-          assert before_parent == parent.reload.attributes, "Rejected initiation must not change its parent"
+          assert_withheld { refusal.path == "/social/entra/failure" }
+          assert_withheld { Rack::Utils.parse_query(refusal.query).fetch("message") == "csrf_detected" }
+          assert_withheld("Rejected initiation must not change its parent") {
+            before_parent == parent.reload.attributes
+          }
           assert_equal 0, OperatorToken.where(staff_id: actor.id).count
         end
       end
@@ -190,8 +197,11 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
 
       assert_equal "https", authorize_uri.scheme, "Entra initiation failure classification: #{failure_reason}"
       assert_equal "login.microsoftonline.com", authorize_uri.host
-      assert authorize_uri.path == "/#{tenant}/oauth2/v2.0/authorize",
-             "Entra request must reach the configured tenant authorize endpoint, not a local failure redirect"
+      assert_withheld(
+        "Entra request must reach the configured tenant authorize endpoint, not a local failure redirect",
+      ) {
+        authorize_uri.path == "/#{tenant}/oauth2/v2.0/authorize"
+      }
       authorize_query = Rack::Utils.parse_query(authorize_uri.query)
       private_key = OpenSSL::PKey::RSA.generate(2048)
       jwk = JWT::JWK.new(private_key, { "kid" => "org-oidc-handoff" })
@@ -237,10 +247,10 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       key_source.verify
 
       assert_equal "login.microsoftonline.com", URI.parse(captured.fetch(:uri)).host
-      assert captured.fetch(:params).fetch(:code_verifier).present?, "Real token exchange must carry PKCE"
+      assert_withheld("Real token exchange must carry PKCE") { captured.fetch(:params).fetch(:code_verifier).present? }
       assert_equal 303, browser.response.status
       assert_equal 0, OperatorToken.where(staff_id: actor.id).count
-      assert identity.reload.last_authenticated_at.present?
+      assert_withheld { identity.reload.last_authenticated_at.present? }
       browser.get(URI.parse(browser.response.location).request_uri)
 
       assert_equal 200, browser.response.status
@@ -265,8 +275,10 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         browser.post("/sign/oidc/handoff", params: { ri: "jp", authenticity_token: csrf }, headers: auth_headers)
 
         assert_equal 400, browser.response.status
-        assert before_parent == parent.reload.attributes, "Incomplete MFA must not authenticate or consume the parent"
-        assert before_passkey == passkey.reload.attributes, "Incomplete MFA must preserve the credential"
+        assert_withheld("Incomplete MFA must not authenticate or consume the parent") {
+          before_parent == parent.reload.attributes
+        }
+        assert_withheld("Incomplete MFA must preserve the credential") { before_passkey == passkey.reload.attributes }
         assert_equal 0, OperatorToken.where(staff_id: actor.id).count
         next
       end
@@ -297,13 +309,13 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       assert_equal "/sign/oidc/handoff", handoff.path
       ceremony.reload
 
-      assert ceremony.authentication_evidence_recorded?
+      assert_withheld { ceremony.authentication_evidence_recorded? }
       flow_locator = browser.session.fetch(SignInCycleLocator::SESSION_KEYS.fetch(:org))
       flow_ref = flow_locator.fetch("public_id")
       flow = OperatorSignInFlow.find_by!(public_id: flow_ref)
 
       assert_equal actor.id, flow.principal_id
-      assert flow.authentication_event_at.present?
+      assert_withheld { flow.authentication_event_at.present? }
       assert_not flow.sign_in_completed?, "Auth must hand off before Base completes the root flow"
       assert_nil parent.reload.base_finalized_at
       browser.get(handoff.request_uri)
@@ -322,8 +334,10 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       assert_equal "/oauth/authorize", completion.path
       submission = Rack::Utils.parse_query(completion.query)
 
-      assert submission.fetch("transaction_ref") == parent.transaction_id, "Handoff must use the original OIDC parent"
-      assert parent.reload.actor_ref == actor.public_id, "Handoff must retain the Entra-selected Operator"
+      assert_withheld("Handoff must use the original OIDC parent") {
+        submission.fetch("transaction_ref") == parent.transaction_id
+      }
+      assert_withheld("Handoff must retain the Entra-selected Operator") { parent.reload.actor_ref == actor.public_id }
       assert_nil parent.base_finalized_at
       browser.host!(base_host)
       root_reference = nil
@@ -335,16 +349,16 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         browser.post("/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers: base_headers)
 
         assert_equal 303, browser.response.status
-        assert parent.reload.base_finalized_at.present?
+        assert_withheld { parent.reload.base_finalized_at.present? }
         root_reference ||= parent.browser_session_ref
 
-        assert root_reference == parent.browser_session_ref, "Exact replay must reuse the first root"
+        assert_withheld("Exact replay must reuse the first root") { root_reference == parent.browser_session_ref }
         assert_equal 1, OperatorToken.where(staff_id: actor.id).count
         root = OperatorToken.find_by!(public_id: root_reference)
 
         assert_equal actor.id, root.staff_id
         assert_equal "passkey", root.established_authentication_method
-        assert root.root_login_established_at.present?
+        assert_withheld { root.root_login_established_at.present? }
         assert_equal original_parent_id, parent.id
         assert_equal original_binding_id, binding.reload.id
         assert_equal original_parent_id, binding.authorization_transaction_id
@@ -361,7 +375,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
               entry.split(";", 2).first.to_s.start_with?("#{cookie_name}=")
             end
 
-          assert line.present?, "Base must emit its rotated browser session"
+          assert_withheld("Base must emit its rotated browser session") { line.present? }
           cookie_value = Rack::Utils.unescape(line.split(";", 2).first.split("=", 2).last)
         end
         browser.cookies.delete(cookie_name)
@@ -378,4 +392,4 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertPredicate, Minitest/MultipleAssertions
+# rubocop:enable Minitest/MultipleAssertions

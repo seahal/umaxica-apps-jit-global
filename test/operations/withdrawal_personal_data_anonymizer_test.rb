@@ -4,7 +4,6 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 # Failed comparisons must not expose retained PII or identifier lookup digests.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
@@ -34,10 +33,16 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
 
       WithdrawalPersonalDataAnonymizer.call(actor: actor)
 
-      assert email.reload.address == original_address, "Retention must preserve original encrypted email"
-      assert telephone.reload.number == original_number, "Retention must preserve original encrypted telephone"
-      assert email.address_digest == email_digest, "Withdrawal must not replace an immutable binding digest"
-      assert telephone.number_digest == telephone_digest, "Withdrawal must not replace an immutable binding digest"
+      assert_withheld("Retention must preserve original encrypted email") { email.reload.address == original_address }
+      assert_withheld("Retention must preserve original encrypted telephone") {
+        telephone.reload.number == original_number
+      }
+      assert_withheld("Withdrawal must not replace an immutable binding digest") {
+        email.address_digest == email_digest
+      }
+      assert_withheld("Withdrawal must not replace an immutable binding digest") {
+        telephone.number_digest == telephone_digest
+      }
       assert_empty email_history.where(owner_key => actor.id)
       assert_empty telephone_history.where(owner_key => actor.id)
       assert_equal actor.purge_eligible_at, email.purge_eligible_at
@@ -180,13 +185,19 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
 
     assert_same client, WithdrawalPersonalDataAnonymizer.call(actor: client)
-    assert email.reload.address == original_address, "Original identifier must survive the retention boundary"
-    assert original_address_digest == email.address_digest, "Immutable identifier digest must be preserved"
+    assert_withheld("Original identifier must survive the retention boundary") {
+      email.reload.address == original_address
+    }
+    assert_withheld("Immutable identifier digest must be preserved") { original_address_digest == email.address_digest }
     assert_equal "withdrawn", email.otp_private_key
     assert_equal "0", email.otp_counter
     assert_equal ClientEmailStatus::SUSPENDED, email.user_email_status_id
-    assert telephone.reload.number == original_number, "Original identifier must survive the retention boundary"
-    assert original_number_digest == telephone.number_digest, "Immutable identifier digest must be preserved"
+    assert_withheld("Original identifier must survive the retention boundary") {
+      telephone.reload.number == original_number
+    }
+    assert_withheld("Immutable identifier digest must be preserved") {
+      original_number_digest == telephone.number_digest
+    }
     assert_equal "withdrawn", telephone.otp_private_key
     assert_equal "0", telephone.otp_counter
     assert_equal ClientTelephoneStatus::SUSPENDED, telephone.user_identity_telephone_status_id
@@ -238,4 +249,3 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
     assert_empty VisitorTelephoneHistory.where(visitor_id: visitor.id)
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator

@@ -125,7 +125,7 @@ module SignInFlowStateStorage
   end
 
   def legacy_case_sql(mapping)
-    clauses = mapping.map { |id, name| "WHEN #{id} THEN #{connection.quote(name)}" }.join(' ')
+    clauses = mapping.map { |id, name| "WHEN #{id} THEN #{connection.quote(name)}" }.join(" ")
     "CASE status_id #{clauses} ELSE NULL END"
   end
 end

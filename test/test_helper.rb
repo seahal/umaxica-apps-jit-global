@@ -41,13 +41,11 @@ require_relative "../config/environment"
 # digest of the watched files against `tmp/cache/vite/last-build-test.json` and skips the Vite
 # call when nothing changed, so a repeat run pays only for the digest.
 unless ViteRuby.commands.build
-  # rubocop:disable I18n/RailsI18n/DecorateString
   abort <<~MESSAGE
     Vite test-mode build failed, so public/vite-test has no usable manifest and every test that
     renders a layout would fail on a missing entrypoint. See the Vite output above; the same build
     runs standalone as `bunx vite build --mode test`.
   MESSAGE
-  # rubocop:enable I18n/RailsI18n/DecorateString
 end
 
 require "rails/test_help"
@@ -74,6 +72,8 @@ require_relative "support/outbound_http_stub"
 require_relative "support/service_stubs"
 require_relative "support/valkey_test_isolation"
 require_relative "support/set_cookie_assertions"
+require_relative "support/withheld_assertions"
+require_relative "support/cookie_jar_helper"
 require_relative "support/login_cooldown_helper"
 require_relative "support/inertia_page_object"
 require_relative "support/org_entra_first_stage_helper"
@@ -340,6 +340,8 @@ end
 module ActiveSupport
   class TestCase
     include AuthenticationHarness
+    include WithheldAssertions
+    include CookieJarHelper
     include ExternalIdentityTestHelper
     include PublishingContentHelper
     include FormActionPolicyHelper

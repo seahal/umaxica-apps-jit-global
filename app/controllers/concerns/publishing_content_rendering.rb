@@ -103,9 +103,7 @@ module PublishingContentRendering
 
     Integer(raw.to_s, 10).tap { |value| raise ArgumentError if value < 1 }
   rescue ArgumentError, TypeError
-    # rubocop:disable I18n/RailsI18n/DecorateString
     render_problem(:bad_request, detail: "page must be a whole number greater than or equal to 1.")
-    # rubocop:enable I18n/RailsI18n/DecorateString
     nil
   end
 
@@ -118,9 +116,7 @@ module PublishingContentRendering
       raise_range_error: true,
     )
   rescue Pagy::RangeError
-    # rubocop:disable I18n/RailsI18n/DecorateString
     render_problem(:bad_request, detail: "page is outside the available range.")
-    # rubocop:enable I18n/RailsI18n/DecorateString
     nil
   end
 

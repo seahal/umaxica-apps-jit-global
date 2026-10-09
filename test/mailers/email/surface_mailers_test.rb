@@ -1,8 +1,6 @@
 # typed: false
 # frozen_string_literal: true
 
-# rubocop:disable Rails/I18nLocaleTexts
-
 require "test_helper"
 # require "helpers/global_test_support"
 
@@ -227,5 +225,3 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
     OutboundSensitivePayload.encrypt_email_otp(code)
   end
 end
-
-# rubocop:enable Rails/I18nLocaleTexts

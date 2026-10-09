@@ -2,7 +2,6 @@
 # frozen_string_literal: true
 
 # Snapshot diffs would expose OTP material and token state on assertion failure.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 
 require "test_helper"
 # require "helpers/global_test_support"
@@ -93,7 +92,7 @@ module Auth::App::Up
       end
 
       assert_response :success
-      assert(original_token_facts == token.reload.attributes, "protected record facts remain unchanged")
+      assert_withheld("protected record facts remain unchanged") { original_token_facts == token.reload.attributes }
     end
 
     test "create keeps an admitted ceremony independent of a presented root token" do
@@ -133,7 +132,7 @@ module Auth::App::Up
       assert_nil candidate.binding_finalized_at
       assert_equal flow.public_id,
                    SignFlowBindingCodec.decode(Rack::Utils.parse_query(target.query).fetch("fb")).flow_public_id
-      assert(original_token_facts == token.reload.attributes, "protected record facts remain unchanged")
+      assert_withheld("protected record facts remain unchanged") { original_token_facts == token.reload.attributes }
     end
 
     test "edit route uses registration session" do
@@ -247,8 +246,8 @@ module Auth::App::Up
       assert_not_equal existing.user_id, candidate.user_id
       assert_equal existing.number_digest, candidate.number_digest
       assert_nil candidate.binding_finalized_at
-      assert(existing_facts == existing.reload.attributes, "effective binding is unchanged")
-      assert(owner_facts == user.reload.attributes, "effective owner is unchanged")
+      assert_withheld("effective binding is unchanged") { existing_facts == existing.reload.attributes }
+      assert_withheld("effective owner is unchanged") { owner_facts == user.reload.attributes }
       get target.request_uri
 
       assert_response :success
@@ -276,8 +275,8 @@ module Auth::App::Up
 
       assert_response :unprocessable_content
       assert_includes response.body, I18n.t("sign.app.registration.telephone.update.invalid_code")
-      assert(existing_facts == existing.reload.attributes, "wrong input cannot alter the existing binding")
-      assert(owner_facts == user.reload.attributes, "wrong input cannot alter the existing owner")
+      assert_withheld("wrong input cannot alter the existing binding") { existing_facts == existing.reload.attributes }
+      assert_withheld("wrong input cannot alter the existing owner") { owner_facts == user.reload.attributes }
     end
 
     test "a verified telephone candidate lock cannot mutate an independent signup candidate" do
@@ -311,8 +310,8 @@ module Auth::App::Up
       assert_equal existing.number_digest, candidate.number_digest
       assert_nil candidate.binding_finalized_at
       assert_not_predicate candidate, :locked?
-      assert(original_facts == existing.reload.attributes, "protected record facts remain unchanged")
-      assert(owner_facts == visitor.reload.attributes, "protected record facts remain unchanged")
+      assert_withheld("protected record facts remain unchanged") { original_facts == existing.reload.attributes }
+      assert_withheld("protected record facts remain unchanged") { owner_facts == visitor.reload.attributes }
       get target.request_uri
 
       assert_response :success
@@ -348,8 +347,8 @@ module Auth::App::Up
       assert_equal existing.number_digest, candidate.number_digest
       assert_nil candidate.binding_finalized_at
       assert_not_predicate candidate, :locked?
-      assert(original_facts == existing.reload.attributes, "protected record facts remain unchanged")
-      assert(owner_facts == visitor.reload.attributes, "protected record facts remain unchanged")
+      assert_withheld("protected record facts remain unchanged") { original_facts == existing.reload.attributes }
+      assert_withheld("protected record facts remain unchanged") { owner_facts == visitor.reload.attributes }
       get target.request_uri
 
       assert_response :success
@@ -431,7 +430,9 @@ module Auth::App::Up
       assert_equal Rack::Utils.parse_query(existing_target.query).keys.sort,
                    Rack::Utils.parse_query(new_target.query).keys.sort
       assert_equal "jp", Rack::Utils.parse_query(new_target.query).fetch("ri")
-      assert(existing_facts == existing_telephone.reload.attributes, "parity does not alter an effective binding")
+      assert_withheld("parity does not alter an effective binding") {
+        existing_facts == existing_telephone.reload.attributes
+      }
     end
 
     test "rejects invalid telephone format" do
@@ -803,9 +804,11 @@ module Auth::App::Up
       assert_not_equal telephone.user_id, new_telephone.user_id
       assert_equal telephone.number_digest, new_telephone.number_digest
       assert_nil new_telephone.binding_finalized_at
-      assert(original_facts == telephone.reload.attributes, "original verified OTP evidence remains unchanged")
-      assert(original_owner_facts == telephone.user.reload.attributes, "original owner remains unchanged")
-      assert(original_flow_facts == flow.reload.attributes, "original checkpoint proof remains unchanged")
+      assert_withheld("original verified OTP evidence remains unchanged") {
+        original_facts == telephone.reload.attributes
+      }
+      assert_withheld("original owner remains unchanged") { original_owner_facts == telephone.user.reload.attributes }
+      assert_withheld("original checkpoint proof remains unchanged") { original_flow_facts == flow.reload.attributes }
     end
 
     test "should reject blank pass code" do
@@ -967,8 +970,10 @@ module Auth::App::Up
       end
 
       assert_response :conflict
-      assert(replacement_facts == replacement.reload.attributes, "terminal proof cannot alter the new candidate")
-      assert(current_facts == current.reload.attributes, "terminal proof cannot alter the new flow")
+      assert_withheld("terminal proof cannot alter the new candidate") {
+        replacement_facts == replacement.reload.attributes
+      }
+      assert_withheld("terminal proof cannot alter the new flow") { current_facts == current.reload.attributes }
     end
 
     test "a replacement flow owns a new telephone candidate without deleting the earlier candidate" do
@@ -1051,8 +1056,10 @@ module Auth::App::Up
       get first_target.request_uri
 
       assert_response :conflict
-      assert(second_facts == second_flow.reload.attributes, "protected record facts remain unchanged")
-      assert(second_candidate_facts == second_candidate.reload.attributes, "protected record facts remain unchanged")
+      assert_withheld("protected record facts remain unchanged") { second_facts == second_flow.reload.attributes }
+      assert_withheld("protected record facts remain unchanged") {
+        second_candidate_facts == second_candidate.reload.attributes
+      }
       get second_target.request_uri
 
       assert_response :success
@@ -1130,15 +1137,19 @@ module Auth::App::Up
       assert_equal 1, responses.uniq.length
       assert_equal 4, candidates.map(&:id).uniq.length
       assert_equal 4, candidates.map(&:user_id).uniq.length
-      assert(existing_facts == existing.reload.attributes, "protected record facts remain unchanged")
-      assert(existing_owner_facts == visitor.reload.attributes, "protected record facts remain unchanged")
+      assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
+      assert_withheld("protected record facts remain unchanged") { existing_owner_facts == visitor.reload.attributes }
       own_candidate_facts = candidates.last.reload.attributes
       foreign_candidate_facts = candidates.first.reload.attributes
       browsers.last.get(targets.first.request_uri)
 
       assert_equal 409, browsers.last.response.status
-      assert(own_candidate_facts == candidates.last.reload.attributes, "protected record facts remain unchanged")
-      assert(foreign_candidate_facts == candidates.first.reload.attributes, "protected record facts remain unchanged")
+      assert_withheld("protected record facts remain unchanged") {
+        own_candidate_facts == candidates.last.reload.attributes
+      }
+      assert_withheld("protected record facts remain unchanged") {
+        foreign_candidate_facts == candidates.first.reload.attributes
+      }
       transaction_ref =
         ClientTelephoneCeremonyTransaction.find_by!(
           telephone_candidate_ref: candidates.first.public_id,
@@ -1163,11 +1174,12 @@ module Auth::App::Up
       end
 
       assert_equal 409, browsers.last.response.status
-      assert(own_candidate_facts == candidates.last.reload.attributes, "foreign proof cannot affect this candidate")
-      assert(
-        foreign_candidate_facts == candidates.first.reload.attributes,
-        "foreign proof cannot consume its candidate",
-      )
+      assert_withheld("foreign proof cannot affect this candidate") {
+        own_candidate_facts == candidates.last.reload.attributes
+      }
+      assert_withheld("foreign proof cannot consume its candidate") {
+        foreign_candidate_facts == candidates.first.reload.attributes
+      }
       browsers.last.get(targets.last.request_uri)
 
       assert_equal 200, browsers.last.response.status
@@ -1311,12 +1323,11 @@ module Auth::App::Up
           assert_response :too_many_requests
           assert_includes response.body, I18n.t("sign.app.registration.email.create.otp_resend_too_soon")
           assert_equal sent_at, session[:user_telephone_otp_last_sent_at]
-          assert(
+          assert_withheld("refusal preserves the existing OTP generation") {
             otp_data == ClientTelephoneCeremonyTransaction.find_by!(
               telephone_candidate_ref: telephone.public_id,
-            ).otp_generation,
-            "refusal preserves the existing OTP generation",
-          )
+            ).otp_generation
+          }
           assert_equal completed_requirements, cycle.reload.completed_requirements
         end
 
@@ -1461,7 +1472,7 @@ module Auth::App::Up
 
       assert_response :success
       assert_not_includes response.body, I18n.t("errors.messages.taken")
-      assert(existing_facts == existing.reload.attributes, "protected record facts remain unchanged")
+      assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
       candidate = ClientTelephone.order(:created_at, :id).last
 
       assert_not_equal existing.id, candidate.id
@@ -1511,7 +1522,7 @@ module Auth::App::Up
 
       assert_response :too_many_requests
       assert_equal I18n.t("sign.app.registration.email.create.otp_resend_too_soon"), response.body
-      assert(existing_facts == existing.reload.attributes, "protected record facts remain unchanged")
+      assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
     end
 
     test "the code page for an already verified telephone stops answering once the window closes" do
@@ -1551,8 +1562,8 @@ module Auth::App::Up
 
       assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), expired_target.host
       assert_equal URI.parse(new_auth_app_sign_up_telephone_path(ri: "jp")).path, expired_target.path
-      assert(original_facts == candidate.reload.attributes, "expired evidence is not revived")
-      assert(original_existing_facts == existing.reload.attributes, "effective binding is unchanged")
+      assert_withheld("expired evidence is not revived") { original_facts == candidate.reload.attributes }
+      assert_withheld("effective binding is unchanged") { original_existing_facts == existing.reload.attributes }
     end
 
     test "a code submitted against an already verified telephone never starts an account" do
@@ -1585,7 +1596,7 @@ module Auth::App::Up
 
       assert_response :unprocessable_content
       assert_equal ClientTelephoneStatus::VERIFIED, existing.reload.user_telephone_status_id
-      assert(existing_facts == existing.reload.attributes, "protected record facts remain unchanged")
+      assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
     end
 
     private

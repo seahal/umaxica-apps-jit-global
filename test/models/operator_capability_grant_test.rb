@@ -212,7 +212,7 @@ class OperatorCapabilityGrantTest < ActiveSupport::TestCase
     # The savepoint keeps the surrounding test transaction usable after the CHECK violation.
     assert_raises(ActiveRecord::StatementInvalid) do
       OperatorCapabilityGrant.transaction(requires_new: true) do
-        grant.update_columns(revoked_at: @now) # rubocop:disable Rails/SkipsModelValidations
+        grant.update_columns(revoked_at: @now)
       end
     end
 
@@ -310,7 +310,7 @@ class OperatorCapabilityGrantTransitionTest < ActiveSupport::TestCase
       starts_at: 1.minute.ago,
       expires_at: 1.day.from_now,
     )
-    other_eligible_but_locked.operator.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    other_eligible_but_locked.operator.update_columns(
       access_state: "admin_locked", admin_locked_at: Time.current, admin_locked_reason_code: "security_incident",
     )
 
@@ -389,7 +389,7 @@ class OperatorCapabilityGrantTransitionTest < ActiveSupport::TestCase
         expires_at: 30.days.from_now,
       )
     end
-    @second.update_columns(withdrawal_started_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
+    @second.update_columns(withdrawal_started_at: Time.current)
     assert_raises(ArgumentError) do
       OperatorCapabilityGrant.bootstrap!(
         operator: @second.reload,

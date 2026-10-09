@@ -58,7 +58,8 @@ class ComSessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
     jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
     jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
     base.cookies.delete(session_key)
-    base.cookies.merge( # rubocop:disable Lint/Void
+    store_raw_cookies(
+      base.cookies,
       "#{session_key}=#{Rack::Utils.escape(jar[session_key])}", URI.parse("https://#{@base_host}/"),
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
@@ -69,7 +70,8 @@ class ComSessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
     )
     binding.confirm_base!(base_token: nil, browser_digest: browser_digest)
     https!
-    cookies.merge( # rubocop:disable Lint/Void
+    store_raw_cookies(
+      cookies,
       "auth_sid=#{Rack::Utils.escape(raw_sid)}", URI.parse("https://#{@host}/"),
     )
     get(auth_com_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" })

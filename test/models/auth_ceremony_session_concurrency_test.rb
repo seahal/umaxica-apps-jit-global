@@ -41,7 +41,7 @@ class AuthCeremonySessionConcurrencyTest < ActiveSupport::TestCase
 
       threads =
         2.times.map do |index|
-          Thread.new do # rubocop:disable ThreadSafety/NewThread
+          Thread.new do
             model.connection_pool.with_connection do
               ready << true
               release.pop

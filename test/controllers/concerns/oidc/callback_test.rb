@@ -462,7 +462,12 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     )
     token_call = nil
 
-    OidcRpTokenClient.stub(:call, ->(**kwargs) { token_call = kwargs; result }) do
+    OidcRpTokenClient.stub(
+      :call, ->(**kwargs) {
+               token_call = kwargs
+               result
+             },
+    ) do
       issued_at = Time.current.to_i
       signed_claims = {
         "iss" => OidcIssuer.for_resource_type("client"),

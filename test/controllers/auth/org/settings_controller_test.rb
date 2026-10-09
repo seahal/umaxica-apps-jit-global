@@ -20,7 +20,12 @@ class Auth::Org::SettingsControllerTest < ActionDispatch::IntegrationTest
     issued = nil
 
     host! auth_host
-    JumpRtIssuer.stub(:call, ->(**args) { issued = args; "signed-jump-token" }) do
+    JumpRtIssuer.stub(
+      :call, ->(**args) {
+               issued = args
+               "signed-jump-token"
+             },
+    ) do
       RedirectsJumpGatewayUrl.stub(
         :call,
         ->(_token) { RedirectsTargetResult.ok(kind: :external, source: :test, value: issued.fetch(:url)) },

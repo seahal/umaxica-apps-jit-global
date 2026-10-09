@@ -641,7 +641,12 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
         access_expires_at: nil, refresh_expires_at: nil,
       )
 
-      OidcTokenExchangeCoordinator.stub(:call, ->(**kwargs) { presented << kwargs.fetch(:refresh_token); refusal }) do
+      OidcTokenExchangeCoordinator.stub(
+        :call, ->(**kwargs) {
+                 presented << kwargs.fetch(:refresh_token)
+                 refusal
+               },
+      ) do
         get :show, params: { required: "1" }
       end
 
@@ -809,7 +814,12 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
       refresh_expires_at: 10.minutes.from_now,
     )
 
-    OidcTokenExchangeCoordinator.stub(:call, ->(**) { calls += 1; success }) do
+    OidcTokenExchangeCoordinator.stub(
+      :call, ->(**) {
+               calls += 1
+               success
+             },
+    ) do
       @request.set_header("HTTP_SEC_FETCH_SITE", "same-origin")
       patch :update
     end

@@ -106,7 +106,8 @@ class CoverageThresholdModelConcernsTest
     t.define_singleton_method(:update!) { |attrs|
       attrs.each { |k, v|
         public_send("#{k}=", v) if respond_to?("#{k}=")
-      }; self
+      }
+      self
     }
 
     assert_same t, t.advance_step!("origin_cleared")
@@ -122,7 +123,8 @@ class CoverageThresholdModelConcernsTest
     t.define_singleton_method(:update!) { |attrs|
       attrs.each { |k, v|
         public_send("#{k}=", v) if respond_to?("#{k}=")
-      }; self
+      }
+      self
     }
     t.status = "failed"
 

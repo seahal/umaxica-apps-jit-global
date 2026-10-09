@@ -1228,11 +1228,10 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
               ActiveSupport::IsolatedExecutionState[flow9_executor_key] = flow9_outer_execution
             end
 
-            # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+            # Do not print the outer request or credentials on failure.
             assert_equal [true, true, 200],
                          [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow9_outer_controller),
                           Actor.context.equal?(flow9_outer_actor), flow9_protocol_browser.response.status,]
-            # rubocop:enable Minitest/AssertSame
             [flow9_protocol_browser.response.status, { "Content-Type" => "application/json" },
              flow9_protocol_browser.response.body,]
           end
@@ -1254,11 +1253,10 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
               ActiveSupport::IsolatedExecutionState[flow9_executor_key] = flow9_outer_execution
             end
 
-            # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+            # Do not print the outer request or credentials on failure.
             assert_equal [true, true, 200],
                          [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow9_outer_controller),
                           Actor.context.equal?(flow9_outer_actor), flow9_protocol_browser.response.status,]
-            # rubocop:enable Minitest/AssertSame
             [flow9_protocol_browser.response.status, { "Content-Type" => "application/json" },
              flow9_protocol_browser.response.body,]
           end

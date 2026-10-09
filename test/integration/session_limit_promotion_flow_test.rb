@@ -72,7 +72,8 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
           { value: fv5085 }
         fv5082 = fv5084[fv5083]
         fv5058.cookies.delete(fv5083)
-        fv5058.cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          fv5058.cookies,
           "#{fv5083}=#{Rack::Utils.escape(fv5082)}",
           URI.parse("https://#{@base_host}/"),
         )
@@ -103,7 +104,8 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
         fv5065 = {
           "Host" => @host, "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin",
         }
-        fv5064.cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          fv5064.cookies,
           "auth_sid=#{Rack::Utils.escape(fv5077)}",
           URI.parse("https://#{@host}/"),
         )
@@ -253,7 +255,8 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
           { value: fv5056 }
         fv5053 = fv5055[fv5054]
         fv5029.cookies.delete(fv5054)
-        fv5029.cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          fv5029.cookies,
           "#{fv5054}=#{Rack::Utils.escape(fv5053)}",
           URI.parse("https://#{@base_host}/"),
         )
@@ -284,7 +287,8 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
         fv5036 = {
           "Host" => @host, "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin",
         }
-        fv5035.cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          fv5035.cookies,
           "auth_sid=#{Rack::Utils.escape(fv5048)}",
           URI.parse("https://#{@host}/"),
         )
@@ -418,7 +422,8 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
           { value: fv5027 }
         fv5024 = fv5026[fv5025]
         fv5000.cookies.delete(fv5025)
-        fv5000.cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          fv5000.cookies,
           "#{fv5025}=#{Rack::Utils.escape(fv5024)}",
           URI.parse("https://#{@base_host}/"),
         )
@@ -449,7 +454,8 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
         fv5007 = {
           "Host" => @host, "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin",
         }
-        fv5006.cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          fv5006.cookies,
           "auth_sid=#{Rack::Utils.escape(fv5019)}",
           URI.parse("https://#{@host}/"),
         )
@@ -551,7 +557,4 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
   private
 
   # This browser journey binds email verification to the durable session-limit child.
-  # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
-
-  # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 end

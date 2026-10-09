@@ -63,7 +63,7 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
           fv5006.cookies.delete(fv5008)
           # Rack::Test's []= uses its default host. The current request may target a
           # different surface, so install the cookie against the browser's active host.
-          fv5006.cookies.merge( # rubocop:disable Lint/Void
+          fv5006.cookies.merge(
             "#{fv5008}=#{Rack::Utils.escape(fv5007)}",
             URI.parse("https://#{fv5006.host}/"),
           )
@@ -162,7 +162,7 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
           fv5000.cookies.delete(fv5002)
           # Rack::Test's []= uses its default host. The current request may target a
           # different surface, so install the cookie against the browser's active host.
-          fv5000.cookies.merge( # rubocop:disable Lint/Void
+          fv5000.cookies.merge(
             "#{fv5002}=#{Rack::Utils.escape(fv5001)}",
             URI.parse("https://#{fv5000.host}/"),
           )

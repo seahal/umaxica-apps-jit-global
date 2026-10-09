@@ -4,7 +4,7 @@ require "test_helper"
 
 # Boolean comparisons prevent retained browser and proof material from appearing in failure output.
 # Each journey keeps admission, signup, and exact proof replay in the same real browser context.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertPredicate, Minitest/MultipleAssertions
+# rubocop:disable Minitest/MultipleAssertions
 class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
 
@@ -99,7 +99,7 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
         )
 
         assert_equal 303, owner.response.status
-        assert binding.reload.base_confirmed_at.present? if index == 1
+        assert_withheld { binding.reload.base_confirmed_at.present? } if index == 1
         next if index == 2
 
         target = URI.parse(owner.response.location)
@@ -112,11 +112,12 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       auth = owner
 
       assert_equal 303, auth.response.status
-      assert binding.reload.redeemed?
+      assert_withheld { binding.reload.redeemed? }
       ceremony = binding.class.auth_admission_session_class.find(binding.admitted_auth_ceremony_session_id)
 
-      assert ceremony.authorization_transaction_ref == parent.transaction_id,
-             "Auth must retain the original OIDC parent"
+      assert_withheld("Auth must retain the original OIDC parent") {
+        ceremony.authorization_transaction_ref == parent.transaction_id
+      }
 
       auth.get("/sign/up/email/new", params: { ri: "jp" })
 
@@ -154,9 +155,12 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       delivery_params = notification.fetch(:params)
       code = OutboundSensitivePayload.decrypt_email_otp(delivery_params.fetch(:encrypted_hotp_token))
 
-      assert delivery_params.fetch(:sign_up_flow_ref) == signup.public_id, "Delivery must name the original signup"
-      assert delivery_params.fetch(:sign_up_email_otp_generation) == transaction.otp_generation,
-             "Delivery must name the current typed ceremony generation"
+      assert_withheld("Delivery must name the original signup") {
+        delivery_params.fetch(:sign_up_flow_ref) == signup.public_id
+      }
+      assert_withheld("Delivery must name the current typed ceremony generation") {
+        delivery_params.fetch(:sign_up_email_otp_generation) == transaction.otp_generation
+      }
       queued_contains_code = JSON.generate(delivery.fetch(:args)).include?(code)
 
       assert_not queued_contains_code, "Queued delivery must not contain plaintext code"
@@ -171,14 +175,15 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 302, auth.response.status
-      assert transaction.reload.otp_consumed_at.present?, "The actual browser must consume its typed Email proof"
+      assert_withheld("The actual browser must consume its typed Email proof") {
+        transaction.reload.otp_consumed_at.present?
+      }
       active_verifier_cleared = transaction.otp_verifier.nil?
 
       assert active_verifier_cleared, "Fresh consumption must remove the active verifier"
       birthdate_uri = URI.parse(auth.response.location)
 
-      assert SignFlowBindingCodec.decode(Rack::Utils.parse_query(birthdate_uri.query).fetch("fb")) == decoded,
-             "The checkpoint must retain the original signed signup binding"
+      assert_withheld("The checkpoint must retain the original signed signup binding") { SignFlowBindingCodec.decode(Rack::Utils.parse_query(birthdate_uri.query).fetch("fb")) == decoded }
       auth.get(birthdate_uri.request_uri)
 
       assert_equal 200, auth.response.status
@@ -186,17 +191,23 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       if surface == "com"
         session_flow_ref = auth.request.session[:auth_com_up_sequence_id]
 
-        assert session_flow_ref == decoded.flow_public_id, "The browser session must retain the signed signup Parent"
+        assert_withheld("The browser session must retain the signed signup Parent") {
+          session_flow_ref == decoded.flow_public_id
+        }
         stored_signup = signup_model.find_by(public_id: session_flow_ref)
 
-        assert stored_signup.present?, "The original signed signup Parent must still exist"
+        assert_withheld("The original signed signup Parent must still exist") { stored_signup.present? }
         assert Visitor.exists?(id: stored_signup.principal_id), "The signup principal Visitor must exist"
         assert Visitor.exists?(id: contact.reload.visitor_id), "The Contact owner Visitor must exist"
-        assert stored_signup.principal_id == contact.visitor_id,
-               "The original signup principal must match the Contact owner"
-        assert stored_signup.principal_id == actor.id, "The birthdate checkpoint must retain the original Visitor"
-        assert binding.reload.authorization_transaction.id == original_parent_id,
-               "Admission must retain the original OIDC Parent"
+        assert_withheld("The original signup principal must match the Contact owner") {
+          stored_signup.principal_id == contact.visitor_id
+        }
+        assert_withheld("The birthdate checkpoint must retain the original Visitor") {
+          stored_signup.principal_id == actor.id
+        }
+        assert_withheld("Admission must retain the original OIDC Parent") {
+          binding.reload.authorization_transaction.id == original_parent_id
+        }
       end
       auth.patch(
         birthdate_uri.request_uri, params: {
@@ -208,8 +219,8 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 302, auth.response.status
-      assert signup.reload.sign_up_completed?
-      assert contact.reload.binding_effective?
+      assert_withheld { signup.reload.sign_up_completed? }
+      assert_withheld { contact.reload.binding_effective? }
       assert_equal 0, token_model.where(owner_key => actor.id).count
       auth.get(URI.parse(auth.response.location).request_uri)
 
@@ -232,8 +243,10 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       assert_equal "/oauth/authorize", completion.path
       submission = Rack::Utils.parse_query(completion.query)
 
-      assert submission.fetch("transaction_ref") == parent.transaction_id, "Result must name the original OIDC parent"
-      assert parent.reload.actor_ref == actor.public_id, "Result must bind the original Contact owner"
+      assert_withheld("Result must name the original OIDC parent") {
+        submission.fetch("transaction_ref") == parent.transaction_id
+      }
+      assert_withheld("Result must bind the original Contact owner") { parent.reload.actor_ref == actor.public_id }
       assert_equal "email_otp", parent.auth_method
       assert_nil parent.base_finalized_at
       assert_equal 0, token_model.where(owner_key => actor.id).count
@@ -244,7 +257,7 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       owner.post("/oauth/authorize", params: submission, headers: base_headers)
 
       assert_equal 422, owner.response.status
-      assert before_parent == parent.reload.attributes, "CSRF refusal must preserve the OIDC parent"
+      assert_withheld("CSRF refusal must preserve the OIDC parent") { before_parent == parent.reload.attributes }
       assert_equal 0, token_model.where(owner_key => actor.id).count
       foreign = open_session
       foreign.host!(base_host)
@@ -259,8 +272,10 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       foreign.post("/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers: base_headers)
 
       assert_equal 400, foreign.response.status
-      assert before_parent == parent.reload.attributes, "Another browser must not consume the original owner's proof"
-      assert before_contact == contact.reload.attributes, "Refusals must preserve the finalized Contact"
+      assert_withheld("Another browser must not consume the original owner's proof") {
+        before_parent == parent.reload.attributes
+      }
+      assert_withheld("Refusals must preserve the finalized Contact") { before_contact == contact.reload.attributes }
       assert_equal 0, token_model.where(owner_key => actor.id).count
 
       root_reference = nil
@@ -272,10 +287,10 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
         owner.post("/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers: base_headers)
 
         assert_equal 303, owner.response.status
-        assert parent.reload.base_finalized_at.present?
+        assert_withheld { parent.reload.base_finalized_at.present? }
         root_reference ||= parent.browser_session_ref
 
-        assert root_reference == parent.browser_session_ref, "Proof replay must retain the first root"
+        assert_withheld("Proof replay must retain the first root") { root_reference == parent.browser_session_ref }
         assert_equal 1, token_model.where(owner_key => actor.id).count
         root = token_model.find_by!(public_id: root_reference)
 
@@ -283,7 +298,9 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
         assert_equal original_parent_id, parent.id
         assert_equal original_binding_id, binding.reload.id
         assert_equal original_parent_id, binding.authorization_transaction_id
-        assert before_contact == contact.reload.attributes, "Base completion must preserve the original binding facts"
+        assert_withheld("Base completion must preserve the original binding facts") {
+          before_contact == contact.reload.attributes
+        }
         next unless attempt.zero?
 
         cookie_value = owner.response.cookies[cookie_name]
@@ -295,7 +312,7 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
               entry.split(";", 2).first.to_s.start_with?("#{cookie_name}=")
             end
 
-          assert line.present?, "Successful completion must emit the rotated Base browser session"
+          assert_withheld("Successful completion must emit the rotated Base browser session") { line.present? }
           cookie_value = Rack::Utils.unescape(line.split(";", 2).first.split("=", 2).last)
         end
         owner.cookies.delete(cookie_name)
@@ -310,4 +327,4 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertPredicate, Minitest/MultipleAssertions
+# rubocop:enable Minitest/MultipleAssertions

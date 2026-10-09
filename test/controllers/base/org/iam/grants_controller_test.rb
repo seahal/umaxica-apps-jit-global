@@ -112,7 +112,7 @@ class Base::Org::Iam::GrantsControllerTest < ActionDispatch::IntegrationTest
       starts_at: 1.minute.ago,
       expires_at: 1.day.from_now,
     )
-    @granter_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @granter_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "operator_capability",
       last_step_up_aal: "aal2",
@@ -217,7 +217,7 @@ class Base::Org::Iam::GrantsControllerTest < ActionDispatch::IntegrationTest
         expires_at: 1.day.from_now,
       )
     end
-    @granter_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @granter_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "operator_capability",
       last_step_up_aal: "aal2",
@@ -315,7 +315,7 @@ class Base::Org::Iam::GrantsControllerTest < ActionDispatch::IntegrationTest
         expires_at: 1.day.from_now,
       )
     end
-    @granter_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @granter_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "operator_capability",
       last_step_up_aal: "aal2",
@@ -422,7 +422,7 @@ class Base::Org::Iam::GrantsControllerTest < ActionDispatch::IntegrationTest
       starts_at: 1.minute.ago,
       expires_at: 1.day.from_now,
     )
-    @granter_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @granter_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "operator_capability",
       last_step_up_aal: "aal2",
@@ -682,7 +682,7 @@ class Base::Org::Iam::GrantsControllerTest < ActionDispatch::IntegrationTest
           expires_at: 1.day.from_now,
         )
       end
-    @granter_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @granter_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "operator_capability",
       last_step_up_aal: "aal2",
@@ -854,7 +854,7 @@ class Base::Org::Iam::GrantsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :ok
 
-    @granter_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @granter_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "operator_capability",
       last_step_up_aal: "aal2",

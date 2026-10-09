@@ -98,7 +98,12 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       host! host
       cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access
       destination = nil
-      JumpRtIssuer.stub(:call, ->(**arguments) { destination = arguments.fetch(:url); "opaque-jump" }) do
+      JumpRtIssuer.stub(
+        :call, ->(**arguments) {
+                 destination = arguments.fetch(:url)
+                 "opaque-jump"
+               },
+      ) do
         RedirectsJumpGatewayUrl.stub(
           :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
         ) do

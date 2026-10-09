@@ -238,7 +238,12 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
       original_sent_at = email.otp_last_sent_at
       expired_while_waiting =
         flow_model.stub(:database_now, -> { decision_time }) do
-          email_model.stub(:database_now, -> { decision_time = flow.expires_at; now }) do
+          email_model.stub(
+            :database_now, -> {
+                             decision_time = flow.expires_at
+                             now
+                           },
+          ) do
             EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: nonce)
           end
         end
@@ -323,7 +328,12 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
       expired_receipt =
         transaction_model.stub(:database_now, -> { receipt_now }) do
           EmailOtpVerificationFailureBudget.stub(:new, budget) do
-            budget.stub(:verify!, ->(**) { receipt_now = resend.transaction.otp_result_expires_at; :verified }) do
+            budget.stub(
+              :verify!, ->(**) {
+                          receipt_now = resend.transaction.otp_result_expires_at
+                          :verified
+                        },
+            ) do
               EmailSignUpOtpVerificationCommitter.call(**scope, code: resend.code)
             end
           end

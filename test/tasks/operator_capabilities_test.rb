@@ -117,13 +117,13 @@ class OperatorCapabilitiesTaskTest < ActiveSupport::TestCase
     ENV["EXPIRES_AT"] = 30.days.from_now.iso8601
     locked = operators(:two)
     locked.update_columns(
-      access_state: "admin_locked", admin_locked_at: Time.current, # rubocop:disable Rails/SkipsModelValidations
+      access_state: "admin_locked", admin_locked_at: Time.current,
       admin_locked_reason_code: "security_incident",
     )
     withdrawing = operators(:sample_staff)
-    withdrawing.update_columns(withdrawal_started_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
+    withdrawing.update_columns(withdrawal_started_at: Time.current)
     deactivated = operators(:none_staff)
-    deactivated.update_columns(deactivated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
+    deactivated.update_columns(deactivated_at: Time.current)
 
     [locked, withdrawing, deactivated].each do |operator|
       ENV["OPERATOR"] = operator.public_id

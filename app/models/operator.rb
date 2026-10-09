@@ -295,3 +295,4 @@ class Operator < OrgPrincipalRecord
     @_assigning_public_id_internally = false
   end
 end
+# rubocop:enable Rails/HasManyOrHasOneDependent

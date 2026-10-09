@@ -4,7 +4,6 @@ require "test_helper"
 require "timeout"
 
 # A committed row and separate writer connections expose the one-shot revocation boundary.
-# rubocop:disable ThreadSafety/NewThread
 class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
   self.fixture_table_names = []
   self.use_transactional_tests = false
@@ -1049,4 +1048,3 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
     end
   end
 end
-# rubocop:enable ThreadSafety/NewThread

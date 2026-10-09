@@ -2,8 +2,6 @@
 
 require "test_helper"
 
-# rubocop:disable Minitest/AssertEqual -- Proof snapshots must not disclose references or keyed digests on failure.
-
 class SignupOtpProofDatabaseTest < ActiveSupport::TestCase
   setup do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
@@ -69,8 +67,9 @@ class SignupOtpProofDatabaseTest < ActiveSupport::TestCase
           raise ActiveRecord::Rollback
         end
 
-        assert_operator original, :==, transaction.reload.attributes,
-                        "rejected direct writes must preserve challenge facts"
+        assert_withheld("rejected direct writes must preserve challenge facts") {
+          original == transaction.reload.attributes
+        }
       end
 
       verified =
@@ -95,10 +94,10 @@ class SignupOtpProofDatabaseTest < ActiveSupport::TestCase
           raise ActiveRecord::Rollback
         end
 
-        assert_operator committed, :==, transaction.reload.attributes,
-                        "direct SQL cannot erase or replace committed proof"
+        assert_withheld("direct SQL cannot erase or replace committed proof") {
+          committed == transaction.reload.attributes
+        }
       end
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual

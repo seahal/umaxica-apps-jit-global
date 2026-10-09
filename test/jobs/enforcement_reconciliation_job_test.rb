@@ -32,7 +32,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
 
     # Simulate a prior partial failure: the state transition committed, but
     # the convergent side effects never ran.
-    the_case.update_columns(sessions_revoked_at: nil, audited_at: nil) # rubocop:disable Rails/SkipsModelValidations
+    the_case.update_columns(sessions_revoked_at: nil, audited_at: nil)
 
     EnforcementReconciliationJob.perform_now
 
@@ -87,7 +87,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
       enforcement_case: ended_case,
       actor_operator_public_id: ended_case.applied_by_operator_public_id,
     )
-    ended_case.update_columns(ended_at: Time.current, end_reason: "revoked", audited_at: nil) # rubocop:disable Rails/SkipsModelValidations
+    ended_case.update_columns(ended_at: Time.current, end_reason: "revoked", audited_at: nil)
 
     assert_not_includes AppEnforcementCase.pending_convergence.to_a, ended_case
     assert_includes AppEnforcementCase.pending_end_convergence.to_a, ended_case
@@ -111,7 +111,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
       enforcement_case: ended_case,
       actor_operator_public_id: ended_case.applied_by_operator_public_id,
     )
-    ended_case.update_columns(ended_at: Time.current, end_reason: "revoked", audited_at: nil) # rubocop:disable Rails/SkipsModelValidations
+    ended_case.update_columns(ended_at: Time.current, end_reason: "revoked", audited_at: nil)
 
     EnforcementReconciliationJob.perform_now
 
@@ -174,7 +174,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
       actor_operator_public_id: the_case.applied_by_operator_public_id,
     )
     ended_at = 1.minute.ago.change(usec: 0)
-    the_case.update_columns(ended_at: ended_at, end_reason: "appeal_approved") # rubocop:disable Rails/SkipsModelValidations
+    the_case.update_columns(ended_at: ended_at, end_reason: "appeal_approved")
     AppEnforcementAppeal.create!(
       enforcement_case: the_case,
       reason_code: "incorrect_decision",
@@ -246,7 +246,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
       enforcement_case: the_case,
       actor_operator_public_id: the_case.applied_by_operator_public_id,
     )
-    the_case.update_columns(ended_at: Time.current, end_reason: "revoked", audited_at: nil) # rubocop:disable Rails/SkipsModelValidations
+    the_case.update_columns(ended_at: Time.current, end_reason: "revoked", audited_at: nil)
     failing_operation = Object.new
     failing_operation.define_singleton_method(:reconcile) { raise ActiveRecord::ConnectionNotEstablished, "chronicle down" }
     logged = []

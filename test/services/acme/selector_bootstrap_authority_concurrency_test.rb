@@ -5,7 +5,6 @@ require "test_helper"
 
 # Bootstrap must serialize the full account/collective graph, not only the individual creator
 # calls. Separate connections are required to expose an orphan collective race.
-# rubocop:disable ThreadSafety/NewThread
 class BaseSelectorBootstrapAuthorityConcurrencyTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
@@ -101,4 +100,3 @@ class BaseSelectorBootstrapAuthorityConcurrencyTest < ActiveSupport::TestCase
     threads.map(&:value).tap { threads.each(&:join) }
   end
 end
-# rubocop:enable ThreadSafety/NewThread

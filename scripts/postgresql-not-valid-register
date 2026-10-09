@@ -56,17 +56,14 @@ lines = [
   "# Existing NOT VALID Constraint Approval Register",
   "",
   # Developer-facing approval register prose is intentionally English.
-  # rubocop:disable I18n/RailsI18n/DecorateString
   "Source: read-only live development catalog captured at #{catalog.fetch("captured_at")} " \
   "against commit `#{catalog.fetch("head")}` with uncommitted changes. #{records.length} " \
   "physical constraints in #{logical_names.length} development databases; #{keys.uniq.length} " \
   "exact logical definitions after grouping by schema, table, type, and definition. No " \
   "`VALIDATE CONSTRAINT` was run. All affected tables were empty in the current development " \
   "databases; the precheck therefore provides no evidence about populated environments.",
-  # rubocop:enable I18n/RailsI18n/DecorateString
   "",
   # Developer-facing approval register prose is intentionally English.
-  # rubocop:disable I18n/RailsI18n/DecorateString
   "Each row is an independent shape-approval item. The recommended action, if approved after " \
   "confirming the same definition and data state in the target environment, is to run " \
   "`VALIDATE CONSTRAINT` in a short, separately bounded migration transaction. Stop on any " \
@@ -74,7 +71,6 @@ lines = [
   "leaves the original `NOT VALID` definition in place; retry only after investigation. A " \
   "successful validation is not automatically reversed because reverting would discard a " \
   "proven integrity guarantee. No shared database is in this task's application scope.",
-  # rubocop:enable I18n/RailsI18n/DecorateString
   "",
   "| Logical DB | Schema.table | Constraint | Type | Live definition | Current state | Decision |",
   "| --- | --- | --- | --- | --- | --- | --- |",

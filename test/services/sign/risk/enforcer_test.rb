@@ -40,7 +40,13 @@ module Sign
         SignRiskEngine.stub(:score, 100) do
           # SignRiskEnforcer.revoke! should be called
           called = false
-          SignRiskEnforcer.stub(:revoke!, ->(u) { called = true; assert_equal @user, u }) do
+          SignRiskEnforcer.stub(
+            :revoke!, ->(u) {
+                        called = true
+
+                        assert_equal @user, u
+                      },
+          ) do
             SignRiskEnforcer.call(@user)
           end
 

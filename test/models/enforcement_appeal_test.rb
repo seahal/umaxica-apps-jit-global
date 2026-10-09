@@ -210,3 +210,4 @@ class EnforcementAppealTest < ActiveSupport::TestCase
     assert_predicate appeal, :valid?
   end
 end
+# rubocop:enable I18n/RailsI18n/DecorateString

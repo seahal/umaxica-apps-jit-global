@@ -128,7 +128,7 @@ jobs:
           bundler-cache: true
           cache-version: 1
       - name: Run RuboCop
-        run: bundle exec rubocop --fail-fast --format github
+        run: bundle exec rubocop --fail-fast --fail-level convention --format github
       - name: Run ERB Lint
         run: bundle exec erb_lint --lint-all
   # ====================

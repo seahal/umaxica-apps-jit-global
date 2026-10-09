@@ -103,9 +103,9 @@ class IdentifierHmacEmergencyRotationTest < ActiveSupport::TestCase
         end
 
       # A failed comparison must not expose identifier lookup HMACs in test output.
-      # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-      assert expected == record[digest_column], "The selected normalized identifier must match its current realm key"
-      # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+      assert_withheld("The selected normalized identifier must match its current realm key") {
+        expected == record[digest_column]
+      }
     end
   end
 end

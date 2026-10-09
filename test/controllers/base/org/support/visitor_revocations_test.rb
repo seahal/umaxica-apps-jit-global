@@ -181,7 +181,7 @@ class Base::Org::Support::VisitorRevocationsTest < ActionDispatch::IntegrationTe
         starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "support_session_revoke",
       last_step_up_aal: "aal2",
@@ -289,7 +289,7 @@ class Base::Org::Support::VisitorRevocationsTest < ActionDispatch::IntegrationTe
         starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "support_session_revoke",
       last_step_up_aal: "aal2",

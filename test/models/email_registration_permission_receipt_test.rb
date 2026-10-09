@@ -4,7 +4,6 @@ require "test_helper"
 require "minitest/mock"
 
 # Boolean snapshots keep durable permission references out of failure diagnostics.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 class EmailRegistrationPermissionReceiptTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
@@ -70,7 +69,7 @@ class EmailRegistrationPermissionReceiptTest < ActiveSupport::TestCase
               assert_raises(IdentityStepUpCeremonyContract::Error) do
                 parent.consume_email_registration!(registered_credential_ref: contact.public_id)
               end
-              assert committed == parent.reload.attributes, "Terminal receipt must remain unchanged"
+              assert_withheld("Terminal receipt must remain unchanged") { committed == parent.reload.attributes }
             end
           elsif %i(caller_nil_clock caller_clock).include?(kind)
             assert_raises(ArgumentError) do
@@ -78,16 +77,17 @@ class EmailRegistrationPermissionReceiptTest < ActiveSupport::TestCase
                 registered_credential_ref: contact.public_id, now: (kind == :caller_nil_clock) ? nil : now,
               )
             end
-            assert initial == parent.reload.attributes, "Caller clock must not mutate permission"
+            assert_withheld("Caller clock must not mutate permission") { initial == parent.reload.attributes }
           else
             assert_raises(IdentityStepUpCeremonyContract::Error) do
               parent.consume_email_registration!(registered_credential_ref: contact.public_id)
             end
-            assert initial == parent.reload.attributes, "Unavailable original permission must remain unchanged"
+            assert_withheld("Unavailable original permission must remain unchanged") {
+              initial == parent.reload.attributes
+            }
           end
         end
       end
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator

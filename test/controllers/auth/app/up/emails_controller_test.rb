@@ -2,7 +2,6 @@
 # frozen_string_literal: true
 
 # Snapshot diffs would expose OTP material and browser-bound token state on failure.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 
 require "test_helper"
 # require "helpers/global_test_support"
@@ -191,8 +190,10 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     get auth_app_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
 
     assert_response :conflict
-    assert(cycle_facts == cycle.reload.attributes, "a sequence id cannot replace browser authority")
-    assert(candidate_facts == candidate.reload.attributes, "missing browser authority preserves candidate evidence")
+    assert_withheld("a sequence id cannot replace browser authority") { cycle_facts == cycle.reload.attributes }
+    assert_withheld("missing browser authority preserves candidate evidence") {
+      candidate_facts == candidate.reload.attributes
+    }
   end
 
   test "update accepts a valid otp submitted through client_email" do
@@ -373,11 +374,10 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal flow.public_id, SignFlowBindingCodec.decode(flow_binding).flow_public_id
     assert_not_equal user.id, candidate.user_id
     assert_nil candidate.binding_finalized_at
-    assert(
-      original_contact_facts == existing_email.reload.attributes,
-      "original binding and OTP facts remain unchanged",
-    )
-    assert(original_owner_facts == user.reload.attributes, "original owner facts remain unchanged")
+    assert_withheld("original binding and OTP facts remain unchanged") {
+      original_contact_facts == existing_email.reload.attributes
+    }
+    assert_withheld("original owner facts remain unchanged") { original_owner_facts == user.reload.attributes }
     assert_equal original_root_count, ClientToken.count
 
     follow_redirect!
@@ -426,8 +426,12 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_not_equal existing_email.id, candidate.id
     assert_not_equal existing_user.id, candidate.user_id
     assert_nil candidate.binding_finalized_at
-    assert(original_contact_facts == existing_email.reload.attributes, "other candidate facts remain unchanged")
-    assert(original_owner_facts == existing_user.reload.attributes, "other candidate owner facts remain unchanged")
+    assert_withheld("other candidate facts remain unchanged") {
+      original_contact_facts == existing_email.reload.attributes
+    }
+    assert_withheld("other candidate owner facts remain unchanged") {
+      original_owner_facts == existing_user.reload.attributes
+    }
     assert_equal original_root_count, ClientToken.count
   end
 
@@ -573,15 +577,19 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal 1, responses.uniq.length
     assert_equal 4, candidates.map(&:id).uniq.length
     assert_equal 4, candidates.map(&:user_id).uniq.length
-    assert(existing_facts == existing.reload.attributes, "protected record facts remain unchanged")
-    assert(existing_owner_facts == user.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
+    assert_withheld("protected record facts remain unchanged") { existing_owner_facts == user.reload.attributes }
     own_candidate_facts = candidates.last.attributes
     foreign_candidate_facts = candidates.first.attributes
     browsers.last.get(targets.first.request_uri)
 
     assert_equal 409, browsers.last.response.status
-    assert(own_candidate_facts == candidates.last.reload.attributes, "protected record facts remain unchanged")
-    assert(foreign_candidate_facts == candidates.first.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") {
+      own_candidate_facts == candidates.last.reload.attributes
+    }
+    assert_withheld("protected record facts remain unchanged") {
+      foreign_candidate_facts == candidates.first.reload.attributes
+    }
     foreign_delivery =
       (enqueued_jobs + performed_jobs).find do |entry|
         next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
@@ -602,8 +610,12 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_equal 409, browsers.last.response.status
-    assert(own_candidate_facts == candidates.last.reload.attributes, "foreign proof cannot affect this candidate")
-    assert(foreign_candidate_facts == candidates.first.reload.attributes, "foreign proof cannot consume its candidate")
+    assert_withheld("foreign proof cannot affect this candidate") {
+      own_candidate_facts == candidates.last.reload.attributes
+    }
+    assert_withheld("foreign proof cannot consume its candidate") {
+      foreign_candidate_facts == candidates.first.reload.attributes
+    }
     browsers.last.get(targets.last.request_uri)
 
     assert_equal 200, browsers.last.response.status
@@ -796,8 +808,10 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
       assert_response :found
       assert_redirected_to new_auth_app_sign_up_email_url(ri: "jp")
-      assert(cycle_facts == cycle.reload.attributes, "OTP expiry does not manufacture checkpoint progress")
-      assert(contact_facts == user_email.reload.attributes, "expired OTP evidence is not consumed or replaced")
+      assert_withheld("OTP expiry does not manufacture checkpoint progress") { cycle_facts == cycle.reload.attributes }
+      assert_withheld("expired OTP evidence is not consumed or replaced") {
+        contact_facts == user_email.reload.attributes
+      }
     end
   end
 
@@ -2076,8 +2090,10 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp", fb: second_binding)
     assert_not_equal first_binding, second_binding
-    assert(original_contact_facts == existing_email.reload.attributes, "effective contact facts remain unchanged")
-    assert(original_owner_facts == user.reload.attributes, "effective owner facts remain unchanged")
+    assert_withheld("effective contact facts remain unchanged") {
+      original_contact_facts == existing_email.reload.attributes
+    }
+    assert_withheld("effective owner facts remain unchanged") { original_owner_facts == user.reload.attributes }
   end
 
   test "otp_resend_too_soon i18n key exists in both locales" do

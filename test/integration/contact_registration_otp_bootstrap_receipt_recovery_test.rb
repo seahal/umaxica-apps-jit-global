@@ -3,7 +3,7 @@
 require "test_helper"
 
 # Boolean comparisons keep OTP, browser bindings and proof out of failure diagnostics.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
+# rubocop:disable Minitest/MultipleAssertions
 class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
 
@@ -136,12 +136,15 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         delivery = ActiveJob::Arguments.deserialize(job.fetch(:args)).last.fetch(:params).stringify_keys
         code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch("encrypted_hotp_token"))
 
-        assert delivery.fetch("contact_ceremony_transaction_ref") == transaction.transaction_id,
-               "Delivery must retain the original Email transaction"
-        assert delivery.fetch("contact_otp_generation") == transaction.otp_generation,
-               "Delivery must retain the independent Email generation"
-        assert transaction.bootstrap_ceremony_transaction_ref == parent.transaction_id,
-               "The keyed proof must bind the original Bootstrap parent before issuance"
+        assert_withheld("Delivery must retain the original Email transaction") {
+          delivery.fetch("contact_ceremony_transaction_ref") == transaction.transaction_id
+        }
+        assert_withheld("Delivery must retain the independent Email generation") {
+          delivery.fetch("contact_otp_generation") == transaction.otp_generation
+        }
+        assert_withheld("The keyed proof must bind the original Bootstrap parent before issuance") {
+          transaction.bootstrap_ceremony_transaction_ref == parent.transaction_id
+        }
         assert_not job.fetch(:args).to_s.include?(code), "Queued delivery must not expose its random code"
         browser.get(URI.parse(browser.response.location).request_uri, params: { ri: "jp" })
 
@@ -151,11 +154,13 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         marker = BaseStepUpMarkerAdapter.new.read(locator:, transaction_ref: parent.transaction_id)
 
         assert_not_nil marker
-        assert marker.fetch("session_ref") == token.public_id, "Original marker must bind the current Root"
-        assert transaction.session_ref == CredentialRegistrationOtpSessionValue.for(
-          surface:, channel: :email, transaction_ref: transaction.transaction_id,
-          root_ref: token.public_id, browser_nonce: nonce,
-        ).dump, "Email proof must belong to the server-issued original browser and Root"
+        assert_withheld("Original marker must bind the current Root") { marker.fetch("session_ref") == token.public_id }
+        assert_withheld("Email proof must belong to the server-issued original browser and Root") {
+          transaction.session_ref == CredentialRegistrationOtpSessionValue.for(
+            surface:, channel: :email, transaction_ref: transaction.transaction_id,
+            root_ref: token.public_id, browser_nonce: nonce,
+          ).dump
+        }
         csrf = browser.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
         submission = { parameter_scope => { pass_code: code }, "cf-turnstile-response" => "test", :ri => "jp" }
         confirmation_headers = headers.merge("X-CSRF-Token" => csrf)
@@ -198,14 +203,17 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
           otp_consumed_at otp_receipt_verifier otp_verifier otp_result_expires_at updated_at lock_version
         )
 
-        assert original_ticket.except(*verification_changes) ==
-          transaction.reload.attributes.except(*verification_changes),
-               "Failed lifecycle receipt must retain every Ticket fact except committed OTP verification"
+        assert_withheld("Failed lifecycle receipt must retain every Ticket fact except committed OTP verification") {
+          original_ticket.except(*verification_changes) ==
+            transaction.reload.attributes.except(*verification_changes)
+        }
         assert_equal original_ticket.fetch("lock_version") + 1, transaction.lock_version,
                      "Committed OTP verification must advance the Ticket optimistic lock exactly once"
         verified_ticket = transaction.attributes
 
-        assert original_parent == parent.reload.attributes, "Failed receipt must retain the original Bootstrap parent"
+        assert_withheld("Failed receipt must retain the original Bootstrap parent") {
+          original_parent == parent.reload.attributes
+        }
         assert_equal "pending", transaction.status
         assert_equal "pending", parent.status
         assert_equal 1, audits.where(event_name: "finalized", contact_ref: contact.public_id).count
@@ -217,7 +225,7 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
           locator:, transaction_ref: parent.transaction_id,
         )
 
-        assert marker == pending_marker, "Persistence failure must retain the original Root/browser marker"
+        assert_withheld("Persistence failure must retain the original Root/browser marker") { marker == pending_marker }
         wrong_code = ((code.to_i + 1) % 1_000_000).to_s.rjust(6, "0")
         browser.patch(
           "/identity/emails/registration",
@@ -227,37 +235,49 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         assert_equal 422, browser.response.status
         assert_equal "pending", transaction.reload.status
         assert_equal "pending", parent.reload.status
-        assert verified_ticket == transaction.attributes,
-               "Receipt-only authorization must still verify the original submitted code"
+        assert_withheld("Receipt-only authorization must still verify the original submitted code") {
+          verified_ticket == transaction.attributes
+        }
         assert_equal source_facts.fetch("otp_attempts_count") + 1, contact.reload.otp_attempts_count
-        assert contact.reload.otp_last_sent_at == source_facts.fetch("otp_last_sent_at"),
-               "Wrong-code refusal must not change the Email issuance timestamp"
-        assert source_facts.except("otp_attempts_count", "updated_at") ==
-          contact.attributes.except("otp_attempts_count", "updated_at"),
-               "Wrong-code refusal updates only the Email failure counter and update timestamp"
+        assert_withheld("Wrong-code refusal must not change the Email issuance timestamp") {
+          contact.reload.otp_last_sent_at == source_facts.fetch("otp_last_sent_at")
+        }
+        assert_withheld("Wrong-code refusal updates only the Email failure counter and update timestamp") {
+          source_facts.except(
+            "otp_attempts_count", "updated_at",
+          ) ==
+            contact.attributes.except("otp_attempts_count", "updated_at")
+        }
         source_facts = contact.attributes
         browser.patch("/identity/emails/registration", params: submission, headers: confirmation_headers)
 
         assert_equal 302, browser.response.status
         assert_equal "/identity/emails", URI.parse(browser.response.location).path,
                      "Receipt recovery must return to the original target, not ordinary verification"
-        assert source_facts == contact.reload.attributes, "Receipt-only retry must not rewrite committed Source facts"
+        assert_withheld("Receipt-only retry must not rewrite committed Source facts") {
+          source_facts == contact.reload.attributes
+        }
         assert_predicate transaction.reload, :consumed?
-        assert proof == transaction.attributes.slice(*proof.keys), "Retry must retain the exact bounded Email proof"
+        assert_withheld("Retry must retain the exact bounded Email proof") {
+          proof == transaction.attributes.slice(*proof.keys)
+        }
         assert_equal "consumed", parent.reload.status
-        assert parent.verified_credential_ref == contact.public_id, "Original parent must consume the original Contact"
+        assert_withheld("Original parent must consume the original Contact") {
+          parent.verified_credential_ref == contact.public_id
+        }
         assert_equal 1, audits.count
-        assert audit_facts == audits.first.attributes, "Retry must not rewrite the original Source audit"
-        assert nonce == browser.request.session.fetch("auth_admission_browser_nonce"),
-               "Retry must retain original nonce"
-        assert locator == browser.request.session.fetch("base_step_up_marker_locator"),
-               "Retry must retain original locator"
+        assert_withheld("Retry must not rewrite the original Source audit") { audit_facts == audits.first.attributes }
+        assert_withheld("Retry must retain original nonce") {
+          nonce == browser.request.session.fetch("auth_admission_browser_nonce")
+        }
+        assert_withheld("Retry must retain original locator") {
+          locator == browser.request.session.fetch("base_step_up_marker_locator")
+        }
         completed_marker = BaseStepUpMarkerAdapter.new.read(
           locator:, transaction_ref: parent.transaction_id,
         )
 
-        assert marker == completed_marker,
-               "Retry must not replace the original Root/browser marker"
+        assert_withheld("Retry must not replace the original Root/browser marker") { marker == completed_marker }
         assert_nil token.reload.last_step_up_at
         assert_nil token.last_step_up_scope
         assert_nil token.last_step_up_credential_ref
@@ -272,4 +292,4 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
+# rubocop:enable Minitest/MultipleAssertions

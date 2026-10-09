@@ -4,7 +4,6 @@ require "test_helper"
 require "minitest/mock"
 
 # Boolean snapshots avoid disclosing OTP, proof and root material when an assertion fails.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
 class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
   %w(app com).each do |surface|
     %i(email telephone).each do |channel|
@@ -194,20 +193,26 @@ class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
           end
 
           assert_equal root_count, token_model.count
-          assert root_facts == token.reload.attributes, "Verification must preserve Root authority"
-          assert device_facts == token.device_session.reload.attributes
-          assert owner_facts == actor.reload.attributes
-          assert other_facts == other.reload.attributes, "Foreign candidate must remain unchanged" if other_facts
+          assert_withheld("Verification must preserve Root authority") { root_facts == token.reload.attributes }
+          assert_withheld { device_facts == token.device_session.reload.attributes }
+          assert_withheld { owner_facts == actor.reload.attributes }
+          assert_withheld("Foreign candidate must remain unchanged") {
+            other_facts == other.reload.attributes
+          } if other_facts
           if other_ticket_facts
-            assert other_ticket_facts == arguments.fetch(:transaction).reload.attributes,
-                   "Foreign Ticket must remain unchanged"
+            assert_withheld("Foreign Ticket must remain unchanged") {
+              other_ticket_facts == arguments.fetch(:transaction).reload.attributes
+            }
           end
           if proof
             assert_not_predicate result, :success?
             assert_equal(scenario == :proof_before, result.verified_evidence?)
-            assert proof == transaction.reload.attributes,
-                   "Receipt retries and expiry must not replace bounded evidence"
-            assert source_facts == contact.reload.attributes, "Retained receipt must not reset Source failures"
+            assert_withheld("Receipt retries and expiry must not replace bounded evidence") {
+              proof == transaction.reload.attributes
+            }
+            assert_withheld("Retained receipt must not reset Source failures") {
+              source_facts == contact.reload.attributes
+            }
           elsif expected_status == :verified
             assert_predicate result, :success?
             assert_predicate result, :verified_evidence?
@@ -219,8 +224,9 @@ class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
             allowed = %w(otp_consumed_at otp_receipt_verifier otp_verifier otp_result_expires_at updated_at
                          lock_version)
 
-            assert issued_ticket.except(*allowed) == transaction.attributes.except(*allowed),
-                   "Fresh verification may change only committed OTP consumption and bounded receipt facts"
+            assert_withheld("Fresh verification may change only committed OTP consumption and bounded receipt facts") {
+              issued_ticket.except(*allowed) == transaction.attributes.except(*allowed)
+            }
             assert_equal issued_ticket.fetch("lock_version") + 1, transaction.lock_version
             assert_equal [transaction.otp_consumed_at + 60.seconds, transaction.expires_at].min,
                          transaction.otp_result_expires_at
@@ -236,19 +242,25 @@ class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
               assert_equal :already_verified, retried.status
               assert_not_predicate retried, :success?
               assert_predicate retried, :verified_evidence?
-              assert committed == transaction.reload.attributes, "Exact retry must retain the committed proof"
-              assert committed_source == contact.reload.attributes
+              assert_withheld("Exact retry must retain the committed proof") {
+                committed == transaction.reload.attributes
+              }
+              assert_withheld { committed_source == contact.reload.attributes }
             end
           else
             assert_not_predicate result, :success?
             assert_not_predicate result, :verified_evidence?
-            assert issued_ticket == transaction.reload.attributes, "Refusal must not consume or manufacture proof"
+            assert_withheld("Refusal must not consume or manufacture proof") {
+              issued_ticket == transaction.reload.attributes
+            }
             if scenario == :wrong_code
               assert_equal source_facts.fetch("otp_attempts_count") + 1, contact.reload.otp_attempts_count
-              assert source_facts.except("otp_attempts_count", "updated_at") ==
-                contact.attributes.except("otp_attempts_count", "updated_at")
+              assert_withheld {
+                source_facts.except("otp_attempts_count", "updated_at") ==
+                  contact.attributes.except("otp_attempts_count", "updated_at")
+              }
             else
-              assert source_facts == contact.reload.attributes, "Refusal must retain Source facts"
+              assert_withheld("Refusal must retain Source facts") { source_facts == contact.reload.attributes }
             end
           end
         end
@@ -256,4 +268,3 @@ class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions

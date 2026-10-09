@@ -1,1 +1,0 @@
-[{"severity":"convention","location":{"begin_pos":5275,"end_pos":5286},"message":"Performance/ChainArrayAllocation: Use unchained `flatten` and `map!` (followed by `return array` if required) instead of chaining `flatten...map`.","cop_name":"Performance/ChainArrayAllocation","status":"unsupported"}]

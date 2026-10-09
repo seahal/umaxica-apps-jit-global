@@ -146,7 +146,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
             fv5384.cookies.delete(fv5386)
             # Rack::Test's []= uses its default host. The current request may target a
             # different surface, so install the cookie against the browser's active host.
-            fv5384.cookies.merge( # rubocop:disable Lint/Void
+            fv5384.cookies.merge(
               "#{fv5386}=#{Rack::Utils.escape(fv5385)}",
               URI.parse("https://#{fv5384.host}/"),
             )
@@ -188,7 +188,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
             fv5378.cookies.delete(fv5380)
             # Rack::Test's []= uses its default host. The current request may target a
             # different surface, so install the cookie against the browser's active host.
-            fv5378.cookies.merge( # rubocop:disable Lint/Void
+            fv5378.cookies.merge(
               "#{fv5380}=#{Rack::Utils.escape(fv5379)}",
               URI.parse("https://#{fv5378.host}/"),
             )
@@ -230,7 +230,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
             fv5372.cookies.delete(fv5374)
             # Rack::Test's []= uses its default host. The current request may target a
             # different surface, so install the cookie against the browser's active host.
-            fv5372.cookies.merge( # rubocop:disable Lint/Void
+            fv5372.cookies.merge(
               "#{fv5374}=#{Rack::Utils.escape(fv5373)}",
               URI.parse("https://#{fv5372.host}/"),
             )
@@ -407,7 +407,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
                       fv5326.cookies.delete(fv5328)
                       # Rack::Test's []= uses its default host. The current request may target a
                       # different surface, so install the cookie against the browser's active host.
-                      fv5326.cookies.merge( # rubocop:disable Lint/Void
+                      fv5326.cookies.merge(
                         "#{fv5328}=#{Rack::Utils.escape(fv5327)}",
                         URI.parse("https://#{fv5326.host}/"),
                       )
@@ -707,7 +707,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
             fv5270.cookies.delete(fv5272)
             # Rack::Test's []= uses its default host. The current request may target a
             # different surface, so install the cookie against the browser's active host.
-            fv5270.cookies.merge( # rubocop:disable Lint/Void
+            fv5270.cookies.merge(
               "#{fv5272}=#{Rack::Utils.escape(fv5271)}",
               URI.parse("https://#{fv5270.host}/"),
             )
@@ -749,7 +749,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
             fv5264.cookies.delete(fv5266)
             # Rack::Test's []= uses its default host. The current request may target a
             # different surface, so install the cookie against the browser's active host.
-            fv5264.cookies.merge( # rubocop:disable Lint/Void
+            fv5264.cookies.merge(
               "#{fv5266}=#{Rack::Utils.escape(fv5265)}",
               URI.parse("https://#{fv5264.host}/"),
             )
@@ -791,7 +791,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
             fv5258.cookies.delete(fv5260)
             # Rack::Test's []= uses its default host. The current request may target a
             # different surface, so install the cookie against the browser's active host.
-            fv5258.cookies.merge( # rubocop:disable Lint/Void
+            fv5258.cookies.merge(
               "#{fv5260}=#{Rack::Utils.escape(fv5259)}",
               URI.parse("https://#{fv5258.host}/"),
             )
@@ -968,7 +968,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
                       fv5214.cookies.delete(fv5216)
                       # Rack::Test's []= uses its default host. The current request may target a
                       # different surface, so install the cookie against the browser's active host.
-                      fv5214.cookies.merge( # rubocop:disable Lint/Void
+                      fv5214.cookies.merge(
                         "#{fv5216}=#{Rack::Utils.escape(fv5215)}",
                         URI.parse("https://#{fv5214.host}/"),
                       )
@@ -1236,7 +1236,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
             fv5159.cookies.delete(fv5161)
             # Rack::Test's []= uses its default host. The current request may target a
             # different surface, so install the cookie against the browser's active host.
-            fv5159.cookies.merge( # rubocop:disable Lint/Void
+            fv5159.cookies.merge(
               "#{fv5161}=#{Rack::Utils.escape(fv5160)}",
               URI.parse("https://#{fv5159.host}/"),
             )
@@ -1278,7 +1278,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
             fv5153.cookies.delete(fv5155)
             # Rack::Test's []= uses its default host. The current request may target a
             # different surface, so install the cookie against the browser's active host.
-            fv5153.cookies.merge( # rubocop:disable Lint/Void
+            fv5153.cookies.merge(
               "#{fv5155}=#{Rack::Utils.escape(fv5154)}",
               URI.parse("https://#{fv5153.host}/"),
             )
@@ -1320,7 +1320,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
             fv5147.cookies.delete(fv5149)
             # Rack::Test's []= uses its default host. The current request may target a
             # different surface, so install the cookie against the browser's active host.
-            fv5147.cookies.merge( # rubocop:disable Lint/Void
+            fv5147.cookies.merge(
               "#{fv5149}=#{Rack::Utils.escape(fv5148)}",
               URI.parse("https://#{fv5147.host}/"),
             )
@@ -1497,7 +1497,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
                       fv5101.cookies.delete(fv5103)
                       # Rack::Test's []= uses its default host. The current request may target a
                       # different surface, so install the cookie against the browser's active host.
-                      fv5101.cookies.merge( # rubocop:disable Lint/Void
+                      fv5101.cookies.merge(
                         "#{fv5103}=#{Rack::Utils.escape(fv5102)}",
                         URI.parse("https://#{fv5101.host}/"),
                       )
@@ -1798,7 +1798,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
                   fv5023.cookies.delete(fv5025)
                   # Rack::Test's []= uses its default host. The current request may target a
                   # different surface, so install the cookie against the browser's active host.
-                  fv5023.cookies.merge( # rubocop:disable Lint/Void
+                  fv5023.cookies.merge(
                     "#{fv5025}=#{Rack::Utils.escape(fv5024)}",
                     URI.parse("https://#{fv5023.host}/"),
                   )

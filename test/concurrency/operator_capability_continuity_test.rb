@@ -34,7 +34,7 @@ class OperatorCapabilityContinuityTest < ActiveSupport::TestCase
     outcomes = Queue.new
     threads =
       [[@grants[0], @operators[1]], [@grants[1], @operators[0]]].map do |grant, revoker|
-        Thread.new do # rubocop:disable ThreadSafety/NewThread -- two connections are the point of this test
+        Thread.new do
           OperatorCapabilityGrant.connection_pool.with_connection do
             start.pop
             OperatorCapabilityGrant.find(grant.id).revoke!(by: Operator.find(revoker.id), reason_code: "duty_ended")

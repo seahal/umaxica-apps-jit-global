@@ -43,7 +43,8 @@ class Base::Org::Identity::Telephones::RegistrationRateLimitTest < ActionDispatc
                  subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: client.client_id,
     )
     # Rack::Test's cookie jar merge mutates the jar; Hash#merge would not.
-    cookies.merge( # rubocop:disable Lint/Void
+    store_raw_cookies(
+      cookies,
       [
         "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
         "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_session.issue_refresh_token!)}",

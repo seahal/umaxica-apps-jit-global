@@ -486,3 +486,4 @@ module Security
     end
   end
 end
+# rubocop:enable I18n/RailsI18n/DecorateString

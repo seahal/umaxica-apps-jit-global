@@ -493,7 +493,8 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         cookies.delete("session")
         # Rack::Test::CookieJar#merge mutates the jar and has no #merge! form; Lint/Void would
         # autocorrect this into a NoMethodError.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "session=#{Rack::Utils.escape(core_continuity_cookies.fetch("session"))}",
           URI.parse("https://#{core_host}/"),
         )

@@ -241,10 +241,8 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
             ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
           end
 
-          # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
-          assert ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller)
-          assert Actor.context.equal?(outer_actor)
-          # rubocop:enable Minitest/AssertSame
+          assert_withheld { ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller) }
+          assert_withheld { Actor.context.equal?(outer_actor) }
           assert_equal 200, protocol_browser.response.status
           [protocol_browser.response.status, { "Content-Type" => "application/json" },
            protocol_browser.response.body,]
@@ -265,10 +263,8 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
             ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
           end
 
-          # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
-          assert ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller)
-          assert Actor.context.equal?(outer_actor)
-          # rubocop:enable Minitest/AssertSame
+          assert_withheld { ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller) }
+          assert_withheld { Actor.context.equal?(outer_actor) }
           assert_equal 200, protocol_browser.response.status
           [protocol_browser.response.status, { "Content-Type" => "application/json" },
            protocol_browser.response.body,]

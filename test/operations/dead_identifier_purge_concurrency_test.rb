@@ -58,7 +58,7 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
         outcomes = Queue.new
         model.connection_pool.release_connection
         threads = [
-          Thread.new do # rubocop:disable ThreadSafety/NewThread
+          Thread.new do
             model.connection_pool.with_connection do
               local = model.find(record.id)
               ready << true
@@ -72,7 +72,7 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
               outcomes << [:purged, history.id]
             end
           end,
-          Thread.new do # rubocop:disable ThreadSafety/NewThread
+          Thread.new do
             model.connection_pool.with_connection do
               ready << true
               release.pop
@@ -163,7 +163,7 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
         model.connection_pool.release_connection
         threads =
           2.times.map do
-            Thread.new do # rubocop:disable ThreadSafety/NewThread
+            Thread.new do
               model.connection_pool.with_connection do
                 local = model.find(record.id)
                 ready << true

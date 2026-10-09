@@ -171,7 +171,7 @@ class ComSocialLoginBlockedTest < ActionDispatch::IntegrationTest
                   fv5024.cookies.delete(fv5026)
                   # Rack::Test's []= uses its default host. The current request may target a
                   # different surface, so install the cookie against the browser's active host.
-                  fv5024.cookies.merge( # rubocop:disable Lint/Void
+                  fv5024.cookies.merge(
                     "#{fv5026}=#{Rack::Utils.escape(fv5025)}",
                     URI.parse("https://#{fv5024.host}/"),
                   )

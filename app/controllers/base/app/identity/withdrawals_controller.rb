@@ -22,7 +22,8 @@ module Base
         before_action :authorize_withdrawal!, only: %i(new update)
         before_action :authorize_withdrawal_ceremony!, only: %i(edit create destroy)
         def new
-          render_withdrawal_entry(current_client); render_withdrawal_new unless performed?
+          render_withdrawal_entry(current_client)
+          render_withdrawal_new unless performed?
         end
 
         def edit
@@ -66,7 +67,8 @@ module Base
         def withdrawal_public_fallback_path = auth_app_sign_in_path
 
         def handle_deactivation_failure(_actor)
-          @schedule_confirmed = true; render_withdrawal_new(status: :unprocessable_content)
+          @schedule_confirmed = true
+          render_withdrawal_new(status: :unprocessable_content)
         end
 
         def render_withdrawal_new(status: :ok)

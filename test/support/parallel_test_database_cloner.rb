@@ -161,7 +161,7 @@ module ParallelTestDatabaseCloner
 
     errors = Queue.new
     Array.new(thread_count) {
-      Thread.new do # rubocop:disable ThreadSafety/NewThread
+      Thread.new do
         connection = connect(config, ENV.fetch("POSTGRESQL_DATABASE"))
         begin
           loop do

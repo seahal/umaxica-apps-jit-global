@@ -397,7 +397,12 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       original_sent_at = telephone.otp_last_sent_at
       expired_while_waiting =
         flow_model.stub(:database_now, -> { decision_time }) do
-          telephone_model.stub(:database_now, -> { decision_time = flow.expires_at; now }) do
+          telephone_model.stub(
+            :database_now, -> {
+                             decision_time = flow.expires_at
+                             now
+                           },
+          ) do
             TelephoneSignUpOtpIssuer.call(flow: flow, telephone: telephone, session_nonce: nonce)
           end
         end
@@ -482,7 +487,12 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       expired_receipt =
         transaction_model.stub(:database_now, -> { receipt_now }) do
           TelephoneOtpVerificationFailureBudget.stub(:new, budget) do
-            budget.stub(:verify!, ->(**) { receipt_now = resend.transaction.otp_result_expires_at; :verified }) do
+            budget.stub(
+              :verify!, ->(**) {
+                          receipt_now = resend.transaction.otp_result_expires_at
+                          :verified
+                        },
+            ) do
               TelephoneSignUpOtpVerificationCommitter.call(**scope, code: resend.code)
             end
           end

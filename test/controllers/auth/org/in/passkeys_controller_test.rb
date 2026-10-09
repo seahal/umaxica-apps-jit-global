@@ -77,7 +77,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -129,7 +130,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -216,7 +218,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -278,7 +281,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -332,7 +336,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -386,7 +391,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -455,7 +461,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -526,7 +533,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -588,7 +596,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -657,7 +666,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -716,7 +726,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -781,7 +792,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -872,7 +884,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -958,7 +971,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         cookies.delete("auth_sid")
         cookies.delete("__Host-auth_sid")
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
         )
         get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }

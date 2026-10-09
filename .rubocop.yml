@@ -1,34 +1,81 @@
+# RuboCop configuration.
+#
+# This file and the plugins it names are the whole coding contract: nothing is inherited from a
+# shared style gem, so every cop that is off is off because an entry in this file says so.
+#
+# Sections:
+#  1. Base settings (AllCops, plugins, inheritance)
+#  2. Layout and formatting
+#  3. Code quality (Metrics, Lint)
+#  4. Security
+#  5. Rails
+#  6. Performance
+#  7. Minitest
+#  8. Naming, Rake, I18n
+#  9-13. Additional strictness
+# 14. Cops this project does not apply
+# 15. Deferred cops (debt)
+
+# `.rubocop/umaxica.yml` loads the two architecture cops. `.rubocop_todo.yml` is their generated
+# baseline (`bin/rails architecture:baseline`) and carries entries for those two cops only; no
+# other cop may be recorded there.
 inherit_from:
-  - .rubocop/rubocop_ast.yml
   - .rubocop/umaxica.yml
   - .rubocop_todo.yml
 
-# ============================================================
-# RuboCop Configuration
-# ============================================================
-# このファイルはRubyコードの静的解析とフォーマットを設定します
-#
-# 設定カテゴリ:
-# 1. 基本設定（AllCops, Plugins, Inheritance）
-# 2. レイアウト・フォーマット（Layout, Style）
-# 3. コード品質（Metrics, Lint）
-# 4. セキュリティ（Security）
-# 5. フレームワーク固有（Rails）
-# 6. パフォーマンス（Performance）
-# 7. テスト（Minitest）
-# 8. その他（Rake, I18n, Naming）
+# An `Exclude` written here adds to a cop's default exclusions instead of replacing them.
+inherit_mode:
+  merge:
+    - Exclude
 
+# A `rubocop:disable` comment is an offense. The cops listed under AllowedCops are the ones that
+# still carried suppressions when this rule was switched on; each entry is debt to remove, and the
+# list only ever shrinks. A new offense is fixed in the code or decided in this file, never
+# silenced where it occurs.
 Style/DisableCopsWithinSourceCodeDirective:
-  Enabled: false
+  Enabled: true
+  AllowedCops:
+    - I18n/RailsI18n/DecorateString
+    - I18n/RailsI18n/DecorateStringFormattingUsingInterpolation
+    - Layout/LineLength
+    - Lint/DuplicateMethods
+    - Lint/EmptyClass
+    - Lint/NoReturnInBeginEndBlocks
+    - Lint/UnusedBlockArgument
+    - Lint/UnusedMethodArgument
+    - Metrics/AbcSize
+    - Metrics/MethodLength
+    - Minitest/MultipleAssertions
+    - Naming/MethodParameterName
+    - Rails/ApplicationController
+    - Rails/HasManyOrHasOneDependent
+    - Rails/I18nLocaleAssignment
+    - Rails/I18nLocaleTexts
+    - Rails/IndexWith
+    - Rails/RakeEnvironment
+    - Rails/RedundantPresenceValidationOnBelongsTo
+    - Rails/RefuteMethods
+    - Rails/SkipsModelValidations
+    - Rails/ThreeStateBooleanColumn
+    - ThreadSafety/ClassAndModuleAttributes
+    - ThreadSafety/ClassInstanceVariable
+
+Lint/CopDirectiveSyntax:
+  Enabled: true
+
+Lint/RedundantCopDisableDirective:
+  Enabled: true
+
+Lint/RedundantCopEnableDirective:
+  Enabled: true
+
+Lint/MissingCopEnableDirective:
+  Enabled: true
 
 # ============================================================
-# 1. 基本設定
+# 1. Base settings
 # ============================================================
 
-inherit_gem:
-  rubocop-rails-omakase: rubocop.yml
-
-# プラグイン
 plugins:
   - rubocop-performance
   - rubocop-thread_safety
@@ -38,7 +85,6 @@ plugins:
   - rubocop-rubycw
   - rubocop-rails
 
-# 全Copに適用される設定
 AllCops:
   TargetRubyVersion: 4.0
   NewCops: enable
@@ -70,10 +116,17 @@ Layout:
   Enabled: true
 
 # ------------------------------------------------------------
-# Controller: enforced structure
+# Class structure: one declaration order for controllers and models
 # ------------------------------------------------------------
+# A single category list serves both: a controller has no associations and a model has no filters,
+# so the categories that do not occur in a file simply take no part in its ordering.
 Layout/ClassStructure:
   Enabled: true
+  # Models are not included yet. The order below is the target for them too, and 356 declarations
+  # in 180 model files are out of it. Reordering a class body can change behavior (a callback or
+  # validation declared earlier runs earlier, a macro may read a constant or attribute declared
+  # above it), so each class is moved by hand and checked; the cop's autocorrection is never applied
+  # in bulk. Add `app/models/**/*.rb` here once those files are in order.
   Include:
     - app/controllers/**/*.rb
   Categories:
@@ -83,6 +136,46 @@ Layout/ClassStructure:
       - extend
     constants:
       - CONSTANT
+    attributes:
+      - class_attribute
+      - attribute
+      - alias_attribute
+      - encrypts
+    enums:
+      - enum
+    associations:
+      - belongs_to
+      - has_one
+      - has_many
+      - has_and_belongs_to_many
+    nested_attributes:
+      - accepts_nested_attributes_for
+    validations:
+      - validates
+      - validate
+    callbacks:
+      - after_initialize
+      - before_validation
+      - after_validation
+      - before_save
+      - around_save
+      - before_create
+      - around_create
+      - after_create
+      - before_update
+      - around_update
+      - after_update
+      - before_destroy
+      - around_destroy
+      - after_destroy
+      - after_save
+      - after_commit
+      - after_rollback
+    delegates:
+      - delegate
+    scopes:
+      - default_scope
+      - scope
     macros:
       - layout
       - respond_to
@@ -107,6 +200,14 @@ Layout/ClassStructure:
   ExpectedOrder:
     - module_inclusion
     - constants
+    - attributes
+    - enums
+    - associations
+    - nested_attributes
+    - validations
+    - callbacks
+    - delegates
+    - scopes
     - macros
     - public_class_methods
     - initializer
@@ -193,6 +294,7 @@ Layout/SpaceBeforeBlockBraces:
 Layout/SpaceInsideBlockBraces:
   Enabled: true
   EnforcedStyle: space
+  EnforcedStyleForEmptyBraces: space
 
 Layout/SpaceInsideArrayLiteralBrackets:
   Enabled: true
@@ -449,8 +551,6 @@ Style/SwapValues:
 Metrics/AbcSize:
   Enabled: true
   Max: 50
-  Exclude:
-    - "app/controllers/sign/app/auth/omniauth_callbacks_controller.rb"
 
 Metrics/CyclomaticComplexity:
   Enabled: true
@@ -459,9 +559,6 @@ Metrics/CyclomaticComplexity:
 Metrics/MethodLength:
   Enabled: true
   Max: 45
-  Exclude:
-    - "app/controllers/concerns/preference/base.rb"
-    - "app/controllers/core/com/contact/telephones_controller.rb"
 
 Metrics/PerceivedComplexity:
   Enabled: true
@@ -502,8 +599,6 @@ Lint/EmptyBlock:
   Enabled: true
   AllowComments: true
   AllowEmptyLambdas: true
-  Exclude:
-    - "db/initial_schemas/**/*"
 
 Lint/EmptyClass:
   Enabled: true
@@ -847,8 +942,11 @@ Rails/CreateTableWithTimestamps:
 # 6. パフォーマンス
 # ============================================================
 
+# Performance cops measure hot paths. Test code is not one, and the clearer form wins there.
 Performance:
   Enabled: true
+  Exclude:
+    - "test/**/*"
 
 Performance/AncestorsInclude:
   Enabled: true
@@ -1336,13 +1434,19 @@ Style/ModuleFunction:
 # ---------- Metrics: より厳格な上限 ----------
 
 # ネストの深さ: 既存 max 2 を維持しつつ全ファイルに適用
+# Deferred (see section 15): the limit below was never enforced while the Metrics department was
+# switched off by the inherited configuration. 294 / 36 offenses / files against it.
 Metrics/BlockNesting:
+  Enabled: false
   Max: 2
   # AllCops の Exclude が適用されるのでここでは除外不要
 
 # パラメータ数の厳格化（既存 max: 4、これを全ファイルで強制）
 # （既存設定を上書き: MaxOptionalParameters を 1 に絞る）
+# Deferred (see section 15): the limit below was never enforced while the Metrics department was
+# switched off by the inherited configuration. 885 / 480 offenses / files against it.
 Metrics/ParameterLists:
+  Enabled: false
   Max: 4
   MaxOptionalParameters: 1
 
@@ -1402,10 +1506,8 @@ Style/IpAddresses:
   Exclude:
     - "config/**/*"
     - "test/**/*"
-    - "docker/**/*"
     - "podman/**/*"
     - "db/**/*_migrate/**/*"
-    - "db/initial_schemas/**/*"
 
 # メソッド呼び出しの括弧を強制（可読性向上）
 Style/MethodCallWithArgsParentheses:
@@ -1464,20 +1566,28 @@ Style/MethodCallWithArgsParentheses:
     - "Gemfile"
 
 # ClassLength を引き下げ
+# Deferred (see section 15): the limit below was never enforced while the Metrics department was
+# switched off by the inherited configuration. 734 / 640 offenses / files against it.
 Metrics/ClassLength:
+  Enabled: false
   Max: 150
 
 # ModuleLength を引き下げ
+# Deferred (see section 15): the limit below was never enforced while the Metrics department was
+# switched off by the inherited configuration. 119 / 119 offenses / files against it.
 Metrics/ModuleLength:
+  Enabled: false
   Max: 100
 
 # BlockLength を引き下げ
+# Deferred (see section 15): the limit below was never enforced while the Metrics department was
+# switched off by the inherited configuration. 59 / 41 offenses / files against it.
 Metrics/BlockLength:
+  Enabled: false
   Max: 30
   Exclude:
     - "config/**/*"
     - "db/**/*_migrate/**/*"
-    - "db/initial_schemas/**/*"
     - "test/**/*"
 
 Style/ConstantVisibility:
@@ -1497,7 +1607,6 @@ Layout/LineLength:
   SplitStrings: false
   Exclude:
     - "db/**/*_migrate/**/*.rb"
-    - "db/initial_schemas/**/*.rb"
 
 Rails/SkipsModelValidations:
   Exclude:
@@ -1508,6 +1617,13 @@ Rails/ApplicationController:
   Exclude:
     - "app/controllers/**/bare_controller.rb"
 
+# Concurrency tests and the race-check scripts start threads on purpose: interleaving is the thing
+# under test. The cop guards request-serving code, where a stray thread escapes the executor.
+ThreadSafety/NewThread:
+  Exclude:
+    - "test/**/*.rb"
+    - "scripts/**/*"
+
 ThreadSafety/ClassInstanceVariable:
   Exclude:
     - "test/**/*.rb"
@@ -1515,9 +1631,386 @@ ThreadSafety/ClassInstanceVariable:
     # after boot. A race can only recompute the same frozen value.
     - "app/values/fqdn_availability_registry.rb"
     - "app/controllers/concerns/social_callback_guard.rb"
-    - "lib/jit/security/turnstile_verifier.rb"
-    - "lib/jit/security/jwt/jti_generator.rb"
 
 ThreadSafety/MutableClassInstanceVariable:
   Exclude:
     - "test/**/*.rb"
+
+# ============================================================
+# 13b. Settings formerly inherited from rubocop-rails-omakase
+# ============================================================
+# Kept because existing code is written to them.
+
+Layout/CaseIndentation:
+  EnforcedStyle: end
+
+# ============================================================
+# 14. Cops this project does not apply
+# ============================================================
+
+# Rewrites `ENV["NAME"]` to `ENV.fetch("NAME", nil)`, which is the code-side default that
+# adr/env-fetch-without-default.md forbids. An optional variable is read as `ENV["NAME"]` with an
+# explicit nil branch.
+Style/FetchEnvVar:
+  Enabled: false
+
+# Contradicts Umaxica/ExplicitMethodVisibility, which requires the explicit `public` this cop reports.
+Lint/UselessAccessModifier:
+  Enabled: false
+
+# Suppression comments are being removed, not restyled; converting a `disable`/`enable` pair to
+# `disable-next` would keep the suppression and only change its spelling.
+Style/DirectiveScope:
+  Enabled: false
+
+# ============================================================
+# 15. Deferred cops
+# ============================================================
+# rubocop-rails-omakase used to switch the Bundler, Gemspec, Lint, Metrics, Naming and Style
+# departments off wholesale. Those departments are on again, so every cop in them applies unless it
+# is named below. Each cop below reported offenses when the inheritance was removed (the number is
+# offenses / files at that point) and is switched off individually until the code is brought into
+# line. This is debt: enable a cop by fixing its offenses and deleting its entry, never by adding an
+# exclusion. Nothing may be added to these lists.
+
+# ---------- No autocorrection: each offense needs a design decision ----------
+
+Lint/ArgumentMismatch: # 32 / 9
+  Enabled: false
+
+Lint/DataDefineOverride: # 3 / 3
+  Enabled: false
+
+Lint/DeprecatedReference: # 150 / 146
+  Enabled: false
+
+Lint/EmptyFile: # 11 / 11
+  Enabled: false
+
+Lint/IneffectiveAccessModifier: # 4 / 2
+  Enabled: false
+
+Lint/NameTypo: # 112 / 40
+  Enabled: false
+
+Lint/ScriptPermission: # 9 / 9
+  Enabled: false
+
+Lint/SelfAssignment: # 4 / 2
+  Enabled: false
+
+Lint/StructNewOverride: # 4 / 4
+  Enabled: false
+
+Lint/UnderscorePrefixedVariableName: # 3 / 3
+  Enabled: false
+
+Lint/UselessConstantScoping: # 14 / 10
+  Enabled: false
+
+Lint/UselessRescue: # 1 / 1
+  Enabled: false
+
+Naming/AccessorMethodName: # 346 / 179
+  Enabled: false
+
+Naming/FileName: # 1 / 1
+  Enabled: false
+
+Naming/PredicateMethod: # 625 / 267
+  Enabled: false
+
+Naming/PredicatePrefix: # 23 / 16
+  Enabled: false
+
+Naming/VariableNumber: # 506 / 80
+  Enabled: false
+
+Style/FormatStringToken: # 13 / 7
+  Enabled: false
+
+Style/HashLikeCase: # 2 / 2
+  Enabled: false
+
+Style/MultilineBlockChain: # 51 / 17
+  Enabled: false
+
+Style/OneClassPerFile: # 6 / 2
+  Enabled: false
+
+Style/SafeNavigationChainLength: # 7 / 5
+  Enabled: false
+
+# ---------- Safe autocorrection available: mechanical, pending review of the diff ----------
+
+Bundler/OrderedGems: # 2 / 1
+  Enabled: false
+
+Lint/AmbiguousBlockAssociation: # 175 / 86
+  Enabled: false
+
+Lint/DeprecatedOpenSSLConstant: # 1 / 1
+  Enabled: false
+
+Lint/DuplicateMagicComment: # 2 / 2
+  Enabled: false
+
+Lint/LiteralInInterpolation: # 23 / 8
+  Enabled: false
+
+Lint/ParenthesesAsGroupedExpression: # 4 / 1
+  Enabled: false
+
+Lint/RedundantRequireStatement: # 7 / 7
+  Enabled: false
+
+Style/Alias: # 20 / 14
+  Enabled: false
+
+Style/BlockDelimiters: # 464 / 107
+  Enabled: false
+
+Style/EmptyClassDefinition: # 26 / 19
+  Enabled: false
+
+Style/EmptyElse: # 5 / 2
+  Enabled: false
+
+Style/EmptyStringInsideInterpolation: # 9 / 6
+  Enabled: false
+
+Style/ExplicitBlockArgument: # 251 / 217
+  Enabled: false
+
+Style/HashAsLastArrayItem: # 1 / 1
+  Enabled: false
+
+Style/IfUnlessModifier: # 163 / 119
+  Enabled: false
+
+Style/IfUnlessModifierOfIfUnless: # 1 / 1
+  Enabled: false
+
+Style/ItBlockParameter: # 24 / 1
+  Enabled: false
+
+Style/KeywordArgumentsMerging: # 50 / 26
+  Enabled: false
+
+Style/KeywordParametersOrder: # 81 / 35
+  Enabled: false
+
+Style/Lambda: # 202 / 119
+  Enabled: false
+
+Style/MethodCallWithoutArgsParentheses: # 5 / 1
+  Enabled: false
+
+Style/ModuleMemberExistenceCheck: # 1 / 1
+  Enabled: false
+
+Style/MultilineIfModifier: # 1222 / 321
+  Enabled: false
+
+Style/MultilineTernaryOperator: # 186 / 74
+  Enabled: false
+
+Style/MultipleComparison: # 9 / 9
+  Enabled: false
+
+Style/NestedModifier: # 1 / 1
+  Enabled: false
+
+Style/NestedTernaryOperator: # 143 / 143
+  Enabled: false
+
+Style/Next: # 2 / 2
+  Enabled: false
+
+Style/OrAssignment: # 1 / 1
+  Enabled: false
+
+Style/ParallelAssignment: # 22 / 16
+  Enabled: false
+
+Style/PerlBackrefs: # 6 / 1
+  Enabled: false
+
+Style/Proc: # 5 / 2
+  Enabled: false
+
+Style/RedundantAssignment: # 8 / 8
+  Enabled: false
+
+Style/RedundantBegin: # 80 / 25
+  Enabled: false
+
+Style/RedundantConstantBase: # 2057 / 903
+  Enabled: false
+
+Style/RedundantDoubleSplatHashBraces: # 2 / 1
+  Enabled: false
+
+Style/RedundantException: # 854 / 88
+  Enabled: false
+
+Style/RedundantFreeze: # 40 / 22
+  Enabled: false
+
+Style/RedundantHeredocDelimiterQuotes: # 2 / 1
+  Enabled: false
+
+Style/RedundantParentheses: # 15 / 8
+  Enabled: false
+
+Style/RedundantPercentQ: # 20 / 9
+  Enabled: false
+
+Style/RedundantRegexpArgument: # 11 / 4
+  Enabled: false
+
+Style/RedundantRegexpEscape: # 3 / 2
+  Enabled: false
+
+Style/RegexpLiteral: # 31 / 23
+  Enabled: false
+
+Style/RescueModifier: # 3 / 3
+  Enabled: false
+
+Style/RescueStandardError: # 1 / 1
+  Enabled: false
+
+Style/SelfAssignment: # 2 / 2
+  Enabled: false
+
+Style/SingleLineMethods: # 5 / 2
+  Enabled: false
+
+Style/SoleNestedConditional: # 10 / 8
+  Enabled: false
+
+Style/SuperArguments: # 6 / 6
+  Enabled: false
+
+Style/TrailingUnderscoreVariable: # 2 / 2
+  Enabled: false
+
+Style/TrivialAccessors: # 32 / 17
+  Enabled: false
+
+# ---------- Unsafe autocorrection only: each offense needs a semantic check ----------
+
+Lint/RedundantSafeNavigation: # 25 / 14
+  Enabled: false
+
+Lint/UselessTimes: # 32 / 5
+  Enabled: false
+
+Naming/MemoizedInstanceVariableName: # 14 / 10
+  Enabled: false
+
+Style/ArrayIntersect: # 4 / 4
+  Enabled: false
+
+Style/CaseLikeIf: # 5 / 3
+  Enabled: false
+
+Style/ClassAndModuleChildren: # 660 / 368
+  Enabled: false
+
+Style/ClassEqualityComparison: # 4 / 4
+  Enabled: false
+
+Style/CollectionQuerying: # 3 / 3
+  Enabled: false
+
+Style/CombinableLoops: # 8 / 6
+  Enabled: false
+
+Style/ComparableBetween: # 2 / 2
+  Enabled: false
+
+Style/ConcatArrayLiterals: # 4 / 4
+  Enabled: false
+
+Style/DataInheritance: # 3 / 3
+  Enabled: false
+
+Style/DoubleNegation: # 12 / 2
+  Enabled: false
+
+Style/EnvHome: # 1 / 1
+  Enabled: false
+
+Style/GlobalStdStream: # 2 / 1
+  Enabled: false
+
+Style/HashEachMethods: # 8 / 5
+  Enabled: false
+
+Style/IdenticalConditionalBranches: # 10 / 3
+  Enabled: false
+
+Style/InverseMethods: # 3 / 3
+  Enabled: false
+
+Style/MapJoin: # 6 / 6
+  Enabled: false
+
+Style/MapToSet: # 3 / 3
+  Enabled: false
+
+Style/MutableConstant: # 4 / 4
+  Enabled: false
+
+Style/NumericPredicate: # 16 / 10
+  Enabled: false
+
+Style/OpenStructUse: # 58 / 15
+  Enabled: false
+
+Style/OptionalBooleanParameter: # 1 / 1
+  Enabled: false
+
+Style/PartitionInsteadOfDoubleSelect: # 1 / 1
+  Enabled: false
+
+Style/PredicateWithKind: # 1 / 1
+  Enabled: false
+
+Style/PreferredHashMethods: # 1 / 1
+  Enabled: false
+
+Style/RaiseArgs: # 88 / 29
+  Enabled: false
+
+Style/ReduceToHash: # 1 / 1
+  Enabled: false
+
+Style/RedundantFetchBlock: # 81 / 4
+  Enabled: false
+
+Style/RedundantInterpolation: # 8 / 6
+  Enabled: false
+
+Style/ReverseFind: # 117 / 30
+  Enabled: false
+
+Style/SelectByKind: # 2 / 2
+  Enabled: false
+
+Style/SendWithLiteralMethodName: # 5 / 2
+  Enabled: false
+
+Style/StringConcatenation: # 43 / 30
+  Enabled: false
+
+Style/StructInheritance: # 2 / 2
+  Enabled: false
+
+Style/SymbolProc: # 21 / 18
+  Enabled: false
+
+Style/YodaCondition: # 2 / 1
+  Enabled: false

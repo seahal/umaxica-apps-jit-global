@@ -66,7 +66,12 @@ class BaseLocalAuthenticationEntryTest < ActionDispatch::IntegrationTest
       host! base_host
 
       target_url = nil
-      JumpRtIssuer.stub(:call, ->(**args) { target_url = args.fetch(:url); "signed-jump-token" }) do
+      JumpRtIssuer.stub(
+        :call, ->(**args) {
+                 target_url = args.fetch(:url)
+                 "signed-jump-token"
+               },
+      ) do
         RedirectsJumpGatewayUrl.stub(
           :call,
           ->(_token) { RedirectsTargetResult.ok(kind: :external, source: :test, value: target_url) },

@@ -4,7 +4,6 @@
 require "test_helper"
 
 # Boolean snapshots prevent failure output from disclosing code, proof and browser facts.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
 class SignOtpCeremonyTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
@@ -63,9 +62,9 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
             verifier.call(flow: first_flow, code: submitted, session_nonce: "budget-browser-0", **first_source)
           end
 
-          assert original_contact == first_contact.reload.attributes
-          assert original_flow == first_flow.reload.attributes
-          assert original_ticket == first_issue.transaction.reload.attributes
+          assert_withheld { original_contact == first_contact.reload.attributes }
+          assert_withheld { original_flow == first_flow.reload.attributes }
+          assert_withheld { original_ticket == first_issue.transaction.reload.attributes }
         end
       end
       5.times do |index|
@@ -87,8 +86,8 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
 
       assert_not_predicate result, :success?
       assert_equal :locked, result.status
-      assert retained_ticket == replacement_issue.transaction.reload.attributes
-      assert retained_source == replacement_contact.reload.attributes
+      assert_withheld { retained_ticket == replacement_issue.transaction.reload.attributes }
+      assert_withheld { retained_source == replacement_contact.reload.attributes }
       assert_not_predicate replacement_contact, :binding_effective?
     end
   end
@@ -134,15 +133,15 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
 
       assert_not_predicate result, :success?
       assert_equal :inactive_candidate, result.status
-      assert retained_ticket == original.transaction.reload.attributes
+      assert_withheld { retained_ticket == original.transaction.reload.attributes }
       assert_predicate contact.reload, :binding_released?
       issued = issuer.call(flow:, session_nonce: "sign-otp-browser", **source)
 
       assert_not_predicate issued, :success?
       assert_equal :inactive_candidate, issued.status
       assert_not query.call(flow:, session_nonce: "sign-otp-browser", **source)
-      assert retained_ticket == original.transaction.reload.attributes
-      assert retained_source == contact.reload.attributes
+      assert_withheld { retained_ticket == original.transaction.reload.attributes }
+      assert_withheld { retained_source == contact.reload.attributes }
     end
   end
 
@@ -191,8 +190,8 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
       assert_equal :inactive_candidate, verified.status
       assert_not_predicate verified, :success?
       assert_not query.call(flow:, session_nonce: "sign-otp-browser", **source)
-      assert retained_ticket == original.transaction.reload.attributes
-      assert retained_source == contact.reload.attributes
+      assert_withheld { retained_ticket == original.transaction.reload.attributes }
+      assert_withheld { retained_source == contact.reload.attributes }
       assert_equal 0, contact.otp_attempts_count
       assert_not_predicate flow.reload, :sign_up_terminal?
     end
@@ -233,7 +232,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
         assert_equal [false, :inactive_flow, false, :inactive_flow],
                      [issued.success?, issued.status, verified.success?, verified.status]
         assert_not EmailSignUpOtpFormQuery.call(flow:, email:, session_nonce: "sign-otp-browser")
-        assert retained_ticket == original.transaction.reload.attributes
+        assert_withheld { retained_ticket == original.transaction.reload.attributes }
       end
     end
   end
@@ -262,7 +261,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     assert_raises(ArgumentError) do
       EmailSignUpOtpIssuer.call(flow:, email: nil, session_nonce: "sign-otp-browser")
     end
-    assert facts == flow.reload.attributes
+    assert_withheld { facts == flow.reload.attributes }
   end
 
   test "issued Email proof rejects another candidate destination then consumes once and retains nonfresh evidence" do
@@ -294,9 +293,9 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     args = enqueued_jobs.first.fetch(:args)
     delivery = ActiveJob::Arguments.deserialize(args).last.fetch(:params).symbolize_keys
 
-    assert delivery.fetch(:sign_up_email_transaction_ref) == issued.transaction.transaction_id
-    assert delivery.fetch(:sign_up_email_otp_generation) == issued.transaction.otp_generation
-    assert OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token)) == issued.code
+    assert_withheld { delivery.fetch(:sign_up_email_transaction_ref) == issued.transaction.transaction_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == issued.transaction.otp_generation }
+    assert_withheld { OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token)) == issued.code }
     assert_not args.to_s.include?(issued.code)
     verified = EmailSignUpOtpVerificationCommitter.call(
       flow:, email:, code: issued.code, session_nonce: "sign-otp-browser",
@@ -315,8 +314,8 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     assert_not_predicate retried, :success?
     assert_predicate retried, :verified_evidence?
     assert_equal :already_verified, retried.status
-    assert receipt == issued.transaction.reload.attributes
-    assert source == email.reload.attributes
+    assert_withheld { receipt == issued.transaction.reload.attributes }
+    assert_withheld { source == email.reload.attributes }
     assert EmailSignUpOtpFormQuery.call(flow:, email:, session_nonce: "sign-otp-browser")
   end
 
@@ -343,9 +342,9 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     assert_not_predicate result, :success?
     assert_equal :inactive_candidate, result.status
     assert_not EmailSignUpOtpFormQuery.call(flow:, email: foreign_email, session_nonce: "sign-otp-browser")
-    assert proof == issued.transaction.reload.attributes
-    assert source == email.reload.attributes
-    assert foreign_facts == foreign_email.reload.attributes
+    assert_withheld { proof == issued.transaction.reload.attributes }
+    assert_withheld { source == email.reload.attributes }
+    assert_withheld { foreign_facts == foreign_email.reload.attributes }
   end
 
   test "Email verification classifies code length neighbors and typed sentinels without admitting failure budgets" do
@@ -367,8 +366,8 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
 
       assert_not_predicate result, :success?
       assert_equal :invalid_code, result.status
-      assert proof == issued.transaction.reload.attributes
-      assert source == email.reload.attributes
+      assert_withheld { proof == issued.transaction.reload.attributes }
+      assert_withheld { source == email.reload.attributes }
     end
     verified = EmailSignUpOtpVerificationCommitter.call(
       flow:, email:, code: issued.code, session_nonce: "sign-otp-browser",
@@ -436,8 +435,8 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     assert_equal :session_mismatch, verified.status
     assert_not_predicate verified, :success?
     assert_not EmailSignUpOtpFormQuery.call(flow:, email:, session_nonce: "another-flow")
-    assert proof == issued.transaction.reload.attributes
-    assert source == email.reload.attributes
+    assert_withheld { proof == issued.transaction.reload.attributes }
+    assert_withheld { source == email.reload.attributes }
   end
 
   test "Telephone issuance refuses an Email signup ticket without creating another channel proof" do
@@ -455,7 +454,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     assert_not_predicate result, :success?
     assert_equal :binding_mismatch, result.status
     assert_not TelephoneSignUpOtpFormQuery.call(flow:, telephone:, session_nonce: "sign-otp-browser")
-    assert source == telephone.reload.attributes
+    assert_withheld { source == telephone.reload.attributes }
     assert_not ClientTelephoneCeremonyTransaction.exists?(telephone_candidate_ref: telephone.public_id)
   end
 
@@ -480,8 +479,8 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     assert_equal :rate_limited, result.status
     assert_nil result.transaction
     assert_nil result.code
-    assert proof == first.transaction.reload.attributes
-    assert source == email.reload.attributes
+    assert_withheld { proof == first.transaction.reload.attributes }
+    assert_withheld { source == email.reload.attributes }
     assert_empty enqueued_jobs
   end
 
@@ -536,8 +535,8 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
         assert_equal((offset < 0) ? :verified : :invalid_code, result.status)
       end
       if offset >= 0
-        assert proof == issued.transaction.reload.attributes
-        assert source == email.reload.attributes
+        assert_withheld { proof == issued.transaction.reload.attributes }
+        assert_withheld { source == email.reload.attributes }
       end
     end
   end
@@ -566,4 +565,3 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     assert_equal flow.expires_at, issued.transaction.expires_at
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions

@@ -4,7 +4,7 @@ require "test_helper"
 require "minitest/mock"
 
 # Boolean fact comparisons keep credentials and binding references out of failure diagnostics.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
+# rubocop:disable Minitest/MultipleAssertions
 class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
@@ -212,13 +212,21 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
             assert_raises(ActiveRecord::StatementInvalid) { EmailCredentialRegistrationOtpFinalizer.call!(**arguments) }
           end
           assert fired, "The real persistence boundary must be reached"
-          assert ticket_facts == transaction.reload.attributes, "Contact receipt must remain pending after failure"
-          assert parent_facts == parent.reload.attributes, "Bootstrap receipt must remain pending after failure"
-          assert proof == transaction.reload.attributes.slice(*proof.keys), "Verified proof must survive failure"
+          assert_withheld("Contact receipt must remain pending after failure") {
+            ticket_facts == transaction.reload.attributes
+          }
+          assert_withheld("Bootstrap receipt must remain pending after failure") {
+            parent_facts == parent.reload.attributes
+          }
+          assert_withheld("Verified proof must survive failure") {
+            proof == transaction.reload.attributes.slice(*proof.keys)
+          }
           assert_nil transaction.reload.otp_verifier
           assert_not_nil transaction.otp_consumed_at
           if scenario == :source_fault
-            assert source_facts == contact.reload.attributes, "Source failure must preserve the original candidate"
+            assert_withheld("Source failure must preserve the original candidate") {
+              source_facts == contact.reload.attributes
+            }
             assert_equal 0, audits.count
           else
             assert_predicate contact, :binding_effective?
@@ -253,8 +261,9 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
             transaction.class.stub(:database_now, finalization_now) do
               parent.class.stub(:database_now, finalization_now) do
                 if scenario == :primary_freshness_elapsed
-                  assert finalization_now >= token.root_login_established_at + 10.minutes,
-                         "Primary freshness is an issuance prerequisite, not a finalization prerequisite"
+                  assert_withheld("Primary freshness is an issuance prerequisite, not a finalization prerequisite") {
+                    finalization_now >= token.root_login_established_at + 10.minutes
+                  }
                 end
 
                 assert_equal :finalized, EmailCredentialRegistrationOtpFinalizer.call!(**arguments)
@@ -264,33 +273,54 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
                 assert_not EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(**arguments),
                            "Consumed receipts cannot authorize another operation"
                 assert_equal "email_otp", parent[:method]
-                assert parent.verified_credential_ref == contact.public_id, "Parent must name the original candidate"
-                assert proof == transaction.attributes.slice(*proof.keys),
-                       "Finalization must retain the exact verified proof"
+                assert_withheld("Parent must name the original candidate") {
+                  parent.verified_credential_ref == contact.public_id
+                }
+                assert_withheld("Finalization must retain the exact verified proof") {
+                  proof == transaction.attributes.slice(*proof.keys)
+                }
                 assert_equal 1, audits.where(event_name: "finalized", contact_ref: contact.public_id).count
                 committed_source = contact.attributes
                 committed_ticket = transaction.attributes
                 committed_parent = parent.attributes
 
                 assert_equal :finalized, EmailCredentialRegistrationOtpFinalizer.call!(**arguments)
-                assert committed_source == contact.reload.attributes, "Exact retry must not rewrite Source facts"
-                assert committed_ticket == transaction.reload.attributes, "Exact retry must not replace Contact receipt"
-                assert committed_parent == parent.reload.attributes, "Exact retry must not replace Bootstrap receipt"
+                assert_withheld("Exact retry must not rewrite Source facts") {
+                  committed_source == contact.reload.attributes
+                }
+                assert_withheld("Exact retry must not replace Contact receipt") {
+                  committed_ticket == transaction.reload.attributes
+                }
+                assert_withheld("Exact retry must not replace Bootstrap receipt") {
+                  committed_parent == parent.reload.attributes
+                }
                 assert_equal 1, audits.count
               end
             end
           end
         else
           assert_equal :unavailable, EmailCredentialRegistrationOtpFinalizer.call!(**arguments)
-          assert source_facts == contact.reload.attributes, "Refusal must preserve the candidate and verified proof"
-          assert ticket_facts == transaction.reload.attributes, "Refusal must preserve the original Contact Ticket"
-          assert parent_facts == parent.reload.attributes, "Refusal must preserve the original Bootstrap parent"
-          assert supplied_parent_facts == supplied_parent&.reload&.attributes, "Refusal must preserve foreign parents"
+          assert_withheld("Refusal must preserve the candidate and verified proof") {
+            source_facts == contact.reload.attributes
+          }
+          assert_withheld("Refusal must preserve the original Contact Ticket") {
+            ticket_facts == transaction.reload.attributes
+          }
+          assert_withheld("Refusal must preserve the original Bootstrap parent") {
+            parent_facts == parent.reload.attributes
+          }
+          assert_withheld("Refusal must preserve foreign parents") {
+            supplied_parent_facts == supplied_parent&.reload&.attributes
+          }
           assert_equal 0, audits.count
         end
 
-        assert root_facts == token.reload.attributes, "Bootstrap must never issue freshness or replace Root authority"
-        assert binding_facts == binding.reload.attributes, "Finalization must not replace original admission binding"
+        assert_withheld("Bootstrap must never issue freshness or replace Root authority") {
+          root_facts == token.reload.attributes
+        }
+        assert_withheld("Finalization must not replace original admission binding") {
+          binding_facts == binding.reload.attributes
+        }
         assert_nil token.last_step_up_at
         assert_nil transaction.reload.otp_verifier
         assert_not_nil transaction.otp_consumed_at
@@ -298,4 +328,4 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
+# rubocop:enable Minitest/MultipleAssertions

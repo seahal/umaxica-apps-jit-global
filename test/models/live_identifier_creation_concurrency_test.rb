@@ -32,7 +32,7 @@ class LiveIdentifierCreationConcurrencyTest < ActiveSupport::TestCase
       model.connection_pool.release_connection
       threads =
         owners.zip([identifier, equivalent]).map do |owner, input|
-          Thread.new do # rubocop:disable ThreadSafety/NewThread
+          Thread.new do
             model.connection_pool.with_connection do
               ready << true
               release.pop

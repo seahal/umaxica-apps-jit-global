@@ -3,7 +3,6 @@
 require "test_helper"
 
 # Boolean comparisons keep OTP secrets and challenge digests out of assertion failure output.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertPredicate
 class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
   %w(app com).each do |surface|
     test "#{surface} issuance and resend stay on their admitted flow without rotating Contact OTP" do
@@ -107,7 +106,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
           assert_equal 200, browser.response.status
           csrf_meta = browser.response.parsed_body.at_css('meta[name="csrf-token"]')
 
-          assert csrf_meta.present?, "expected the rendered browser CSRF meta tag"
+          assert_withheld("expected the rendered browser CSRF meta tag") { csrf_meta.present? }
           csrf = csrf_meta["content"]
           address_field = (surface == "app") ? :client_email : :user_email
           delivery_count = ActionMailer::Base.deliveries.size
@@ -129,23 +128,24 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
           assert_equal [address], delivery.to
           match = delivery.text_part.body.decoded.match(/Pass Code:\s*([0-9]{6})/)
 
-          assert match.present?, "expected an OTP in the delivered text part"
+          assert_withheld("expected an OTP in the delivered text part") { match.present? }
           codes << match[1]
 
-          assert source_generation == contact.reload.attributes.slice(*source_generation.keys),
-                 "sign-in issuance must leave Contact OTP generation unchanged"
+          assert_withheld("sign-in issuance must leave Contact OTP generation unchanged") {
+            source_generation == contact.reload.attributes.slice(*source_generation.keys)
+          }
           browser.get(URI.parse(browser.response.location).request_uri, params: { ri: "jp" })
 
           assert_equal 200, browser.response.status
           edit_props << JSON.parse(browser.response.parsed_body.at_css('script[data-page="app"]').text).fetch("props")
           csrf_meta = browser.response.parsed_body.at_css('meta[name="csrf-token"]')
 
-          assert csrf_meta.present?, "expected the rendered edit-page CSRF meta tag"
+          assert_withheld("expected the rendered edit-page CSRF meta tag") { csrf_meta.present? }
           edit_csrf_tokens << csrf_meta["content"]
           if index.zero?
             @first_context = ceremonies.first.reload.email_otp_context.deep_dup
 
-            assert @first_context.present?, "issuance must persist a Ticket challenge"
+            assert_withheld("issuance must persist a Ticket challenge") { @first_context.present? }
             # B is genuinely throttled before the identifier window expires;
             # swapping the clock-aware store does not bypass the existing limit.
             browsers.last.get("/sign/in/email/new", params: { ri: "jp" })
@@ -162,11 +162,13 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
             assert_equal 429, browsers.last.response.status
             assert_equal delivery_count + 1, ActionMailer::Base.deliveries.size
             assert_nil ceremonies.last.reload.email_otp_context
-            assert @first_context == ceremonies.first.reload.email_otp_context,
-                   "throttled B receipt must leave A's challenge unchanged"
+            assert_withheld("throttled B receipt must leave A's challenge unchanged") {
+              @first_context == ceremonies.first.reload.email_otp_context
+            }
           else
-            assert @first_context == ceremonies.first.reload.email_otp_context,
-                   "another browser issuance must not rotate A's Ticket challenge"
+            assert_withheld("another browser issuance must not rotate A's Ticket challenge") {
+              @first_context == ceremonies.first.reload.email_otp_context
+            }
           end
         end
         resend_key = (surface == "app") ? "otp_resend" : "resend"
@@ -180,10 +182,12 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
         )
 
         assert_equal 400, browsers.last.response.status
-        assert @first_context == ceremonies.first.reload.email_otp_context,
-               "foreign resend state must not mutate A"
-        assert second_before == ceremonies.last.reload.email_otp_context,
-               "foreign resend state must not mutate B"
+        assert_withheld("foreign resend state must not mutate A") {
+          @first_context == ceremonies.first.reload.email_otp_context
+        }
+        assert_withheld("foreign resend state must not mutate B") {
+          second_before == ceremonies.last.reload.email_otp_context
+        }
 
         travel_to(original_time + (2 * (EmailOtpPolicy::SEND_COOLDOWN + 1.second)))
         delivery_count = ActionMailer::Base.deliveries.size
@@ -197,10 +201,12 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
 
         assert_equal 200, browsers.last.response.status
         assert_equal delivery_count + 1, ActionMailer::Base.deliveries.size
-        assert source_generation == contact.reload.attributes.slice(*source_generation.keys),
-               "resend must leave Contact OTP generation unchanged"
-        assert @first_context == ceremonies.first.reload.email_otp_context,
-               "B resend must leave A's challenge unchanged"
+        assert_withheld("resend must leave Contact OTP generation unchanged") {
+          source_generation == contact.reload.attributes.slice(*source_generation.keys)
+        }
+        assert_withheld("B resend must leave A's challenge unchanged") {
+          @first_context == ceremonies.first.reload.email_otp_context
+        }
         assert_not_equal second_before.fetch("generation"), ceremonies.last.reload.email_otp_context.fetch("generation")
         assert_nil ceremonies.last.email_otp_context.fetch("verified_at")
 
@@ -218,7 +224,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
 
         # APP preserves its Found response; COM explicitly uses See Other after verification.
         assert_equal((surface == "app") ? 302 : 303, browsers.first.response.status)
-        assert ceremonies.first.reload.email_otp_context.fetch("verified_at").present?
+        assert_withheld { ceremonies.first.reload.email_otp_context.fetch("verified_at").present? }
         assert_nil ceremonies.last.reload.email_otp_context.fetch("verified_at")
         assert_equal actor.public_id, ceremonies.first.email_otp_context.fetch("owner_ref")
       ensure
@@ -230,4 +236,3 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertPredicate

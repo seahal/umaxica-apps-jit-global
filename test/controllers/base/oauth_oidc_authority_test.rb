@@ -96,7 +96,12 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       token_response: { access_token: "access", refresh_token: "refresh", token_type: "Bearer" },
     )
 
-    OidcTokenExchangeCoordinator.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
+    OidcTokenExchangeCoordinator.stub(
+      :call, ->(**kwargs) {
+               captured = kwargs
+               result
+             },
+    ) do
       post base_app_oauth_token_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
            params: {
              grant_type: "authorization_code",
@@ -125,7 +130,12 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       token_response: { access_token: "access", refresh_token: "next-refresh", token_type: "Bearer" },
     )
 
-    OidcTokenExchangeCoordinator.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
+    OidcTokenExchangeCoordinator.stub(
+      :call, ->(**kwargs) {
+               captured = kwargs
+               result
+             },
+    ) do
       post base_app_oauth_token_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
            params: {
              grant_type: "refresh_token",
@@ -275,7 +285,10 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     with_oauth_authorize_counter(
       store,
-      oauth_result: ->(key, _amount, expires_in:) { calls << [key, expires_in]; counts.shift },
+      oauth_result: ->(key, _amount, expires_in:) {
+        calls << [key, expires_in]
+        counts.shift
+      },
     ) do
       RateLimitProfiles.stub(:oauth_authorize, profile_set) do
         get base_app_oauth_authorization_url(
@@ -372,7 +385,12 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     captured = nil
     result = AuthResult.new(success: false, error: "invalid_token")
 
-    OidcAccessTokenAuthenticator.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
+    OidcAccessTokenAuthenticator.stub(
+      :call, ->(**kwargs) {
+               captured = kwargs
+               result
+             },
+    ) do
       get base_app_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
           headers: { "Authorization" => "Bearer access", "DPoP" => "proof" }
     end
@@ -524,7 +542,12 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     invalid = AuthResult.new(success: false, error: "invalid_token")
     insufficient = AuthResult.new(success: false, error: "insufficient_scope")
 
-    OidcAccessTokenAuthenticator.stub(:call, ->(**kwargs) { calls << kwargs; invalid }) do
+    OidcAccessTokenAuthenticator.stub(
+      :call, ->(**kwargs) {
+               calls << kwargs
+               invalid
+             },
+    ) do
       get base_com_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL")),
           headers: { "Authorization" => "Bearer wrong-realm" }
     end
@@ -604,7 +627,12 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     captured = nil
     result = RevocationResult.new(success: true)
 
-    OidcTokenRevoker.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
+    OidcTokenRevoker.stub(
+      :call, ->(**kwargs) {
+               captured = kwargs
+               result
+             },
+    ) do
       post base_app_oauth_revocation_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
            params: {
              token: "refresh",
@@ -626,7 +654,12 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     result = RevocationResult.new(success: true)
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
 
-    OidcTokenRevoker.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
+    OidcTokenRevoker.stub(
+      :call, ->(**kwargs) {
+               captured = kwargs
+               result
+             },
+    ) do
       post base_com_oauth_revocation_url(host: host),
            params: {
              token: "refresh",
@@ -648,7 +681,12 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     result = RevocationResult.new(success: true)
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
 
-    OidcTokenRevoker.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
+    OidcTokenRevoker.stub(
+      :call, ->(**kwargs) {
+               captured = kwargs
+               result
+             },
+    ) do
       post base_org_oauth_revocation_url(host: host),
            params: {
              token: "refresh",

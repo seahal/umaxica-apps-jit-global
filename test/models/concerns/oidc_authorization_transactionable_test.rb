@@ -312,7 +312,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
 
     threads =
       Array.new(2) do |index|
-        Thread.new do # rubocop:disable ThreadSafety/NewThread
+        Thread.new do
           VisitorOidcAuthorizationTransaction.connection_pool.with_connection do
             ready << true
             release.pop
@@ -361,7 +361,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     results = Queue.new
     threads =
       2.times.map do
-        Thread.new do # rubocop:disable ThreadSafety/NewThread
+        Thread.new do
           VisitorOidcAuthorizationTransaction.connection_pool.with_connection do
             results << VisitorOidcAuthorizationTransaction.find(transaction.id).claim_authorization_grant!
           end

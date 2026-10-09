@@ -1644,7 +1644,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     with_authenticated_client do
       threads =
         2.times.map do |index|
-          Thread.new do # rubocop:disable ThreadSafety/NewThread
+          Thread.new do
             results[index] =
               OidcTokenExchangeCoordinator.call(
                 grant_type: "authorization_code",

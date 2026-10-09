@@ -4,7 +4,6 @@ require "test_helper"
 
 # The voluntary-removal decision and the terminal mutation must share the Client owner lock.
 # Independent connections make the two competing requests observe the real serialization boundary.
-# rubocop:disable ThreadSafety/NewThread
 class AuthMethodGuardConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
 
@@ -66,4 +65,3 @@ class AuthMethodGuardConcurrencyTest < ActiveSupport::TestCase
     threads&.each(&:join)
   end
 end
-# rubocop:enable ThreadSafety/NewThread

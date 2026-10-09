@@ -244,7 +244,7 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
                       fv5087.cookies.delete(fv5089)
                       # Rack::Test's []= uses its default host. The current request may target a
                       # different surface, so install the cookie against the browser's active host.
-                      fv5087.cookies.merge( # rubocop:disable Lint/Void
+                      fv5087.cookies.merge(
                         "#{fv5089}=#{Rack::Utils.escape(fv5088)}",
                         URI.parse("https://#{fv5087.host}/"),
                       )
@@ -486,7 +486,7 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
                       fv5023.cookies.delete(fv5025)
                       # Rack::Test's []= uses its default host. The current request may target a
                       # different surface, so install the cookie against the browser's active host.
-                      fv5023.cookies.merge( # rubocop:disable Lint/Void
+                      fv5023.cookies.merge(
                         "#{fv5025}=#{Rack::Utils.escape(fv5024)}",
                         URI.parse("https://#{fv5023.host}/"),
                       )

@@ -89,7 +89,8 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           fv5016 = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
           fv5001.cookies.delete("auth_sid")
           fv5001.cookies.delete("__Host-auth_sid")
-          fv5001.cookies.merge( # rubocop:disable Lint/Void
+          store_raw_cookies(
+            fv5001.cookies,
             "#{fv5016}=#{Rack::Utils.escape(fv5015)}", URI.parse("https://#{fv5014}/"),
           )
           fv5001.get(

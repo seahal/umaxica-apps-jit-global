@@ -3,8 +3,6 @@
 require "test_helper"
 
 # Fact comparisons must not disclose readable identifiers or lookup digests.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
-# rubocop:disable Minitest/RefuteEqual
 class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
   %w(app com).each do |realm|
     %w(email telephone).each do |channel|
@@ -43,16 +41,23 @@ class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
         assert_equal 0, result.records_failed
         record.reload
 
-        assert facts.fetch(digest_column.to_s) != record[digest_column], "The finalized lookup digest must rotate"
-        assert facts.except(digest_column.to_s, "updated_at") ==
-          record.attributes.except(digest_column.to_s, "updated_at"),
-               "Rotation must preserve finalized ownership and all other lifecycle facts"
+        assert_withheld("The finalized lookup digest must rotate") {
+          facts.fetch(digest_column.to_s) != record[digest_column]
+        }
+        assert_withheld("Rotation must preserve finalized ownership and all other lifecycle facts") {
+          facts.except(
+            digest_column.to_s, "updated_at",
+          ) ==
+            record.attributes.except(digest_column.to_s, "updated_at")
+        }
         audit_model = (realm == "app") ? ClientIdentifierRotationAudit : VisitorIdentifierRotationAudit
         audit = audit_model.find_by!(channel: channel, record_id: record.id)
 
         assert_equal model.lease_connection.raw_connection.user, audit.actor_role
         assert_match(/\A[0-9a-f-]{36}\z/, audit.operation_ref)
-        assert audit.attributes.keys.sort == %w(id operation_ref channel record_id actor_role occurred_at).sort
+        assert_withheld {
+          audit.attributes.keys.sort == %w(id operation_ref channel record_id actor_role occurred_at).sort
+        }
       ensure
         ENV[key_name] = original_key if original_key
       end
@@ -115,16 +120,23 @@ class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
               when "telephone" then IdentifierBlindIndex.bidx_for_telephone(record.number, realm:)
               end
 
-            assert expected == record[digest_column], "Selected model must use only its realm/channel HMAC key"
-            assert facts.fetch(index).fetch(digest_column.to_s) != record[digest_column],
-                   "Selected stale digest must actually be replaced"
-            assert facts.fetch(index).except(digest_column.to_s, "updated_at") ==
-              record.attributes.except(digest_column.to_s, "updated_at"),
-                   "Rotation must retain identifier ownership, readable PII, OTP and lifecycle facts"
+            assert_withheld("Selected model must use only its realm/channel HMAC key") {
+              expected == record[digest_column]
+            }
+            assert_withheld("Selected stale digest must actually be replaced") {
+              facts.fetch(index).fetch(digest_column.to_s) != record[digest_column]
+            }
+            assert_withheld("Rotation must retain identifier ownership, readable PII, OTP and lifecycle facts") {
+              facts.fetch(index).except(
+                digest_column.to_s, "updated_at",
+              ) ==
+                record.attributes.except(digest_column.to_s, "updated_at")
+            }
             assert_operator counts.fetch(result_key), :>=, 1
           else
-            assert facts.fetch(index) == record.attributes,
-                   "Other realm/channel records must remain entirely unchanged, including stale digests"
+            assert_withheld("Other realm/channel records must remain entirely unchanged, including stale digests") {
+              facts.fetch(index) == record.attributes
+            }
             assert_equal 0, counts.fetch(result_key), "Unselected model must not be visited"
           end
         end
@@ -176,5 +188,3 @@ class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
     end
   end
 end
-# rubocop:enable Minitest/RefuteEqual
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions

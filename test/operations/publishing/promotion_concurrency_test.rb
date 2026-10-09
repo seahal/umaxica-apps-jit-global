@@ -84,7 +84,6 @@ module Publishing
     # Each block runs on its own checked-out connection so PostgreSQL sees
     # genuinely concurrent transactions. Real threads are the point here: a
     # simulated race on one connection would prove nothing.
-    # rubocop:disable ThreadSafety/NewThread
     def concurrently(count, &block)
       threads =
         Array.new(count) do |index|
@@ -96,7 +95,6 @@ module Publishing
         end
       threads.map(&:value)
     end
-    # rubocop:enable ThreadSafety/NewThread
 
     def destroy_publishing_fixtures
       connection = PublishingRecord.lease_connection

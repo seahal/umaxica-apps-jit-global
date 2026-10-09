@@ -137,7 +137,12 @@ module Authentication
       AuthenticationToken.stub(:decode, payload) do
         AuthenticationToken.stub(:resource_type_scope_matches?, true) do
           connection_calls = []
-          OrgTicketRecord.stub(:connected_to, ->(**options, &block) { connection_calls << options; block.call }) do
+          OrgTicketRecord.stub(
+            :connected_to, ->(**options, &block) {
+                             connection_calls << options
+                             block.call
+                           },
+          ) do
             result = AuthenticationCurrentResourceResolver.new(
               access_token: "token",
               request_host: "app.localhost",

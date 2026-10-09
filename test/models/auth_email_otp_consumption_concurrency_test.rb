@@ -39,7 +39,7 @@ class AuthEmailOtpConsumptionConcurrencyTest < ActiveSupport::TestCase
       ActiveRecord::Base.connection_handler.clear_active_connections!
       threads =
         2.times.map do
-          Thread.new do # rubocop:disable ThreadSafety/NewThread
+          Thread.new do
             ticket_owner.connected_to(role: :writing) do
               ticket_owner.connection_pool.with_connection do
                 local = auth_model.find(ceremony.id)
@@ -58,9 +58,9 @@ class AuthEmailOtpConsumptionConcurrencyTest < ActiveSupport::TestCase
       assert_equal %i(already_verified verified), outcomes.map(&:status).sort
       assert ceremony.reload.email_otp_context.fetch("verified_at")
       # Equality failure output must not disclose Source OTP secrets or encrypted PII.
-      # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-      assert source_before == contact.reload.attributes, "Auth OTP consumption must not rewrite Source proof or PII"
-      # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+      assert_withheld("Auth OTP consumption must not rewrite Source proof or PII") {
+        source_before == contact.reload.attributes
+      }
     ensure
       threads&.each(&:join)
       # Only rows created by this nontransactional race fixture are removed; lifecycle purge is tested separately.

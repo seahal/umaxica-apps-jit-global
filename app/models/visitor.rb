@@ -259,3 +259,4 @@ class Visitor < ComPrincipalRecord
     step_up_methods
   end
 end
+# rubocop:enable Rails/HasManyOrHasOneDependent

@@ -17,7 +17,12 @@ class IdentitySocialCeremonyResultIssuerTest < ActiveSupport::TestCase
     captured = nil
     authentication_event_at = @now - 2.minutes
 
-    with_ceremony(issue: ->(claims, **) { captured = claims; "issued-token" }) do
+    with_ceremony(
+      issue: ->(claims, **) {
+        captured = claims
+        "issued-token"
+      },
+    ) do
       result = issuer(callback_result: verified_callback(verified_at: authentication_event_at)).issue!
 
       assert_equal "issued-token", result
@@ -54,7 +59,12 @@ class IdentitySocialCeremonyResultIssuerTest < ActiveSupport::TestCase
       expires_at: @transaction.expires_at,
     )
 
-    with_ceremony(issue: ->(claims, **) { captured = claims; "issued-token" }) do
+    with_ceremony(
+      issue: ->(claims, **) {
+        captured = claims
+        "issued-token"
+      },
+    ) do
       IdentitySocialCeremonyCandidateStore.stub(:store!, stored) do
         issuer(candidate: nil, challenge_id: nil).issue!
       end

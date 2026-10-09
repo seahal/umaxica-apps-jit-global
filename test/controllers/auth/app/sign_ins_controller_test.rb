@@ -186,7 +186,7 @@ module Auth
                         fv5627.cookies.delete(fv5629)
                         # Rack::Test's []= uses its default host. The current request may target a
                         # different surface, so install the cookie against the browser's active host.
-                        fv5627.cookies.merge( # rubocop:disable Lint/Void
+                        fv5627.cookies.merge(
                           "#{fv5629}=#{Rack::Utils.escape(fv5628)}",
                           URI.parse("https://#{fv5627.host}/"),
                         )
@@ -449,7 +449,7 @@ module Auth
                         fv5560.cookies.delete(fv5562)
                         # Rack::Test's []= uses its default host. The current request may target a
                         # different surface, so install the cookie against the browser's active host.
-                        fv5560.cookies.merge( # rubocop:disable Lint/Void
+                        fv5560.cookies.merge(
                           "#{fv5562}=#{Rack::Utils.escape(fv5561)}",
                           URI.parse("https://#{fv5560.host}/"),
                         )
@@ -686,7 +686,7 @@ module Auth
                         fv5493.cookies.delete(fv5495)
                         # Rack::Test's []= uses its default host. The current request may target a
                         # different surface, so install the cookie against the browser's active host.
-                        fv5493.cookies.merge( # rubocop:disable Lint/Void
+                        fv5493.cookies.merge(
                           "#{fv5495}=#{Rack::Utils.escape(fv5494)}",
                           URI.parse("https://#{fv5493.host}/"),
                         )
@@ -927,7 +927,7 @@ module Auth
                         fv5426.cookies.delete(fv5428)
                         # Rack::Test's []= uses its default host. The current request may target a
                         # different surface, so install the cookie against the browser's active host.
-                        fv5426.cookies.merge( # rubocop:disable Lint/Void
+                        fv5426.cookies.merge(
                           "#{fv5428}=#{Rack::Utils.escape(fv5427)}",
                           URI.parse("https://#{fv5426.host}/"),
                         )
@@ -1164,7 +1164,7 @@ module Auth
                         fv5359.cookies.delete(fv5361)
                         # Rack::Test's []= uses its default host. The current request may target a
                         # different surface, so install the cookie against the browser's active host.
-                        fv5359.cookies.merge( # rubocop:disable Lint/Void
+                        fv5359.cookies.merge(
                           "#{fv5361}=#{Rack::Utils.escape(fv5360)}",
                           URI.parse("https://#{fv5359.host}/"),
                         )
@@ -1402,7 +1402,7 @@ module Auth
                         fv5292.cookies.delete(fv5294)
                         # Rack::Test's []= uses its default host. The current request may target a
                         # different surface, so install the cookie against the browser's active host.
-                        fv5292.cookies.merge( # rubocop:disable Lint/Void
+                        fv5292.cookies.merge(
                           "#{fv5294}=#{Rack::Utils.escape(fv5293)}",
                           URI.parse("https://#{fv5292.host}/"),
                         )
@@ -1639,7 +1639,7 @@ module Auth
                         fv5225.cookies.delete(fv5227)
                         # Rack::Test's []= uses its default host. The current request may target a
                         # different surface, so install the cookie against the browser's active host.
-                        fv5225.cookies.merge( # rubocop:disable Lint/Void
+                        fv5225.cookies.merge(
                           "#{fv5227}=#{Rack::Utils.escape(fv5226)}",
                           URI.parse("https://#{fv5225.host}/"),
                         )
@@ -1876,7 +1876,7 @@ module Auth
                         fv5158.cookies.delete(fv5160)
                         # Rack::Test's []= uses its default host. The current request may target a
                         # different surface, so install the cookie against the browser's active host.
-                        fv5158.cookies.merge( # rubocop:disable Lint/Void
+                        fv5158.cookies.merge(
                           "#{fv5160}=#{Rack::Utils.escape(fv5159)}",
                           URI.parse("https://#{fv5158.host}/"),
                         )
@@ -2125,7 +2125,7 @@ module Auth
                         fv5091.cookies.delete(fv5093)
                         # Rack::Test's []= uses its default host. The current request may target a
                         # different surface, so install the cookie against the browser's active host.
-                        fv5091.cookies.merge( # rubocop:disable Lint/Void
+                        fv5091.cookies.merge(
                           "#{fv5093}=#{Rack::Utils.escape(fv5092)}",
                           URI.parse("https://#{fv5091.host}/"),
                         )
@@ -2365,7 +2365,7 @@ module Auth
                         fv5024.cookies.delete(fv5026)
                         # Rack::Test's []= uses its default host. The current request may target a
                         # different surface, so install the cookie against the browser's active host.
-                        fv5024.cookies.merge( # rubocop:disable Lint/Void
+                        fv5024.cookies.merge(
                           "#{fv5026}=#{Rack::Utils.escape(fv5025)}",
                           URI.parse("https://#{fv5024.host}/"),
                         )

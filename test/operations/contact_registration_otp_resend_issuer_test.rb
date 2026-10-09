@@ -4,7 +4,6 @@ require "test_helper"
 require "minitest/mock"
 
 # Boolean snapshots keep credentials, destinations and binding references out of failure output.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
 class ContactRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
   %i(app com).each do |surface|
     %i(email telephone).each do |channel|
@@ -61,9 +60,12 @@ class ContactRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
             end
 
           assert_predicate issued, :success?
-          assert source_before_issuance.except("otp_last_sent_at", "updated_at") ==
-            contact.reload.attributes.except("otp_last_sent_at", "updated_at"),
-                 "Issuance must not write Source counters, proof or destination lookup facts"
+          assert_withheld("Issuance must not write Source counters, proof or destination lookup facts") {
+            source_before_issuance.except(
+              "otp_last_sent_at", "updated_at",
+            ) ==
+              contact.reload.attributes.except("otp_last_sent_at", "updated_at")
+          }
           transaction = issued.transaction
           code = issued.code
           generation = transaction.otp_generation
@@ -172,7 +174,7 @@ class ContactRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
                     cooldown_after maximum_uuid_generation).include?(scenario)
                 assert_kind_of issue_result, issuance
                 assert_predicate issuance, :success?
-                assert issuance.transaction == transaction, "Resend must retain the original transaction"
+                assert_withheld("Resend must retain the original transaction") { issuance.transaction == transaction }
                 updated = transaction.reload.attributes
                 contact.reload
 
@@ -181,14 +183,21 @@ class ContactRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
                 assert_not_equal context.fetch("otp_verifier"), transaction.otp_verifier
                 assert_equal original.fetch("otp_attempts_count"), contact.otp_attempts_count
                 assert_equal context.fetch("otp_expires_at"), transaction.otp_expires_at
-                assert context.except("otp_generation", "otp_verifier", "updated_at", "lock_version") ==
-                  updated.except("otp_generation", "otp_verifier", "updated_at", "lock_version"),
-                       "Resend must preserve all original bindings and both original deadlines"
+                assert_withheld("Resend must preserve all original bindings and both original deadlines") {
+                  context.except(
+                    "otp_generation", "otp_verifier", "updated_at", "lock_version",
+                  ) ==
+                    updated.except("otp_generation", "otp_verifier", "updated_at", "lock_version")
+                }
                 assert_equal context.fetch("lock_version") + 1, transaction.lock_version
                 assert_equal decision_time, contact.otp_last_sent_at
-                assert original.except("otp_last_sent_at", "updated_at") ==
-                  contact.attributes.except("otp_last_sent_at", "updated_at"),
-                       "Resend must preserve every other Source fact"
+                assert_withheld("Resend must preserve every other Source fact") {
+                  original.except(
+                    "otp_last_sent_at",
+                    "updated_at",
+                  ) ==
+                    contact.attributes.except("otp_last_sent_at", "updated_at")
+                }
                 old_delivered = false
                 new_delivered = false
 
@@ -220,11 +229,13 @@ class ContactRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
                   assert_equal expected, issuance.status, "Resend refusal must return its exact classified status"
                 end
 
-                assert original == contact.reload.attributes,
-                       "Refusal or fault must preserve the original Source issuance"
-                assert supplied_contact_facts ==
-                  arguments.fetch((channel == :email) ? :email : :telephone).reload.attributes,
-                       "A substituted Contact must remain unchanged"
+                assert_withheld("Refusal or fault must preserve the original Source issuance") {
+                  original == contact.reload.attributes
+                }
+                assert_withheld("A substituted Contact must remain unchanged") {
+                  supplied_contact_facts ==
+                    arguments.fetch((channel == :email) ? :email : :telephone).reload.attributes
+                }
               end
             end
           end
@@ -232,20 +243,23 @@ class ContactRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
           if issuance&.success?
             allowed = %w(otp_generation otp_verifier updated_at lock_version)
 
-            assert ticket_facts.except(*allowed) == transaction.reload.attributes.except(*allowed),
-                   "Resend must not renew or replace the original Ticket"
+            assert_withheld("Resend must not renew or replace the original Ticket") {
+              ticket_facts.except(*allowed) == transaction.reload.attributes.except(*allowed)
+            }
             assert_equal ticket_facts.fetch("lock_version") + 1, transaction.lock_version
           else
-            assert ticket_facts == transaction.reload.attributes, "Refusal or Source fault must retain original proof"
-            assert supplied_ticket_facts == arguments.fetch(:transaction).reload.attributes,
-                   "A substituted Ticket must remain unchanged"
+            assert_withheld("Refusal or Source fault must retain original proof") {
+              ticket_facts == transaction.reload.attributes
+            }
+            assert_withheld("A substituted Ticket must remain unchanged") {
+              supplied_ticket_facts == arguments.fetch(:transaction).reload.attributes
+            }
           end
 
-          assert root_facts == token.reload.attributes, "Resend must retain root facts"
-          assert owner_facts == actor.reload.attributes, "Resend must retain owner facts"
+          assert_withheld("Resend must retain root facts") { root_facts == token.reload.attributes }
+          assert_withheld("Resend must retain owner facts") { owner_facts == actor.reload.attributes }
         end
       end
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions

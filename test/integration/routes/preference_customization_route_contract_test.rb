@@ -19,7 +19,6 @@ class PreferenceCustomizationRouteContractTest < ActionDispatch::IntegrationTest
     org: { host: BASE_ORG_HOST, controller_prefix: "base/org" },
   }.freeze
 
-  # rubocop:disable Minitest/MultipleAssertions
   test "preference customization edit is recognized on every surface" do
     SURFACES.each do |_surface, config|
       recognized = Rails.application.routes.recognize_path(
@@ -106,5 +105,4 @@ class PreferenceCustomizationRouteContractTest < ActionDispatch::IntegrationTest
                    recognized[:controller]
     end
   end
-  # rubocop:enable Minitest/MultipleAssertions
 end

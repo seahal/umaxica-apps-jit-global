@@ -4,7 +4,6 @@ require "test_helper"
 require "minitest/mock"
 
 # Boolean comparisons prevent failure output from exposing OTP and binding material.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertIncludes, Minitest/MultipleAssertions
 class ContactRegistrationOtpTransportBindingTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
@@ -85,23 +84,30 @@ class ContactRegistrationOtpTransportBindingTest < ActiveSupport::TestCase
             params = ActiveJob::Arguments.deserialize(arguments).last.fetch(:params).symbolize_keys
             params[:email_address] = destination
 
-            assert params.fetch(:contact_ceremony_transaction_ref) == transaction.transaction_id,
-                   "Email must retain the original ceremony UUID"
-            assert params.fetch(:public_id) == contact.public_id, "Email must retain the original Contact"
+            assert_withheld("Email must retain the original ceremony UUID") {
+              params.fetch(:contact_ceremony_transaction_ref) == transaction.transaction_id
+            }
+            assert_withheld("Email must retain the original Contact") { params.fetch(:public_id) == contact.public_id }
             assert_equal "credential_registration", params.fetch(:purpose)
-            assert params.fetch(:contact_otp_generation) == generation, "Email must retain the original generation"
-            assert OutboundSensitivePayload.decrypt_email_otp(params.fetch(:encrypted_hotp_token)) == code,
-                   "Email ciphertext must contain the issued random code"
+            assert_withheld("Email must retain the original generation") {
+              params.fetch(:contact_otp_generation) == generation
+            }
+            assert_withheld("Email ciphertext must contain the issued random code") {
+              OutboundSensitivePayload.decrypt_email_otp(params.fetch(:encrypted_hotp_token)) == code
+            }
           else
             payload = OutboundSensitivePayload.decrypt_sms_delivery(arguments.first.fetch("encrypted_payload"))
 
             assert_equal 4, payload.fetch(:version)
-            assert payload.fetch(:otp_binding) ==
-              [surface.to_s, "credential_registration", transaction.transaction_id, contact.public_id, generation],
-                   "SMS envelope must retain the complete original five-tuple"
-            assert payload.fetch(:to) == destination, "SMS must retain the original destination"
-            assert payload.fetch(:otp_code) == code, "SMS must encrypt the issued random code"
-            assert payload.fetch(:body) == expected_body, "SMS must encrypt the issued code in the selected template"
+            assert_withheld("SMS envelope must retain the complete original five-tuple") {
+              payload.fetch(:otp_binding) ==
+                [surface.to_s, "credential_registration", transaction.transaction_id, contact.public_id, generation]
+            }
+            assert_withheld("SMS must retain the original destination") { payload.fetch(:to) == destination }
+            assert_withheld("SMS must encrypt the issued random code") { payload.fetch(:otp_code) == code }
+            assert_withheld("SMS must encrypt the issued code in the selected template") {
+              payload.fetch(:body) == expected_body
+            }
           end
           case state
           when :verified
@@ -181,9 +187,11 @@ class ContactRegistrationOtpTransportBindingTest < ActiveSupport::TestCase
             if state == :current
               delivered = ActionMailer::Base.deliveries.last
 
-              assert delivered.to == [destination], "Delivered email must target the bound destination"
+              assert_withheld("Delivered email must target the bound destination") { delivered.to == [destination] }
               assert_not_nil delivered.text_part, "OTP email must include the existing plain-text MIME part"
-              assert delivered.text_part.body.decoded.include?(code), "Delivered email must contain the issued OTP"
+              assert_withheld("Delivered email must contain the issued OTP") {
+                delivered.text_part.body.decoded.include?(code)
+              }
             end
           else
             expected_calls = %i(current current_localized).include?(state) ? 1 : 0
@@ -205,18 +213,24 @@ class ContactRegistrationOtpTransportBindingTest < ActiveSupport::TestCase
           end
 
           assert_equal(%i(current current_localized).include?(state) ? 1 : 0, sent)
-          assert contact_facts == contact.reload.attributes, "Transport must preserve Source OTP and proof facts"
-          assert ticket_facts == transaction.reload.attributes, "Transport must preserve the original Ticket"
-          assert root_facts == token.reload.attributes, "Transport must preserve root facts"
-          assert device_facts == token.device_session.reload.attributes, "Transport must preserve device facts"
-          assert owner_facts == actor.reload.attributes, "Transport must preserve owner facts"
+          assert_withheld("Transport must preserve Source OTP and proof facts") {
+            contact_facts == contact.reload.attributes
+          }
+          assert_withheld("Transport must preserve the original Ticket") {
+            ticket_facts == transaction.reload.attributes
+          }
+          assert_withheld("Transport must preserve root facts") { root_facts == token.reload.attributes }
+          assert_withheld("Transport must preserve device facts") {
+            device_facts == token.device_session.reload.attributes
+          }
+          assert_withheld("Transport must preserve owner facts") { owner_facts == actor.reload.attributes }
           if other_ticket_facts
-            assert other_ticket_facts == other_transaction.reload.attributes,
-                   "Transport must preserve a substituted Ticket"
+            assert_withheld("Transport must preserve a substituted Ticket") {
+              other_ticket_facts == other_transaction.reload.attributes
+            }
           end
         end
       end
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertIncludes, Minitest/MultipleAssertions

@@ -830,7 +830,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
         expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "support_session_revoke",
       last_step_up_aal: "aal2",
@@ -1000,7 +1000,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
         expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "support_session_revoke",
       last_step_up_aal: "aal2",
@@ -1096,7 +1096,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
         expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "support_session_revoke",
       last_step_up_aal: "aal2",
@@ -1198,7 +1198,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
         expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "support_session_revoke",
       last_step_up_aal: "aal2",
@@ -1297,7 +1297,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
         expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "support_session_revoke",
       last_step_up_aal: "aal2",
@@ -1390,7 +1390,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
         expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "support_session_revoke",
       last_step_up_aal: "aal2",
@@ -1486,7 +1486,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
     end
     @operator.update_columns(
       access_state: "admin_locked",
-      admin_locked_at: Time.current, # rubocop:disable Rails/SkipsModelValidations
+      admin_locked_at: Time.current,
       admin_locked_reason_code: "security_incident",
     )
 
@@ -1659,7 +1659,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
         expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "support_session_revoke",
       last_step_up_aal: "aal2",
@@ -1757,7 +1757,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
         expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "support_session_revoke",
       last_step_up_aal: "aal2",
@@ -1919,7 +1919,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
         expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "support_session_revoke",
       last_step_up_aal: "aal2",
@@ -2069,7 +2069,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
         reason_code: "duty_assignment", starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current, last_step_up_scope: "support_session_revoke", last_step_up_aal: "aal2",
       last_step_up_method: "passkey",
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,

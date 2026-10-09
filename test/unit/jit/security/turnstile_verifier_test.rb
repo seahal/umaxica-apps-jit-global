@@ -173,7 +173,11 @@ module Jit
         mock_response_body = '{"success": true}'
 
         config_called = false
-        fake = -> { config_called = true; "should-not-use" }
+        fake =
+          -> {
+            config_called = true
+            "should-not-use"
+          }
         JitSecurityTurnstileConfig.stub(:stealth_secret_key, fake) do
           stub_turnstile_response(mock_response_body) do
             result = JitSecurityTurnstileVerifier.verify(
@@ -277,7 +281,12 @@ module Jit
         mock_response2_body = response
 
         consumed = []
-        TurnstileReplayStore.stub(:consume!, ->(**kwargs) { consumed << kwargs; true }) do
+        TurnstileReplayStore.stub(
+          :consume!, ->(**kwargs) {
+                       consumed << kwargs
+                       true
+                     },
+        ) do
           JitSecurityTurnstileConfig.stub(:visible_secret_key, "visible-secret") do
             stub_turnstile_response(mock_response_body) do
               ok = JitSecurityTurnstileVerifier.verify_for_ceremony(

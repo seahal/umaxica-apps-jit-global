@@ -22,7 +22,7 @@ module AvatarOwnershipTransfers
 
     def collective_exists?(surface:, public_id:)
       config = OWNER_DATA[surface.to_s]
-      config && config.fetch(:collective).exists?(public_id: public_id)
+      config&.fetch(:collective)&.exists?(public_id: public_id)
     end
 
     def find_avatar!(public_id)

@@ -21,7 +21,12 @@ class Auth::App::SettingsControllerTest < ActionDispatch::IntegrationTest
   test "anonymous sign settings does not start a browser RP authorization request" do
     issued_url = nil
 
-    JumpRtIssuer.stub(:call, ->(**args) { issued_url = args.fetch(:url); "signed-jump-token" }) do
+    JumpRtIssuer.stub(
+      :call, ->(**args) {
+               issued_url = args.fetch(:url)
+               "signed-jump-token"
+             },
+    ) do
       RedirectsJumpGatewayUrl.stub(
         :call,
         ->(_token) { RedirectsTargetResult.ok(kind: :external, source: :test, value: issued_url) },
@@ -42,7 +47,12 @@ class Auth::App::SettingsControllerTest < ActionDispatch::IntegrationTest
   test "anonymous sign settings hands off cross-origin to the base sign entry" do
     issued = nil
 
-    JumpRtIssuer.stub(:call, ->(**args) { issued = args; "signed-jump-token" }) do
+    JumpRtIssuer.stub(
+      :call, ->(**args) {
+               issued = args
+               "signed-jump-token"
+             },
+    ) do
       RedirectsJumpGatewayUrl.stub(
         :call,
         ->(_token) { RedirectsTargetResult.ok(kind: :external, source: :test, value: issued.fetch(:url)) },

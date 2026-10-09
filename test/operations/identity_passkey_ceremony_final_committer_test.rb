@@ -22,7 +22,12 @@ class IdentityPasskeyCeremonyFinalCommitterTest < ActiveSupport::TestCase
       consumer_result: consumption,
     ) do
       ClientPasskey.stub(:transaction, ->(&block) { block.call }) do
-        ClientPasskey.stub(:create!, ->(attrs) { created_attrs = attrs; passkey_record }) do
+        ClientPasskey.stub(
+          :create!, ->(attrs) {
+                      created_attrs = attrs
+                      passkey_record
+                    },
+        ) do
           IdentityAudit.stub(:record!, ->(**kwargs) { audit = kwargs }) do
             commit = IdentityPasskeyCeremonyFinalCommitter.call!(
               result_token: "token",

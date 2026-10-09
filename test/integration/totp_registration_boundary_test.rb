@@ -134,7 +134,6 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   # The candidate, registration proof and Base credential must remain distinct across requests.
-  # rubocop:disable Minitest/MultipleAssertions
   test "admitted bootstrap confirms a DB TOTP candidate without Auth root credentials or freshness" do
     actor = Client.create!(id: 9_106_000_000_002, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
@@ -251,10 +250,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationCookieName.access]
     assert_nil cookies[AuthenticationCookieName.refresh]
   end
-  # rubocop:enable Minitest/MultipleAssertions
-
   # Each surface redeems its own permission and limits registration to its method matrix.
-  # rubocop:disable Minitest/MultipleAssertions
   test "COM and ORG setup admit only their actor-specific Passkey registration permission" do
     %w(com org).each do |surface|
       case surface
@@ -354,7 +350,12 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
       assert_nil browser.cookies[AuthenticationCookieName.refresh]
       assert_nil token.reload.last_step_up_at
       destination = nil
-      JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
+      JumpRtIssuer.stub(
+        :call, ->(**args) {
+                 destination = args.fetch(:url)
+                 "opaque-jump"
+               },
+      ) do
         RedirectsJumpGatewayUrl.stub(
           :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
         ) do
@@ -368,10 +369,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
       assert_equal "pending", issuance.transaction.reload.status
     end
   end
-  # rubocop:enable Minitest/MultipleAssertions
-
   # A failure and redisplay must retain the same candidate and the same authority deadline.
-  # rubocop:disable Minitest/MultipleAssertions
   test "GET and repeated start preserve enrollment deadline and failures while cancel closes the permission" do
     actor = Client.create!(id: 9_106_000_000_003, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
@@ -465,7 +463,12 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
       assert_equal candidate.ref, child.reload.credential_candidate_ref
     end
     destination = nil
-    JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
+    JumpRtIssuer.stub(
+      :call, ->(**args) {
+               destination = args.fetch(:url)
+               "opaque-jump"
+             },
+    ) do
       RedirectsJumpGatewayUrl.stub(
         :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
       ) do
@@ -487,8 +490,6 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_nil candidate.reload.last_otp_at
     assert_nil token.reload.last_step_up_at
   end
-  # rubocop:enable Minitest/MultipleAssertions
-
   # This journey starts from a real Base Browser-RP session. Root issuance itself is covered by
   # the root-login integration boundary; this case focuses on bootstrap admission and completion.
   # rubocop:disable Minitest/MultipleAssertions
@@ -600,7 +601,12 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
 
     assert_equal 0, ClientStepUpCeremonyTransaction.where(session_ref: token.public_id).count
     destination = nil
-    JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
+    JumpRtIssuer.stub(
+      :call, ->(**args) {
+               destination = args.fetch(:url)
+               "opaque-jump"
+             },
+    ) do
       RedirectsJumpGatewayUrl.stub(
         :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
       ) do
@@ -677,7 +683,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
         fv5064.cookies.delete(fv5066)
         # Rack::Test's []= uses its default host. The current request may target a
         # different surface, so install the cookie against the browser's active host.
-        fv5064.cookies.merge( # rubocop:disable Lint/Void
+        fv5064.cookies.merge(
           "#{fv5066}=#{Rack::Utils.escape(fv5065)}",
           URI.parse("https://#{fv5064.host}/"),
         )
@@ -768,7 +774,12 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_equal 200, response.status
     assert_not_nil verification_page
     props = JSON.parse(verification_page.text).fetch("props")
-    JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
+    JumpRtIssuer.stub(
+      :call, ->(**args) {
+               destination = args.fetch(:url)
+               "opaque-jump"
+             },
+    ) do
       RedirectsJumpGatewayUrl.stub(
         :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
       ) do
@@ -912,7 +923,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
                   fv5023.cookies.delete(fv5025)
                   # Rack::Test's []= uses its default host. The current request may target a
                   # different surface, so install the cookie against the browser's active host.
-                  fv5023.cookies.merge( # rubocop:disable Lint/Void
+                  fv5023.cookies.merge(
                     "#{fv5025}=#{Rack::Utils.escape(fv5024)}",
                     URI.parse("https://#{fv5023.host}/"),
                   )

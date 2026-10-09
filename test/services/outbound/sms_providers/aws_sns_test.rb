@@ -64,7 +64,12 @@ module Outbound
         fake_creds = FakeCreds.new(session_token: "session-token")
 
         Rails.app.stub(:creds, fake_creds) do
-          ::Aws::SNS::Client.stub(:new, ->(options) { captured_options = options; OpenStruct.new }) do
+          ::Aws::SNS::Client.stub(
+            :new, ->(options) {
+                    captured_options = options
+                    OpenStruct.new
+                  },
+          ) do
             OutboundSmsProvidersAwsSns.new
           end
         end

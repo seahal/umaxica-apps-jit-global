@@ -1211,7 +1211,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
                     fv5423.cookies.delete(fv5425)
                     # Rack::Test's []= uses its default host. The current request may target a
                     # different surface, so install the cookie against the browser's active host.
-                    fv5423.cookies.merge( # rubocop:disable Lint/Void
+                    fv5423.cookies.merge(
                       "#{fv5425}=#{Rack::Utils.escape(fv5424)}",
                       URI.parse("https://#{fv5423.host}/"),
                     )
@@ -1434,7 +1434,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
                     fv5353.cookies.delete(fv5355)
                     # Rack::Test's []= uses its default host. The current request may target a
                     # different surface, so install the cookie against the browser's active host.
-                    fv5353.cookies.merge( # rubocop:disable Lint/Void
+                    fv5353.cookies.merge(
                       "#{fv5355}=#{Rack::Utils.escape(fv5354)}",
                       URI.parse("https://#{fv5353.host}/"),
                     )
@@ -1657,7 +1657,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
                     fv5283.cookies.delete(fv5285)
                     # Rack::Test's []= uses its default host. The current request may target a
                     # different surface, so install the cookie against the browser's active host.
-                    fv5283.cookies.merge( # rubocop:disable Lint/Void
+                    fv5283.cookies.merge(
                       "#{fv5285}=#{Rack::Utils.escape(fv5284)}",
                       URI.parse("https://#{fv5283.host}/"),
                     )
@@ -1929,7 +1929,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
                     fv5215.cookies.delete(fv5217)
                     # Rack::Test's []= uses its default host. The current request may target a
                     # different surface, so install the cookie against the browser's active host.
-                    fv5215.cookies.merge( # rubocop:disable Lint/Void
+                    fv5215.cookies.merge(
                       "#{fv5217}=#{Rack::Utils.escape(fv5216)}",
                       URI.parse("https://#{fv5215.host}/"),
                     )
@@ -2134,7 +2134,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
                     fv5151.cookies.delete(fv5153)
                     # Rack::Test's []= uses its default host. The current request may target a
                     # different surface, so install the cookie against the browser's active host.
-                    fv5151.cookies.merge( # rubocop:disable Lint/Void
+                    fv5151.cookies.merge(
                       "#{fv5153}=#{Rack::Utils.escape(fv5152)}",
                       URI.parse("https://#{fv5151.host}/"),
                     )
@@ -2348,7 +2348,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
                   fv5087.cookies.delete(fv5089)
                   # Rack::Test's []= uses its default host. The current request may target a
                   # different surface, so install the cookie against the browser's active host.
-                  fv5087.cookies.merge( # rubocop:disable Lint/Void
+                  fv5087.cookies.merge(
                     "#{fv5089}=#{Rack::Utils.escape(fv5088)}",
                     URI.parse("https://#{fv5087.host}/"),
                   )
@@ -2556,7 +2556,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
                   fv5023.cookies.delete(fv5025)
                   # Rack::Test's []= uses its default host. The current request may target a
                   # different surface, so install the cookie against the browser's active host.
-                  fv5023.cookies.merge( # rubocop:disable Lint/Void
+                  fv5023.cookies.merge(
                     "#{fv5025}=#{Rack::Utils.escape(fv5024)}",
                     URI.parse("https://#{fv5023.host}/"),
                   )

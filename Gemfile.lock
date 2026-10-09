@@ -975,10 +975,6 @@ GEM
       rack (>= 1.1)
       rubocop (>= 1.89.0, < 2.0)
       rubocop-ast (>= 1.44.0, < 2.0)
-    rubocop-rails-omakase (1.1.0)
-      rubocop (>= 1.72)
-      rubocop-performance (>= 1.24)
-      rubocop-rails (>= 2.30)
     rubocop-rake (0.7.1)
       lint_roller (~> 1.1)
       rubocop (>= 1.72.1)
@@ -1264,7 +1260,6 @@ DEPENDENCIES
   rubocop-minitest
   rubocop-performance
   rubocop-rails
-  rubocop-rails-omakase
   rubocop-rake
   rubocop-rubycw
   rubocop-thread_safety
@@ -1618,7 +1613,6 @@ CHECKSUMS
   rubocop-minitest (0.41.0) sha256=c15bfe00134a30c8a00ce670b07ecc80440455ba277b8682cf0d515c98ee7426
   rubocop-performance (1.27.0) sha256=eeeb1374d062a368ee1c787b70eb0b0cc4b184cb1f8565f424760946146d61ce
   rubocop-rails (2.38.0) sha256=6e2b7c532efa95e3050371bec20b8f5b025662acead8bc70ee31f0e3e6fa2f06
-  rubocop-rails-omakase (1.1.0) sha256=2af73ac8ee5852de2919abbd2618af9c15c19b512c4cfc1f9a5d3b6ef009109d
   rubocop-rake (0.7.1) sha256=3797f2b6810c3e9df7376c26d5f44f3475eda59eb1adc38e6f62ecf027cbae4d
   rubocop-rubycw (0.2.2) sha256=28b3741cac84845bb845885943d7990b720ed05bf68d76ddd34315afa27e98c9
   rubocop-thread_safety (0.8.0) sha256=71fe5e7894fb9acfbd4c2dcd394feabc35bd690f75b0bc846e1504d9e31f9034

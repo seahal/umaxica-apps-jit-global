@@ -6,7 +6,6 @@ require "test_helper"
 # A single connection or transactional fixture cannot prove that the notification row lock
 # serializes claims and receipt application. These tests require committed rows and independent
 # PostgreSQL connections.
-# rubocop:disable ThreadSafety/NewThread
 class ProcessorErasureNotificationConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
 
@@ -93,7 +92,7 @@ class ProcessorErasureNotificationConcurrencyTest < ActiveSupport::TestCase
     release = Queue.new
     threads =
       Array.new(count) do
-        Thread.new do # rubocop:disable ThreadSafety/NewThread
+        Thread.new do
           AppZenithRecord.connection_pool.with_connection do
             ready << true
             release.pop
@@ -109,4 +108,3 @@ class ProcessorErasureNotificationConcurrencyTest < ActiveSupport::TestCase
     threads.map(&:value).tap { threads.each(&:join) }
   end
 end
-# rubocop:enable ThreadSafety/NewThread

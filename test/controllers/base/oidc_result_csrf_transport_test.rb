@@ -3,7 +3,6 @@
 require "test_helper"
 
 # Boolean snapshots keep retained proof and cookie material out of assertion output.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertPredicate
 class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
   %w(app com org).each do |surface|
     test "#{surface} genuine OIDC result requires missing-header CSRF fallback and finalizes one root" do
@@ -56,7 +55,7 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
             entry.split(";", 2).first.start_with?("#{cookie_name}=")
           end
 
-        assert line.present?, "expected the actual Base session Set-Cookie"
+        assert_withheld("expected the actual Base session Set-Cookie") { line.present? }
         cookie_value = Rack::Utils.unescape(line.split(";", 2).first.split("=", 2).last)
       end
       owner.cookies.delete(cookie_name)
@@ -93,7 +92,7 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, auth.response.status
-      assert binding.reload.redeemed?
+      assert_withheld { binding.reload.redeemed? }
       # Real public proof issuance isolates receiver CSRF from credential verification;
       # neither admission nor opaque result verification/finalization is mocked.
       actor = actor_model.create!(id: SecureRandom.random_number(1 << 60))
@@ -120,9 +119,11 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
       assert_equal "https://#{base_host}", owner.request.headers["Origin"]
       assert_equal 422, owner.response.status
       assert_nil owner.response.location
-      assert before_parent == parent.reload.attributes, "CSRF refusal must leave the parent unchanged"
-      assert before_binding == binding.reload.attributes, "CSRF refusal must leave the binding unchanged"
-      assert before_ceremony == ceremony.reload.attributes, "CSRF refusal must leave Auth authority unchanged"
+      assert_withheld("CSRF refusal must leave the parent unchanged") { before_parent == parent.reload.attributes }
+      assert_withheld("CSRF refusal must leave the binding unchanged") { before_binding == binding.reload.attributes }
+      assert_withheld("CSRF refusal must leave Auth authority unchanged") {
+        before_ceremony == ceremony.reload.attributes
+      }
       assert_equal 0, token_model.where(owner_key => actor.id).count
       root_reference = nil
       2.times do |attempt|
@@ -141,7 +142,7 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
         assert_nil owner.request.headers["Sec-Fetch-Site"]
         assert_nil owner.request.headers["Origin"]
         assert_equal 303, owner.response.status
-        assert parent.reload.base_finalized_at.present?
+        assert_withheld { parent.reload.base_finalized_at.present? }
         root_reference ||= parent.browser_session_ref
 
         assert_equal root_reference, parent.browser_session_ref
@@ -159,7 +160,7 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
               entry.split(";", 2).first.start_with?("#{cookie_name}=")
             end
 
-          assert line.present?, "expected the actual finalized Base session Set-Cookie"
+          assert_withheld("expected the actual finalized Base session Set-Cookie") { line.present? }
           cookie_value = Rack::Utils.unescape(line.split(";", 2).first.split("=", 2).last)
         end
         owner.cookies.delete(cookie_name)
@@ -172,4 +173,3 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertPredicate

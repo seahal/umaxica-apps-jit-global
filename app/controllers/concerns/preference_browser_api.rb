@@ -78,13 +78,10 @@ module PreferenceBrowserApi
 
   # `pointers` are RFC 6901 JSON Pointers into the request body.
   def render_preference_browser_api_invalid_fields(pointers)
-    # rubocop:disable I18n/RailsI18n/DecorateString
     errors =
       pointers.map do |pointer|
         { pointer: pointer, type: INVALID_FIELD_TYPE, detail: "#{pointer} is missing or not an accepted value." }
       end
-    # rubocop:enable I18n/RailsI18n/DecorateString
-
     render_problem(:validation_failed, errors: errors)
   end
 end

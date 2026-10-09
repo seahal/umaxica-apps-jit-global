@@ -908,7 +908,7 @@ module PublishingSchema
 
   def finish_public_id(m, table)
     m.add_index(table, :public_id, unique: true)
-    ident = table.to_s.delete_prefix('publishing_').gsub("taxonomy_", "").gsub("assignments", "asg")
+    ident = table.to_s.delete_prefix("publishing_").gsub("taxonomy_", "").gsub("assignments", "asg")
     name = "chk_#{ident}_pid"
     name = "chk_#{ident[0, 55]}_pid" if name.length > 63
     m.add_check_constraint(table, PUBLIC_ID, name:)

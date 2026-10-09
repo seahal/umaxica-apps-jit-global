@@ -12,7 +12,10 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerBranchCoverageTest < Acti
     c.set_response!(response)
     redirects = []
     c.define_singleton_method(:redirect_to) { |*args, **kwargs| redirects << [args, kwargs] }
-    c.define_singleton_method(:redirect_invalid_session) { redirects << :invalid; nil }
+    c.define_singleton_method(:redirect_invalid_session) {
+      redirects << :invalid
+      nil
+    }
     c.define_singleton_method(:load_gate_context!) { |_| true }
     c.define_singleton_method(:params) { ActionController::Parameters.new({}) }
     c.instance_variable_set(:@user_email, nil)
@@ -29,8 +32,14 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerBranchCoverageTest < Acti
     c.set_response!(response)
     redirects = []
     c.define_singleton_method(:redirect_to) { |*args, **kwargs| redirects << [args, kwargs] }
-    c.define_singleton_method(:redirect_invalid_session) { redirects << :invalid; nil }
-    c.define_singleton_method(:render_code_required) { redirects << :code; nil }
+    c.define_singleton_method(:redirect_invalid_session) {
+      redirects << :invalid
+      nil
+    }
+    c.define_singleton_method(:render_code_required) {
+      redirects << :code
+      nil
+    }
     c.define_singleton_method(:load_gate_context!) { |_| true }
     c.define_singleton_method(:valid_email_session?) { false }
     c.define_singleton_method(:params) { ActionController::Parameters.new(code: "123456") }

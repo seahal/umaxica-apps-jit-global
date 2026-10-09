@@ -1398,7 +1398,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     transfer.update_columns(
       requested_at: 2.days.ago,
       expires_at: 1.second.ago,
-    ) # rubocop:disable Rails/SkipsModelValidations
+    )
     begin
       fv5053 = @client_token
       fv5074 = { scope: "avatar_transfer_cancel", surface: "app" }

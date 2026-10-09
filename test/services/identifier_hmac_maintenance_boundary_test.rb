@@ -3,7 +3,6 @@
 require "test_helper"
 
 # Fact comparisons must not disclose decrypted identifiers or credential material on failure.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 class IdentifierHmacMaintenanceBoundaryTest < ActiveSupport::TestCase
   %w(app com).each do |realm|
     %w(email telephone).each do |channel|
@@ -64,9 +63,10 @@ class IdentifierHmacMaintenanceBoundaryTest < ActiveSupport::TestCase
         end
         after = record.reload.attributes
 
-        assert facts.except(digest_column.to_s) == after.except(digest_column.to_s),
-               "Maintenance must not change owner, PII, binding state, proof or timestamps"
-        assert desired_digest == record[digest_column], "The selected lookup digest must be replaced"
+        assert_withheld("Maintenance must not change owner, PII, binding state, proof or timestamps") {
+          facts.except(digest_column.to_s) == after.except(digest_column.to_s)
+        }
+        assert_withheld("The selected lookup digest must be replaced") { desired_digest == record[digest_column] }
         audit = audit_model.find_by!(operation_ref: operation_ref, record_id: record.id, channel: channel)
 
         assert_equal raw.user, audit.actor_role
@@ -115,7 +115,9 @@ class IdentifierHmacMaintenanceBoundaryTest < ActiveSupport::TestCase
           connection.execute("RESET ROLE")
         end
 
-        assert after == record.reload.attributes, "Rejected arguments and stale snapshots must preserve Source facts"
+        assert_withheld("Rejected arguments and stale snapshots must preserve Source facts") {
+          after == record.reload.attributes
+        }
         assert_equal 1, audit_model.where(record_id: record.id, channel: channel).count
         assert_raises(PG::InsufficientPrivilege) do
           model.transaction(requires_new: true) do
@@ -146,7 +148,7 @@ class IdentifierHmacMaintenanceBoundaryTest < ActiveSupport::TestCase
           end
         end
 
-        assert after == record.reload.attributes, "Audit insert failure must roll back the digest mutation"
+        assert_withheld("Audit insert failure must roll back the digest mutation") { after == record.reload.attributes }
         assert_equal 1, audit_model.where(operation_ref: operation_ref).count
 
         assert_raises(PG::RaiseException) do
@@ -164,4 +166,3 @@ class IdentifierHmacMaintenanceBoundaryTest < ActiveSupport::TestCase
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator

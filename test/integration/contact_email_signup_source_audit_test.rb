@@ -123,14 +123,12 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
         code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
         # Boolean comparisons keep the producer's code and binding material out of failure output.
-        # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-        assert delivery.fetch(:sign_up_flow_ref) == flow.public_id
-        assert delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation
-        assert transaction.email_candidate_ref == contact.public_id
+        assert_withheld { delivery.fetch(:sign_up_flow_ref) == flow.public_id }
+        assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+        assert_withheld { transaction.email_candidate_ref == contact.public_id }
         owner = (surface == :app) ? contact.user : contact.visitor
 
-        assert transaction.actor_ref == owner.public_id
-        # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+        assert_withheld { transaction.actor_ref == owner.public_id }
         assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
         assert_nil transaction.otp_consumed_at
         otp_failure_write = {
@@ -179,10 +177,9 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
         assert_includes [302, 303], browser.response.status
         if otp_failure_write
           # Proof references and keyed digests must not appear in assertion failure output.
-          # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-          assert proof == transaction.reload.attributes,
-                 "HTTP retry must not extend or replace committed proof"
-          # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+          assert_withheld("HTTP retry must not extend or replace committed proof") {
+            proof == transaction.reload.attributes
+          }
         end
         verified_proof = transaction.reload.attributes
 
@@ -241,10 +238,9 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
             end
 
             assert_predicate contact.reload, :binding_effective?
-            # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-            assert verified_proof == transaction.reload.attributes,
-                   "Source commit before failed Parent persistence must retain the consumed child proof"
-            # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+            assert_withheld("Source commit before failed Parent persistence must retain the consumed child proof") {
+              verified_proof == transaction.reload.attributes
+            }
             committed_at = contact.binding_finalized_at
             committed_intent = outbox.find_by!(operation_ref: flow.public_id)
             if surface == :com
@@ -285,10 +281,11 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
           )
         end
 
-        # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-        assert verified_proof == transaction.reload.attributes,
-               "Finalization, retry and denial must not rewrite the original child generation or bounded receipt"
-        # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+        assert_withheld(
+          "Finalization, retry and denial must not rewrite the original child generation or bounded receipt",
+        ) {
+          verified_proof == transaction.reload.attributes
+        }
         if %i(ticket_failure_duplicate_intent ticket_failure_released_binding
               ticket_failure_suspended_owner ticket_failure_expired_flow).include?(outcome)
           assert_equal((outcome == :ticket_failure_expired_flow) ? 403 : 409, browser.response.status)

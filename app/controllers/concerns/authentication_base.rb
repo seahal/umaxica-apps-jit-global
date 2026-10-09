@@ -3513,3 +3513,4 @@ module AuthenticationBase
           :lock_sign_in_flow_for_issuance!, :advance_sign_in_flow_to_issuance!, :complete_sign_in_flow_issuance!,
           :bind_committed_login!, :apply_committed_login!
 end
+# rubocop:enable Rails/SkipsModelValidations

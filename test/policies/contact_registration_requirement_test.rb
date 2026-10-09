@@ -3,7 +3,6 @@
 require "test_helper"
 
 # Boolean binding assertions keep root references out of diagnostic output.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 class ContactRegistrationRequirementTest < ActiveSupport::TestCase
   [
     [Client, ClientToken, ClientEmail, ClientEmailPolicy, :user_id, "app", "settings_email"],
@@ -26,9 +25,9 @@ class ContactRegistrationRequirementTest < ActiveSupport::TestCase
       assert_equal "step_up", requirement.purpose
       assert_equal %i(email_otp passkey totp), requirement.allowed_methods
       assert_equal 15.minutes, requirement.ttl
-      assert requirement.actor_ref == owner.public_id, "requirement must bind the actual owner"
-      assert requirement.session_binding == root.public_id, "requirement must bind the actual root"
-      assert requirement.token_binding == root.public_id, "token binding must name the same root"
+      assert_withheld("requirement must bind the actual owner") { requirement.actor_ref == owner.public_id }
+      assert_withheld("requirement must bind the actual root") { requirement.session_binding == root.public_id }
+      assert_withheld("token binding must name the same root") { requirement.token_binding == root.public_id }
       assert requirement.require_session_binding
       assert_not requirement.phishing_resistant_required?
       assert_not requirement.user_verification_required?
@@ -52,4 +51,3 @@ class ContactRegistrationRequirementTest < ActiveSupport::TestCase
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator

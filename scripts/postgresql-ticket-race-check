@@ -83,7 +83,7 @@ begin
       c2.exec("BEGIN")
       worker =
         # Independent workers are required to exercise the concurrent database boundary.
-        Thread.new do # rubocop:disable ThreadSafety/NewThread
+        Thread.new do
           begin
             c2.exec_params(sql, params)
             c2.exec("COMMIT")

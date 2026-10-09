@@ -264,7 +264,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
                       fv5000.cookies.delete(fv5029)
                       # Rack::Test's []= uses its default host. The current request may target a
                       # different surface, so install the cookie against the browser's active host.
-                      fv5000.cookies.merge( # rubocop:disable Lint/Void
+                      fv5000.cookies.merge(
                         "#{fv5029}=#{Rack::Utils.escape(fv5028)}",
                         URI.parse("https://#{fv5000.host}/"),
                       )
@@ -620,7 +620,5 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
 
   private
 
-  # rubocop:disable Metrics/AbcSize -- This fixture walks the complete Base-to-Auth browser handoff.
-
-  # rubocop:enable Metrics/AbcSize
+  # This fixture walks the complete Base-to-Auth browser handoff.
 end

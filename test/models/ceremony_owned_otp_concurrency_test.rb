@@ -19,7 +19,7 @@ class CeremonyOwnedOtpConcurrencyTest < ActiveSupport::TestCase
       ActiveRecord::Base.connection_handler.clear_active_connections!
       threads =
         2.times.map do
-          Thread.new do # rubocop:disable ThreadSafety/NewThread
+          Thread.new do
             model.connection_pool.with_connection do
               local = model.find(transaction.id)
               ready << true
@@ -66,7 +66,7 @@ class CeremonyOwnedOtpConcurrencyTest < ActiveSupport::TestCase
       ActiveRecord::Base.connection_handler.clear_active_connections!
       threads =
         2.times.map do
-          Thread.new do # rubocop:disable ThreadSafety/NewThread
+          Thread.new do
             model.connection_pool.with_connection do
               local = model.find(transaction.id)
               ready << true

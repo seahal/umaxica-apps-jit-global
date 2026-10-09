@@ -80,13 +80,19 @@ class TelephoneCeremonyOtpVerificationAdmissionTest < ActiveSupport::TestCase
                 candidate_ref: "candidate", }
       comparisons = []
 
-      assert_not transaction.verify_telephone_otp!(code: code, **scope) { |valid| comparisons << valid; false }
+      assert_not transaction.verify_telephone_otp!(code: code, **scope) { |valid|
+        comparisons << valid
+        false
+      }
       assert_equal [true], comparisons
       assert_nil transaction.reload.otp_consumed_at
       assert transaction.otp_verifier
       wrong = (code == "000000") ? "000001" : "000000"
 
-      assert_not transaction.verify_telephone_otp!(code: wrong, **scope) { |valid| comparisons << valid; true }
+      assert_not transaction.verify_telephone_otp!(code: wrong, **scope) { |valid|
+        comparisons << valid
+        true
+      }
       assert_equal [true, false], comparisons
       foreign =
         transaction.verify_telephone_otp!(code: code, **scope.merge(session_ref: "foreign")) do |valid|
@@ -96,10 +102,16 @@ class TelephoneCeremonyOtpVerificationAdmissionTest < ActiveSupport::TestCase
 
       assert_not foreign
       assert_equal [true, false], comparisons
-      assert transaction.verify_telephone_otp!(code: code, **scope) { |valid| comparisons << valid; true }
+      assert transaction.verify_telephone_otp!(code: code, **scope) { |valid|
+        comparisons << valid
+        true
+      }
       assert_equal [true, false, true], comparisons
       assert transaction.reload.otp_consumed_at
-      assert_not transaction.verify_telephone_otp!(code: code, **scope) { |valid| comparisons << valid; true }
+      assert_not transaction.verify_telephone_otp!(code: code, **scope) { |valid|
+        comparisons << valid
+        true
+      }
       assert_equal [true, false, true], comparisons
     end
   end

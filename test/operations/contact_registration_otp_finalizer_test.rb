@@ -5,7 +5,6 @@ require "minitest/mock"
 require "webauthn/fake_client"
 
 # Boolean comparisons prevent disclosure of proof, OTP and root facts on assertion failures.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
 class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
   %i(app com).each do |surface|
     %i(email telephone).each do |channel|
@@ -227,15 +226,20 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
             end
 
             assert fired, "The actual persistence boundary must be reached"
-            assert ticket_facts == transaction.reload.attributes,
-                   "A failed receipt must leave the original Ticket pending"
+            assert_withheld("A failed receipt must leave the original Ticket pending") {
+              ticket_facts == transaction.reload.attributes
+            }
             retained_proof = transaction.reload.attributes.slice(*proof.keys)
 
-            assert proof == retained_proof, "Fault must retain the original verified proof"
+            assert_withheld("Fault must retain the original verified proof") { proof == retained_proof }
             assert_nil transaction.otp_verifier
             if scenario == :source_fault
-              assert original_contact == contact.reload.attributes, "Source failure must roll back candidate binding"
-              assert original_previous == previous.reload.attributes, "Source failure must preserve the old binding"
+              assert_withheld("Source failure must roll back candidate binding") {
+                original_contact == contact.reload.attributes
+              }
+              assert_withheld("Source failure must preserve the old binding") {
+                original_previous == previous.reload.attributes
+              }
               assert_equal original_audits, audits.count
             else
               assert_predicate contact, :binding_effective?, "Source must commit before the Ticket receipt write"
@@ -250,7 +254,11 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
                          root_at: 0,
                          root_after: Rational(1, 1_000_000), }.fetch(scenario)
               reads = 0
-              clock = -> { reads += 1; (reads == 1) ? root_deadline - 1.second : root_deadline + offset }
+              clock =
+                -> {
+                  reads += 1
+                  (reads == 1) ? root_deadline - 1.second : root_deadline + offset
+                }
               flow_model.stub(:database_now, clock) { finalizer.call!(**arguments) }
             elsif %i(proof_before proof_at proof_after).include?(scenario)
               # PostgreSQL timestamptz(6) represents both nearest neighbors of the strict proof deadline.
@@ -277,7 +285,7 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
             assert_predicate transaction.reload, :consumed?
             final_proof = transaction.attributes.slice(*proof.keys)
 
-            assert proof == final_proof, "Finalization must not replace OTP proof"
+            assert_withheld("Finalization must not replace OTP proof") { proof == final_proof }
             completed_contact = contact.attributes
             completed_previous = previous.attributes
             completed_ticket = transaction.attributes
@@ -292,25 +300,40 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
               end
 
             assert_equal :finalized, retried
-            assert completed_contact == contact.reload.attributes, "Exact retry must not mutate finalized Source"
-            assert completed_previous == previous.reload.attributes, "Exact retry must not re-release previous binding"
-            assert completed_ticket == transaction.reload.attributes, "Exact retry must retain the original receipt"
-            assert audit_facts == audits.order(:id).map(&:attributes), "Exact retry must not duplicate audits"
+            assert_withheld("Exact retry must not mutate finalized Source") {
+              completed_contact == contact.reload.attributes
+            }
+            assert_withheld("Exact retry must not re-release previous binding") {
+              completed_previous == previous.reload.attributes
+            }
+            assert_withheld("Exact retry must retain the original receipt") {
+              completed_ticket == transaction.reload.attributes
+            }
+            assert_withheld("Exact retry must not duplicate audits") {
+              audit_facts == audits.order(:id).map(&:attributes)
+            }
           else
             assert_equal :unavailable, status
-            assert original_contact == contact.reload.attributes, "Refusal must preserve verified candidate evidence"
-            assert original_previous == previous.reload.attributes,
-                   "Refusal must preserve the previous effective binding"
-            assert ticket_facts == transaction.reload.attributes, "Refusal must preserve the original pending Ticket"
-            assert supplied_ticket_facts == arguments.fetch(:transaction).reload.attributes,
-                   "Refusal must preserve any substituted Ticket"
+            assert_withheld("Refusal must preserve verified candidate evidence") {
+              original_contact == contact.reload.attributes
+            }
+            assert_withheld("Refusal must preserve the previous effective binding") {
+              original_previous == previous.reload.attributes
+            }
+            assert_withheld("Refusal must preserve the original pending Ticket") {
+              ticket_facts == transaction.reload.attributes
+            }
+            assert_withheld("Refusal must preserve any substituted Ticket") {
+              supplied_ticket_facts == arguments.fetch(:transaction).reload.attributes
+            }
             assert_equal original_audits, audits.count
           end
 
-          assert root_facts == token.reload.attributes, "Contact finalization must not replace root authority"
+          assert_withheld("Contact finalization must not replace root authority") {
+            root_facts == token.reload.attributes
+          }
         end
       end
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions

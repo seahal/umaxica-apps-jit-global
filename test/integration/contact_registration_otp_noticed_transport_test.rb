@@ -4,7 +4,6 @@ require "test_helper"
 require "minitest/mock"
 
 # Boolean comparisons avoid disclosing OTP, proof and session facts on failure.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertIncludes, Minitest/MultipleAssertions
 class ContactRegistrationOtpNoticedTransportTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
@@ -61,13 +60,18 @@ class ContactRegistrationOtpNoticedTransportTest < ActiveSupport::TestCase
         params = arguments.last.fetch(:params).stringify_keys
 
         assert_equal "credential_registration", params.fetch("purpose")
-        assert params.fetch("contact_ceremony_transaction_ref") == transaction.transaction_id,
-               "Noticed must queue the original ceremony UUID"
-        assert params.fetch("public_id") == contact.public_id, "Noticed must queue the original Contact reference"
-        assert params.fetch("contact_otp_generation") == transaction.otp_generation,
-               "Noticed must queue the original independent Email generation"
-        assert OutboundSensitivePayload.decrypt_email_otp(params.fetch("encrypted_hotp_token")) == code,
-               "Noticed must encrypt the issued random code before enqueue"
+        assert_withheld("Noticed must queue the original ceremony UUID") {
+          params.fetch("contact_ceremony_transaction_ref") == transaction.transaction_id
+        }
+        assert_withheld("Noticed must queue the original Contact reference") {
+          params.fetch("public_id") == contact.public_id
+        }
+        assert_withheld("Noticed must queue the original independent Email generation") {
+          params.fetch("contact_otp_generation") == transaction.otp_generation
+        }
+        assert_withheld("Noticed must encrypt the issued random code before enqueue") {
+          OutboundSensitivePayload.decrypt_email_otp(params.fetch("encrypted_hotp_token")) == code
+        }
         assert_not serialized_arguments.to_s.include?(code), "Noticed must not queue a plaintext OTP"
         assert_not params.key?("otp_code"), "Noticed must not retain the raw OTP parameter"
 
@@ -107,18 +111,23 @@ class ContactRegistrationOtpNoticedTransportTest < ActiveSupport::TestCase
         if state == :current
           delivered = ActionMailer::Base.deliveries.last
 
-          assert delivered.to == [contact.address], "Noticed must deliver to the bound Contact destination"
+          assert_withheld("Noticed must deliver to the bound Contact destination") { delivered.to == [contact.address] }
           assert_not_nil delivered.text_part
-          assert delivered.text_part.body.decoded.include?(code), "Noticed must deliver the actual issued OTP"
+          assert_withheld("Noticed must deliver the actual issued OTP") {
+            delivered.text_part.body.decoded.include?(code)
+          }
         end
 
-        assert contact_facts == contact.reload.attributes, "Noticed must preserve Source failure and issuance facts"
-        assert ticket_facts == transaction.reload.attributes, "Noticed must preserve the original pending Ticket"
-        assert root_facts == token.reload.attributes, "Noticed must preserve root facts"
-        assert device_facts == token.device_session.reload.attributes, "Noticed must preserve device facts"
-        assert owner_facts == actor.reload.attributes, "Noticed must preserve owner facts"
+        assert_withheld("Noticed must preserve Source failure and issuance facts") {
+          contact_facts == contact.reload.attributes
+        }
+        assert_withheld("Noticed must preserve the original pending Ticket") {
+          ticket_facts == transaction.reload.attributes
+        }
+        assert_withheld("Noticed must preserve root facts") { root_facts == token.reload.attributes }
+        assert_withheld("Noticed must preserve device facts") { device_facts == token.device_session.reload.attributes }
+        assert_withheld("Noticed must preserve owner facts") { owner_facts == actor.reload.attributes }
       end
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertIncludes, Minitest/MultipleAssertions

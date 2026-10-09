@@ -358,3 +358,4 @@ module Auth
     end
   end
 end
+# rubocop:enable Metrics/AbcSize, Metrics/MethodLength

@@ -15,7 +15,7 @@ locale_settings = Rails.configuration.x.locale
 fallbacks_enabled = locale_settings.fallbacks_enabled
 raise_on_fallback = locale_settings.raise_on_fallback
 
-# rubocop:disable I18n/RailsI18n/DecorateString -- raised before any translation is loaded
+# Raised before any translation is loaded
 unless [true, false].include?(fallbacks_enabled)
   raise ArgumentError,
         "config.x.locale.fallbacks_enabled must be true or false, got #{fallbacks_enabled.inspect}"
@@ -25,8 +25,6 @@ unless [true, false].include?(raise_on_fallback)
   raise ArgumentError,
         "config.x.locale.raise_on_fallback must be true or false, got #{raise_on_fallback.inspect}"
 end
-# rubocop:enable I18n/RailsI18n/DecorateString
-
 # Overrides the hook I18n::Backend::Fallbacks#translate calls after it resolves a key through a
 # locale other than the requested one (i18n 1.15.2, lib/i18n/backend/fallbacks.rb). Re-read that
 # method when upgrading i18n: if the hook is renamed or no longer called, this stops raising.

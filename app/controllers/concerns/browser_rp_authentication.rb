@@ -729,3 +729,4 @@ module BrowserRpAuthentication
     value.blank? || value.include?("\0") || value != value.strip
   end
 end
+# rubocop:enable I18n/RailsI18n/DecorateString

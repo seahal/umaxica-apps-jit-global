@@ -7,7 +7,6 @@ require "timeout"
 
 # Committed unique fixtures are required for independent PostgreSQL connection visibility.
 # Boolean snapshots prevent disclosure of OTP, proof and root facts.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
 class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
@@ -98,18 +97,20 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
           params = ActiveJob::Arguments.deserialize(arguments).last.fetch(:params).symbolize_keys
           transported_code = OutboundSensitivePayload.decrypt_email_otp(params.fetch(:encrypted_hotp_token))
 
-          assert params.fetch(:contact_ceremony_transaction_ref) == transaction.transaction_id
-          assert params.fetch(:contact_otp_generation) == generation
+          assert_withheld { params.fetch(:contact_ceremony_transaction_ref) == transaction.transaction_id }
+          assert_withheld { params.fetch(:contact_otp_generation) == generation }
         else
           payload = OutboundSensitivePayload.decrypt_sms_delivery(arguments.first.fetch("encrypted_payload"))
           transported_code = payload.fetch(:otp_code)
 
           assert_equal 4, payload.fetch(:version)
-          assert payload.fetch(:otp_binding) ==
-            [surface.to_s, "credential_registration", transaction.transaction_id, contact.public_id, generation]
+          assert_withheld {
+            payload.fetch(:otp_binding) ==
+              [surface.to_s, "credential_registration", transaction.transaction_id, contact.public_id, generation]
+          }
         end
 
-        assert transported_code == code, "Transport must retain the actual issued code"
+        assert_withheld("Transport must retain the actual issued code") { transported_code == code }
         device = token.device_session
         protected_rows = [actor, contact, device, token, transaction]
         facts = protected_rows.map { |row| row.reload.attributes }
@@ -178,14 +179,21 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
           end
         end
 
-        assert facts == protected_rows.map { |row| row.reload.attributes },
-               "While transport is held, competing reissue and revoke lock acquisition must preserve all facts"
+        assert_withheld(
+          "While transport is held, competing reissue and revoke lock acquisition must preserve all facts",
+        ) {
+          facts == protected_rows.map { |row|
+            row.reload.attributes
+          }
+        }
         assert_not holder.complete?, "The external transport barrier must still hold the delivery operation"
         release << true
 
         delivery_result = Timeout.timeout(20) { holder.value! }
 
-        assert delivery_result == true, "Eligible delivery must finish only after the transport barrier is released"
+        assert_withheld("Eligible delivery must finish only after the transport barrier is released") {
+          delivery_result == true
+        }
         protected_rows.each do |row|
           row.class.transaction(requires_new: true) do
             acquired = row.class.lock("FOR UPDATE NOWAIT").find(row.id)
@@ -194,7 +202,11 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
           end
         end
 
-        assert facts == protected_rows.map { |row| row.reload.attributes }, "Delivery must not mutate protected facts"
+        assert_withheld("Delivery must not mutate protected facts") {
+          facts == protected_rows.map { |row|
+            row.reload.attributes
+          }
+        }
         contact.with_lock do
           case channel
           when :email then transaction.reissue_email_otp!
@@ -221,7 +233,7 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
           end
         stale_result = stale_guard.call { delivered_again = true }
 
-        assert stale_result == false, "Reissued and revoked evidence must refuse stale delivery"
+        assert_withheld("Reissued and revoked evidence must refuse stale delivery") { stale_result == false }
         assert_not delivered_again, "Released locks must not restore stale queued delivery authority"
       ensure
         release << true if release
@@ -243,4 +255,3 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions

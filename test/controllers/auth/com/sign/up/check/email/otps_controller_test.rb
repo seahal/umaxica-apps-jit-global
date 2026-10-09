@@ -116,18 +116,19 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
     # Boolean assertions keep ceremony binding material out of failure output.
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert notification.fetch(:recipient).public_id == visitor_email.public_id,
-           "Delivery must address this flow's Email candidate"
-    assert delivery.fetch(:sign_up_flow_ref) == cycle.public_id
-    assert delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation
-    assert transaction.email_candidate_ref == visitor_email.public_id
-    assert transaction.purpose == "sign_up"
-    assert transaction.operation == "sign_up"
-    assert transaction.actor_ref == visitor_email.visitor.public_id
-    assert transaction.session_ref ==
-      Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == visitor_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == visitor_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == visitor_email.visitor.public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
     assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
 
     assert_not visitor_email.attributes.values.include?(otp_code), "Source must not hold the random OTP code"
@@ -180,18 +181,19 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
     # Boolean assertions keep ceremony binding material out of failure output.
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert notification.fetch(:recipient).public_id == visitor_email.public_id,
-           "Delivery must address this flow's Email candidate"
-    assert delivery.fetch(:sign_up_flow_ref) == cycle.public_id
-    assert delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation
-    assert transaction.email_candidate_ref == visitor_email.public_id
-    assert transaction.purpose == "sign_up"
-    assert transaction.operation == "sign_up"
-    assert transaction.actor_ref == visitor_email.visitor.public_id
-    assert transaction.session_ref ==
-      Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == visitor_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == visitor_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == visitor_email.visitor.public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
     assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
     cycle = VisitorSignUpFlow.find_by!(public_id: session.fetch(:auth_com_up_sequence_id))
     attempts_before = visitor_email.reload.otp_attempts_count
@@ -214,9 +216,9 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     end
 
     assert_equal attempts_before, visitor_email.reload.otp_attempts_count
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert proof_before == transaction.reload.attributes, "Turnstile refusal must preserve the entire live OTP proof"
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld("Turnstile refusal must preserve the entire live OTP proof") {
+      proof_before == transaction.reload.attributes
+    }
     assert_equal VisitorSignUpFlowStatus::CONTACT_PENDING, cycle.reload.status_id
     assert_nil cycle.completed_requirements["otp"]
   end
@@ -246,18 +248,19 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
     # Boolean assertions keep ceremony binding material out of failure output.
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert notification.fetch(:recipient).public_id == visitor_email.public_id,
-           "Delivery must address this flow's Email candidate"
-    assert delivery.fetch(:sign_up_flow_ref) == cycle.public_id
-    assert delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation
-    assert transaction.email_candidate_ref == visitor_email.public_id
-    assert transaction.purpose == "sign_up"
-    assert transaction.operation == "sign_up"
-    assert transaction.actor_ref == visitor_email.visitor.public_id
-    assert transaction.session_ref ==
-      Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == visitor_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == visitor_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == visitor_email.visitor.public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
     assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
     attempts_before = visitor_email.reload.otp_attempts_count
     proof_before = transaction.attributes
@@ -275,10 +278,9 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
 
     assert_response :unprocessable_content
     assert_equal attempts_before, visitor_email.reload.otp_attempts_count
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert proof_before == transaction.reload.attributes, "Turnstile refusal must preserve the entire live OTP proof"
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
-
+    assert_withheld("Turnstile refusal must preserve the entire live OTP proof") {
+      proof_before == transaction.reload.attributes
+    }
     TurnstileVerifierStub.challenge_response = { "success" => false, "unavailable" => true }
     patch(
       auth_com_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
@@ -317,18 +319,19 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
     # Boolean assertions keep ceremony binding material out of failure output.
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert notification.fetch(:recipient).public_id == visitor_email.public_id,
-           "Delivery must address this flow's Email candidate"
-    assert delivery.fetch(:sign_up_flow_ref) == cycle.public_id
-    assert delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation
-    assert transaction.email_candidate_ref == visitor_email.public_id
-    assert transaction.purpose == "sign_up"
-    assert transaction.operation == "sign_up"
-    assert transaction.actor_ref == visitor_email.visitor.public_id
-    assert transaction.session_ref ==
-      Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == visitor_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == visitor_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == visitor_email.visitor.public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
     assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
     cycle = VisitorSignUpFlow.find_by!(public_id: session.fetch(:auth_com_up_sequence_id))
 
@@ -374,18 +377,19 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
     # Boolean assertions keep ceremony binding material out of failure output.
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert notification.fetch(:recipient).public_id == visitor_email.public_id,
-           "Delivery must address this flow's Email candidate"
-    assert delivery.fetch(:sign_up_flow_ref) == cycle.public_id
-    assert delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation
-    assert transaction.email_candidate_ref == visitor_email.public_id
-    assert transaction.purpose == "sign_up"
-    assert transaction.operation == "sign_up"
-    assert transaction.actor_ref == visitor_email.visitor.public_id
-    assert transaction.session_ref ==
-      Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == visitor_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == visitor_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == visitor_email.visitor.public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
     assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
     cycle = VisitorSignUpFlow.find_by!(public_id: session.fetch(:auth_com_up_sequence_id))
 
@@ -422,18 +426,19 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
     # Boolean assertions keep ceremony binding material out of failure output.
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert notification.fetch(:recipient).public_id == email.public_id,
-           "Delivery must address this flow's Email candidate"
-    assert delivery.fetch(:sign_up_flow_ref) == cycle.public_id
-    assert delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation
-    assert transaction.email_candidate_ref == email.public_id
-    assert transaction.purpose == "sign_up"
-    assert transaction.operation == "sign_up"
-    assert transaction.actor_ref == email.visitor.public_id
-    assert transaction.session_ref ==
-      Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == email.visitor.public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
     assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
 
     patch auth_com_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
@@ -467,18 +472,19 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
     # Boolean assertions keep ceremony binding material out of failure output.
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert notification.fetch(:recipient).public_id == email.public_id,
-           "Delivery must address this flow's Email candidate"
-    assert delivery.fetch(:sign_up_flow_ref) == cycle.public_id
-    assert delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation
-    assert transaction.email_candidate_ref == email.public_id
-    assert transaction.purpose == "sign_up"
-    assert transaction.operation == "sign_up"
-    assert transaction.actor_ref == email.visitor.public_id
-    assert transaction.session_ref ==
-      Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == email.visitor.public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
     assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
     cycle = VisitorSignUpFlow.find_by!(public_id: session.fetch(:auth_com_up_sequence_id))
 
@@ -517,18 +523,19 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
     # Boolean assertions keep ceremony binding material out of failure output.
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert notification.fetch(:recipient).public_id == visitor_email.public_id,
-           "Delivery must address this flow's Email candidate"
-    assert delivery.fetch(:sign_up_flow_ref) == cycle.public_id
-    assert delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation
-    assert transaction.email_candidate_ref == visitor_email.public_id
-    assert transaction.purpose == "sign_up"
-    assert transaction.operation == "sign_up"
-    assert transaction.actor_ref == visitor_email.visitor.public_id
-    assert transaction.session_ref ==
-      Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == visitor_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == visitor_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == visitor_email.visitor.public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
     assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
     cycle = VisitorSignUpFlow.find_by!(public_id: session.fetch(:auth_com_up_sequence_id))
 
@@ -578,18 +585,19 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
     # Boolean assertions keep ceremony binding material out of failure output.
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert notification.fetch(:recipient).public_id == email.public_id,
-           "Delivery must address this flow's Email candidate"
-    assert delivery.fetch(:sign_up_flow_ref) == cycle.public_id
-    assert delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation
-    assert transaction.email_candidate_ref == email.public_id
-    assert transaction.purpose == "sign_up"
-    assert transaction.operation == "sign_up"
-    assert transaction.actor_ref == email.visitor.public_id
-    assert transaction.session_ref ==
-      Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == email.visitor.public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
     assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
 
     cycle = VisitorSignUpFlow.find_by!(public_id: session.fetch(:auth_com_up_sequence_id))

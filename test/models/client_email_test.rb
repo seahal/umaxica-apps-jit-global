@@ -399,7 +399,7 @@ class ClientEmailTest < ActiveSupport::TestCase
 
         fv5009 =
           [fv5015.id, fv5014.id].map do |fv5012|
-            Thread.new do # rubocop:disable ThreadSafety/NewThread
+            Thread.new do
               ClientEmail.connection_pool.with_connection do |fv5013|
                 configure_identifier_race_connection!(fv5013)
                 fv5011 << true
@@ -447,7 +447,7 @@ class ClientEmailTest < ActiveSupport::TestCase
 
         fv5001 =
           [fv5007.id, fv5006.id].map do |fv5004|
-            Thread.new do # rubocop:disable ThreadSafety/NewThread
+            Thread.new do
               ClientEmail.connection_pool.with_connection do |fv5005|
                 configure_identifier_race_connection!(fv5005)
                 fv5003 << true
@@ -499,7 +499,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     results = Queue.new
     ActiveRecord::Base.connection_handler.clear_active_connections!
     updater =
-      Thread.new do # rubocop:disable ThreadSafety/NewThread
+      Thread.new do
         ClientEmail.connection_pool.with_connection do |connection|
           configure_identifier_race_connection!(connection)
           ClientEmail.transaction do
@@ -514,7 +514,7 @@ class ClientEmailTest < ActiveSupport::TestCase
         end
       end
     creator =
-      Thread.new do # rubocop:disable ThreadSafety/NewThread
+      Thread.new do
         ClientEmail.connection_pool.with_connection do |connection|
           configure_identifier_race_connection!(connection)
           ready.pop
@@ -564,7 +564,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     ActiveRecord::Base.connection_handler.clear_active_connections!
 
     holder =
-      Thread.new do # rubocop:disable ThreadSafety/NewThread
+      Thread.new do
         ClientEmail.connection_pool.with_connection do |connection|
           configure_identifier_race_connection!(connection)
           ClientEmail.transaction do
@@ -579,7 +579,7 @@ class ClientEmailTest < ActiveSupport::TestCase
         end
       end
     releaser =
-      Thread.new do # rubocop:disable ThreadSafety/NewThread
+      Thread.new do
         ready.pop
         release << true
         results << { status: :released }
@@ -608,7 +608,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     ActiveRecord::Base.connection_handler.clear_active_connections!
 
     [first_address, second_address].map do |address|
-      Thread.new do # rubocop:disable ThreadSafety/NewThread
+      Thread.new do
         ClientEmail.connection_pool.with_connection do |connection|
           configure_identifier_race_connection!(connection)
           ready << true

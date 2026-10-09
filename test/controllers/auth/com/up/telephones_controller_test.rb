@@ -2,7 +2,6 @@
 # frozen_string_literal: true
 
 # Snapshot diffs would expose OTP material and token state on assertion failure.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 
 require "test_helper"
 # require "helpers/global_test_support"
@@ -101,7 +100,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     end
 
     assert_response :success
-    assert(original_token_facts == token.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { original_token_facts == token.reload.attributes }
   end
 
   test "create keeps an admitted ceremony independent of a presented root token" do
@@ -141,7 +140,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_nil candidate.binding_finalized_at
     assert_equal flow.public_id,
                  SignFlowBindingCodec.decode(Rack::Utils.parse_query(target.query).fetch("fb")).flow_public_id
-    assert(original_token_facts == token.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { original_token_facts == token.reload.attributes }
   end
 
   test "create redirects to edit and creates pending visitor telephone" do
@@ -323,12 +322,12 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_equal first_candidate.number_digest, second_candidate.number_digest
     assert_nil first_candidate.binding_finalized_at
     assert_nil second_candidate.binding_finalized_at
-    assert(
+    assert_withheld("owned supersession preserves binding facts") {
       first_facts == first_candidate.reload.attributes.slice(
         "visitor_id", "number_digest", "binding_finalized_at",
         "binding_released_at",
-      ), "owned supersession preserves binding facts",
-    )
+      )
+    }
     assert_predicate first_flow.reload, :sign_up_halted?
     assert_predicate first_flow, :cleanup_completed?
     assert_operator first_candidate.discard_at, :<=, first_flow.cleanup_completed_at
@@ -340,8 +339,10 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     get first_target.request_uri
 
     assert_response :conflict
-    assert(second_facts == second_flow.reload.attributes, "protected record facts remain unchanged")
-    assert(second_candidate_facts == second_candidate.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { second_facts == second_flow.reload.attributes }
+    assert_withheld("protected record facts remain unchanged") {
+      second_candidate_facts == second_candidate.reload.attributes
+    }
     get second_target.request_uri
 
     assert_response :success
@@ -419,15 +420,19 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_equal 1, responses.uniq.length
     assert_equal 4, candidates.map(&:id).uniq.length
     assert_equal 4, candidates.map(&:visitor_id).uniq.length
-    assert(existing_facts == existing.reload.attributes, "protected record facts remain unchanged")
-    assert(existing_owner_facts == visitor.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
+    assert_withheld("protected record facts remain unchanged") { existing_owner_facts == visitor.reload.attributes }
     own_candidate_facts = candidates.last.attributes
     foreign_candidate_facts = candidates.first.attributes
     browsers.last.get(targets.first.request_uri)
 
     assert_equal 409, browsers.last.response.status
-    assert(own_candidate_facts == candidates.last.reload.attributes, "protected record facts remain unchanged")
-    assert(foreign_candidate_facts == candidates.first.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") {
+      own_candidate_facts == candidates.last.reload.attributes
+    }
+    assert_withheld("protected record facts remain unchanged") {
+      foreign_candidate_facts == candidates.first.reload.attributes
+    }
     transaction_ref =
       VisitorTelephoneCeremonyTransaction.find_by!(
         telephone_candidate_ref: candidates.first.public_id,
@@ -452,8 +457,12 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     end
 
     assert_equal 409, browsers.last.response.status
-    assert(own_candidate_facts == candidates.last.reload.attributes, "foreign proof cannot affect this candidate")
-    assert(foreign_candidate_facts == candidates.first.reload.attributes, "foreign proof cannot consume its candidate")
+    assert_withheld("foreign proof cannot affect this candidate") {
+      own_candidate_facts == candidates.last.reload.attributes
+    }
+    assert_withheld("foreign proof cannot consume its candidate") {
+      foreign_candidate_facts == candidates.first.reload.attributes
+    }
     browsers.last.get(targets.last.request_uri)
 
     assert_equal 200, browsers.last.response.status
@@ -492,12 +501,12 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_not_equal first_candidate.id, replacement.id
     assert_not_equal first_candidate.visitor_id, replacement.visitor_id
     assert_equal first_candidate.number_digest, replacement.number_digest
-    assert(
+    assert_withheld("original candidate binding facts remain unchanged") {
       first_binding_facts == first_candidate.reload.attributes.slice(
         "visitor_id", "number_digest", "binding_finalized_at",
         "binding_released_at",
-      ), "original candidate binding facts remain unchanged",
-    )
+      )
+    }
     assert_predicate first_flow.reload, :sign_up_halted?
     assert_predicate first_flow, :cleanup_completed?
     assert_operator first_candidate.discard_at, :<=, first_flow.cleanup_completed_at
@@ -540,8 +549,8 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_equal existing.number_digest, candidate.number_digest
     assert_nil candidate.binding_finalized_at
     assert_not_predicate candidate, :locked?
-    assert(original_facts == existing.reload.attributes, "protected record facts remain unchanged")
-    assert(owner_facts == visitor.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { original_facts == existing.reload.attributes }
+    assert_withheld("protected record facts remain unchanged") { owner_facts == visitor.reload.attributes }
     get target.request_uri
 
     assert_response :success
@@ -577,8 +586,8 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_equal existing.number_digest, candidate.number_digest
     assert_nil candidate.binding_finalized_at
     assert_not_predicate candidate, :locked?
-    assert(original_facts == existing.reload.attributes, "protected record facts remain unchanged")
-    assert(owner_facts == visitor.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { original_facts == existing.reload.attributes }
+    assert_withheld("protected record facts remain unchanged") { owner_facts == visitor.reload.attributes }
     get target.request_uri
 
     assert_response :success
@@ -648,7 +657,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
 
     assert_response :success
     assert_not_includes response.body, I18n.t("errors.messages.taken")
-    assert(existing_facts == existing.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
     candidate = VisitorTelephone.order(:created_at, :id).last
 
     assert_not_equal existing.id, candidate.id
@@ -698,7 +707,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
 
     assert_response :too_many_requests
     assert_equal I18n.t("sign.app.registration.email.create.otp_resend_too_soon"), response.body
-    assert(existing_facts == existing.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
   end
 
   test "the code page for an already verified telephone stops answering once the window closes" do
@@ -734,8 +743,8 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     end
 
     assert_response :unprocessable_content
-    assert(original_facts == candidate.reload.attributes, "expired evidence is not revived")
-    assert(original_existing_facts == existing.reload.attributes, "effective binding is unchanged")
+    assert_withheld("expired evidence is not revived") { original_facts == candidate.reload.attributes }
+    assert_withheld("effective binding is unchanged") { original_existing_facts == existing.reload.attributes }
   end
 
   test "a code submitted against an already verified telephone never starts an account" do
@@ -768,7 +777,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
 
     assert_response :unprocessable_content
     assert_equal VisitorTelephoneStatus::VERIFIED, existing.reload.visitor_telephone_status_id
-    assert(existing_facts == existing.reload.attributes, "protected record facts remain unchanged")
+    assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
   end
 
   test "the OTP page without a flow locator refuses without creating state" do

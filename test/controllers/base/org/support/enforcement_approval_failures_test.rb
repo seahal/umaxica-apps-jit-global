@@ -38,7 +38,7 @@ class Base::Org::Support::EnforcementApprovalFailuresTest < ActionDispatch::Inte
         )
       end
       token = @tokens.fetch(operator)
-      token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+      token.update_columns(
         last_step_up_at: Time.current, last_step_up_scope: scope, last_step_up_aal: "aal2",
         last_step_up_method: "passkey",
         last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
@@ -55,7 +55,7 @@ class Base::Org::Support::EnforcementApprovalFailuresTest < ActionDispatch::Inte
   end
 
   test "failure before the claim: a case that is not pending is refused and left unchanged" do
-    @pending.update_columns(state: "failed") # rubocop:disable Rails/SkipsModelValidations
+    @pending.update_columns(state: "failed")
 
     http_headers_6 =
       begin

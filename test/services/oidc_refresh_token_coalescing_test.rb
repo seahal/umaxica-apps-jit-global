@@ -722,7 +722,7 @@ class OidcRefreshTokenCoalescingConcurrencyTest < ActiveSupport::TestCase
       ActiveRecord::Base.connection_handler.connection_pool_list.each(&:release_connection)
       threads =
         2.times.map do
-          Thread.new do # rubocop:disable ThreadSafety/NewThread
+          Thread.new do
             ready << true
             start.pop
             AppTicketRecord.connection_pool.with_connection do

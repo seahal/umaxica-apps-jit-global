@@ -176,7 +176,6 @@ module AuthenticationSequenceGate
         cycle.sign_in_session_issuance_pending? || cycle.sign_in_completed?)
   end
 
-  # rubocop:disable Metrics/AbcSize
   def continue_welcome_sequence_without_content!
     cycle = current_db_sign_in_flow_for_sequence
     if cycle
@@ -219,7 +218,6 @@ module AuthenticationSequenceGate
     clear_welcome_gate!
     sign_in_sequence_carrier.clear!
     @welcome_next_path = destination
-    # rubocop:enable Metrics/AbcSize
   end
 
   alias continue_dashboard_sequence_without_content! continue_welcome_sequence_without_content!

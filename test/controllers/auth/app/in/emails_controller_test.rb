@@ -5,7 +5,6 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 # Boolean comparisons keep Source OTP secrets and Ticket digests out of assertion output.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertPredicate
 class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTest
   # Real rate-limit counters follow the travelled request clock; the shared
   # verification budget and admitted Auth state still use their real stores.
@@ -75,10 +74,12 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
           headers: { "Host" => @host }
 
     assert_response :unprocessable_content
-    assert retained == @current_auth_ceremony.reload.email_otp_context,
-           "budget refusal must preserve the unconsumed flow challenge"
-    assert source_generation == contact.reload.attributes.slice(*source_generation.keys),
-           "budget refusal must preserve Source OTP generation"
+    assert_withheld("budget refusal must preserve the unconsumed flow challenge") {
+      retained == @current_auth_ceremony.reload.email_otp_context
+    }
+    assert_withheld("budget refusal must preserve Source OTP generation") {
+      source_generation == contact.reload.attributes.slice(*source_generation.keys)
+    }
     assert_not contact.locked?
     assert_equal 0, contact.otp_attempts_count
   end
@@ -162,8 +163,8 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
     @current_auth_ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(cookies[cookie_name])
 
-    assert @current_auth_ceremony.present?, "expected this browser's active Auth continuity"
-    assert @current_auth_ceremony.admitted?, "expected confirmed admission before issuing a code"
+    assert_withheld("expected this browser's active Auth continuity") { @current_auth_ceremony.present? }
+    assert_withheld("expected confirmed admission before issuing a code") { @current_auth_ceremony.admitted? }
     assert_equal @local_admission.transaction.public_id, @current_auth_ceremony.local_sign_in_flow_ref
   end
 
@@ -363,8 +364,8 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
       cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
       refused_ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(refused_browser.cookies[cookie_name])
 
-      assert refused_ceremony.present?, "expected the second browser's active continuity"
-      assert refused_ceremony.admitted?, "expected confirmed admission for the second flow"
+      assert_withheld("expected the second browser's active continuity") { refused_ceremony.present? }
+      assert_withheld("expected confirmed admission for the second flow") { refused_ceremony.admitted? }
       assert_equal refused_admission.transaction.public_id, refused_ceremony.local_sign_in_flow_ref
       code = refused_ceremony.issue_email_otp!(contact:, destination: contact.address)
       wrong = (code == "000000") ? "111111" : "000000"
@@ -476,8 +477,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_equal expires_at_before, @current_auth_ceremony.reload.email_otp_context.fetch("expires_at")
-    assert challenge_before == @current_auth_ceremony.email_otp_context,
-           "Turnstile rejection must leave the flow challenge unconsumed"
+    assert_withheld("Turnstile rejection must leave the flow challenge unconsumed") {
+      challenge_before == @current_auth_ceremony.email_otp_context
+    }
     assert_equal source_expiry_before, email.reload.otp_expires_at
     assert_equal attempts_before, email.reload.otp_attempts_count
     assert_equal state_id, SignAppInEmailAuthenticationState.load(session)&.id
@@ -567,8 +569,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :too_many_requests
     assert_equal I18n.t("sign.app.authentication.email.create.cooldown"), response.body
-    assert challenge == @current_auth_ceremony.reload.email_otp_context,
-           "dispatch refusal must not rotate the flow challenge"
+    assert_withheld("dispatch refusal must not rotate the flow challenge") {
+      challenge == @current_auth_ceremony.reload.email_otp_context
+    }
     assert_equal source_sent_at, test_email.reload.otp_last_sent_at
   end
 
@@ -778,8 +781,8 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   test "otp initial request sends email" do
     test_email = test_setup_cooldown_test_email
 
-    assert @current_auth_ceremony.reload.email_otp_context.fetch("issued_at").present?
-    assert @source_generation_before == test_email.reload.attributes.slice(*@source_generation_before.keys)
+    assert_withheld { @current_auth_ceremony.reload.email_otp_context.fetch("issued_at").present? }
+    assert_withheld { @source_generation_before == test_email.reload.attributes.slice(*@source_generation_before.keys) }
   end
 
   test "otp immediate resend is rejected with cooldown" do
@@ -798,8 +801,8 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :too_many_requests
     # The cooldown message must not depend on whether the address is registered.
     assert_includes @response.body, I18n.t("sign.app.authentication.email.create.cooldown")
-    assert initial_challenge == @current_auth_ceremony.reload.email_otp_context
-    assert @source_generation_before == test_email.reload.attributes.slice(*@source_generation_before.keys)
+    assert_withheld { initial_challenge == @current_auth_ceremony.reload.email_otp_context }
+    assert_withheld { @source_generation_before == test_email.reload.attributes.slice(*@source_generation_before.keys) }
   end
 
   test "otp resend still rejected after 29 seconds" do
@@ -813,8 +816,8 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_response :too_many_requests
-    assert initial == @current_auth_ceremony.reload.email_otp_context
-    assert @source_generation_before == contact.reload.attributes.slice(*@source_generation_before.keys)
+    assert_withheld { initial == @current_auth_ceremony.reload.email_otp_context }
+    assert_withheld { @source_generation_before == contact.reload.attributes.slice(*@source_generation_before.keys) }
   end
 
   [30, 31].each do |seconds|
@@ -838,7 +841,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
       assert_response :found
       assert_not_equal initial.fetch("generation"), @current_auth_ceremony.reload.email_otp_context.fetch("generation")
-      assert @source_generation_before == contact.reload.attributes.slice(*@source_generation_before.keys)
+      assert_withheld { @source_generation_before == contact.reload.attributes.slice(*@source_generation_before.keys) }
     end
   end
 
@@ -1766,4 +1769,3 @@ class Auth::App::Sign::In::EmailsControllerTest
       )
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/AssertPredicate

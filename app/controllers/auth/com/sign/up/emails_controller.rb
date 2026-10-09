@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+# rubocop:disable Metrics/MethodLength
 
 module Auth
   module Com
@@ -414,3 +414,4 @@ module Auth
     end
   end
 end
+# rubocop:enable Metrics/MethodLength

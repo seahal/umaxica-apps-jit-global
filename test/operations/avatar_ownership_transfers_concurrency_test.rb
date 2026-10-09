@@ -5,7 +5,6 @@ require "timeout"
 require_relative "../support/avatar_test_factory"
 
 # Independent PostgreSQL connections are required to exercise the persistent ownership lock.
-# rubocop:disable ThreadSafety/NewThread
 class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
   self.fixture_table_names = []
   self.use_transactional_tests = false
@@ -417,4 +416,3 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
     Bureau.where(id: bureau.id).delete_all
   end
 end
-# rubocop:enable ThreadSafety/NewThread

@@ -378,12 +378,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                           flow4_outer_execution
                       end
 
-                      # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                      # Do not print the outer request or credentials on failure.
                       assert_equal [true, true, 200],
                                    [ActiveSupport::ExecutionContext.to_h
                                      .fetch(:controller).equal?(flow4_outer_controller),
                                     Actor.context.equal?(flow4_outer_actor), flow4_protocol_browser.response.status,]
-                      # rubocop:enable Minitest/AssertSame
                       [flow4_protocol_browser.response.status, { "Content-Type" => "application/json" },
                        flow4_protocol_browser.response.body,]
                     end
@@ -406,12 +405,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                           flow4_outer_execution
                       end
 
-                      # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                      # Do not print the outer request or credentials on failure.
                       assert_equal [true, true, 200],
                                    [ActiveSupport::ExecutionContext.to_h
                                      .fetch(:controller).equal?(flow4_outer_controller),
                                     Actor.context.equal?(flow4_outer_actor), flow4_protocol_browser.response.status,]
-                      # rubocop:enable Minitest/AssertSame
                       [flow4_protocol_browser.response.status, { "Content-Type" => "application/json" },
                        flow4_protocol_browser.response.body,]
                     end
@@ -665,12 +663,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                         flow6_outer_execution
                     end
 
-                    # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                    # Do not print the outer request or credentials on failure.
                     assert_equal [true, true, 200],
                                  [ActiveSupport::ExecutionContext.to_h
                                    .fetch(:controller).equal?(flow6_outer_controller),
                                   Actor.context.equal?(flow6_outer_actor), flow6_protocol_browser.response.status,]
-                    # rubocop:enable Minitest/AssertSame
                     [flow6_protocol_browser.response.status, { "Content-Type" => "application/json" },
                      flow6_protocol_browser.response.body,]
                   end
@@ -693,12 +690,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                         flow6_outer_execution
                     end
 
-                    # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                    # Do not print the outer request or credentials on failure.
                     assert_equal [true, true, 200],
                                  [ActiveSupport::ExecutionContext.to_h
                                    .fetch(:controller).equal?(flow6_outer_controller),
                                   Actor.context.equal?(flow6_outer_actor), flow6_protocol_browser.response.status,]
-                    # rubocop:enable Minitest/AssertSame
                     [flow6_protocol_browser.response.status, { "Content-Type" => "application/json" },
                      flow6_protocol_browser.response.body,]
                   end
@@ -1080,12 +1076,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                           flow11_outer_execution
                       end
 
-                      # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                      # Do not print the outer request or credentials on failure.
                       assert_equal [true, true, 200],
                                    [ActiveSupport::ExecutionContext.to_h
                                      .fetch(:controller).equal?(flow11_outer_controller),
                                     Actor.context.equal?(flow11_outer_actor), flow11_protocol_browser.response.status,]
-                      # rubocop:enable Minitest/AssertSame
                       [flow11_protocol_browser.response.status, { "Content-Type" => "application/json" },
                        flow11_protocol_browser.response.body,]
                     end
@@ -1108,12 +1103,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                           flow11_outer_execution
                       end
 
-                      # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                      # Do not print the outer request or credentials on failure.
                       assert_equal [true, true, 200],
                                    [ActiveSupport::ExecutionContext.to_h
                                      .fetch(:controller).equal?(flow11_outer_controller),
                                     Actor.context.equal?(flow11_outer_actor), flow11_protocol_browser.response.status,]
-                      # rubocop:enable Minitest/AssertSame
                       [flow11_protocol_browser.response.status, { "Content-Type" => "application/json" },
                        flow11_protocol_browser.response.body,]
                     end
@@ -1367,12 +1361,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                         flow13_outer_execution
                     end
 
-                    # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                    # Do not print the outer request or credentials on failure.
                     assert_equal [true, true, 200],
                                  [ActiveSupport::ExecutionContext.to_h
                                    .fetch(:controller).equal?(flow13_outer_controller),
                                   Actor.context.equal?(flow13_outer_actor), flow13_protocol_browser.response.status,]
-                    # rubocop:enable Minitest/AssertSame
                     [flow13_protocol_browser.response.status, { "Content-Type" => "application/json" },
                      flow13_protocol_browser.response.body,]
                   end
@@ -1395,12 +1388,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                         flow13_outer_execution
                     end
 
-                    # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                    # Do not print the outer request or credentials on failure.
                     assert_equal [true, true, 200],
                                  [ActiveSupport::ExecutionContext.to_h
                                    .fetch(:controller).equal?(flow13_outer_controller),
                                   Actor.context.equal?(flow13_outer_actor), flow13_protocol_browser.response.status,]
-                    # rubocop:enable Minitest/AssertSame
                     [flow13_protocol_browser.response.status, { "Content-Type" => "application/json" },
                      flow13_protocol_browser.response.body,]
                   end
@@ -1759,12 +1751,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                         flow17_outer_execution
                     end
 
-                    # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                    # Do not print the outer request or credentials on failure.
                     assert_equal [true, true, 200],
                                  [ActiveSupport::ExecutionContext.to_h
                                    .fetch(:controller).equal?(flow17_outer_controller),
                                   Actor.context.equal?(flow17_outer_actor), flow17_protocol_browser.response.status,]
-                    # rubocop:enable Minitest/AssertSame
                     [flow17_protocol_browser.response.status, { "Content-Type" => "application/json" },
                      flow17_protocol_browser.response.body,]
                   end
@@ -1787,12 +1778,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                         flow17_outer_execution
                     end
 
-                    # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                    # Do not print the outer request or credentials on failure.
                     assert_equal [true, true, 200],
                                  [ActiveSupport::ExecutionContext.to_h
                                    .fetch(:controller).equal?(flow17_outer_controller),
                                   Actor.context.equal?(flow17_outer_actor), flow17_protocol_browser.response.status,]
-                    # rubocop:enable Minitest/AssertSame
                     [flow17_protocol_browser.response.status, { "Content-Type" => "application/json" },
                      flow17_protocol_browser.response.body,]
                   end
@@ -2143,12 +2133,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                         flow21_outer_execution
                     end
 
-                    # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                    # Do not print the outer request or credentials on failure.
                     assert_equal [true, true, 200],
                                  [ActiveSupport::ExecutionContext.to_h
                                    .fetch(:controller).equal?(flow21_outer_controller),
                                   Actor.context.equal?(flow21_outer_actor), flow21_protocol_browser.response.status,]
-                    # rubocop:enable Minitest/AssertSame
                     [flow21_protocol_browser.response.status, { "Content-Type" => "application/json" },
                      flow21_protocol_browser.response.body,]
                   end
@@ -2171,12 +2160,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                         flow21_outer_execution
                     end
 
-                    # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                    # Do not print the outer request or credentials on failure.
                     assert_equal [true, true, 200],
                                  [ActiveSupport::ExecutionContext.to_h
                                    .fetch(:controller).equal?(flow21_outer_controller),
                                   Actor.context.equal?(flow21_outer_actor), flow21_protocol_browser.response.status,]
-                    # rubocop:enable Minitest/AssertSame
                     [flow21_protocol_browser.response.status, { "Content-Type" => "application/json" },
                      flow21_protocol_browser.response.body,]
                   end
@@ -2519,12 +2507,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                         flow23_outer_execution
                     end
 
-                    # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                    # Do not print the outer request or credentials on failure.
                     assert_equal [true, true, 200],
                                  [ActiveSupport::ExecutionContext.to_h
                                    .fetch(:controller).equal?(flow23_outer_controller),
                                   Actor.context.equal?(flow23_outer_actor), flow23_protocol_browser.response.status,]
-                    # rubocop:enable Minitest/AssertSame
                     [flow23_protocol_browser.response.status, { "Content-Type" => "application/json" },
                      flow23_protocol_browser.response.body,]
                   end
@@ -2547,12 +2534,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                         flow23_outer_execution
                     end
 
-                    # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                    # Do not print the outer request or credentials on failure.
                     assert_equal [true, true, 200],
                                  [ActiveSupport::ExecutionContext.to_h
                                    .fetch(:controller).equal?(flow23_outer_controller),
                                   Actor.context.equal?(flow23_outer_actor), flow23_protocol_browser.response.status,]
-                    # rubocop:enable Minitest/AssertSame
                     [flow23_protocol_browser.response.status, { "Content-Type" => "application/json" },
                      flow23_protocol_browser.response.body,]
                   end
@@ -2897,12 +2883,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                         flow25_outer_execution
                     end
 
-                    # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                    # Do not print the outer request or credentials on failure.
                     assert_equal [true, true, 200],
                                  [ActiveSupport::ExecutionContext.to_h
                                    .fetch(:controller).equal?(flow25_outer_controller),
                                   Actor.context.equal?(flow25_outer_actor), flow25_protocol_browser.response.status,]
-                    # rubocop:enable Minitest/AssertSame
                     [flow25_protocol_browser.response.status, { "Content-Type" => "application/json" },
                      flow25_protocol_browser.response.body,]
                   end
@@ -2925,12 +2910,11 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                         flow25_outer_execution
                     end
 
-                    # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                    # Do not print the outer request or credentials on failure.
                     assert_equal [true, true, 200],
                                  [ActiveSupport::ExecutionContext.to_h
                                    .fetch(:controller).equal?(flow25_outer_controller),
                                   Actor.context.equal?(flow25_outer_actor), flow25_protocol_browser.response.status,]
-                    # rubocop:enable Minitest/AssertSame
                     [flow25_protocol_browser.response.status, { "Content-Type" => "application/json" },
                      flow25_protocol_browser.response.body,]
                   end
@@ -3961,11 +3945,10 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                       flow27_outer_execution
                   end
 
-                  # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                  # Do not print the outer request or credentials on failure.
                   assert_equal [true, true, 200],
                                [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow27_outer_controller),
                                 Actor.context.equal?(flow27_outer_actor), flow27_protocol_browser.response.status,]
-                  # rubocop:enable Minitest/AssertSame
                   [flow27_protocol_browser.response.status, { "Content-Type" => "application/json" },
                    flow27_protocol_browser.response.body,]
                 end
@@ -3988,11 +3971,10 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                       flow27_outer_execution
                   end
 
-                  # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                  # Do not print the outer request or credentials on failure.
                   assert_equal [true, true, 200],
                                [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow27_outer_controller),
                                 Actor.context.equal?(flow27_outer_actor), flow27_protocol_browser.response.status,]
-                  # rubocop:enable Minitest/AssertSame
                   [flow27_protocol_browser.response.status, { "Content-Type" => "application/json" },
                    flow27_protocol_browser.response.body,]
                 end

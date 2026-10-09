@@ -352,7 +352,6 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
     )
   end
 
-  # rubocop:disable Minitest/MultipleAssertions
   test "core org route contract" do
     assert_recognizes(
       { controller: "core/org/roots", action: "index" },
@@ -486,8 +485,6 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{CORE_ORG_HOST}/oidc/backchannel/logout", method: :post },
     )
   end
-  # rubocop:enable Minitest/MultipleAssertions
-
   test "core net route contract" do
     recognized = Rails.application.routes.recognize_path(
       "http://#{CORE_NET_HOST}/",

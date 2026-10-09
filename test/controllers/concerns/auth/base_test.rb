@@ -1,8 +1,6 @@
 # typed: false
 # frozen_string_literal: true
 
-# rubocop:disable I18n/RailsI18n/DecorateString
-
 require "test_helper"
 # require "helpers/global_test_support"
 
@@ -636,8 +634,6 @@ module Auth
     end
   end
 end
-
-# rubocop:enable I18n/RailsI18n/DecorateString
 
 # DAMP local route helper aliases for former shared test support.
 class Auth::BaseTest

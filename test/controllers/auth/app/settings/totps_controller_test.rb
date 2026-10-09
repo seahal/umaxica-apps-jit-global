@@ -169,7 +169,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -262,7 +263,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -353,7 +355,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -425,7 +428,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -499,7 +503,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -566,7 +571,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -644,7 +650,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -759,7 +766,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -842,7 +850,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -933,7 +942,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -1018,7 +1028,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -1095,7 +1106,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -1202,7 +1214,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -1307,7 +1320,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -1420,7 +1434,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -1526,7 +1541,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -1619,7 +1635,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -1708,7 +1725,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )
@@ -1805,7 +1823,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         }.fetch(admission_issuance.transaction.surface)
         admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
-        cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          cookies,
           "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
           URI.parse("https://#{admission_auth_host}/"),
         )

@@ -30,7 +30,12 @@ class IdentityTelephoneCeremonyResultConsumerTest < ActiveSupport::TestCase
     transaction = fake_transaction
     captured = nil
 
-    IdentityTelephoneCeremonyResult.stub(:decode, ->(_token, **kwargs) { captured = kwargs; valid_result_hash }) do
+    IdentityTelephoneCeremonyResult.stub(
+      :decode, ->(_token, **kwargs) {
+                 captured = kwargs
+                 valid_result_hash
+               },
+    ) do
       IdentityTelephoneCeremonyResultConsumer.new(
         transaction: transaction,
         issuer_id: "custom-issuer",
@@ -45,7 +50,12 @@ class IdentityTelephoneCeremonyResultConsumerTest < ActiveSupport::TestCase
     transaction = fake_transaction
     captured = nil
 
-    IdentityTelephoneCeremonyResult.stub(:decode, ->(_token, **kwargs) { captured = kwargs; valid_result_hash }) do
+    IdentityTelephoneCeremonyResult.stub(
+      :decode, ->(_token, **kwargs) {
+                 captured = kwargs
+                 valid_result_hash
+               },
+    ) do
       IdentityTelephoneCeremonyResultConsumer.new(transaction: transaction, now: @now).call("token")
     end
 

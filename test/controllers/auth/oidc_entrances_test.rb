@@ -155,7 +155,7 @@ class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
                     fv5093.cookies.delete(fv5095)
                     # Rack::Test's []= uses its default host. The current request may target a
                     # different surface, so install the cookie against the browser's active host.
-                    fv5093.cookies.merge( # rubocop:disable Lint/Void
+                    fv5093.cookies.merge(
                       "#{fv5095}=#{Rack::Utils.escape(fv5094)}",
                       URI.parse("https://#{fv5093.host}/"),
                     )
@@ -398,7 +398,7 @@ class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
                     fv5025.cookies.delete(fv5027)
                     # Rack::Test's []= uses its default host. The current request may target a
                     # different surface, so install the cookie against the browser's active host.
-                    fv5025.cookies.merge( # rubocop:disable Lint/Void
+                    fv5025.cookies.merge(
                       "#{fv5027}=#{Rack::Utils.escape(fv5026)}",
                       URI.parse("https://#{fv5025.host}/"),
                     )

@@ -29,7 +29,7 @@ class Base::Org::Support::EnforcementConfirmationScreensTest < ActionDispatch::I
         starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "enforcement_case_apply",
       last_step_up_aal: "aal2",
@@ -117,7 +117,7 @@ class Base::Org::Support::EnforcementConfirmationScreensTest < ActionDispatch::I
         starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "enforcement_case_apply",
       last_step_up_aal: "aal2",
@@ -203,7 +203,7 @@ class Base::Org::Support::EnforcementConfirmationScreensTest < ActionDispatch::I
         starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "enforcement_case_apply",
       last_step_up_aal: "aal2",
@@ -314,7 +314,7 @@ class Base::Org::Support::EnforcementConfirmationScreensTest < ActionDispatch::I
         starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "enforcement_case_apply",
       last_step_up_aal: "aal2",
@@ -419,7 +419,7 @@ class Base::Org::Support::EnforcementConfirmationScreensTest < ActionDispatch::I
         starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "enforcement_case_apply",
       last_step_up_aal: "aal2",
@@ -533,7 +533,7 @@ class Base::Org::Support::EnforcementConfirmationScreensTest < ActionDispatch::I
         starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "enforcement_case_release",
       last_step_up_aal: "aal2",
@@ -635,7 +635,7 @@ class Base::Org::Support::EnforcementConfirmationScreensTest < ActionDispatch::I
         starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "enforcement_case_release",
       last_step_up_aal: "aal2",
@@ -728,7 +728,7 @@ class Base::Org::Support::EnforcementConfirmationScreensTest < ActionDispatch::I
         starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "enforcement_case_release",
       last_step_up_aal: "aal2",
@@ -828,7 +828,7 @@ class Base::Org::Support::EnforcementConfirmationScreensTest < ActionDispatch::I
         starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    @operator_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @operator_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "enforcement_case_review_appeal",
       last_step_up_aal: "aal2",

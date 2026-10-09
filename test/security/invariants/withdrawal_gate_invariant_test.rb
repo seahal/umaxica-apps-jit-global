@@ -1,8 +1,6 @@
 # typed: false
 # frozen_string_literal: true
 
-# rubocop:disable I18n/RailsI18n/DecorateString
-
 require "test_helper"
 # require "helpers/global_test_support"
 

@@ -3,7 +3,6 @@
 require "test_helper"
 
 # Boolean snapshots keep keyed digests and original Root references out of failure output.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 class CredentialRegistrationOtpProofDatabaseTest < ActiveSupport::TestCase
   [
     [Client, ClientToken, ClientEmail, :user_id, :app, :email],
@@ -70,7 +69,7 @@ class CredentialRegistrationOtpProofDatabaseTest < ActiveSupport::TestCase
         raise ActiveRecord::Rollback
       end
 
-      assert original == flow.reload.attributes
+      assert_withheld { original == flow.reload.attributes }
 
       now = flow.class.database_now
       [-Rational(1, 1_000_000), 0, Rational(1, 1_000_000),
@@ -91,7 +90,7 @@ class CredentialRegistrationOtpProofDatabaseTest < ActiveSupport::TestCase
           raise ActiveRecord::Rollback
         end
 
-        assert original == flow.reload.attributes, "Rolled-back bounds must not manufacture a result"
+        assert_withheld("Rolled-back bounds must not manufacture a result") { original == flow.reload.attributes }
       end
 
       verified =
@@ -116,7 +115,7 @@ class CredentialRegistrationOtpProofDatabaseTest < ActiveSupport::TestCase
           raise ActiveRecord::Rollback
         end
 
-        assert committed == flow.reload.attributes, "SQL cannot erase or replace committed proof"
+        assert_withheld("SQL cannot erase or replace committed proof") { committed == flow.reload.attributes }
       end
       assert_nil flow.otp_verifier
       assert_not_nil flow.otp_consumed_at
@@ -124,4 +123,3 @@ class CredentialRegistrationOtpProofDatabaseTest < ActiveSupport::TestCase
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator

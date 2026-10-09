@@ -390,11 +390,10 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                       flow3_outer_execution
                   end
 
-                  # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                  # Do not print the outer request or credentials on failure.
                   assert_equal [true, true, 200],
                                [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow3_outer_controller),
                                 Actor.context.equal?(flow3_outer_actor), flow3_protocol_browser.response.status,]
-                  # rubocop:enable Minitest/AssertSame
                   [flow3_protocol_browser.response.status, { "Content-Type" => "application/json" },
                    flow3_protocol_browser.response.body,]
                 end
@@ -417,11 +416,10 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                       flow3_outer_execution
                   end
 
-                  # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                  # Do not print the outer request or credentials on failure.
                   assert_equal [true, true, 200],
                                [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow3_outer_controller),
                                 Actor.context.equal?(flow3_outer_actor), flow3_protocol_browser.response.status,]
-                  # rubocop:enable Minitest/AssertSame
                   [flow3_protocol_browser.response.status, { "Content-Type" => "application/json" },
                    flow3_protocol_browser.response.body,]
                 end
@@ -1185,11 +1183,10 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                       flow11_outer_execution
                   end
 
-                  # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                  # Do not print the outer request or credentials on failure.
                   assert_equal [true, true, 200],
                                [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow11_outer_controller),
                                 Actor.context.equal?(flow11_outer_actor), flow11_protocol_browser.response.status,]
-                  # rubocop:enable Minitest/AssertSame
                   [flow11_protocol_browser.response.status, { "Content-Type" => "application/json" },
                    flow11_protocol_browser.response.body,]
                 end
@@ -1212,11 +1209,10 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                       flow11_outer_execution
                   end
 
-                  # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                  # Do not print the outer request or credentials on failure.
                   assert_equal [true, true, 200],
                                [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow11_outer_controller),
                                 Actor.context.equal?(flow11_outer_actor), flow11_protocol_browser.response.status,]
-                  # rubocop:enable Minitest/AssertSame
                   [flow11_protocol_browser.response.status, { "Content-Type" => "application/json" },
                    flow11_protocol_browser.response.body,]
                 end
@@ -1606,11 +1602,10 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                       flow15_outer_execution
                   end
 
-                  # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                  # Do not print the outer request or credentials on failure.
                   assert_equal [true, true, 200],
                                [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow15_outer_controller),
                                 Actor.context.equal?(flow15_outer_actor), flow15_protocol_browser.response.status,]
-                  # rubocop:enable Minitest/AssertSame
                   [flow15_protocol_browser.response.status, { "Content-Type" => "application/json" },
                    flow15_protocol_browser.response.body,]
                 end
@@ -1633,11 +1628,10 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                       flow15_outer_execution
                   end
 
-                  # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                  # Do not print the outer request or credentials on failure.
                   assert_equal [true, true, 200],
                                [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow15_outer_controller),
                                 Actor.context.equal?(flow15_outer_actor), flow15_protocol_browser.response.status,]
-                  # rubocop:enable Minitest/AssertSame
                   [flow15_protocol_browser.response.status, { "Content-Type" => "application/json" },
                    flow15_protocol_browser.response.body,]
                 end
@@ -2044,11 +2038,10 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                       flow19_outer_execution
                   end
 
-                  # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                  # Do not print the outer request or credentials on failure.
                   assert_equal [true, true, 200],
                                [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow19_outer_controller),
                                 Actor.context.equal?(flow19_outer_actor), flow19_protocol_browser.response.status,]
-                  # rubocop:enable Minitest/AssertSame
                   [flow19_protocol_browser.response.status, { "Content-Type" => "application/json" },
                    flow19_protocol_browser.response.body,]
                 end
@@ -2071,11 +2064,10 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
                       flow19_outer_execution
                   end
 
-                  # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
+                  # Do not print the outer request or credentials on failure.
                   assert_equal [true, true, 200],
                                [ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(flow19_outer_controller),
                                 Actor.context.equal?(flow19_outer_actor), flow19_protocol_browser.response.status,]
-                  # rubocop:enable Minitest/AssertSame
                   [flow19_protocol_browser.response.status, { "Content-Type" => "application/json" },
                    flow19_protocol_browser.response.body,]
                 end

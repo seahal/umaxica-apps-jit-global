@@ -38,7 +38,7 @@ class Base::Org::Iam::GrantSubmissionsTest < ActionDispatch::IntegrationTest
       capability: OperatorCapabilityGrant::SUPPORT_CONSOLE_READ, reason_code: "duty_assignment",
       starts_at: 1.minute.ago, expires_at: 1.day.from_now,
     )
-    @granter_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @granter_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "operator_capability",
       last_step_up_aal: "aal2",
@@ -136,7 +136,7 @@ class Base::Org::Iam::GrantSubmissionsTest < ActionDispatch::IntegrationTest
       capability: OperatorCapabilityGrant::SUPPORT_CONSOLE_READ, reason_code: "duty_assignment",
       starts_at: 1.minute.ago, expires_at: 1.day.from_now,
     )
-    @granter_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @granter_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "operator_capability",
       last_step_up_aal: "aal2",
@@ -241,7 +241,7 @@ class Base::Org::Iam::GrantSubmissionsTest < ActionDispatch::IntegrationTest
       capability: OperatorCapabilityGrant::SUPPORT_CONSOLE_READ, reason_code: "duty_assignment",
       starts_at: 1.minute.ago, expires_at: 1.day.from_now,
     )
-    @granter_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @granter_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "operator_capability",
       last_step_up_aal: "aal2",
@@ -342,7 +342,7 @@ class Base::Org::Iam::GrantSubmissionsTest < ActionDispatch::IntegrationTest
       capability: OperatorCapabilityGrant::SUPPORT_CONSOLE_READ, reason_code: "duty_assignment",
       starts_at: 1.minute.ago, expires_at: 1.day.from_now,
     )
-    @granter_token.update_columns( # rubocop:disable Rails/SkipsModelValidations
+    @granter_token.update_columns(
       last_step_up_at: Time.current,
       last_step_up_scope: "operator_capability",
       last_step_up_aal: "aal2",

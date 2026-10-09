@@ -3,7 +3,6 @@
 require "test_helper"
 
 # Boolean snapshots avoid exposing OTP, destination and root material on failure.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
 class ContactRegistrationOtpDeliveryIssuerTest < ActiveSupport::TestCase
   %w(app com).each do |surface|
     %i(email telephone).each do |channel|
@@ -159,24 +158,36 @@ class ContactRegistrationOtpDeliveryIssuerTest < ActiveSupport::TestCase
             guard.call(**arguments) do
               calls += 1
 
-              assert contact_facts == contact.reload.attributes, "Transport must not replace Source evidence"
-              assert ticket_facts == transaction.reload.attributes, "Transport must retain the original Ticket"
+              assert_withheld("Transport must not replace Source evidence") {
+                contact_facts == contact.reload.attributes
+              }
+              assert_withheld("Transport must retain the original Ticket") {
+                ticket_facts == transaction.reload.attributes
+              }
             end
           expected = scenario == :valid_code
 
           assert_equal expected, eligible
           assert_equal(expected ? 1 : 0, calls)
-          assert contact_facts == contact.reload.attributes, "Delivery must not consume or reconstruct Source evidence"
-          assert ticket_facts == transaction.reload.attributes, "Delivery must not complete the original Ticket"
-          assert supplied_ticket_facts == arguments.fetch(:transaction).reload.attributes,
-                 "Delivery must not mutate a substituted Ticket"
-          assert root_facts == token.reload.attributes, "Delivery must retain root facts"
-          assert device_facts == token.device_session.reload.attributes, "Delivery must retain device facts"
-          assert owner_facts == actor.reload.attributes, "Delivery must retain owner facts"
-          assert other_facts == other.reload.attributes, "A foreign candidate must remain unchanged" if other_facts
+          assert_withheld("Delivery must not consume or reconstruct Source evidence") {
+            contact_facts == contact.reload.attributes
+          }
+          assert_withheld("Delivery must not complete the original Ticket") {
+            ticket_facts == transaction.reload.attributes
+          }
+          assert_withheld("Delivery must not mutate a substituted Ticket") {
+            supplied_ticket_facts == arguments.fetch(:transaction).reload.attributes
+          }
+          assert_withheld("Delivery must retain root facts") { root_facts == token.reload.attributes }
+          assert_withheld("Delivery must retain device facts") {
+            device_facts == token.device_session.reload.attributes
+          }
+          assert_withheld("Delivery must retain owner facts") { owner_facts == actor.reload.attributes }
+          assert_withheld("A foreign candidate must remain unchanged") {
+            other_facts == other.reload.attributes
+          } if other_facts
         end
       end
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions

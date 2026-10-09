@@ -135,7 +135,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
         session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
         encoded_session = session_cookie_jar[session_key]
         base.cookies.delete(session_key)
-        base.cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          base.cookies,
           "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
         )
         binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -287,7 +288,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
         session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
         encoded_session = session_cookie_jar[session_key]
         base.cookies.delete(session_key)
-        base.cookies.merge( # rubocop:disable Lint/Void
+        store_raw_cookies(
+          base.cookies,
           "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
         )
         binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -336,22 +338,18 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
         code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
         # assert_match would disclose the delivered secret on failure.
-        # rubocop:disable Minitest/AssertMatch
-        assert code.match?(/\A[0-9]{6}\z/), "Delivery must contain one six-digit code"
-        # rubocop:enable Minitest/AssertMatch
+        assert_withheld("Delivery must contain one six-digit code") { code.match?(/\A[0-9]{6}\z/) }
         assert_equal "sign_in", delivery.fetch(:purpose)
         assert_equal surface.to_s, context.fetch("surface")
         assert_equal "authentication", context.fetch("purpose")
         assert_equal "local_sign_in", context.fetch("parent_kind")
         assert_equal "real", context.fetch("mode")
         # Boolean comparisons keep ceremony bindings and keyed proof out of failure output.
-        # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-        assert context.fetch("parent_ref") == issuance.transaction.public_id
-        assert context.fetch("contact_ref") == email.public_id
-        assert context.fetch("owner_ref") == actor.public_id
-        assert context.fetch("sid_digest") == ceremony.sid_digest
-        assert context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
-        # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+        assert_withheld { context.fetch("parent_ref") == issuance.transaction.public_id }
+        assert_withheld { context.fetch("contact_ref") == email.public_id }
+        assert_withheld { context.fetch("owner_ref") == actor.public_id }
+        assert_withheld { context.fetch("sid_digest") == ceremony.sid_digest }
+        assert_withheld { context.fetch("generation") == delivery.fetch(:auth_email_otp_generation) }
         assert_nil context.fetch("verified_at")
         assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
         patch email_path,
@@ -449,7 +447,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
     encoded_session = session_cookie_jar[session_key]
     base.cookies.delete(session_key)
-    base.cookies.merge( # rubocop:disable Lint/Void
+    store_raw_cookies(
+      base.cookies,
       "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
@@ -511,10 +510,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
 
     assert_response :bad_request
     # Boolean snapshots avoid exposing credential or ceremony material on refusal.
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert source_before == email.reload.attributes
-    assert ceremonies_before == ClientAuthCeremonySession.order(:id).map(&:attributes)
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld { source_before == email.reload.attributes }
+    assert_withheld { ceremonies_before == ClientAuthCeremonySession.order(:id).map(&:attributes) }
     assert_equal deliveries_before, enqueued_jobs.length
     assert_nil session[:user_email_authentication_id]
   end
@@ -567,7 +564,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
     encoded_session = session_cookie_jar[session_key]
     base.cookies.delete(session_key)
-    base.cookies.merge( # rubocop:disable Lint/Void
+    store_raw_cookies(
+      base.cookies,
       "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
@@ -664,7 +662,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
     encoded_session = session_cookie_jar[session_key]
     base.cookies.delete(session_key)
-    base.cookies.merge( # rubocop:disable Lint/Void
+    store_raw_cookies(
+      base.cookies,
       "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
@@ -713,22 +712,18 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
     # assert_match would disclose the delivered secret on failure.
-    # rubocop:disable Minitest/AssertMatch
-    assert code.match?(/\A[0-9]{6}\z/), "Delivery must contain one six-digit code"
-    # rubocop:enable Minitest/AssertMatch
+    assert_withheld("Delivery must contain one six-digit code") { code.match?(/\A[0-9]{6}\z/) }
     assert_equal "sign_in", delivery.fetch(:purpose)
     assert_equal "app", context.fetch("surface")
     assert_equal "authentication", context.fetch("purpose")
     assert_equal "local_sign_in", context.fetch("parent_kind")
     assert_equal "real", context.fetch("mode")
     # Boolean comparisons keep ceremony bindings and keyed proof out of failure output.
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert context.fetch("parent_ref") == issuance.transaction.public_id
-    assert context.fetch("contact_ref") == email.public_id
-    assert context.fetch("owner_ref") == actor.public_id
-    assert context.fetch("sid_digest") == ceremony.sid_digest
-    assert context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld { context.fetch("parent_ref") == issuance.transaction.public_id }
+    assert_withheld { context.fetch("contact_ref") == email.public_id }
+    assert_withheld { context.fetch("owner_ref") == actor.public_id }
+    assert_withheld { context.fetch("sid_digest") == ceremony.sid_digest }
+    assert_withheld { context.fetch("generation") == delivery.fetch(:auth_email_otp_generation) }
     assert_nil context.fetch("verified_at")
     assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
     original_nonce_digest = issuance.transaction.reload.nonce_digest
@@ -811,7 +806,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
     encoded_session = session_cookie_jar[session_key]
     base.cookies.delete(session_key)
-    base.cookies.merge( # rubocop:disable Lint/Void
+    store_raw_cookies(
+      base.cookies,
       "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
@@ -861,22 +857,18 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
     # assert_match would disclose the delivered secret on failure.
-    # rubocop:disable Minitest/AssertMatch
-    assert code.match?(/\A[0-9]{6}\z/), "Delivery must contain one six-digit code"
-    # rubocop:enable Minitest/AssertMatch
+    assert_withheld("Delivery must contain one six-digit code") { code.match?(/\A[0-9]{6}\z/) }
     assert_equal "sign_in", delivery.fetch(:purpose)
     assert_equal "app", context.fetch("surface")
     assert_equal "authentication", context.fetch("purpose")
     assert_equal "local_sign_in", context.fetch("parent_kind")
     assert_equal "real", context.fetch("mode")
     # Boolean comparisons keep ceremony bindings and keyed proof out of failure output.
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert context.fetch("parent_ref") == flow.public_id
-    assert context.fetch("contact_ref") == email.public_id
-    assert context.fetch("owner_ref") == actor.public_id
-    assert context.fetch("sid_digest") == ceremony.sid_digest
-    assert context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld { context.fetch("parent_ref") == flow.public_id }
+    assert_withheld { context.fetch("contact_ref") == email.public_id }
+    assert_withheld { context.fetch("owner_ref") == actor.public_id }
+    assert_withheld { context.fetch("sid_digest") == ceremony.sid_digest }
+    assert_withheld { context.fetch("generation") == delivery.fetch(:auth_email_otp_generation) }
     assert_nil context.fetch("verified_at")
     assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
     assert_no_difference("ClientToken.count") do
@@ -989,10 +981,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
               ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
             end
 
-            # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
-            assert ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller)
-            assert Actor.context.equal?(outer_actor)
-            # rubocop:enable Minitest/AssertSame
+            assert_withheld { ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller) }
+            assert_withheld { Actor.context.equal?(outer_actor) }
             assert_equal 200, protocol_browser.response.status
             [protocol_browser.response.status, { "Content-Type" => "application/json" },
              protocol_browser.response.body,]
@@ -1013,10 +1003,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
               ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
             end
 
-            # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
-            assert ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller)
-            assert Actor.context.equal?(outer_actor)
-            # rubocop:enable Minitest/AssertSame
+            assert_withheld { ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller) }
+            assert_withheld { Actor.context.equal?(outer_actor) }
             assert_equal 200, protocol_browser.response.status
             [protocol_browser.response.status, { "Content-Type" => "application/json" },
              protocol_browser.response.body,]
@@ -1217,7 +1205,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     session_cookie_jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
     encoded_session = session_cookie_jar[session_key]
     base.cookies.delete(session_key)
-    base.cookies.merge( # rubocop:disable Lint/Void
+    store_raw_cookies(
+      base.cookies,
       "#{session_key}=#{Rack::Utils.escape(encoded_session)}", URI.parse("https://#{base_host}/"),
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
@@ -1267,22 +1256,18 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
 
     # assert_match would disclose the delivered secret on failure.
-    # rubocop:disable Minitest/AssertMatch
-    assert code.match?(/\A[0-9]{6}\z/), "Delivery must contain one six-digit code"
-    # rubocop:enable Minitest/AssertMatch
+    assert_withheld("Delivery must contain one six-digit code") { code.match?(/\A[0-9]{6}\z/) }
     assert_equal "sign_in", delivery.fetch(:purpose)
     assert_equal "com", context.fetch("surface")
     assert_equal "authentication", context.fetch("purpose")
     assert_equal "local_sign_in", context.fetch("parent_kind")
     assert_equal "real", context.fetch("mode")
     # Boolean comparisons keep ceremony bindings and keyed proof out of failure output.
-    # rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
-    assert context.fetch("parent_ref") == flow.public_id
-    assert context.fetch("contact_ref") == email.public_id
-    assert context.fetch("owner_ref") == actor.public_id
-    assert context.fetch("sid_digest") == ceremony.sid_digest
-    assert context.fetch("generation") == delivery.fetch(:auth_email_otp_generation)
-    # rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
+    assert_withheld { context.fetch("parent_ref") == flow.public_id }
+    assert_withheld { context.fetch("contact_ref") == email.public_id }
+    assert_withheld { context.fetch("owner_ref") == actor.public_id }
+    assert_withheld { context.fetch("sid_digest") == ceremony.sid_digest }
+    assert_withheld { context.fetch("generation") == delivery.fetch(:auth_email_otp_generation) }
     assert_nil context.fetch("verified_at")
     assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
     assert_no_difference("VisitorToken.count") do
@@ -1398,10 +1383,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
               ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
             end
 
-            # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
-            assert ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller)
-            assert Actor.context.equal?(outer_actor)
-            # rubocop:enable Minitest/AssertSame
+            assert_withheld { ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller) }
+            assert_withheld { Actor.context.equal?(outer_actor) }
             assert_equal 200, protocol_browser.response.status
             [protocol_browser.response.status, { "Content-Type" => "application/json" },
              protocol_browser.response.body,]
@@ -1422,10 +1405,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
               ActiveSupport::IsolatedExecutionState[executor_key] = outer_execution
             end
 
-            # rubocop:disable Minitest/AssertSame -- Do not print the outer request or credentials on failure.
-            assert ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller)
-            assert Actor.context.equal?(outer_actor)
-            # rubocop:enable Minitest/AssertSame
+            assert_withheld { ActiveSupport::ExecutionContext.to_h.fetch(:controller).equal?(outer_controller) }
+            assert_withheld { Actor.context.equal?(outer_actor) }
             assert_equal 200, protocol_browser.response.status
             [protocol_browser.response.status, { "Content-Type" => "application/json" },
              protocol_browser.response.body,]

@@ -206,3 +206,6 @@ seven.md
 
 # what is this?
 .aws
+
+# RuboCop result cache written when the cache root resolved under config/.
+/config/tmp/

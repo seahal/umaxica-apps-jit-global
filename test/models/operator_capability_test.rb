@@ -92,7 +92,7 @@ class OperatorCapabilityTest < ActiveSupport::TestCase
       starts_at: 1.minute.ago,
       expires_at: 1.day.from_now,
     )
-    @operator.update_columns(withdrawal_started_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
+    @operator.update_columns(withdrawal_started_at: Time.current)
 
     assert_not @operator.reload.capability?(OperatorCapabilityGrant::SUPPORT_CONSOLE_READ)
   end

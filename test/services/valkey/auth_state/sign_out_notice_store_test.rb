@@ -32,7 +32,7 @@ class ValkeyAuthStateSignOutNoticeStoreTest < ActiveSupport::TestCase
     results = Array.new(8)
     threads =
       8.times.map do |index|
-        Thread.new do # rubocop:disable ThreadSafety/NewThread
+        Thread.new do
           store = Valkey::AuthState::SignOutNoticeStore.new(connection: @connection)
           results[index] = store.consume(raw_id: raw_id)
         end

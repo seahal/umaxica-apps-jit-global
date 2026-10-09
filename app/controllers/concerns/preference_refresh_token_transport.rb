@@ -1,8 +1,6 @@
 # typed: false
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/MethodLength
-
 module PreferenceRefreshTokenTransport
   extend ActiveSupport::Concern
 
@@ -332,5 +330,3 @@ module PreferenceRefreshTokenTransport
     legacy_refresh_token_digest(token)
   end
 end
-
-# rubocop:enable Metrics/MethodLength

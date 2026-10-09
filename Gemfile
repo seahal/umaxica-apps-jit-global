@@ -187,8 +187,6 @@ group :development, :test do
   gem "rubocop-rake", require: false
   # RuboCop Minitest rules.
   gem "rubocop-minitest", require: false
-  # RuboCop Rails omakase rules.
-  gem "rubocop-rails-omakase", require: false
   # RuboCop i18n rules.
   gem "rubocop-i18n", require: false
   # Locale auditing and normalization.

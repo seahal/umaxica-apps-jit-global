@@ -7,7 +7,6 @@ require "test_helper"
 # fixture cannot prove that the terminal TOTP transition is serialized in PostgreSQL.
 # RuboCop's thread rule is disabled here because independent worker threads are the behavior under
 # test; the connections are checked out explicitly from the application pool.
-# rubocop:disable ThreadSafety/NewThread
 class TotpWindowConsumerConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
 
@@ -149,4 +148,3 @@ class TotpWindowConsumerConcurrencyTest < ActiveSupport::TestCase
     threads.map(&:value)
   end
 end
-# rubocop:enable ThreadSafety/NewThread

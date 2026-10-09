@@ -5,7 +5,6 @@ require "test_helper"
 
 # This uses committed rows and independent PostgreSQL connections. A transaction-local or mocked
 # concurrency test cannot prove that only one worker consumes the same step-up session.
-# rubocop:disable ThreadSafety/NewThread
 class StepUpSessionConsumptionConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
 
@@ -37,7 +36,7 @@ class StepUpSessionConsumptionConcurrencyTest < ActiveSupport::TestCase
 
     threads =
       2.times.map do
-        Thread.new do # rubocop:disable ThreadSafety/NewThread
+        Thread.new do
           AppTicketRecord.connection_pool.with_connection do
             ready << true
             release.pop
@@ -63,4 +62,3 @@ class StepUpSessionConsumptionConcurrencyTest < ActiveSupport::TestCase
     assert_nil ClientStepUpSession.find_by(id: @step_up_session.id)
   end
 end
-# rubocop:enable ThreadSafety/NewThread

@@ -5,8 +5,6 @@ require "argon2"
 require "digest"
 
 # Boolean comparisons prevent fingerprints and identifiers entering failure diagnostics.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
-# rubocop:disable Minitest/AssertKindOf, Minitest/AssertMatch, Minitest/RefuteEqual
 class IdentifierHistoryFingerprintVerifierTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
@@ -21,12 +19,15 @@ class IdentifierHistoryFingerprintVerifierTest < ActiveSupport::TestCase
         first = IdentifierHistoryFingerprintVerifier.create(identifier:, realm:, channel:)
         second = IdentifierHistoryFingerprintVerifier.create(identifier: equivalent, realm:, channel:)
 
-        assert first.is_a?(String), "Fingerprint must be a serialized Argon2id verifier"
-        assert first.match?(/\A\$argon2id\$v=19\$m=65536,t=3,p=4\$/),
-               "Production costs must not use Rails test min_cost"
-        assert second.match?(/\A\$argon2id\$v=19\$m=65536,t=3,p=4\$/)
-        assert first != second, "Equivalent identifiers must receive independent random salts"
-        assert first.split("$").fetch(4) != second.split("$").fetch(4), "Salt must vary, not only hash output"
+        assert_withheld("Fingerprint must be a serialized Argon2id verifier") { first.is_a?(String) }
+        assert_withheld("Production costs must not use Rails test min_cost") do
+          first.match?(/\A\$argon2id\$v=19\$m=65536,t=3,p=4\$/)
+        end
+        assert_withheld { second.match?(/\A\$argon2id\$v=19\$m=65536,t=3,p=4\$/) }
+        assert_withheld("Equivalent identifiers must receive independent random salts") { first != second }
+        assert_withheld("Salt must vary, not only hash output") do
+          first.split("$").fetch(4) != second.split("$").fetch(4)
+        end
         assert IdentifierHistoryFingerprintVerifier.matches?(
           fingerprint: first, identifier: equivalent, realm:,
           channel:,
@@ -191,5 +192,3 @@ class IdentifierHistoryFingerprintVerifierTest < ActiveSupport::TestCase
     assert_raises(ArgumentError) { IdentifierHistoryFingerprintVerifier.matches?(fingerprint: "not-argon2") }
   end
 end
-# rubocop:enable Minitest/AssertKindOf, Minitest/AssertMatch, Minitest/RefuteEqual
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions

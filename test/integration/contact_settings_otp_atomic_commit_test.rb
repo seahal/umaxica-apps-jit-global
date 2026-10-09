@@ -5,7 +5,7 @@ require "webauthn/fake_client"
 
 # Proof, cookies and Contact digests must stay out of assertion failure output.
 # The real Step-Up and fault/retry journey intentionally has more than thirty assertions.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
+# rubocop:disable Minitest/MultipleAssertions
 class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
 
@@ -252,7 +252,7 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
           end
         flow = flow_model.find_by!(transaction_id: transaction_ref)
 
-        assert generation == flow.otp_generation, "Delivery must name the original issued generation"
+        assert_withheld("Delivery must name the original issued generation") { generation == flow.otp_generation }
         old_facts = old_contact.reload.attributes
         browser.get(URI.parse(browser.response.location).request_uri, params: { ri: "jp" })
 
@@ -276,8 +276,12 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
         end
         assert_equal 1, failures
         assert_nil candidate.reload.binding_finalized_at
-        assert old_facts == old_contact.reload.attributes, "Failure must preserve the original effective binding"
-        assert other_facts == other_contact.reload.attributes, "Failure must preserve another owner's binding"
+        assert_withheld("Failure must preserve the original effective binding") {
+          old_facts == old_contact.reload.attributes
+        }
+        assert_withheld("Failure must preserve another owner's binding") {
+          other_facts == other_contact.reload.attributes
+        }
         assert_nil flow.reload.otp_verifier, "Verification consumes OTP before independent binding finalization"
         proof = flow.attributes.slice(
           "purpose", "otp_generation", "otp_expires_at", "otp_consumed_at", "otp_cancelled_at",
@@ -299,12 +303,15 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
         assert_predicate candidate, :binding_effective?,
                          "The original candidate must be finalized by the identical retry"
         assert_nil flow.reload.otp_verifier
-        assert proof == flow.attributes.slice(*proof.keys),
-               "Identical HTTP retry must preserve the original immutable verification result"
+        assert_withheld("Identical HTTP retry must preserve the original immutable verification result") {
+          proof == flow.attributes.slice(*proof.keys)
+        }
         assert_predicate flow.reload, :consumed?
         assert_not_nil old_contact.reload.binding_released_at
         assert_equal 1, contact_model.effective_binding.where(owner_key => actor.id).count
-        assert other_facts == other_contact.reload.attributes, "Retry must not mutate another owner's binding"
+        assert_withheld("Retry must not mutate another owner's binding") {
+          other_facts == other_contact.reload.attributes
+        }
       ensure
         ActionController::Base.allow_forgery_protection = protection
         TurnstileVerifierStub.enabled, TurnstileVerifierStub.response = previous_turnstile
@@ -313,4 +320,4 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
+# rubocop:enable Minitest/MultipleAssertions

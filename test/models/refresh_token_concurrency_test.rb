@@ -31,7 +31,7 @@ class RefreshTokenConcurrencyTest < ActiveSupport::TestCase
 
     threads =
       2.times.map do
-        Thread.new do # rubocop:disable ThreadSafety/NewThread
+        Thread.new do
           ActiveRecord::Base.connection_pool.with_connection do
             ready << true
             release.pop

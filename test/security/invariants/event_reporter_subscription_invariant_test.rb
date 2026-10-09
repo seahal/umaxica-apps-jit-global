@@ -1,8 +1,6 @@
 # typed: false
 # frozen_string_literal: true
 
-# rubocop:disable I18n/RailsI18n/DecorateString
-
 require "test_helper"
 
 module Security
@@ -73,5 +71,3 @@ module Security
     end
   end
 end
-
-# rubocop:enable I18n/RailsI18n/DecorateString

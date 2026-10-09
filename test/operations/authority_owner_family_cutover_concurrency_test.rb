@@ -54,7 +54,6 @@ class AuthorityOwnerFamilyCutoverConcurrencyTest < ActiveSupport::TestCase
   private
 
   # Separate writer connections are required to exercise the PostgreSQL table-lock boundary.
-  # rubocop:disable ThreadSafety/NewThread
   def concurrently(count)
     ready = Queue.new
     release = Queue.new
@@ -75,5 +74,4 @@ class AuthorityOwnerFamilyCutoverConcurrencyTest < ActiveSupport::TestCase
     count.times { release << true }
     threads.map(&:value)
   end
-  # rubocop:enable ThreadSafety/NewThread
 end

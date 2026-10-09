@@ -3,7 +3,6 @@
 require "test_helper"
 
 # Boolean assertions prevent disclosure of code and binding material.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
 class ContactRegistrationOtpIssuerTest < ActiveSupport::TestCase
   %w(app com).each do |surface|
     %i(email telephone).each do |channel|
@@ -65,15 +64,17 @@ class ContactRegistrationOtpIssuerTest < ActiveSupport::TestCase
         assert_equal surface, transaction.surface
         assert_equal "credential_registration", transaction.purpose
         assert_equal "registration", transaction.operation
-        assert transaction.session_ref == expected_session, "Issuance must bind the original browser and Root"
-        assert transaction.actor_ref == actor.public_id
+        assert_withheld("Issuance must bind the original browser and Root") {
+          transaction.session_ref == expected_session
+        }
+        assert_withheld { transaction.actor_ref == actor.public_id }
         candidate_ref = (channel == :email) ? transaction.email_candidate_ref : transaction.telephone_candidate_ref
         candidate_digest =
           (channel == :email) ? transaction.normalized_email_digest : transaction.normalized_number_digest
         source_digest = (channel == :email) ? contact.address_digest : contact.number_digest
 
-        assert candidate_ref == contact.public_id
-        assert candidate_digest == source_digest
+        assert_withheld { candidate_ref == contact.public_id }
+        assert_withheld { candidate_digest == source_digest }
         assert_match(
           /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/,
           transaction.otp_generation,
@@ -105,9 +106,8 @@ class ContactRegistrationOtpIssuerTest < ActiveSupport::TestCase
         assert_not guard.call(
           transaction:, generation: transaction.otp_generation, destination:, code: wrong_code, **arguments,
         ) { flunk("Wrong code must not reach transport") }
-        assert source == contact.reload.attributes
+        assert_withheld { source == contact.reload.attributes }
       end
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions

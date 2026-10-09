@@ -3,7 +3,6 @@
 require "test_helper"
 
 # Fact comparisons keep normalized PII and lookup digests out of assertion diagnostics.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions
 class LiveIdentifierNamespaceTest < ActiveSupport::TestCase
   %w(app com org).each do |realm|
     %w(email telephone).each do |channel|
@@ -53,7 +52,9 @@ class LiveIdentifierNamespaceTest < ActiveSupport::TestCase
               end
 
             assert_not_nil digest
-            assert original[digest_column] == digest, "Equivalent formatting must select the same realm digest"
+            assert_withheld("Equivalent formatting must select the same realm digest") {
+              original[digest_column] == digest
+            }
             assert model.unscoped.exists?(original.id), "Live and retained bindings remain physical Source"
             if lifetime == :retained
               retained = (realm == "org") ? owner : original
@@ -97,7 +98,9 @@ class LiveIdentifierNamespaceTest < ActiveSupport::TestCase
               end
             end
 
-            assert original_facts == original.reload.attributes, "Duplicate refusal must preserve the occupying Source"
+            assert_withheld("Duplicate refusal must preserve the occupying Source") {
+              original_facts == original.reload.attributes
+            }
             assert_equal 1, model.unscoped.where(digest_column => digest).count,
                          "An unreleased binding occupies the realm namespace across owners throughout retention"
           end
@@ -138,7 +141,7 @@ class LiveIdentifierNamespaceTest < ActiveSupport::TestCase
           end
 
         assert_predicate record, :persisted?
-        assert record[digest_column] == expected, "Each realm must use its own normalized identifier HMAC"
+        assert_withheld("Each realm must use its own normalized identifier HMAC") { record[digest_column] == expected }
         records << [record, digest_column]
       end
 
@@ -149,4 +152,3 @@ class LiveIdentifierNamespaceTest < ActiveSupport::TestCase
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator, Minitest/MultipleAssertions

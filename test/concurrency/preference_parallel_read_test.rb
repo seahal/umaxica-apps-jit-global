@@ -35,7 +35,7 @@ class PreferenceParallelReadTest < ActionDispatch::IntegrationTest
     results = Queue.new
     threads =
       Array.new(READERS) do
-        Thread.new do # rubocop:disable ThreadSafety/NewThread -- parallel connections are the point of this test
+        Thread.new do
           session = open_session
           session.https!
           session.host!(ENV.fetch("PUBLIC_BASE_SERVICE_URL"))

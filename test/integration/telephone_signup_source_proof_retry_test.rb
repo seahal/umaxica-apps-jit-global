@@ -4,7 +4,6 @@ require "test_helper"
 
 # Retained proof and browser references must not appear in assertion failure output.
 # Each case observes the two-database failure and HTTP retry as one transaction journey.
-# rubocop:disable Minitest/AssertEqual, Minitest/AssertOperator
 class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
 
@@ -171,7 +170,9 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
         assert_not_nil proof.fetch("otp_consumed_at")
         assert_equal source_state, contact.reload.attributes.slice(*source_state.keys)
         assert_equal flow_class::STATUS_MODEL::CONTACT_PENDING, flow.reload.status_id
-        assert before_requirements == flow.completed_requirements, "Failed progression must roll back all requirements"
+        assert_withheld("Failed progression must roll back all requirements") {
+          before_requirements == flow.completed_requirements
+        }
         assert_equal before_version, flow.checkpoint_version
         assert_nil contact.binding_finalized_at
         assert_not contact.binding_effective?
@@ -187,12 +188,12 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
         guard = URI.parse(browser.response.location)
 
         assert_equal "/sign/up/guard/telephone", guard.path
-        assert SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard.query).fetch("fb")) == decoded,
-               "Retry must retain its original signed signup flow"
+        assert_withheld("Retry must retain its original signed signup flow") { SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard.query).fetch("fb")) == decoded }
         assert_equal flow_class::STATUS_MODEL::CHECKPOINT_PENDING, flow.reload.status_id
         assert flow.requirement_cleared?(:otp), "Retry must clear the OTP checkpoint requirement"
-        assert proof == transaction.reload.attributes.slice(*proof.keys),
-               "Retry must preserve the committed ceremony proof exactly"
+        assert_withheld("Retry must preserve the committed ceremony proof exactly") {
+          proof == transaction.reload.attributes.slice(*proof.keys)
+        }
         assert_equal source_state, contact.reload.attributes.slice(*source_state.keys)
         assert_equal owner_id, contact[owner_key]
         assert_nil contact.binding_finalized_at
@@ -208,4 +209,3 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
     end
   end
 end
-# rubocop:enable Minitest/AssertEqual, Minitest/AssertOperator
