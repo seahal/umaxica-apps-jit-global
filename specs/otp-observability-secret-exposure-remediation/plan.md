@@ -66,7 +66,7 @@ is claimed by this document.
 
 ## Related work
 
-- [Integrated authentication boundary plan](../backlog/integrated-auth-boundary-surface-consolidation-plan.md),
+- [Integrated authentication boundary plan](../../plans/backlog/integrated-auth-boundary-surface-consolidation-plan.md),
   especially its secret-protection and completion requirements.
 - [Authentication implementation context](../../research/implementation/2026-10-03-auth-boundary-step-up.md).
 
