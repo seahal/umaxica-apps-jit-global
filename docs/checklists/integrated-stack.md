@@ -136,8 +136,9 @@ covered; absence of an implementation is not removal of a requirement.
 ## Approved-decision and exception crosswalk
 
 This is navigation to retained interpretations, not a second decision-making authority. Exact
-C01–C15 wording and Sections 5–9 are preserved in the committed implementation instruction; all
-observable consequences needed for investigation are in the criteria above.
+C01–C15 and the business contracts in Sections 5–9 are retained in the committed instruction; the
+operational mount example is corrected for shared-source labeling. All observable consequences
+needed for investigation are in the criteria above.
 
 | Decision | Criteria and retained effect                                                                      |
 | -------- | ------------------------------------------------------------------------------------------------- |

@@ -80,10 +80,10 @@ can establish that a past Red or full gate actually ran.
   criteria, code, references, diagrams and full/doc gates. IDs persist; supersession records
   reason/successor. Failure is not a reason to delete/weaken a requirement.
 - Missing durable criteria, critical broken links or uncommitted acceptance updates leave
-  documentation/ handoff incomplete. Report implemented, verified, documented and committed states
-  separately. A later investigator uses current evidence; Luna neither waits for routine independent
-  approval nor calls its own testing independent acceptance. Existing explicit owner/security-review
-  requirements still apply.
+  documentation and handoff incomplete. Report implemented, verified, documented and committed
+  states separately. A later investigator uses current evidence; Luna neither waits for routine
+  independent approval nor calls its own testing independent acceptance. Existing explicit
+  owner/security-review requirements still apply.
 - Check requirement crosswalk completeness and real references, safe documentation checker output
   and evidence provenance. No static source review substitutes for COMMIT/concurrency/export/mount
   behavior.
@@ -164,6 +164,10 @@ can establish that a past Red or full gate actually ran.
   barrier before required backfill/writer migration, no automatic old-table drop, no post-cutover
   legacy authority fallback. Forward-only recovery preserves history. Unresolved Group semantics
   blocks this cutover, not P10a, P11a or P12a.
+- P8/P9 implementation and synthetic proof are not consumer activation. Before any new transfer
+  entrypoint becomes reachable, required P10a/P10b consequences are implemented atomically; retained
+  ownership consumers switch only at the verified P12b boundary. No second owner authority or silent
+  legacy fallback is introduced to bridge missing data or permissions.
 - Check real role privileges and four write verbs, reconciliation and failure/recovery drill;
   comprehensive barrier/runbook execution is planned. No production cutover, physical Avatar/history
   deletion or assumed PII retention decision is authorized.

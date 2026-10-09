@@ -78,7 +78,11 @@ older production/Sentry/broader-review obligations: those remain separately owne
 
 - Basis: O06/O07. Given root-first Compose resolution, rendered configuration points core's nested
   directory mount from ./podman/alloy to /home/global/workspace/podman/alloy with read_only true,
-  following existing SELinux/mount conventions. Alloy's own config source remains read-only.
+  following existing SELinux/mount conventions. Alloy's own config source remains read-only. On
+  SELinux-enforcing hosts, both consumers retain read access to the shared source after recreation,
+  including parent-workspace relabel effects and startup order. A private label on a shared source
+  is not justified by YAML parsing. A pre-existing user-added mount is preserved, not duplicated;
+  unavailable host edits are handed off without bypassing protection.
 - After the user's authorized rebuild/recreate, inspect effective mounts and an approved harmless
   write-denial probe: core can read but cannot modify the policy directory. Host configuration
   remains the source. No remount/protection bypass or reload machinery is introduced.
