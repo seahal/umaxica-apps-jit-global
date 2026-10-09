@@ -21,7 +21,7 @@ class McpVersionTool < MCP::Tool
   class << self
     # The SDK always passes `server_context:`; the revision is surface-independent, so this tool
     # ignores it rather than pretending to vary by surface.
-    def call(server_context:) # rubocop:disable Lint/UnusedMethodArgument
+    def call(server_context:)
       revision = Rails.application.revision&.to_s
 
       MCP::Tool::Response.new([{ type: "text", text: { revision: revision }.to_json }])

@@ -175,7 +175,8 @@ class OidcRefreshDeliveryReceipt < Data.define(
   # deadlines below when setting browser cookies.
   # The exact issued response is a snapshot; retain the existing time keyword for callers that
   # already have the database decision time.
-  def token_response_for(now:) # rubocop:disable Lint/UnusedMethodArgument -- The snapshot does not change with elapsed time.
+  # The snapshot does not change with elapsed time.
+  def token_response_for(now:)
     token_response.dup
   end
 

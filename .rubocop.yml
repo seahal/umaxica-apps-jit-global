@@ -38,11 +38,7 @@ Style/DisableCopsWithinSourceCodeDirective:
     - I18n/RailsI18n/DecorateString
     - I18n/RailsI18n/DecorateStringFormattingUsingInterpolation
     - Layout/LineLength
-    - Lint/DuplicateMethods
-    - Lint/EmptyClass
     - Lint/NoReturnInBeginEndBlocks
-    - Lint/UnusedBlockArgument
-    - Lint/UnusedMethodArgument
     - Metrics/AbcSize
     - Metrics/MethodLength
     - Minitest/MultipleAssertions
@@ -56,7 +52,6 @@ Style/DisableCopsWithinSourceCodeDirective:
     - Rails/RedundantPresenceValidationOnBelongsTo
     - Rails/RefuteMethods
     - Rails/SkipsModelValidations
-    - Rails/ThreeStateBooleanColumn
     - ThreadSafety/ClassAndModuleAttributes
     - ThreadSafety/ClassInstanceVariable
 
@@ -624,14 +619,16 @@ Lint/SuppressedException:
 Lint/UselessAssignment:
   Enabled: true
 
+# A keyword argument's name is part of the interface the caller uses, so an unused one cannot be
+# renamed with a leading underscore the way a positional argument can.
 Lint/UnusedBlockArgument:
   Enabled: true
-  AllowUnusedKeywordArguments: false
+  AllowUnusedKeywordArguments: true
   IgnoreEmptyBlocks: true
 
 Lint/UnusedMethodArgument:
   Enabled: true
-  AllowUnusedKeywordArguments: false
+  AllowUnusedKeywordArguments: true
   IgnoreEmptyMethods: true
 
 Lint/IncompatibleIoSelectWithFiberScheduler:

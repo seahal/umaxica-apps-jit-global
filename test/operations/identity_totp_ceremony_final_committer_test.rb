@@ -349,8 +349,5 @@ class IdentityTotpCeremonyFinalCommitterTest < ActiveSupport::TestCase
     end
   end
 
-  # rubocop:disable Lint/EmptyClass
-  class FakeTotpRecord
-  end
-  # rubocop:enable Lint/EmptyClass
+  FakeTotpRecord = Class.new
 end
