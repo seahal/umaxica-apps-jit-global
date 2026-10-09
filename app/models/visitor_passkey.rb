@@ -55,8 +55,6 @@ class VisitorPasskey < ComPrincipalRecord
   mfa_status_owner :visitor
   belongs_to :status, class_name: "VisitorPasskeyStatus"
 
-  scope :active, -> { where(status_id: VisitorPasskeyStatus::ACTIVE) }
-
   validates :webauthn_id, presence: true, uniqueness: true
   validates :external_id, presence: true
   validates :public_key, presence: true
@@ -66,6 +64,8 @@ class VisitorPasskey < ComPrincipalRecord
   validate :validate_slot_limit, on: :create
   before_validation :set_defaults, on: :create
   around_create :create_with_slot_lock
+
+  scope :active, -> { where(status_id: VisitorPasskeyStatus::ACTIVE) }
 
   def to_param
     public_id

@@ -6,13 +6,13 @@ class AvatarGroupOwnershipPeriod < AvatarRecord
 
   belongs_to :avatar_group, inverse_of: :ownership_periods
 
-  scope :current, -> { where("valid_to = 'infinity'::timestamp with time zone") }
-
   validates :avatar_group_id,
             uniqueness: { conditions: -> { where("valid_to = 'infinity'::timestamp with time zone") } }
   validates :owner_surface, inclusion: { in: OWNER_SURFACES }
   validates :owner_collective_public_id, presence: true
   validates :valid_from, presence: true
+
+  scope :current, -> { where("valid_to = 'infinity'::timestamp with time zone") }
 
   def current?
     valid_to == Float::INFINITY

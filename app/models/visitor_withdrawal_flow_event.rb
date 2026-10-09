@@ -42,13 +42,13 @@ class VisitorWithdrawalFlowEvent < ComPrincipalRecord
   belongs_to :to_status,
              class_name: "VisitorWithdrawalFlowStatus"
 
-  before_validation :ensure_withdrawal_flow_status_defaults
-
   validates :from_status_id, inclusion: { in: VisitorWithdrawalFlowStatus::DEFAULTS }, allow_nil: true
   validates :to_status_id, inclusion: { in: VisitorWithdrawalFlowStatus::DEFAULTS }
   validates :occurred_at, presence: true
   validates :token_public_id, length: { maximum: 64 }, allow_blank: true
   validates :reason, length: { maximum: 64 }, allow_blank: true
+
+  before_validation :ensure_withdrawal_flow_status_defaults
 
   private
 

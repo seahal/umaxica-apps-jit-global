@@ -32,21 +32,17 @@
 #
 
 class OperatorTelephone < OrgPrincipalRecord
+  include Telephone
+  include TelephoneDeadIdentifierHistory
+
   IDENTIFIER_REALM = "org"
+
+  MAX_TELEPHONES_PER_STAFF = 4
+
   encrypts :number, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
   encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
 
   alias_attribute :staff_telephone_status_id, :staff_identity_telephone_status_id
-  include Telephone
-  include TelephoneDeadIdentifierHistory
-
-  after_initialize :initialize_telephone_otp_state
-
-  before_destroy :archive_dead_telephone_identifier, prepend: true
-
-  self.filter_attributes += %w(number)
-
-  MAX_TELEPHONES_PER_STAFF = 4
   attribute :staff_identity_telephone_status_id, default: OperatorTelephoneStatus::UNVERIFIED
 
   belongs_to :staff_telephone_status, class_name: "OperatorTelephoneStatus",
@@ -61,6 +57,13 @@ class OperatorTelephone < OrgPrincipalRecord
   validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :staff_identity_telephone_status_id, numericality: { only_integer: true }
   validates :number_digest, blind_index_uniqueness: { error_attribute: :number }, allow_blank: true
+
+  after_initialize :initialize_telephone_otp_state
+
+  before_destroy :archive_dead_telephone_identifier, prepend: true
+
+  self.filter_attributes += %w(number)
+
   validates_with AssociatedRecordLimitValidator,
                  on: :create,
                  owner: :staff,

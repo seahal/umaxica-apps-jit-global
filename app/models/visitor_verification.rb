@@ -38,10 +38,6 @@ class VisitorVerification < ComTicketRecord
 
   scope :active, -> { where(arel_table[:discard_at].gt(Time.current)) }
 
-  def active?
-    discard_at.present? && discard_at > Time.current
-  end
-
   def self.digest_token(raw_token)
     digest_refresh_token(raw_token.to_s).unpack1("H*")
   end
@@ -66,5 +62,9 @@ class VisitorVerification < ComTicketRecord
       end
 
     [verification, raw_token]
+  end
+
+  def active?
+    discard_at.present? && discard_at > Time.current
   end
 end

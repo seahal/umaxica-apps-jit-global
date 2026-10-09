@@ -28,10 +28,6 @@ class AvatarPersonaBinding < AvatarRecord
   include PublicId
   include AvatarPersonaBindingRevocation
 
-  before_validation :default_assigned_at, on: :create
-
-  scope :active, -> { where(revoked_at: nil) }
-
   belongs_to :avatar, inverse_of: :avatar_persona_binding
   belongs_to :persona, class_name: "ClientPersona", inverse_of: :avatar_persona_binding
 
@@ -41,6 +37,10 @@ class AvatarPersonaBinding < AvatarRecord
             if: -> { assigned_at.present? && revoked_at.present? }
   validates :avatar_id, uniqueness: { conditions: -> { active } }, if: :active?
   validates :persona_id, uniqueness: { conditions: -> { active } }, if: :active?
+
+  before_validation :default_assigned_at, on: :create
+
+  scope :active, -> { where(revoked_at: nil) }
 
   private
 

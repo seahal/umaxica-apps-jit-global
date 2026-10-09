@@ -3,9 +3,9 @@
 
 # adr/unified-enforcement.md: Enforcement Case for the app realm (Client).
 class AppEnforcementCase < AppPrincipalRecord
-  encrypts :reason_note
-
   include EnforcementCaseApplicable
+
+  encrypts :reason_note
 
   self.table_name = "app_enforcement_cases"
 

@@ -28,14 +28,6 @@ class ComPreferenceChronicleEvent < ChronicleRecord
   UPDATE_PREFERENCE_DENSITY = 13
   UPDATE_PREFERENCE_PAGE_SIZE = 14
 
-  # Placeholder for audit event types; ids are string tokens (e.g., 'CREATED')
-  has_many :com_preference_chronicles,
-           class_name: "ComPreferenceChronicle",
-           foreign_key: "event_id",
-           primary_key: "id",
-           inverse_of: :com_preference_chronicle_event,
-           dependent: :restrict_with_error
-
   DEFAULTS = [
     NOTHING,
     CREATE_NEW_PREFERENCE_TOKEN,
@@ -53,6 +45,14 @@ class ComPreferenceChronicleEvent < ChronicleRecord
     UPDATE_PREFERENCE_DENSITY,
     UPDATE_PREFERENCE_PAGE_SIZE,
   ].freeze
+
+  # Placeholder for audit event types; ids are string tokens (e.g., 'CREATED')
+  has_many :com_preference_chronicles,
+           class_name: "ComPreferenceChronicle",
+           foreign_key: "event_id",
+           primary_key: "id",
+           inverse_of: :com_preference_chronicle_event,
+           dependent: :restrict_with_error
 
   def self.ensure_defaults!
     insert_missing_fixed_ids!(DEFAULTS)

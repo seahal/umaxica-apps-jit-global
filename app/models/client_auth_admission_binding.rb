@@ -4,6 +4,13 @@
 class ClientAuthAdmissionBinding < AppTicketRecord
   include AuthAdmissionBinding
 
+  belongs_to :sign_in_flow, class_name: "ClientSignInFlow", optional: true
+  belongs_to :authorization_transaction, class_name: "ClientOidcAuthorizationTransaction", optional: true
+  belongs_to :step_up_ceremony_transaction, class_name: "ClientStepUpCeremonyTransaction", optional: true
+  belongs_to :base_token, class_name: "ClientToken", optional: true
+  belongs_to :auth_ceremony_session, class_name: "ClientAuthCeremonySession", optional: true
+  belongs_to :admitted_auth_ceremony_session, class_name: "ClientAuthCeremonySession", optional: true
+
   validates :entry_ref, presence: true, uniqueness: true
   validates :purpose, presence: true
   validates :base_browser_digest, presence: true, length: { is: 64 }
@@ -27,11 +34,4 @@ class ClientAuthAdmissionBinding < AppTicketRecord
 
     def connection_owner = AppTicketRecord
   end
-
-  belongs_to :sign_in_flow, class_name: "ClientSignInFlow", optional: true
-  belongs_to :authorization_transaction, class_name: "ClientOidcAuthorizationTransaction", optional: true
-  belongs_to :step_up_ceremony_transaction, class_name: "ClientStepUpCeremonyTransaction", optional: true
-  belongs_to :base_token, class_name: "ClientToken", optional: true
-  belongs_to :auth_ceremony_session, class_name: "ClientAuthCeremonySession", optional: true
-  belongs_to :admitted_auth_ceremony_session, class_name: "ClientAuthCeremonySession", optional: true
 end

@@ -57,15 +57,9 @@
 #
 
 class Operator < OrgPrincipalRecord
-  encrypts :admin_locked_reason_note
-
   # rubocop:disable Rails/HasManyOrHasOneDependent
   include Retainable
   include HasBirthdate
-
-  # Operator represents an authenticated actor for the org console.
-  # It mirrors `User` for identity concerns but is used for org-scoped access.
-  self.ignored_columns += ["operator_id", "webauthn_id"]
 
   include ::Identity
   include AuthenticationCredentialInventoryOwner
@@ -81,10 +75,13 @@ class Operator < OrgPrincipalRecord
   PUBLIC_ID_FORMAT = /\A[0-9A-FGHJKMNPQRSTVWXYZ]{16}\z/
   MAX_PUBLIC_ID_RETRIES = 5
 
+  encrypts :admin_locked_reason_note
+
+  # Operator represents an authenticated actor for the org console.
+  # It mirrors `User` for identity concerns but is used for org-scoped access.
+  self.ignored_columns += ["operator_id", "webauthn_id"]
+
   attribute :status_id, default: OperatorStatus::NOTHING
-  validates :status_id, numericality: { only_integer: true }
-  mfa_level_reference OperatorMfaLevel
-  mfa_status_reference OperatorMfaStatus
 
   belongs_to :staff_status, class_name: "OperatorStatus", foreign_key: :status_id,
                             inverse_of: :staffs
@@ -180,6 +177,10 @@ class Operator < OrgPrincipalRecord
           inverse_of: :operator
   has_one :staff_preference, class_name: "OperatorPreference", dependent: :destroy, inverse_of: :staff
 
+  validates :status_id, numericality: { only_integer: true }
+  mfa_level_reference OperatorMfaLevel
+  mfa_status_reference OperatorMfaStatus
+
   validates :public_id,
             presence: true,
             uniqueness: true,
@@ -192,6 +193,18 @@ class Operator < OrgPrincipalRecord
   before_validation :assign_public_id!, on: :create
   before_save :normalize_public_id
   around_create :retry_on_public_id_collision
+
+  delegate :generate_public_id, to: :class
+
+  def self.generate_public_id
+    Array.new(PUBLIC_ID_LENGTH) { PUBLIC_ID_ALPHABET[SecureRandom.random_number(PUBLIC_ID_ALPHABET.length)] }.join
+  end
+
+  def self.normalize_public_id(value)
+    return value if value.nil?
+
+    value.strip.gsub(/[-_]/, "").upcase
+  end
 
   def operator?
     true
@@ -223,21 +236,9 @@ class Operator < OrgPrincipalRecord
     capability_grants.in_force(now).exists?(capability: capability)
   end
 
-  def self.generate_public_id
-    Array.new(PUBLIC_ID_LENGTH) { PUBLIC_ID_ALPHABET[SecureRandom.random_number(PUBLIC_ID_ALPHABET.length)] }.join
-  end
-
-  delegate :generate_public_id, to: :class
-
   def public_id=(value)
     @public_id_supplied = true unless @_assigning_public_id_internally
     super
-  end
-
-  def self.normalize_public_id(value)
-    return value if value.nil?
-
-    value.strip.gsub(/[-_]/, "").upcase
   end
 
   private

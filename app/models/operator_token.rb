@@ -110,6 +110,11 @@ class OperatorToken < OrgTicketRecord
   MAX_TOTAL_SESSIONS_PER_STAFF = 2
   session_oidc_connection_config actor_name: :staff, connection_class: OperatorOidcConnection
 
+  attribute :staff_token_status_id, default: OperatorTokenStatus::ACTIVE
+  attribute :staff_token_kind_id, default: OperatorTokenKind::BROWSER_WEB
+  attribute :staff_token_binding_method_id, default: OperatorTokenBindingMethod::NOTHING
+  attribute :staff_token_dbsc_status_id, default: OperatorTokenDbscStatus::NOTHING
+
   belongs_to :staff, class_name: "Operator"
   belongs_to :staff_token_status, class_name: "OperatorTokenStatus"
   belongs_to :staff_token_kind, class_name: "OperatorTokenKind"
@@ -128,10 +133,6 @@ class OperatorToken < OrgTicketRecord
           inverse_of: :staff_token,
           strict_loading: false,
           dependent: :destroy
-  attribute :staff_token_status_id, default: OperatorTokenStatus::ACTIVE
-  attribute :staff_token_kind_id, default: OperatorTokenKind::BROWSER_WEB
-  attribute :staff_token_binding_method_id, default: OperatorTokenBindingMethod::NOTHING
-  attribute :staff_token_dbsc_status_id, default: OperatorTokenDbscStatus::NOTHING
 
   validates :public_id, uniqueness: true, length: { maximum: 21 }
 

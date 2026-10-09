@@ -13,6 +13,7 @@ module EmailOtpPolicy
   SEND_COOLDOWN = 30.seconds
   REREGISTRATION_OVERWRITE_WINDOW = 10.seconds
   EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS = 0.1
+
   public
 
   def store_otp(otp_private_key, otp_counter, expires_at, now: nil)

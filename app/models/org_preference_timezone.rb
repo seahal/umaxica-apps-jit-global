@@ -29,9 +29,9 @@ class OrgPreferenceTimezone < OrgSettingRecord
              class_name: "OrgPreferenceTimezoneOption",
              inverse_of: :org_preference_timezones
 
-  before_validation :set_option_id
-
   validates :preference_id, uniqueness: true
+
+  before_validation :set_option_id
 
   private
 

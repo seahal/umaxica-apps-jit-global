@@ -35,9 +35,6 @@ class ClientTotpCredential < AppPrincipalRecord
   include ::PublicId
   include MfaStatusCredential
 
-  encrypts :private_key
-
-  alias_attribute :user_totp_credential_status_id, :user_identity_totp_credential_status_id
   MAX_TOTP_SLOTS = 2
   MAX_CONSECUTIVE_FAILURES = 100
   SLOT_CONSUMING_STATUS_IDS = [
@@ -45,9 +42,15 @@ class ClientTotpCredential < AppPrincipalRecord
     ClientTotpCredentialStatus::INACTIVE,
   ].freeze
 
+  encrypts :private_key
+
+  alias_attribute :user_totp_credential_status_id, :user_identity_totp_credential_status_id
+
   class SlotLimitExceeded < StandardError; end
 
   attr_accessor :first_token
+
+  attribute :user_identity_totp_credential_status_id, default: ClientTotpCredentialStatus::NOTHING
 
   belongs_to :user, class_name: "Client", inverse_of: :client_totp_credentials
   mfa_status_owner :user
@@ -55,7 +58,6 @@ class ClientTotpCredential < AppPrincipalRecord
              class_name: "ClientTotpCredentialStatus",
              inverse_of: :client_totp_credentials,
              foreign_key: :user_identity_totp_credential_status_id
-  attribute :user_identity_totp_credential_status_id, default: ClientTotpCredentialStatus::NOTHING
 
   validates :private_key, presence: true, length: { maximum: 1024 }
   validates :otp_attempts_count, numericality: {

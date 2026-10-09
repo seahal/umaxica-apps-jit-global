@@ -49,12 +49,6 @@ class ClientChronicleEvent < ChronicleRecord
   REFRESH_TOKEN_REUSE_DETECTED = 35
   SIGN_FLOW_HALTED = 36
 
-  # Association with client_chronicles
-  has_many :client_chronicles,
-           foreign_key: :event_id,
-           dependent: :restrict_with_error,
-           inverse_of: :user_chronicle_event
-
   DEFAULTS = [
     ACCOUNT_RECOVERED,
     ACCOUNT_WITHDRAWN,
@@ -93,6 +87,12 @@ class ClientChronicleEvent < ChronicleRecord
     REFRESH_TOKEN_REUSE_DETECTED,
     SIGN_FLOW_HALTED,
   ].freeze
+
+  # Association with client_chronicles
+  has_many :client_chronicles,
+           foreign_key: :event_id,
+           dependent: :restrict_with_error,
+           inverse_of: :user_chronicle_event
 
   public_constant :ACCOUNT_RECOVERED
   public_constant :ACCOUNT_WITHDRAWN

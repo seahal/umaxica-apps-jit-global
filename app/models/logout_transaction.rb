@@ -28,6 +28,35 @@ class LogoutTransaction < AppTicketRecord
   validates :public_id, :token_digest, :issuer, :audience, :purpose, :expires_at, presence: true
   validates :public_id, :token_digest, uniqueness: true
 
+  def self.issue!(issuer:, audience:, purpose:, expires_in: 2.minutes, now: Time.current)
+    transaction do
+      public_id = SecureRandom.urlsafe_base64(16)
+      raw_token, verifier = generate_one_time_url_token(public_id: public_id)
+      transaction_record = create!(
+        public_id: public_id,
+        issuer: issuer.to_s,
+        audience: audience.to_s,
+        purpose: purpose.to_s,
+        expires_at: now + expires_in,
+        token_digest: digest_one_time_url_verifier(verifier),
+      )
+      [transaction_record, raw_token]
+    end
+  end
+
+  def self.consume_one_time_url_token!(raw_token:, issuer:, audience:, purpose:, now: Time.current)
+    parsed = parse_one_time_url_token(raw_token)
+    return Result.new(:invalid) unless parsed
+
+    public_id, verifier = parsed
+    transaction = find_by(public_id: public_id)
+    return Result.new(:invalid) unless transaction
+
+    transaction.consume!(verifier: verifier, issuer: issuer, audience: audience, purpose: purpose, now: now)
+  rescue ActiveRecord::RecordNotFound
+    Result.new(:invalid)
+  end
+
   def expired?(now: Time.current)
     expires_at <= now
   end
@@ -75,35 +104,6 @@ class LogoutTransaction < AppTicketRecord
 
   def revoke!(now: Time.current, failure_code: nil)
     update!(revoked_at: now, failed_at: now, failure_code: failure_code)
-  end
-
-  def self.issue!(issuer:, audience:, purpose:, expires_in: 2.minutes, now: Time.current)
-    transaction do
-      public_id = SecureRandom.urlsafe_base64(16)
-      raw_token, verifier = generate_one_time_url_token(public_id: public_id)
-      transaction_record = create!(
-        public_id: public_id,
-        issuer: issuer.to_s,
-        audience: audience.to_s,
-        purpose: purpose.to_s,
-        expires_at: now + expires_in,
-        token_digest: digest_one_time_url_verifier(verifier),
-      )
-      [transaction_record, raw_token]
-    end
-  end
-
-  def self.consume_one_time_url_token!(raw_token:, issuer:, audience:, purpose:, now: Time.current)
-    parsed = parse_one_time_url_token(raw_token)
-    return Result.new(:invalid) unless parsed
-
-    public_id, verifier = parsed
-    transaction = find_by(public_id: public_id)
-    return Result.new(:invalid) unless transaction
-
-    transaction.consume!(verifier: verifier, issuer: issuer, audience: audience, purpose: purpose, now: now)
-  rescue ActiveRecord::RecordNotFound
-    Result.new(:invalid)
   end
 
   private

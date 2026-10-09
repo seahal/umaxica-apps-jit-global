@@ -188,7 +188,6 @@ module SessionLimitResolutionTransactionable
           oidc_authorization_transaction.secret_sign_in_flow_id != sign_in_flow.id
         raise ArgumentError, "authorization transaction flow binding mismatch"
       end
-
     end
 
     def ensure_parent_open!(flow, actor, now)

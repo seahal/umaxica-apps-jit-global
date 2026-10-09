@@ -56,6 +56,9 @@ class AppPreference < AppSettingRecord
 
   self.belongs_to_required_by_default = false
 
+  DBSC_BINDING_METHOD_CLASS = AppPreferenceBindingMethod
+  DBSC_STATUS_CLASS = AppPreferenceDbscStatus
+
   # A preference token is "expired" exactly when it has been discarded, so the
   # generic token vocabulary reads expires_at while Retainable owns the column.
   #
@@ -67,12 +70,12 @@ class AppPreference < AppSettingRecord
   # A new caller that forgets this guard writes an infinite cookie lifetime.
   alias_attribute :expires_at, :discard_at
 
-  DBSC_BINDING_METHOD_CLASS = AppPreferenceBindingMethod
-  DBSC_STATUS_CLASS = AppPreferenceDbscStatus
-
   # Mirrors the app_preferences.status_id database default so an unsaved record
   # reports the same status the row would receive on insert.
   attribute :status_id, default: AppPreferenceStatus::NOTHING
+
+  attribute :binding_method_id, default: AppPreferenceBindingMethod::NOTHING
+  attribute :dbsc_status_id, default: AppPreferenceDbscStatus::NOTHING
 
   belongs_to :app_preference_status,
              foreign_key: :status_id,
@@ -147,9 +150,6 @@ class AppPreference < AppSettingRecord
   # validations
   validates :status_id, numericality: { only_integer: true }
   validates :jti, uniqueness: true, allow_nil: true
-
-  attribute :binding_method_id, default: AppPreferenceBindingMethod::NOTHING
-  attribute :dbsc_status_id, default: AppPreferenceDbscStatus::NOTHING
 
   before_validation :default_replaced_by_to_self, on: :create
   after_create :persist_self_replacement

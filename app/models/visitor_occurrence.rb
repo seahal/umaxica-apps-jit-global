@@ -49,10 +49,10 @@ class VisitorOccurrence < OccurrenceRecord
   has_many :ip_visitor_occurrences, dependent: :destroy, inverse_of: :visitor_occurrence
   has_many :ip_occurrences, through: :ip_visitor_occurrences
 
-  scope :active, -> { where(status_id: ACTIVE_STATUS_ID) }
-  scope :inactive, -> { where(status_id: INACTIVE_STATUS_ID) }
-
   validates :body, length: { maximum: 36 }
   validates :status_id, numericality: { only_integer: true }
   validates :event_type, length: { maximum: 255 }, allow_nil: true
+
+  scope :active, -> { where(status_id: ACTIVE_STATUS_ID) }
+  scope :inactive, -> { where(status_id: INACTIVE_STATUS_ID) }
 end

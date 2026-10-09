@@ -43,6 +43,14 @@
 class ClientChronicle < ChronicleRecord
   include Retainable
 
+  attribute :level_id, default: ClientChronicleLevel::NOTHING
+  attribute :subject_id, :string
+
+  # Alias for backward compatibility
+  alias_attribute :timestamp, :occurred_at
+
+  encrypts :previous_value
+
   belongs_to :actor, polymorphic: true
   belongs_to :user_chronicle_event, class_name: "ClientChronicleEvent", foreign_key: :event_id,
                                     inverse_of: :client_chronicles
@@ -52,17 +60,15 @@ class ClientChronicle < ChronicleRecord
   validates :subject_id, presence: true
   validates :subject_type, presence: true
 
-  attribute :level_id, default: ClientChronicleLevel::NOTHING
-  attribute :subject_id, :string
-
-  scope :recent_activity_first, -> { order(arel_table[:occurred_at].desc, arel_table[:created_at].desc) }
-
   validates :event_id, numericality: { only_integer: true }, allow_nil: true
   validates :level_id, numericality: { only_integer: true }, allow_nil: true
   # Validate that event_id exists in client_chronicle_events table
   validate :event_id_must_exist
   before_validation :default_actor_to_subject
   before_create :set_timestamp
+
+  scope :recent_activity_first, -> { order(arel_table[:occurred_at].desc, arel_table[:created_at].desc) }
+
   # Helper methods for compatibility with existing code
   def user
     Client.find(subject_id) if subject_type == "Client"
@@ -80,9 +86,6 @@ class ClientChronicle < ChronicleRecord
     self.subject_id = user.id.to_s
     self.subject_type = "Client"
   end
-
-  # Alias for backward compatibility
-  alias_attribute :timestamp, :occurred_at
 
   def event_id_must_exist
     return if event_id.blank?
@@ -109,6 +112,4 @@ class ClientChronicle < ChronicleRecord
     self.actor_id = subject_id
     self.actor_type = subject_type
   end
-
-  encrypts :previous_value
 end

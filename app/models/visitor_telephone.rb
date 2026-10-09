@@ -37,35 +37,36 @@
 #  fk_rails_...  (visitor_telephone_status_id => visitor_telephone_statuses.id)
 #
 class VisitorTelephone < ComPrincipalRecord
-  IDENTIFIER_REALM = "com"
-  encrypts :number, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
-  encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
-
   include Retainable
   include Telephone
   include TelephoneDeadIdentifierHistory
 
-  after_initialize :initialize_telephone_otp_state
-  before_destroy :archive_dead_telephone_identifier, prepend: true
-
   include PublicId
   include TelephoneContactBinding
 
-  scope :effective_binding, -> { where.not(binding_finalized_at: nil).where(binding_released_at: nil) }
-  validate :effective_binding_has_digest
-
-  self.filter_attributes += %w(number sign_up_otp_context credential_registration_otp_context)
+  IDENTIFIER_REALM = "com"
+  encrypts :number, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
+  encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
 
   attribute :visitor_telephone_status_id, default: VisitorTelephoneStatus::UNVERIFIED
 
   belongs_to :visitor, inverse_of: :visitor_telephones
   belongs_to :visitor_telephone_status, inverse_of: :visitor_telephones
 
+  validate :effective_binding_has_digest
+
   validates :otp_attempts_count, presence: true, numericality: { only_integer: true }
   validates :otp_counter, presence: true
   validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :visitor_telephone_status_id, numericality: { only_integer: true }
   validates :number_digest, presence: true, if: :binding_effective?
+
+  after_initialize :initialize_telephone_otp_state
+  before_destroy :archive_dead_telephone_identifier, prepend: true
+
+  scope :effective_binding, -> { where.not(binding_finalized_at: nil).where(binding_released_at: nil) }
+
+  self.filter_attributes += %w(number sign_up_otp_context credential_registration_otp_context)
 
   public
 

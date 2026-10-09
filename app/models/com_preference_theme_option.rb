@@ -22,15 +22,15 @@ class ComPreferenceThemeOption < ComSettingRecord
            inverse_of: :option,
            dependent: :restrict_with_error
 
+  def self.ensure_defaults!
+    insert_missing_fixed_ids!(DEFAULTS)
+  end
+
   def name
     case id
     when LIGHT then "light"
     when DARK then "dark"
     when SYSTEM then "system"
     end
-  end
-
-  def self.ensure_defaults!
-    insert_missing_fixed_ids!(DEFAULTS)
   end
 end

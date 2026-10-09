@@ -15,11 +15,17 @@ class OrgPreferenceThemeOption < OrgSettingRecord
   DARK = 2
   SYSTEM = 3
 
+  DEFAULTS = [LIGHT, DARK, SYSTEM].freeze
+
   has_many :org_preference_themes,
            class_name: "OrgPreferenceTheme",
            foreign_key: :option_id,
            inverse_of: :option,
            dependent: :restrict_with_error
+
+  def self.ensure_defaults!
+    insert_missing_fixed_ids!(DEFAULTS)
+  end
 
   def name
     case id
@@ -27,11 +33,5 @@ class OrgPreferenceThemeOption < OrgSettingRecord
     when DARK then "dark"
     when SYSTEM then "system"
     end
-  end
-
-  DEFAULTS = [LIGHT, DARK, SYSTEM].freeze
-
-  def self.ensure_defaults!
-    insert_missing_fixed_ids!(DEFAULTS)
   end
 end

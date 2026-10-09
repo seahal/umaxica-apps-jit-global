@@ -38,6 +38,13 @@
 #
 
 class ClientTelephone < AppPrincipalRecord
+  include Retainable
+  include Telephone
+  include TelephoneDeadIdentifierHistory
+
+  include PublicId
+  include TelephoneContactBinding
+
   IDENTIFIER_REALM = "app"
   encrypts :number, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
   encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
@@ -45,18 +52,33 @@ class ClientTelephone < AppPrincipalRecord
   self.filter_attributes += %w(number sign_up_otp_context credential_registration_otp_context)
 
   alias_attribute :user_telephone_status_id, :user_identity_telephone_status_id
-  include Retainable
-  include Telephone
-  include TelephoneDeadIdentifierHistory
+
+  attribute :user_identity_telephone_status_id, default: ClientTelephoneStatus::UNVERIFIED
+
+  belongs_to :user_telephone_status,
+             class_name: "ClientTelephoneStatus",
+             inverse_of: :client_telephones,
+             foreign_key: :user_identity_telephone_status_id
+  belongs_to :user, class_name: "Client", inverse_of: :client_telephones
+
+  validate :effective_binding_has_digest
+
+  # Note: :number validation is now handled by Telephone concern (E.164 normalization)
+  validates :number, presence: true
+  validates :otp_attempts_count, presence: true, numericality: { only_integer: true }
+  validates :otp_counter, presence: true
+  validates :otp_private_key, presence: true, length: { maximum: 255 }
+  validates :user_identity_telephone_status_id, numericality: { only_integer: true }
+  validates :number_digest, presence: true, if: :binding_effective?
 
   after_initialize :initialize_telephone_otp_state
   before_destroy :archive_dead_telephone_identifier, prepend: true
 
-  include PublicId
-  include TelephoneContactBinding
+  after_initialize do
+    self.number ||= ""
+  end
 
   scope :effective_binding, -> { where.not(binding_finalized_at: nil).where(binding_released_at: nil) }
-  validate :effective_binding_has_digest
 
   public
 
@@ -87,26 +109,6 @@ class ClientTelephone < AppPrincipalRecord
       )
       self
     end
-  end
-
-  attribute :user_identity_telephone_status_id, default: ClientTelephoneStatus::UNVERIFIED
-
-  belongs_to :user_telephone_status,
-             class_name: "ClientTelephoneStatus",
-             inverse_of: :client_telephones,
-             foreign_key: :user_identity_telephone_status_id
-  belongs_to :user, class_name: "Client", inverse_of: :client_telephones
-
-  # Note: :number validation is now handled by Telephone concern (E.164 normalization)
-  validates :number, presence: true
-  validates :otp_attempts_count, presence: true, numericality: { only_integer: true }
-  validates :otp_counter, presence: true
-  validates :otp_private_key, presence: true, length: { maximum: 255 }
-  validates :user_identity_telephone_status_id, numericality: { only_integer: true }
-  validates :number_digest, presence: true, if: :binding_effective?
-
-  after_initialize do
-    self.number ||= ""
   end
 
   def contact_binding_digest

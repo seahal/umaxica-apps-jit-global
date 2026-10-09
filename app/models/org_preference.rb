@@ -56,6 +56,9 @@ class OrgPreference < OrgSettingRecord
 
   self.belongs_to_required_by_default = false
 
+  DBSC_BINDING_METHOD_CLASS = OrgPreferenceBindingMethod
+  DBSC_STATUS_CLASS = OrgPreferenceDbscStatus
+
   # A preference token is "expired" exactly when it has been discarded, so the
   # generic token vocabulary reads expires_at while Retainable owns the column.
   #
@@ -66,9 +69,6 @@ class OrgPreference < OrgSettingRecord
   # #consented_buffer_expires_at, which both guard with `!expires_at.is_a?(Float)`.
   # A new caller that forgets this guard writes an infinite cookie lifetime.
   alias_attribute :expires_at, :discard_at
-
-  DBSC_BINDING_METHOD_CLASS = OrgPreferenceBindingMethod
-  DBSC_STATUS_CLASS = OrgPreferenceDbscStatus
 
   attribute :status_id, default: OrgPreferenceStatus::NOTHING
   attribute :binding_method_id, default: OrgPreferenceBindingMethod::NOTHING

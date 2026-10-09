@@ -4,6 +4,13 @@
 class VisitorAuthAdmissionBinding < ComTicketRecord
   include AuthAdmissionBinding
 
+  belongs_to :sign_in_flow, class_name: "VisitorSignInFlow", optional: true
+  belongs_to :authorization_transaction, class_name: "VisitorOidcAuthorizationTransaction", optional: true
+  belongs_to :step_up_ceremony_transaction, class_name: "VisitorStepUpCeremonyTransaction", optional: true
+  belongs_to :base_token, class_name: "VisitorToken", optional: true
+  belongs_to :auth_ceremony_session, class_name: "VisitorAuthCeremonySession", optional: true
+  belongs_to :admitted_auth_ceremony_session, class_name: "VisitorAuthCeremonySession", optional: true
+
   validates :entry_ref, presence: true, uniqueness: true
   validates :purpose, presence: true
   validates :base_browser_digest, presence: true, length: { is: 64 }
@@ -27,11 +34,4 @@ class VisitorAuthAdmissionBinding < ComTicketRecord
 
     def connection_owner = ComTicketRecord
   end
-
-  belongs_to :sign_in_flow, class_name: "VisitorSignInFlow", optional: true
-  belongs_to :authorization_transaction, class_name: "VisitorOidcAuthorizationTransaction", optional: true
-  belongs_to :step_up_ceremony_transaction, class_name: "VisitorStepUpCeremonyTransaction", optional: true
-  belongs_to :base_token, class_name: "VisitorToken", optional: true
-  belongs_to :auth_ceremony_session, class_name: "VisitorAuthCeremonySession", optional: true
-  belongs_to :admitted_auth_ceremony_session, class_name: "VisitorAuthCeremonySession", optional: true
 end

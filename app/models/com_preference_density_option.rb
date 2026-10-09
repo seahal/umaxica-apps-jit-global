@@ -15,22 +15,22 @@ class ComPreferenceDensityOption < ComSettingRecord
   STANDARD = 1
   COMPACT = 2
 
+  DEFAULTS = [NOTHING, STANDARD, COMPACT].freeze
+
   has_many :com_preference_densities,
            class_name: "ComPreferenceDensity",
            foreign_key: :option_id,
            inverse_of: :option,
            dependent: :restrict_with_error
 
+  def self.ensure_defaults!
+    insert_missing_fixed_ids!(DEFAULTS)
+  end
+
   def name
     case id
     when 1 then "standard"
     when 2 then "compact"
     end
-  end
-
-  DEFAULTS = [NOTHING, STANDARD, COMPACT].freeze
-
-  def self.ensure_defaults!
-    insert_missing_fixed_ids!(DEFAULTS)
   end
 end

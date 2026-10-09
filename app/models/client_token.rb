@@ -110,6 +110,11 @@ class ClientToken < AppTicketRecord
   MAX_TOTAL_SESSIONS_PER_USER = 3
   session_oidc_connection_config actor_name: :user, connection_class: ClientOidcConnection
 
+  attribute :user_token_status_id, default: ClientTokenStatus::ACTIVE
+  attribute :user_token_kind_id, default: ClientTokenKind::BROWSER_WEB
+  attribute :user_token_binding_method_id, default: ClientTokenBindingMethod::NOTHING
+  attribute :user_token_dbsc_status_id, default: ClientTokenDbscStatus::NOTHING
+
   belongs_to :user, class_name: "Client", inverse_of: :client_tokens
   belongs_to :user_token_status, class_name: "ClientTokenStatus"
   belongs_to :user_token_kind, class_name: "ClientTokenKind"
@@ -128,10 +133,6 @@ class ClientToken < AppTicketRecord
           inverse_of: :user_token,
           strict_loading: false,
           dependent: :destroy
-  attribute :user_token_status_id, default: ClientTokenStatus::ACTIVE
-  attribute :user_token_kind_id, default: ClientTokenKind::BROWSER_WEB
-  attribute :user_token_binding_method_id, default: ClientTokenBindingMethod::NOTHING
-  attribute :user_token_dbsc_status_id, default: ClientTokenDbscStatus::NOTHING
 
   validates :public_id, uniqueness: true, length: { maximum: 21 }
 

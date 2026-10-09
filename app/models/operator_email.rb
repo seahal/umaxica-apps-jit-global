@@ -39,24 +39,21 @@
 #
 
 class OperatorEmail < OrgPrincipalRecord
+  include PublicId
+  include Email
+  include EmailDeadIdentifierHistory
+
+  include PromotionalEmailUnsubscribable
+
   IDENTIFIER_REALM = "org"
+
+  MAX_EMAILS_PER_STAFF = 4
+
   encrypts :address, downcase: true,
                      key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
   encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
 
   alias_attribute :staff_email_status_id, :staff_identity_email_status_id
-  include PublicId
-  include Email
-  include EmailDeadIdentifierHistory
-
-  after_initialize :initialize_email_otp_state
-  before_destroy :archive_dead_email_identifier, prepend: true
-
-  include PromotionalEmailUnsubscribable
-
-  self.filter_attributes += %w(address)
-
-  MAX_EMAILS_PER_STAFF = 4
   attribute :staff_identity_email_status_id, default: OperatorEmailStatus::UNVERIFIED
   belongs_to :staff_email_status, class_name: "OperatorEmailStatus",
                                   foreign_key: :staff_identity_email_status_id,
@@ -68,6 +65,12 @@ class OperatorEmail < OrgPrincipalRecord
   validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :staff_identity_email_status_id, numericality: { only_integer: true }
   validates :address_digest, blind_index_uniqueness: { error_attribute: :address }, allow_blank: true
+
+  after_initialize :initialize_email_otp_state
+  before_destroy :archive_dead_email_identifier, prepend: true
+
+  self.filter_attributes += %w(address)
+
   validates_with AssociatedRecordLimitValidator,
                  on: :create,
                  owner: :staff,
@@ -82,6 +85,10 @@ class OperatorEmail < OrgPrincipalRecord
   end
 
   public
+
+  after_initialize do
+    self.address ||= ""
+  end
 
   def finalize_email_registration!(transaction:, code:, session_ref:)
     with_lock do
@@ -106,10 +113,6 @@ class OperatorEmail < OrgPrincipalRecord
 
   def to_param
     public_id
-  end
-
-  after_initialize do
-    self.address ||= ""
   end
 
   def promotional_unsubscribe_scope

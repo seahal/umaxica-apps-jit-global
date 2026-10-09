@@ -106,6 +106,11 @@ class VisitorToken < ComTicketRecord
   MAX_TOTAL_SESSIONS_PER_VISITOR = 2
   session_oidc_connection_config actor_name: :visitor, connection_class: VisitorOidcConnection
 
+  attribute :visitor_token_status_id, default: VisitorTokenStatus::ACTIVE
+  attribute :visitor_token_kind_id, default: VisitorTokenKind::BROWSER_WEB
+  attribute :visitor_token_binding_method_id, default: VisitorTokenBindingMethod::NOTHING
+  attribute :visitor_token_dbsc_status_id, default: VisitorTokenDbscStatus::NOTHING
+
   belongs_to :visitor, inverse_of: :visitor_tokens
   has_many :visitor_verifications, dependent: :delete_all, inverse_of: :visitor_token
   belongs_to :visitor_token_status
@@ -124,11 +129,6 @@ class VisitorToken < ComTicketRecord
           inverse_of: :visitor_token,
           strict_loading: false,
           dependent: :destroy
-
-  attribute :visitor_token_status_id, default: VisitorTokenStatus::ACTIVE
-  attribute :visitor_token_kind_id, default: VisitorTokenKind::BROWSER_WEB
-  attribute :visitor_token_binding_method_id, default: VisitorTokenBindingMethod::NOTHING
-  attribute :visitor_token_dbsc_status_id, default: VisitorTokenDbscStatus::NOTHING
 
   validates :public_id, uniqueness: true, length: { maximum: 21 }
 

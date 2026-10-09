@@ -31,12 +31,12 @@ class OrgPreferenceCookie < OrgSettingRecord
 
   validates :preference_id, uniqueness: true
 
-  after_initialize :set_defaults
-
   validates :targetable, inclusion: { in: [true, false] }
   validates :performant, inclusion: { in: [true, false] }
   validates :functional, inclusion: { in: [true, false] }
   validates :consented, inclusion: { in: [true, false] }
+
+  after_initialize :set_defaults
 
   private
 

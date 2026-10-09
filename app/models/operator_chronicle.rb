@@ -43,6 +43,13 @@
 class OperatorChronicle < ChronicleRecord
   include Retainable
 
+  attribute :level_id, default: OperatorChronicleLevel::NOTHING
+
+  # Alias for backward compatibility
+  alias_attribute :timestamp, :occurred_at
+
+  encrypts :previous_value
+
   belongs_to :staff_chronicle_event, class_name: "OperatorChronicleEvent", foreign_key: :event_id,
                                      inverse_of: :staff_chronicles
   belongs_to :actor, polymorphic: true
@@ -52,10 +59,6 @@ class OperatorChronicle < ChronicleRecord
   validates :subject_id, presence: true
   validates :subject_type, presence: true
 
-  attribute :level_id, default: OperatorChronicleLevel::NOTHING
-
-  scope :recent_activity_first, -> { order(arel_table[:occurred_at].desc, arel_table[:created_at].desc) }
-
   validates :event_id, numericality: { only_integer: true }, allow_nil: true
   validates :level_id, numericality: { only_integer: true }, allow_nil: true
   # Validate that event_id exists in staff_chronicle_events table
@@ -63,6 +66,8 @@ class OperatorChronicle < ChronicleRecord
   before_validation :default_actor_to_subject
   # Helper methods for compatibility with existing code
   before_create :set_timestamp
+
+  scope :recent_activity_first, -> { order(arel_table[:occurred_at].desc, arel_table[:created_at].desc) }
 
   def set_timestamp
     self.timestamp ||= Time.current
@@ -76,9 +81,6 @@ class OperatorChronicle < ChronicleRecord
     self.subject_id = staff.id.to_s
     self.subject_type = "Operator"
   end
-
-  # Alias for backward compatibility
-  alias_attribute :timestamp, :occurred_at
 
   def event_id_must_exist
     return if event_id.blank?
@@ -105,6 +107,4 @@ class OperatorChronicle < ChronicleRecord
     self.actor_id = subject_id
     self.actor_type = subject_type
   end
-
-  encrypts :previous_value
 end

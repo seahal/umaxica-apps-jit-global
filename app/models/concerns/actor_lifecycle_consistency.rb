@@ -32,7 +32,6 @@ module ActorLifecycleConsistency
     return if has_attribute?(:withdrawn_at) && withdrawn_at.present? && !lifecycle_infinite_time?(withdrawn_at)
 
     errors.add(:terminated_at, "requires a finite withdrawn_at")
-
   end
 
   def mfa_level_requirement_columns_are_consistent

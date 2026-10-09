@@ -32,12 +32,10 @@
 class AvatarOwnershipPeriod < AvatarRecord
   self.belongs_to_required_by_default = false
 
-  belongs_to :avatar
-  belongs_to :avatar_ownership_status
-
   OWNER_SURFACES = %w(app org).freeze
 
-  scope :current, -> { where("valid_to = 'infinity'::timestamp with time zone") }
+  belongs_to :avatar
+  belongs_to :avatar_ownership_status
 
   validates :avatar_id,
             uniqueness: { conditions: -> { where("valid_to = 'infinity'::timestamp with time zone") } }
@@ -45,6 +43,8 @@ class AvatarOwnershipPeriod < AvatarRecord
   validates :owner_collective_public_id, presence: true
   validates :valid_from, presence: true
   validates :id, length: { maximum: 255 }
+
+  scope :current, -> { where("valid_to = 'infinity'::timestamp with time zone") }
 
   def current?
     valid_to == Float::INFINITY && avatar_ownership_status_id == AvatarOwnershipStatus::ACTIVE

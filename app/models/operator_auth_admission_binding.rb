@@ -4,6 +4,13 @@
 class OperatorAuthAdmissionBinding < OrgTicketRecord
   include AuthAdmissionBinding
 
+  belongs_to :sign_in_flow, class_name: "OperatorSignInFlow", optional: true
+  belongs_to :authorization_transaction, class_name: "OperatorOidcAuthorizationTransaction", optional: true
+  belongs_to :step_up_ceremony_transaction, class_name: "OperatorStepUpCeremonyTransaction", optional: true
+  belongs_to :base_token, class_name: "OperatorToken", optional: true
+  belongs_to :auth_ceremony_session, class_name: "OperatorAuthCeremonySession", optional: true
+  belongs_to :admitted_auth_ceremony_session, class_name: "OperatorAuthCeremonySession", optional: true
+
   validates :entry_ref, presence: true, uniqueness: true
   validates :purpose, presence: true
   validates :base_browser_digest, presence: true, length: { is: 64 }
@@ -27,11 +34,4 @@ class OperatorAuthAdmissionBinding < OrgTicketRecord
 
     def connection_owner = OrgTicketRecord
   end
-
-  belongs_to :sign_in_flow, class_name: "OperatorSignInFlow", optional: true
-  belongs_to :authorization_transaction, class_name: "OperatorOidcAuthorizationTransaction", optional: true
-  belongs_to :step_up_ceremony_transaction, class_name: "OperatorStepUpCeremonyTransaction", optional: true
-  belongs_to :base_token, class_name: "OperatorToken", optional: true
-  belongs_to :auth_ceremony_session, class_name: "OperatorAuthCeremonySession", optional: true
-  belongs_to :admitted_auth_ceremony_session, class_name: "OperatorAuthCeremonySession", optional: true
 end

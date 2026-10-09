@@ -160,6 +160,5 @@ class ClientSecretIssuance < AppZenithRecord
     return if presented_at && confirmed_at >= presented_at && confirmed_at < expires_at
 
     raise ArgumentError, "confirmation requires presentation before expiry"
-
   end
 end

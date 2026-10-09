@@ -18,11 +18,17 @@ class AppPreferenceThemeOption < AppSettingRecord
   DARK = 2
   SYSTEM = 3
 
+  DEFAULTS = [NOTHING, LIGHT, DARK, SYSTEM].freeze
+
   has_many :app_preference_themes,
            class_name: "AppPreferenceTheme",
            foreign_key: :option_id,
            inverse_of: :option,
            dependent: :restrict_with_error
+
+  def self.ensure_defaults!
+    insert_missing_fixed_ids!(DEFAULTS)
+  end
 
   def name
     case id
@@ -30,11 +36,5 @@ class AppPreferenceThemeOption < AppSettingRecord
     when DARK then "dark"
     when SYSTEM then "system"
     end
-  end
-
-  DEFAULTS = [NOTHING, LIGHT, DARK, SYSTEM].freeze
-
-  def self.ensure_defaults!
-    insert_missing_fixed_ids!(DEFAULTS)
   end
 end

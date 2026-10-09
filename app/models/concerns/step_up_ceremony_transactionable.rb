@@ -490,7 +490,6 @@ module StepUpCeremonyTransactionable
     return unless %w(step_up reauthentication).include?(purpose) && verified_credential_ref.blank?
 
     errors.add(:verified_credential_ref, "is required for step-up consumption")
-
   end
 
   def cancellation_handoff_fields_are_consistent
@@ -512,6 +511,5 @@ module StepUpCeremonyTransactionable
         cancellation_handoff_digest != cancellation_handoff_digest_in_database
       errors.add(:cancellation_handoff_digest, "cannot change after cancellation")
     end
-
   end
 end

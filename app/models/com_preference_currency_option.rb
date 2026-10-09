@@ -15,22 +15,22 @@ class ComPreferenceCurrencyOption < ComSettingRecord
   USD = 1
   JPY = 2
 
+  DEFAULTS = [NOTHING, USD, JPY].freeze
+
   has_many :com_preference_currencies,
            class_name: "ComPreferenceCurrency",
            foreign_key: :option_id,
            inverse_of: :option,
            dependent: :restrict_with_error
 
+  def self.ensure_defaults!
+    insert_missing_fixed_ids!(DEFAULTS)
+  end
+
   def name
     case id
     when 1 then "usd"
     when 2 then "jpy"
     end
-  end
-
-  DEFAULTS = [NOTHING, USD, JPY].freeze
-
-  def self.ensure_defaults!
-    insert_missing_fixed_ids!(DEFAULTS)
   end
 end

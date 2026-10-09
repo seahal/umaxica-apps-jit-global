@@ -12,6 +12,7 @@ module TelephoneOtpPolicy
   SIGN_UP_CONFIRMATION_TTL = MAX_OOB_TTL
   SEND_COOLDOWN = 30.seconds
   REREGISTRATION_OVERWRITE_WINDOW = 10.seconds
+
   public
 
   def store_otp(otp_private_key, otp_counter, expires_at, now: nil)

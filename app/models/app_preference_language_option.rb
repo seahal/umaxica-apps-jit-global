@@ -23,14 +23,14 @@ class AppPreferenceLanguageOption < AppSettingRecord
 
   self.primary_key = :id
 
+  def self.ensure_defaults!
+    insert_missing_fixed_ids!(DEFAULTS)
+  end
+
   def name
     case id
     when JA then "ja"
     when EN then "en"
     end
-  end
-
-  def self.ensure_defaults!
-    insert_missing_fixed_ids!(DEFAULTS)
   end
 end

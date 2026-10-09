@@ -55,8 +55,6 @@ class ClientPasskey < AppPrincipalRecord
   mfa_status_owner :user
   belongs_to :status, class_name: "ClientPasskeyStatus"
 
-  scope :active, -> { where(status_id: ClientPasskeyStatus::ACTIVE) }
-
   validates :webauthn_id, presence: true, uniqueness: true
   validates :external_id, presence: true
   validates :public_key, presence: true
@@ -67,6 +65,8 @@ class ClientPasskey < AppPrincipalRecord
   before_validation :set_defaults, on: :create
   before_validation :ensure_status_defaults, on: :create
   around_create :create_with_slot_lock
+
+  scope :active, -> { where(status_id: ClientPasskeyStatus::ACTIVE) }
 
   def to_param
     public_id

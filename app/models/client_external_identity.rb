@@ -7,7 +7,8 @@ class ClientExternalIdentity < AppPrincipalRecord
 
   encrypts :subject, deterministic: true
 
-  scope :effective_binding, -> { where(released_at: nil) }
+  alias_attribute :uid, :subject
+  alias_attribute :user_id, :client_id
 
   belongs_to :client, inverse_of: :client_external_identities
   has_many :client_apple_notification_events,
@@ -19,8 +20,7 @@ class ClientExternalIdentity < AppPrincipalRecord
   validates :state, inclusion: { in: STATES }
   validates :verified_at, presence: true
 
-  alias_attribute :uid, :subject
-  alias_attribute :user_id, :client_id
+  scope :effective_binding, -> { where(released_at: nil) }
 
   alias_method :user, :client
   alias_method :user=, :client=

@@ -192,7 +192,6 @@ module EmailCeremonyOtp
     return unless (changes_to_save.keys & protected_fields).any?
 
     errors.add(:base, "terminal email OTP facts are immutable")
-
   end
 
   def email_otp_digest(code)

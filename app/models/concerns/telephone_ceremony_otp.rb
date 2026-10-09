@@ -191,7 +191,6 @@ module TelephoneCeremonyOtp
     return unless (changes_to_save.keys & protected_fields).any?
 
     errors.add(:base, "terminal telephone OTP facts are immutable")
-
   end
 
   def telephone_otp_digest(code)

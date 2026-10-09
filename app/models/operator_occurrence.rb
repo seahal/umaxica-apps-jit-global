@@ -64,10 +64,10 @@ class OperatorOccurrence < OccurrenceRecord
                                    inverse_of: :staff_occurrence
   has_many :zip_occurrences, through: :staff_zip_occurrences
 
-  scope :active, -> { where(status_id: ACTIVE_STATUS_ID) }
-  scope :expired, -> { where(status_id: EXPIRED_STATUS_ID) }
-
   validates :body, length: { maximum: 36 }
   validates :status_id, numericality: { only_integer: true }
   validates :event_type, length: { maximum: 255 }, allow_nil: true
+
+  scope :active, -> { where(status_id: ACTIVE_STATUS_ID) }
+  scope :expired, -> { where(status_id: EXPIRED_STATUS_ID) }
 end

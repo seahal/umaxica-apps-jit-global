@@ -55,14 +55,15 @@
 
 class OperatorSecretCredential < OrgPrincipalRecord
   include Retainable
-
-  alias_attribute :staff_secret_status_id, :staff_identity_secret_status_id
   include ::PublicId
   include ::SecretCredential
   include OperatorSecretCredentialKinds
 
   MAX_SECRETS_PER_STAFF = 20
   ACTIVE_STATUS_IDS = [OperatorSecretCredentialStatus::ACTIVE].freeze
+
+  alias_attribute :staff_secret_status_id, :staff_identity_secret_status_id
+
   attr_accessor :raw_secret_credential
 
   attribute :staff_identity_secret_status_id, default: OperatorSecretCredentialStatus::ACTIVE

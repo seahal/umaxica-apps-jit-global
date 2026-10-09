@@ -48,8 +48,6 @@ class OperatorPasskey < OrgPrincipalRecord
   mfa_status_owner :staff
   belongs_to :status, class_name: "OperatorPasskeyStatus"
 
-  scope :active, -> { where(status_id: OperatorPasskeyStatus::ACTIVE) }
-
   validates :webauthn_id, presence: true, uniqueness: true
   validates :external_id, presence: true
   validates :public_key, presence: true
@@ -60,6 +58,8 @@ class OperatorPasskey < OrgPrincipalRecord
   validate :validate_slot_limit, on: :create
   before_validation :set_defaults, on: :create
   around_create :create_with_slot_lock
+
+  scope :active, -> { where(status_id: OperatorPasskeyStatus::ACTIVE) }
 
   private
 

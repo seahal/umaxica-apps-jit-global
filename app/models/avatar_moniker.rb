@@ -24,7 +24,19 @@
 #  fk_rails_...  (avatar_id => avatars.id)
 
 class AvatarMoniker < AvatarRecord
+  encrypts :moniker
+
   belongs_to :avatar, inverse_of: :avatar_monikers
+
+  validates :avatar_id,
+            uniqueness: { conditions: -> { where("valid_to = 'infinity'::timestamp with time zone") } },
+            if: :current_temporal_row?
+  validates :moniker, avatar_moniker: true
+  validates :valid_from, presence: true
+
+  before_validation :normalize_moniker_to_nfc
+
+  scope :current, -> { where("valid_to = 'infinity'::timestamp with time zone") }
 
   def self.validate_column_size(attribute_name)
     # Rails' generated ciphertext-length validator calls String#blank? on malformed UTF-8 before
@@ -35,18 +47,6 @@ class AvatarMoniker < AvatarRecord
     super
   end
   private_class_method :validate_column_size
-
-  encrypts :moniker
-
-  before_validation :normalize_moniker_to_nfc
-
-  scope :current, -> { where("valid_to = 'infinity'::timestamp with time zone") }
-
-  validates :avatar_id,
-            uniqueness: { conditions: -> { where("valid_to = 'infinity'::timestamp with time zone") } },
-            if: :current_temporal_row?
-  validates :moniker, avatar_moniker: true
-  validates :valid_from, presence: true
 
   private
 

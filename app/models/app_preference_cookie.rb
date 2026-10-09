@@ -31,13 +31,13 @@ class AppPreferenceCookie < AppSettingRecord
              class_name: "AppPreference",
              inverse_of: :app_preference_cookie
 
-  after_initialize :set_defaults
-
   validates :preference_id, uniqueness: true
   validates :targetable, inclusion: { in: [true, false] }
   validates :performant, inclusion: { in: [true, false] }
   validates :functional, inclusion: { in: [true, false] }
   validates :consented, inclusion: { in: [true, false] }
+
+  after_initialize :set_defaults
 
   private
 

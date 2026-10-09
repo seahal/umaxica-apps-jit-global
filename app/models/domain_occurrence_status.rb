@@ -12,6 +12,8 @@
 class DomainOccurrenceStatus < OccurrenceRecord
   include ReferenceRecord
 
+  include OccurrenceStatus
+
   # Fixed IDs - do not modify these values
   NOTHING = 0
   ACTIVE = 1
@@ -20,8 +22,6 @@ class DomainOccurrenceStatus < OccurrenceRecord
   LEGACY_NOTHING = 4
   PENDING = 5
   DEFAULTS = [NOTHING, ACTIVE, DELETED, INACTIVE, LEGACY_NOTHING, PENDING].freeze
-
-  include OccurrenceStatus
 
   has_many :domain_occurrences, foreign_key: :status_id, dependent: :restrict_with_error,
                                 inverse_of: :domain_occurrence_status

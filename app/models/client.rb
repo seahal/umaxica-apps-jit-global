@@ -72,11 +72,7 @@
 #   identifier retention and legal-hold expiry. Retained Identity rows preserve
 #   audit linkage; identifier-only purge preserves their dead histories.
 class Client < AppPrincipalRecord
-  encrypts :admin_locked_reason_note
-
   include Retainable
-
-  before_destroy :admit_identifier_history_erasure, prepend: true
   include Withdrawable
   include HasBirthdate
   include ::PublicId
@@ -87,6 +83,7 @@ class Client < AppPrincipalRecord
   include MfaStatusTrackable
   include ActorLifecycleConsistency
   include AdministrativeAccessLockable
+  include Retainable
 
   LOGIN_BLOCKED_STATUS_IDS = [ClientStatus::RESERVED].freeze
   # what is this?
@@ -100,10 +97,9 @@ class Client < AppPrincipalRecord
   ].freeze
   RECOVERY_IDENTITY_REQUIRED_MESSAGE = I18n.t("models.user.recovery_identity_required")
 
+  encrypts :admin_locked_reason_note
+
   attribute :status_id, default: ClientStatus::NOTHING
-  validates :status_id, numericality: { only_integer: true }
-  mfa_level_reference ClientMfaLevel
-  mfa_status_reference ClientMfaStatus
 
   belongs_to :user_status, class_name: "ClientStatus",
                            foreign_key: :status_id,
@@ -269,8 +265,14 @@ class Client < AppPrincipalRecord
   # RetentionCrossDatabaseChildPurge, not by an implicit cross-DB cascade.
   has_many :avatar_assignments, foreign_key: :user_id, inverse_of: :user # rubocop:disable Rails/HasManyOrHasOneDependent
   has_many :assigned_avatars, through: :avatar_assignments, source: :avatar
+
+  validates :status_id, numericality: { only_integer: true }
   validates :public_id, uniqueness: true, length: { maximum: 21 }
-  include Retainable
+
+  before_destroy :admit_identifier_history_erasure, prepend: true
+
+  mfa_level_reference ClientMfaLevel
+  mfa_status_reference ClientMfaStatus
 
   before_destroy :erase_dead_identifier_histories
 

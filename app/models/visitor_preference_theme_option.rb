@@ -28,15 +28,15 @@ class VisitorPreferenceThemeOption < ComPrincipalRecord
 
   self.primary_key = :id
 
+  def self.ensure_defaults!
+    insert_missing_fixed_ids!(DEFAULTS)
+  end
+
   def name
     case id
     when SYSTEM, LEGACY_SYSTEM then "system"
     when LIGHT then "light"
     when DARK then "dark"
     end
-  end
-
-  def self.ensure_defaults!
-    insert_missing_fixed_ids!(DEFAULTS)
   end
 end

@@ -25,11 +25,11 @@
 class TurnstileReplay < AppTicketRecord
   validates :ceremony_id, :token_digest, :expires_at, presence: true
 
-  def expired?
-    expires_at.present? && expires_at <= Time.current
-  end
-
   def self.digest_token(token)
     Digest::SHA256.hexdigest(token.to_s)
+  end
+
+  def expired?
+    expires_at.present? && expires_at <= Time.current
   end
 end

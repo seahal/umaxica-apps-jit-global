@@ -234,7 +234,6 @@ class ClientSecretCredential < AppZenithRecord
         actor_context.subject.id == client_id
       raise InvalidTransition, "Secret claim requires the owning admitted browser flow"
     end
-
   end
 
   def claim_ceremony_matches?(flow, ceremony)
@@ -269,7 +268,6 @@ class ClientSecretCredential < AppZenithRecord
     return if valid_reason && (reason != "flow_expired" || flow.expired?(ClientSignInFlow.database_now))
 
     raise InvalidTransition, "Secret retirement requires its verified terminal outcome reason"
-
   end
 
   def verify_cancellation_outcome!(flow)
@@ -288,7 +286,6 @@ class ClientSecretCredential < AppZenithRecord
     end
 
     raise InvalidTransition, "Secret cancellation requires its durable canceled ceremony"
-
   end
 
   def terminal_flow?(flow)

@@ -56,6 +56,9 @@ class ComPreference < ComSettingRecord
 
   self.belongs_to_required_by_default = false
 
+  DBSC_BINDING_METHOD_CLASS = ComPreferenceBindingMethod
+  DBSC_STATUS_CLASS = ComPreferenceDbscStatus
+
   # A preference token is "expired" exactly when it has been discarded, so the
   # generic token vocabulary reads expires_at while Retainable owns the column.
   #
@@ -67,10 +70,9 @@ class ComPreference < ComSettingRecord
   # A new caller that forgets this guard writes an infinite cookie lifetime.
   alias_attribute :expires_at, :discard_at
 
-  DBSC_BINDING_METHOD_CLASS = ComPreferenceBindingMethod
-  DBSC_STATUS_CLASS = ComPreferenceDbscStatus
-
   attribute :status_id, default: ComPreferenceStatus::NOTHING
+  attribute :binding_method_id, default: ComPreferenceBindingMethod::NOTHING
+  attribute :dbsc_status_id, default: ComPreferenceDbscStatus::NOTHING
 
   belongs_to :com_preference_status,
              foreign_key: :status_id,
@@ -143,8 +145,6 @@ class ComPreference < ComSettingRecord
            dependent: :nullify
   validates :status_id, numericality: { only_integer: true }
   validates :jti, uniqueness: true, allow_nil: true
-  attribute :binding_method_id, default: ComPreferenceBindingMethod::NOTHING
-  attribute :dbsc_status_id, default: ComPreferenceDbscStatus::NOTHING
 
   before_validation :default_replaced_by_to_self, on: :create
   after_create :persist_self_replacement

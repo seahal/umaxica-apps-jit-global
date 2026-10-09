@@ -9,8 +9,6 @@ class AvatarOwnershipTransfer < AvatarRecord
 
   belongs_to :avatar, inverse_of: :ownership_transfers
 
-  scope :pending, -> { where(state: "pending") }
-
   validates :state, inclusion: { in: STATES }
   validates :from_owner_surface, inclusion: { in: SURFACES }
   validates :to_owner_surface, inclusion: { in: SURFACES }
@@ -21,6 +19,8 @@ class AvatarOwnershipTransfer < AvatarRecord
                          if: -> { requested_at.present? && expires_at.present? }
   validate :source_and_target_owners_differ
   validate :actor_surfaces_match_terminal_state
+
+  scope :pending, -> { where(state: "pending") }
 
   private
 

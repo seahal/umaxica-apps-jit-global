@@ -59,8 +59,6 @@
 #
 
 class Visitor < ComPrincipalRecord
-  encrypts :admin_locked_reason_note
-
   # rubocop:disable Rails/HasManyOrHasOneDependent
   include Retainable
   include Withdrawable
@@ -85,10 +83,9 @@ class Visitor < ComPrincipalRecord
   ].freeze
   RECOVERY_IDENTITY_REQUIRED_MESSAGE = I18n.t("models.visitor.recovery_identity_required")
 
+  encrypts :admin_locked_reason_note
+
   attribute :status_id, default: VisitorStatus::NOTHING
-  validates :status_id, numericality: { only_integer: true }
-  mfa_level_reference VisitorMfaLevel
-  mfa_status_reference VisitorMfaStatus
 
   belongs_to :visitor_status,
              class_name: "VisitorStatus",
@@ -173,6 +170,10 @@ class Visitor < ComPrincipalRecord
   has_one :core_com_visitor_bridge,
           dependent: :destroy,
           inverse_of: :visitor
+
+  validates :status_id, numericality: { only_integer: true }
+  mfa_level_reference VisitorMfaLevel
+  mfa_status_reference VisitorMfaStatus
 
   before_destroy :admit_identifier_history_erasure, prepend: true
   before_destroy :erase_dead_identifier_histories

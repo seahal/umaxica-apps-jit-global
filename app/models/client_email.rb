@@ -45,54 +45,56 @@
 #
 
 class ClientEmail < AppPrincipalRecord
+  include PublicId
+  include Retainable
+  include Email
+  include EmailDeadIdentifierHistory
+
+  include MfaStatusCredential
+  include PromotionalEmailUnsubscribable
+  include EmailContactBinding
+
   IDENTIFIER_REALM = "app"
-  encrypts :address, downcase: true,
-                     key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
-  encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
 
   EDITABLE_SUBSCRIPTION_PREFERENCE_STATUS_IDS = [
     ClientEmailStatus::VERIFIED,
     ClientEmailStatus::VERIFIED_WITH_SIGN_UP,
   ].freeze
 
-  include PublicId
-  include Retainable
-  include Email
-  include EmailDeadIdentifierHistory
-
-  after_initialize :initialize_email_otp_state
-  before_destroy :archive_dead_email_identifier, prepend: true
-
-  include MfaStatusCredential
-  include PromotionalEmailUnsubscribable
-  include EmailContactBinding
-
-  scope :effective_binding, -> { where.not(binding_finalized_at: nil).where(binding_released_at: nil) }
-  validate :effective_binding_has_digest
-
-  self.filter_attributes += %w(address sign_up_otp_context credential_registration_otp_context)
+  encrypts :address, downcase: true,
+                     key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
+  encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
 
   attribute :user_email_status_id, default: ClientEmailStatus::UNVERIFIED
   belongs_to :user_email_status, class_name: "ClientEmailStatus",
                                  inverse_of: :client_emails
   belongs_to :user, class_name: "Client", inverse_of: :client_emails
-  mfa_status_owner :user
+
+  validate :effective_binding_has_digest
   validates :address, presence: true
   validates :otp_attempts_count, presence: true, numericality: { only_integer: true }
   validates :otp_counter, presence: true
   validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :user_email_status_id, numericality: { only_integer: true }
   validates :address_digest, presence: true, if: :binding_effective?
+
+  after_initialize :initialize_email_otp_state
+  before_destroy :archive_dead_email_identifier, prepend: true
   before_destroy :prevent_destroy_when_undeletable
+
+  after_initialize do
+    self.address ||= ""
+  end
+
+  scope :effective_binding, -> { where.not(binding_finalized_at: nil).where(binding_released_at: nil) }
+
+  self.filter_attributes += %w(address sign_up_otp_context credential_registration_otp_context)
+  mfa_status_owner :user
 
   public
 
   def to_param
     public_id
-  end
-
-  after_initialize do
-    self.address ||= ""
   end
 
   # Generates a new verification token and saves its digest

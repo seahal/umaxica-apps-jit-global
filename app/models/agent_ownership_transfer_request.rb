@@ -12,13 +12,13 @@ class AgentOwnershipTransferRequest < OrgRpRecord
   belongs_to :source_operator, class_name: "Operator", inverse_of: false
   belongs_to :destination_operator, class_name: "Operator", inverse_of: false
 
-  scope :pending, -> { where(status: PENDING) }
-  scope :due, ->(now = Time.current) { pending.where(expires_at: ..now) }
-
   validates :status, inclusion: { in: STATUSES }
   validates :expected_ownership_revision, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validate :parties_must_differ
   validate :expiry_must_follow_request
+
+  scope :pending, -> { where(status: PENDING) }
+  scope :due, ->(now = Time.current) { pending.where(expires_at: ..now) }
 
   private
 
