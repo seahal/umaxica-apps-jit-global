@@ -32,8 +32,6 @@
 #  fk_rails_...  (handle_id => handles.id)
 #
 
-# frozen_string_literal: true
-
 require "forwardable"
 
 class HandleAssignment < AvatarRecord

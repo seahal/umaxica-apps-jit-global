@@ -282,9 +282,9 @@ module Base
             )
           end
 
-          def cleanup_pending_signup!; nil end
+          def cleanup_pending_signup! = nil
 
-          def remove_existing_unverified_emails!; nil end
+          def remove_existing_unverified_emails! = nil
         end
       end
     end

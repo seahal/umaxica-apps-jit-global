@@ -236,13 +236,14 @@ module AuthenticationBase
     return nil if record.blank?
 
     # Check status_id if provided
-    if validations[:status_id] && record.respond_to?(:user_email_status_id)
-      return nil if record.user_email_status_id != validations[:status_id]
+    if validations[:status_id] && record.respond_to?(:user_email_status_id) &&
+        (record.user_email_status_id != validations[:status_id])
+      return nil
     end
 
     # Run custom validation if provided
-    if validations[:custom]
-      return nil unless validations[:custom].call(record)
+    if (validations[:custom]) && !validations[:custom].call(record)
+      return nil
     end
 
     record
@@ -349,6 +350,8 @@ module AuthenticationBase
       sign_in_flow: sign_in_flow,
       oidc_authorization_transaction: oidc_authorization_transaction,
     )
+    return { status: :invalid_request, reason: :flow_expired } if issuance.is_a?(FlowTransitionResult)
+
     issue_session_limit_gate_for_pending_login(issuance, resource, sign_in_flow)
     return issuance unless issuance[:status] == :committed
 
@@ -527,6 +530,32 @@ module AuthenticationBase
   def commit_login_session!(resource, establishment:, token_kind_id:, dpop_jkt:, established_authentication_method:,
                             authentication_context:, authentication_event_at:, sign_in_flow:,
                             oidc_authorization_transaction: nil, limit_refused: false)
+    return commit_login_session_in_ticket_transaction!(
+      resource, establishment:, token_kind_id:, dpop_jkt:, established_authentication_method:,
+                authentication_context:, authentication_event_at:, sign_in_flow:,
+                oidc_authorization_transaction:, limit_refused:,
+    ) unless sign_in_flow
+
+    unless sign_in_flow.is_a?(sign_in_flow_class_for(resource))
+      raise SignInFlowIssuanceRejected, "sign-in flow does not belong to the actor surface"
+    end
+
+    sign_in_flow.with_cycle_lock do
+      sign_in_flow.require_active_cycle!
+      commit_login_session_in_ticket_transaction!(
+        resource, establishment:, token_kind_id:, dpop_jkt:, established_authentication_method:,
+                  authentication_context:, authentication_event_at:, sign_in_flow:,
+                  oidc_authorization_transaction:, limit_refused:,
+      )
+    end
+  rescue FlowInvalidTransition => e
+    raise SignInFlowIssuanceRejected, e.message
+  end
+
+  def commit_login_session_in_ticket_transaction!(resource, establishment:, token_kind_id:, dpop_jkt:,
+                                                  established_authentication_method:, authentication_context:,
+                                                  authentication_event_at:, sign_in_flow:,
+                                                  oidc_authorization_transaction: nil, limit_refused: false)
     token_record_connection_owner.connected_to(role: :writing) do
       token_class.transaction(requires_new: true) do
         check_login_cooldown!(resource) if establishment == :root_login
@@ -538,26 +567,37 @@ module AuthenticationBase
           sign_in_flow: sign_in_flow,
         )
 
-        if limit_refused || session_limit_state_for(resource) == :at_limit
-          issue_pending_session_limit_resolution!(
-            resource,
-            locked_flow: locked_flow,
-            established_authentication_method: established_authentication_method,
-            oidc_authorization_transaction: oidc_authorization_transaction,
-          )
-        else
-          create_committed_login_issuance!(
-            resource,
-            establishment: establishment,
-            token_kind_id: token_kind_id,
-            dpop_jkt: dpop_jkt,
-            established_authentication_method: established_authentication_method,
-            authentication_context: authentication_context,
-            authentication_event_at: authentication_event_at,
-            sign_in_flow: locked_flow,
-          )
+        with_sign_in_flow_issuance_lock(locked_flow) do
+          if limit_refused || session_limit_state_for(resource) == :at_limit
+            issue_pending_session_limit_resolution!(
+              resource,
+              locked_flow: locked_flow,
+              established_authentication_method: established_authentication_method,
+              oidc_authorization_transaction: oidc_authorization_transaction,
+            )
+          else
+            create_committed_login_issuance!(
+              resource,
+              establishment: establishment,
+              token_kind_id: token_kind_id,
+              dpop_jkt: dpop_jkt,
+              established_authentication_method: established_authentication_method,
+              authentication_context: authentication_context,
+              authentication_event_at: authentication_event_at,
+              sign_in_flow: locked_flow,
+            )
+          end
         end
       end
+    end
+  end
+
+  def with_sign_in_flow_issuance_lock(flow)
+    return yield unless flow
+
+    flow.with_cycle_lock do
+      flow.require_active_cycle!
+      yield
     end
   end
 
@@ -576,10 +616,12 @@ module AuthenticationBase
       raise SignInFlowIssuanceRejected, "sign-in flow does not belong to the actor surface"
     end
 
-    flow = sign_in_flow.class.lock.find(sign_in_flow.id)
+    flow = sign_in_flow
+    flow.lock!
     raise SignInFlowIssuanceRejected, "sign-in flow is not bound to the actor" unless flow.principal_id == resource.id
     raise SignInFlowIssuanceRejected, "sign-in flow already issued a session" if flow.token_id.present?
-    raise SignInFlowIssuanceRejected, "sign-in flow is expired" if flow.expired?
+
+    flow.require_active_cycle!
 
     advance_sign_in_flow_to_issuance!(flow, resource) unless flow.sign_in_session_issuance_pending?
     flow.reload
@@ -1899,9 +1941,10 @@ module AuthenticationBase
       track_session_activity: track_authenticated_session_activity?,
     ).call
 
-    if result.resource.blank? && (authorization_scheme.to_s.casecmp?("DPoP") || dpop_proof.present?)
+    if result.resource.blank? && (authorization_scheme.to_s.casecmp?("DPoP") || dpop_proof.present?) &&
+        defined?(DpopNonceService)
       response.headers["DPoP-Nonce"] =
-        DpopNonceService.generate(resource_type: resource_type) if defined?(DpopNonceService)
+        DpopNonceService.generate(resource_type: resource_type)
     end
 
     remember_authentication_resolution!(
@@ -2765,7 +2808,7 @@ module AuthenticationBase
         authentication_context: authentication_context,
         authentication_event_at: authentication_event_at,
       )
-      advance_pending_sign_in_flow_after_primary!(cycle, resource, result)
+      result = advance_pending_sign_in_flow_after_primary!(cycle, resource, result)
       if local_authentication_ceremony? && result[:status] == :authentication_evidence_recorded
         result[:redirect_path] = sign_in_sequence_redirect_path(pt: pt)
       end
@@ -2773,7 +2816,9 @@ module AuthenticationBase
     end
 
     resolved_pt = resolve_mfa_pt(pt)
-    cycle.advance_sign_in_to_mfa!
+    outcome = cycle.with_cycle_lock { cycle.advance_sign_in_to_mfa! }
+    return { status: :invalid_request, reason: :flow_expired } if outcome.is_a?(FlowTransitionResult)
+
     sign_in_flow_locator_for(actor: resource).issue!(cycle) unless local_authentication_ceremony?
     set_pending_mfa!(
       resource: resource, primary: auth_method, pt: resolved_pt, ri: ri,
@@ -3509,7 +3554,8 @@ module AuthenticationBase
 
   private :check_totp_requirement_before_session_rotation, :resource_connection_owner,
           :preserved_oidc_rp_session_state, :restore_oidc_rp_session_state!, :store_authentication_return_target!,
-          :commit_login_session!, :write_secret_sign_in_receipt!,
+          :commit_login_session!, :commit_login_session_in_ticket_transaction!, :with_sign_in_flow_issuance_lock,
+          :write_secret_sign_in_receipt!,
           :lock_sign_in_flow_for_issuance!, :advance_sign_in_flow_to_issuance!, :complete_sign_in_flow_issuance!,
           :bind_committed_login!, :apply_committed_login!
 end

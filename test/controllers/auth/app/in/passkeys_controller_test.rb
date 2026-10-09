@@ -236,7 +236,7 @@ module Auth::App::In
 
       # Verify no duplicate keys in JSON
       json_string = response.body
-      challenge_count = json_string.scan(/"challenge"/).count
+      challenge_count = json_string.scan('"challenge"').count
 
       assert_equal 1, challenge_count,
                    "JSON should contain exactly one 'challenge' key (found #{challenge_count})"

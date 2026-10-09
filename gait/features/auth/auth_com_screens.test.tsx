@@ -224,7 +224,7 @@ describe("sign-in credential screens", () => {
         field_placeholder="000000"
         submit_label="確認"
         delivery_help="届かない場合"
-        return_link={{ label: "もどる", href: "/sign/in/email/new" }}
+        return_link={{ label: "もどる" }}
         resend={{
           endpoint: "/web/v0/in/email/otp",
           state: "resend-state",
@@ -255,7 +255,7 @@ describe("sign-in credential screens", () => {
         field_placeholder="000000"
         submit_label="確認"
         delivery_help="届かない場合"
-        return_link={{ label: "もどる", href: "/sign/in/email/new" }}
+        return_link={{ label: "もどる" }}
         resend={{
           endpoint: "/web/v0/in/email/otp",
           state: "resend-state",

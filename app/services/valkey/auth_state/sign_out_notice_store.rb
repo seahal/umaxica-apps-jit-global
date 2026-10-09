@@ -37,8 +37,7 @@ module Valkey
       end
 
       def consume(raw_id:, now: Time.current)
-        payload = read(raw_id: raw_id, now: now, delete: true)
-        payload
+        read(raw_id: raw_id, now: now, delete: true)
       rescue Redis::BaseError, IOError, SystemCallError => e
         raise Umaxica::Valkey::Unavailable, "Valkey sign-out notice consume unavailable", cause: e
       rescue ArgumentError, KeyError, TypeError => e

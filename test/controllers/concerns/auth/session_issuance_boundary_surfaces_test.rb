@@ -60,6 +60,47 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
     assert_nil request.cookie_jar[AuthenticationBase::REFRESH_COOKIE_KEY]
   end
 
+  test "expired root issuance commits only expiry through each surface outer Ticket owner" do
+    [
+      [Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01"),
+       ClientSignInFlow, ClientToken, :user_id, Base::App::AuthorityController, ENV.fetch("PUBLIC_BASE_SERVICE_URL"),],
+      [Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR),
+       VisitorSignInFlow, VisitorToken, :visitor_id, Base::Com::AuthorityController,
+       ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),],
+      [Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF),
+       OperatorSignInFlow, OperatorToken, :staff_id, Base::Org::AuthorityController,
+       ENV.fetch("PUBLIC_BASE_STAFF_URL"),],
+    ].each do |actor, model, token_model, owner_key, controller_class, host|
+      now = model.database_now
+      flow = model.create!(
+        principal_id: actor.id, state_id: model.state_id_for("SESSION_ISSUANCE_PENDING"),
+        nonce_digest: model.digest_nonce(SecureRandom.hex(16)),
+        issued_at: now - 2.minutes, expires_at: now - 1.minute,
+      )
+      request = ActionDispatch::TestRequest.create
+      request.host = host
+      request.session = ActionController::TestSession.new
+      controller = controller_class.new
+      controller.set_request!(request)
+      controller.set_response!(controller_class.make_response!(request))
+      outcome = nil
+
+      assert_no_difference -> { token_model.where(owner_key => actor.id).count } do
+        outcome =
+          model.transaction(requires_new: true) do
+            controller.log_in(actor, establishment: :root_login, sign_in_flow: flow, require_totp_check: false)
+          end
+      end
+
+      assert_equal :invalid_request, outcome.fetch(:status)
+      assert_equal :flow_expired, outcome.fetch(:reason)
+      assert_predicate flow.reload, :sign_in_expired?
+      assert_nil flow.token_id
+      assert_nil request.cookie_jar[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_nil request.cookie_jar[AuthenticationBase::REFRESH_COOKIE_KEY]
+    end
+  end
+
   SURFACES.each do |surface, config|
     test "#{surface}: one below the limit commits one ACTIVE root session with cookies and context" do
       resource = config[:resource].call

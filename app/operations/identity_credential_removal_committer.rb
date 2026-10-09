@@ -28,9 +28,10 @@ class IdentityCredentialRemovalCommitter
     validate_binding!
     actor.class.connection_class_for_self.connected_to(role: :writing) do
       actor.with_lock do
-        credential.with_lock do
-          current_session.class.connection_class_for_self.connected_to(role: :writing) do
+        current_session.class.connection_class_for_self.connected_to(role: :writing) do
+          current_session.device_session.with_lock do
             current_session.with_lock do
+              credential.lock!
               validate_binding!
               unless current_session.currently_usable?(current_session.class.database_now)
                 raise ArgumentError, "credential removal session is unavailable"
@@ -39,6 +40,7 @@ class IdentityCredentialRemovalCommitter
                 raise ArgumentError, "credential removal requires a Normal session"
               end
               return false if terminal? || (contact? && !credential.binding_effective?) || !removable?
+              return false unless passkey_management_authorized?
 
               # Ticket invalidation precedes principal mutation. A separate-DB failure can
               # remove freshness while retaining the credential, but cannot preserve stale authority.
@@ -82,6 +84,24 @@ class IdentityCredentialRemovalCommitter
   def contact?
     credential.is_a?(ClientEmail) || credential.is_a?(ClientTelephone) ||
       credential.is_a?(VisitorEmail) || credential.is_a?(VisitorTelephone)
+  end
+
+  def passkey_management_authorized?
+    policy =
+      case credential
+      when ClientPasskey then ClientPasskeyPolicy.new(credential, user: actor)
+      when VisitorPasskey then VisitorPasskeyPolicy.new(credential, user: actor)
+      when OperatorPasskey then OperatorPasskeyPolicy.new(credential, user: actor)
+      when ClientTotpCredential, ClientEmail, ClientTelephone, VisitorEmail, VisitorTelephone then return true
+      else raise ArgumentError, "unsupported removal credential"
+      end
+    evidence = policy.management_credential(token: current_session)
+    return false unless evidence
+
+    evidence.lock!
+    policy.apply(:destroy?) && policy.management_authorized?(
+      token: current_session, now: current_session.class.database_now,
+    )
   end
 
   def validate_contact_context!

@@ -15,7 +15,9 @@ class BrowserRpAuthenticationProbeController < ApplicationController
   prepend_before_action :authenticate_browser_rp_unsafe_request!
 
   def show
-    return unless authenticate_browser_rp! if params[:required] == "1"
+    if (params[:required] == "1") && !authenticate_browser_rp!
+      return
+    end
 
     render plain: current_resource&.public_id.to_s
   end
@@ -247,6 +249,89 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
 
     assert_response :unauthorized
     assert_nil response.headers["Set-Cookie"]
+  end
+
+  test "missing RP credentials log the Browser RP refusal vocabulary and controller metadata" do
+    output = StringIO.new
+    logger = ActiveSupport::Logger.new(output)
+    @request.set_header("HTTP_SEC_FETCH_SITE", "cross-site")
+
+    Rails.stub(:logger, logger) { get :show, params: { required: "1" } }
+
+    assert_response :unauthorized
+    events =
+      output.string.lines.filter_map do |line|
+        next unless line.start_with?("{")
+
+        event = JSON.parse(line)
+        event if event["event"] == "auth.session.authentication_required"
+      end
+
+    assert_equal 1, events.length
+    data = events.fetch(0).fetch("data")
+
+    assert_equal "access_credential_missing", data.fetch("failure_reason")
+    assert_equal "BrowserRpAuthenticationProbeController", data.fetch("controller")
+    assert_equal "show", data.fetch("action")
+    assert_equal [false, false], data.values_at("access_credential_presented", "refresh_credential_presented")
+    assert_equal "cross-site", data.fetch("fetch_site")
+    assert_in_delta Time.current.to_f, Time.iso8601(data.fetch("occurred_at")).to_f, 5
+    assert_equal %w(action access_credential_presented controller failure_reason fetch_site occurred_at
+                    refresh_credential_presented).sort, data.keys.sort
+  end
+
+  test "invalid RP credentials log presence without either credential value" do
+    output = StringIO.new
+    logger = ActiveSupport::Logger.new(output)
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = "invalid-access-credential-sensitive"
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = @refresh_token
+    refusal = OidcTokenExchangeCoordinator::Result.new(
+      success: false, token_response: nil, error: "invalid_grant", error_description: "invalid refresh",
+      access_expires_at: nil, refresh_expires_at: nil,
+    )
+
+    Rails.stub(:logger, logger) do
+      OidcTokenExchangeCoordinator.stub(:call, refusal) { get :show, params: { required: "1" } }
+    end
+
+    assert_response :unauthorized
+    event = output.string.lines.filter_map do |line|
+      next unless line.start_with?("{")
+
+      parsed = JSON.parse(line)
+      parsed if parsed["event"] == "auth.session.authentication_required"
+    end.fetch(0)
+
+    assert_equal "access_credential_invalid", event.fetch("data").fetch("failure_reason")
+    assert_equal [true, true],
+                 event.fetch("data").values_at("access_credential_presented", "refresh_credential_presented")
+    assert_not_includes output.string, "invalid-access-credential-sensitive"
+    assert_not_includes output.string, @refresh_token
+  end
+
+  test "RP refusal fetch-site metadata preserves known classifications and omits missing empty or unsupported values" do
+    [nil, "", "credential-like-fetch-site-value", "same-origin", "same-site", "cross-site", "none"].each do |value|
+      output = StringIO.new
+      logger = ActiveSupport::Logger.new(output)
+      @request.set_header("HTTP_SEC_FETCH_SITE", value)
+
+      Rails.stub(:logger, logger) { get :show, params: { required: "1" } }
+
+      assert_response :unauthorized
+      event = output.string.lines.filter_map do |line|
+        next unless line.start_with?("{")
+
+        parsed = JSON.parse(line)
+        parsed if parsed["event"] == "auth.session.authentication_required"
+      end.fetch(0)
+      if %w(same-origin same-site cross-site none).include?(value)
+        assert_equal value, event.fetch("data").fetch("fetch_site")
+      else
+        assert_not event.fetch("data").key?("fetch_site")
+      end
+
+      assert_not_includes output.string, "credential-like-fetch-site-value"
+    end
   end
 
   {
@@ -888,4 +973,38 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
   private
 
   # CSRF is verified by real Rails forgery protection for this test only (D-113).
+end
+
+class BrowserRpUnauthenticatedBasePasskeyTest < ActionDispatch::IntegrationTest
+  test "Base passkey management without a session reaches the authentication gate in every realm" do
+    [
+      ["app", new_base_app_identity_passkey_path(ri: "jp", format: :json)],
+      ["com", new_base_com_identity_passkey_path(ri: "jp", format: :json)],
+      ["org", new_base_org_identity_passkey_path(ri: "jp", format: :json)],
+    ].each do |realm, path|
+      client = OidcClientRegistry.find!("base-#{realm}-ww")
+      browser = open_session
+      browser.https!
+      browser.host!(URI.parse(client.redirect_uris.first).host)
+      output = StringIO.new
+      logger = ActiveSupport::Logger.new(output)
+      request_id = "unauthenticated-base-passkeys-#{realm}"
+
+      Rails.stub(:logger, logger) do
+        browser.get(path, headers: { "Sec-Fetch-Site" => "same-origin", "X-Request-ID" => request_id })
+      end
+
+      assert_equal 401, browser.response.status, "#{realm}: #{browser.response.body.first(100)}"
+      assert_equal({ "error" => "Unauthorized" }, JSON.parse(browser.response.body))
+      event = output.string.lines.filter_map do |line|
+        next unless line.start_with?("{")
+
+        parsed = JSON.parse(line)
+        parsed if parsed["event"] == "auth.session.authentication_required"
+      end.fetch(0)
+
+      assert_equal request_id, event.fetch("data").fetch("request_id")
+      assert_equal request_id, browser.response.headers.fetch("X-Request-ID")
+    end
+  end
 end

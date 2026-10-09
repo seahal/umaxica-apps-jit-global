@@ -27,8 +27,8 @@ class LocalAuthenticationSessionCommitter
         actor.class.connection_class_for_self.connected_to(role: :writing) do
           actor.with_lock do
             flow.class.connection_class_for_self.connected_to(role: :writing) do
-              flow.class.transaction do
-                flow.lock!
+              flow.with_cycle_lock do
+                flow.require_active_cycle! unless flow.base_finalized_at
                 now = flow.class.database_now
                 validate_browser_binding!(
                   flow: flow, actor: actor, nonce: nonce, binding: binding,
@@ -44,6 +44,7 @@ class LocalAuthenticationSessionCommitter
             end
           end
         end
+      result = { status: :invalid_request, reason: :flow_expired } if result.is_a?(FlowTransitionResult)
       if flow.is_a?(ClientSignInFlow) && flow.authentication_method == "secret"
         claim = ClientSecretCredential.find_by!(claim_sign_in_flow_ref: flow.public_id, client_id: actor.id)
         ClientSecretClaimFinalizer.call!(credential: claim, purge_after: ClientSecretLifetimesValue.purge_delay)
@@ -104,7 +105,9 @@ class LocalAuthenticationSessionCommitter
         # The durable child owns session-limit continuation. The parent remains
         # in SESSION_ISSUANCE_PENDING until the same issuance boundary succeeds.
         nil
-      when :access_locked, :login_forbidden, :dpop_proof_invalid, :invalid_request
+      when :invalid_request
+        flow.halt_sign_in! unless result[:reason] == :flow_expired
+      when :access_locked, :login_forbidden, :dpop_proof_invalid
         flow.halt_sign_in!
       else
         raise BaseAuthAdmissionCoordinator::Denied, "unexpected local finalization status"

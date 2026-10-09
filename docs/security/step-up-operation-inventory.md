@@ -18,6 +18,12 @@ All missing, invalid, contradictory, or legacy assurance-level requirements fail
 `false` is distinct from omission. A URL pattern validates only the stored destination and never
 selects the requirement.
 
+An ordinary disabled requirement is exactly `{ step_up_required: false }`: it rejects additional
+properties even when their values are `nil` or `false`, and serializes back to that minimal shape.
+The explicitly scoped `bootstrap` and `credential_registration` ceremonies retain their mandatory
+bindings and Boolean flags. They remain separate from ordinary disabled requirements and never
+grant step-up freshness.
+
 ## Operation matrix
 
 | Surface | Actor / resource | Operation | Current caller and scope | Current protection | Target evidence / behavior | Unavailable-method behavior |
@@ -30,15 +36,24 @@ selects the requirement.
 | app | Client / own account | Withdrawal | Base withdrawal controller, `withdrawal` | Step-up and existing Action Policy | Current account/resource policy is re-evaluated immediately before commit | Refuse; no partial withdrawal state is created |
 | app | Client / own avatar | Avatar ownership transfer request, accept, cancel | Base avatar transfer controller, `avatar_transfer_*` | Step-up per transition | Each transition has its own scope and resource binding | Refuse the transition; do not reuse another transition's proof |
 | app | Client / own Secret | Secret issuance and presentation | Base Secret controllers, `settings_secret_credential` or `settings_passkey` | Existing explicit step-up and Secret-specific rules | Secret management never treats Secret possession as step-up evidence | Secret session and missing configured method remain distinct refusals |
-| com | Visitor / own identity | Passkey creation, email change, Secret removal | Base/Auth COM identity controllers | Bootstrap for first eligible authenticator; normal step-up thereafter | COM method set excludes TOTP and social scopes | No TOTP fallback; available COM methods are recomputed |
+| com | Visitor / own identity | Passkey creation, update and removal, email change, Secret removal | Base/Auth COM identity controllers | Bootstrap for first eligible authenticator; normal step-up thereafter | COM method set excludes TOTP and social scopes | No TOTP fallback; available COM methods are recomputed |
 | com | Visitor / own sessions | Revoke another session or all sessions | Base COM revocation controller, `session_revoke_all` | Step-up | Target session ownership is rechecked at mutation | Refuse without revoking a session |
 | com | Visitor / own account | Withdrawal and birthdate-sensitive operations | Base COM identity controllers, `withdrawal` / `settings_birthdate` | Existing step-up and Action Policy | Current visitor/resource policy is evaluated again | Refuse with no partial mutation |
-| org | Operator / own identity | Passkey creation, removal and email/telephone changes | Base/Auth ORG identity controllers | Passkey-only bootstrap or normal step-up | Emergency sessions cannot initiate or satisfy step-up | No email/TOTP substitute; emergency mode remains unavailable |
+| org | Operator / own identity | Passkey creation, update, removal and email/telephone changes | Base/Auth ORG identity controllers | Passkey-only bootstrap or normal step-up | Emergency sessions cannot initiate or satisfy step-up | No email/TOTP substitute; emergency mode remains unavailable |
 | org | Operator / own sessions | Revoke sessions | Base ORG revocation controller, `session_revoke_all` | Step-up | Operator and selected session ownership are rechecked | Refuse with no session mutation |
 | org | Operator / governed resource | IAM grants and revocations | `Base::Org::Iam::*`, `operator_capability` | Existing Action Policy plus step-up | Capability, tenant and target resource are re-evaluated | Refuse without changing the grant |
 | org | Operator / support resource | Client/visitor session revocation | `Base::Org::Support::*`, `support_session_revoke` | Existing support authorization plus step-up | Target actor, tenant and session are rechecked | Refuse without revoking the target |
 | org | Operator / enforcement case | Apply, approve, release and appeal review | `Base::Org::Support::EnforcementCases::*`, `enforcement_case_*` | Existing enforcement authorization plus step-up | Case, tenant and operator capability are re-evaluated | Refuse without changing the case |
 | all | Current actor / current resource | Verification receiver | `VerificationBase`, `BaseStepUpCompletion` | Requirement travels through admission, Auth, result and final mutation | The current policy may strengthen the accepted snapshot; it may not be weakened by an older one | Stale, future, revoked, incomplete or mixed evidence is refused and requires a new ceremony |
+
+Passkey management requirements belong to `ClientPasskeyPolicy`, `VisitorPasskeyPolicy`, and
+`OperatorPasskeyPolicy`. Concrete Base controllers authorize the owned record before enforcing
+`settings_passkey` on rename and removal. The locked name/removal writers and additional-registration
+finalizer repeat the current policy check against the usable current Root, actor, and active evidence
+credential. Evidence from an expired event, another scope, a replaced session, or a removed
+authenticator cannot authorize the mutation. The fifteen-minute deadline is exclusive. First-key
+bootstrap remains a separate ceremony, and replay of an already consumed registration returns the
+existing credential without creating another one.
 
 ## Scope and destination catalog
 

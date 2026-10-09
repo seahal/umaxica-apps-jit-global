@@ -1,7 +1,6 @@
 # typed: false
 # frozen_string_literal: true
 
-require "set"
 require "jit_security_jwt_issuer_record"
 require "jit_security_jwt_key_material"
 require "jit_security_jwt_jwk"

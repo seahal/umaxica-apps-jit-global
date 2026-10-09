@@ -18,8 +18,12 @@ class SignInSelectorParticipant
   end
 
   def auto_commit_single!
-    cycle.class.transaction do
-      cycle.lock!
+    unless cycle.is_a?(ClientSignInFlow) || cycle.is_a?(VisitorSignInFlow) || cycle.is_a?(OperatorSignInFlow)
+      raise InvalidCycle, "unsupported sign-in cycle"
+    end
+
+    cycle.with_cycle_lock do
+      cycle.require_active_cycle!
       ensure_selector_cycle!
 
       candidates = resolver.candidates
@@ -37,7 +41,6 @@ class SignInSelectorParticipant
 
   def ensure_selector_cycle!
     raise InvalidCycle, "sign-in cycle is not pending selector" unless cycle.sign_in_selector_pending?
-    raise InvalidCycle, "sign-in cycle is expired" if cycle.expired?
     raise InvalidCycle, "sign-in cycle is not bound to an actor" if cycle.principal_id.blank?
     raise InvalidCycle, "actor does not match sign-in cycle" unless resolved_actor&.id == cycle.principal_id
     raise InvalidCycle, "actor class does not match sign-in cycle" unless actor_class_matches?

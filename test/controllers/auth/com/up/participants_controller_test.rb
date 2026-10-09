@@ -139,7 +139,7 @@ class Auth::Com::Sign::Up::ParticipantsControllerTest < ActionDispatch::Integrat
     controller.define_singleton_method(:signed_pt_param) { nil }
     controller.define_singleton_method(:signed_pt_token) { |path| path.presence && "signed-pt" }
     controller.define_singleton_method(:auth_com_sign_up_check_email_birthdate_path) { |ri: nil, pt: nil, fb: nil|
-      "/sign/up/check/email/birthdate?ri=#{ri}#{pt ? "&pt=#{pt}" : ""}#{fb ? "&fb=#{CGI.escape(fb)}" : ""}"
+      "/sign/up/check/email/birthdate?ri=#{ri}#{"&pt=#{pt}" if pt}#{"&fb=#{CGI.escape(fb)}" if fb}"
     }
     controller.define_singleton_method(:redirect_to) { |path, **_options| @redirected_to = path }
     controller.define_singleton_method(:redirected_to) { @redirected_to }

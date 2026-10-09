@@ -103,7 +103,7 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
         assert history_model.find(results.find { |status, _| status == :purged }.last).matches_identifier?(identifier)
         if results.any? { |status, _| status == :conflict }
           replacement = model.find_by(owner_key => replacement_owner.id)
-          replacement = model.create!(replacement_attributes) unless replacement
+          replacement ||= model.create!(replacement_attributes)
           replacement.finalize_binding! unless realm == "org"
         end
         current = model.find_by!(owner_key => replacement_owner.id)

@@ -11,7 +11,7 @@ module SignSocialAuthenticationEndpoint
   private
 
   def continue_social_authentication(provider:, intent: nil)
-    intent = intent || "link"
+    intent ||= "link"
     raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent") unless intent.to_s == "link"
 
     unless SUPPORTED_PROVIDERS.include?(provider)

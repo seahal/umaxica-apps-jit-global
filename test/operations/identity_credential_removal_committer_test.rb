@@ -303,7 +303,21 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
           )
           [actor, OperatorToken.create!(staff: actor), credential, OperatorPasskeyStatus::REVOKED]
         end
-      token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_passkey")
+      evidence_ref =
+        case credential
+        when ClientPasskey, VisitorPasskey then credential.public_id
+        when OperatorPasskey then credential.external_id
+        when ClientTotpCredential then actor.client_passkeys.active.first!.public_id
+        else raise ArgumentError, "unsupported credential"
+        end
+      evidence_surface = (surface == :totp) ? :app : surface
+      token.update!(
+        last_step_up_at: Time.current, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
+        last_step_up_credential_ref: evidence_ref, last_step_up_session_public_id: token.public_id,
+        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:#{evidence_surface}",
+        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+        last_step_up_full_reauthentication: false,
+      )
       transaction_model, ceremony_model =
         case actor
         when Client then [ClientStepUpCeremonyTransaction, ClientAuthCeremonySession]
@@ -373,7 +387,13 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       webauthn_id: SecureRandom.uuid, public_key: "removed-key",
       uv_verified_at: Time.current,
     )
-    token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_passkey")
+    token.update!(
+      last_step_up_at: Time.current, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
+      last_step_up_credential_ref: credential.external_id, last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
+    )
     timestamp = token.last_step_up_at
 
     CredentialSecurityTransition.stub(

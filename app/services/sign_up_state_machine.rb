@@ -59,12 +59,12 @@ class SignUpStateMachine
   private
 
   def evaluate_under_lock
-    result = nil
-    ticket.with_cycle_lock do
-      ticket.reload
-      result = evaluate_event
-    end
-    result
+    result =
+      ticket.with_cycle_lock do
+        ticket.reload
+        evaluate_event
+      end
+    result.is_a?(FlowTransitionResult) ? expired_result : result
   end
 
   def evaluate_event

@@ -76,6 +76,9 @@ class ExternalAuthenticationUnlinkUseCaseTest < ActiveSupport::TestCase
       actor_ref: client.public_id, session_ref: SecureRandom.uuid, operation: "link", provider: "google",
       provider_subject_digest: digest,
     )
+    pre_callback = ClientSocialCeremonyTransaction.create_transaction!(
+      actor_ref: client.public_id, session_ref: SecureRandom.uuid, operation: "link", provider: "google",
+    )
     unrelated = ClientSocialCeremonyTransaction.create_transaction!(
       actor_ref: client.public_id, session_ref: SecureRandom.uuid, operation: "link", provider: "apple",
     )
@@ -98,6 +101,7 @@ class ExternalAuthenticationUnlinkUseCaseTest < ActiveSupport::TestCase
 
     assert_predicate transaction, :valid?
     assert_predicate transaction, :expired?
+    assert_predicate pre_callback.reload, :expired?
     assert_nil transaction.result_jti
     assert_nil transaction.consumed_at
     assert_not_predicate unrelated.reload, :expired?

@@ -12,16 +12,23 @@ class FlowInvalidTransition < FlowError; end
 module FlowBase
   extend ActiveSupport::Concern
 
+  class ExpiryPending < FlowError; end
+  private_constant :ExpiryPending
+
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     class_attribute :cycle_status_column_name, instance_accessor: false
   end
 
   class_methods do
+    public
+
     def cycle_status_column(column_name)
       self.cycle_status_column_name = column_name.to_sym
     end
   end
+
+  public
 
   def cycle_status_id
     self[configured_cycle_status_column]
@@ -54,47 +61,34 @@ module FlowBase
   # the model's transition graph. It is private so callers cannot supply an
   # arbitrary source set or clock value.
   def transition_cycle_to!(next_status_id, changes: {}, timestamp_fields: [])
-    expired_request = false
+    joined_transaction = cycle_transaction_joined?
+    outcome =
+      with_cycle_lock do
+        now = self.class.database_now
+        current_status_id = cycle_status_id
+        ensure_transition_auxiliary_fields!(changes, timestamp_fields)
+        ensure_cycle_not_terminal!(current_status_id)
+        if cycle_expires_at_lapsed?(now) && next_status_id != cycle_status_id_for("EXPIRED")
+          raise ExpiryPending
+        end
+        raise FlowInvalidTransition, "cycle is discarded" unless cycle_accessible?(now)
 
-    with_cycle_lock do
-      now = self.class.database_now
-      current_status_id = cycle_status_id
-      ensure_transition_auxiliary_fields!(changes, timestamp_fields)
-      ensure_cycle_transition_known!(current_status_id, next_status_id)
-      ensure_cycle_not_terminal!(current_status_id)
-      raise FlowInvalidTransition, "cycle is discarded" unless cycle_accessible?(now)
-      if next_status_id == cycle_status_id_for("EXPIRED") && !cycle_expires_at_lapsed?(now)
-        raise FlowInvalidTransition, "cycle is not expired"
-      end
+        ensure_cycle_transition_known!(current_status_id, next_status_id)
+        if next_status_id == cycle_status_id_for("EXPIRED") && !cycle_expires_at_lapsed?(now)
+          raise FlowInvalidTransition, "cycle is not expired"
+        end
 
-      if cycle_expires_at_lapsed?(now)
-        expire_status_id = cycle_status_id_for("EXPIRED")
-        ensure_cycle_transition_known!(current_status_id, expire_status_id)
-        update!(cycle_transition_attributes(expire_status_id, now, {}))
-        expired_request = next_status_id != expire_status_id
-      else
         update!(cycle_transition_attributes(next_status_id, now, changes, timestamp_fields: timestamp_fields))
+        self
       end
-    end
+    return outcome unless outcome.is_a?(FlowTransitionResult)
 
-    raise FlowInvalidTransition, "cycle is expired" if expired_request
-
-    self
+    joined_transaction ? outcome : outcome.value!
   end
   private :transition_cycle_to!
 
-  # Pessimistic row lock for cycle mutations. `lock!` issues SELECT ... FOR
-  # UPDATE which only holds the lock for the surrounding transaction; without
-  # one, PostgreSQL releases the lock at statement end and the block runs
-  # unprotected. Wrap in `self.class.transaction` so the lock is real whether
-  # or not the caller already opened a transaction (Rails treats nested
-  # `transaction` as a join, not a SAVEPOINT, unless `requires_new: true`).
-  #
-  # When a controller wraps the whole finalize sequence in `with_cycle_lock`
-  # and the inner state-machine evaluation re-enters `with_cycle_lock` on the
-  # same instance, the row is already locked for the outermost transaction.
-  # Re-issuing SELECT ... FOR UPDATE is semantically redundant and only adds
-  # round-trips, so the inner re-entry yields without re-locking.
+  # A joined caller owns the final commit and must handle an expiry result before
+  # proceeding. Raising inside its transaction would undo the durable refusal.
   def with_cycle_lock
     raise ArgumentError, "block required" unless block_given?
     raise FlowInvalidTransition, "cycle must be persisted" unless persisted?
@@ -102,11 +96,13 @@ module FlowBase
     return yield if @_in_cycle_lock
 
     self.class.connection_class_for_self.connected_to(role: :writing) do
-      self.class.transaction do
+      self.class.transaction(requires_new: true) do
         lock!
         @_in_cycle_lock = true
         begin
-          yield
+          self.class.transaction(requires_new: true) { yield }
+        rescue ExpiryPending
+          persist_cycle_expiry_refusal!
         ensure
           @_in_cycle_lock = false
         end
@@ -114,7 +110,35 @@ module FlowBase
     end
   end
 
+  def require_active_cycle!
+    joined_transaction = cycle_transaction_joined?
+    outcome =
+      with_cycle_lock do
+        now = self.class.database_now
+        ensure_cycle_not_terminal!(cycle_status_id)
+        raise ExpiryPending if cycle_expires_at_lapsed?(now)
+        raise FlowInvalidTransition, "cycle is discarded" unless cycle_accessible?(now)
+
+        self
+      end
+    return outcome unless outcome.is_a?(FlowTransitionResult)
+
+    joined_transaction ? outcome : outcome.value!
+  end
+
   private
+
+  def cycle_transaction_joined?
+    self.class.connection_class_for_self.connected_to(role: :writing) do
+      self.class.lease_connection.transaction_open?
+    end
+  end
+
+  def persist_cycle_expiry_refusal!
+    reload
+    transition_cycle_to!(cycle_status_id_for("EXPIRED"))
+    FlowTransitionResult.new(status: :expired)
+  end
 
   def configured_cycle_status_column
     column = self.class.cycle_status_column_name

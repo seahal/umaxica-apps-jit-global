@@ -114,7 +114,7 @@ class CacheBoundaryInvariantTest < ActiveSupport::TestCase
     %w(development production).each do |environment|
       content = Rails.root.join("config/environments/#{environment}.rb").read
 
-      assert_equal 2, content.scan(/error_handler:/).length,
+      assert_equal 2, content.scan("error_handler:").length,
                    "#{environment} must give both the cache and the rate-limit store an " \
                    "error_handler, or a Valkey outage degrades them without a trace"
     end

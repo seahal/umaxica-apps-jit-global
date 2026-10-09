@@ -219,39 +219,45 @@ module SignUpSequenceControllerSupport
     # the duplicate transition. Holding the lock from the policy
     # re-check through `:complete` keeps the actor mutation and the
     # cycle transition atomic with respect to peers.
-    sign_up_ticket_record_class.connected_to(role: :writing) do
-      @sign_up_ticket.with_cycle_lock do
-        @sign_up_ticket.reload
-        context = sign_up_finalization_context
-        return render_sign_up_finalization_forbidden(json: json) unless context &&
-          allowed_to?(:finalize?, context, with: SignUp::FinalizationPolicy)
+    outcome =
+      sign_up_ticket_record_class.connected_to(role: :writing) do
+        @sign_up_ticket.with_cycle_lock do
+          @sign_up_ticket.reload
+          @sign_up_ticket.require_active_cycle!
+          context = sign_up_finalization_context
+          return render_sign_up_finalization_forbidden(json: json) unless context &&
+            allowed_to?(:finalize?, context, with: SignUp::FinalizationPolicy)
 
-        unless @sign_up_ticket.sign_up_checkpoint_pending?
-          finalized = SignUpResult.build(
-            status: :invalid_transition,
-            ticket: @sign_up_ticket,
-            errors: ["ticket is not at checkpoint"],
+          unless @sign_up_ticket.sign_up_checkpoint_pending?
+            finalized = SignUpResult.build(
+              status: :invalid_transition,
+              ticket: @sign_up_ticket,
+              errors: ["ticket is not at checkpoint"],
+            )
+            next
+          end
+
+          finalization_result = finalize_sign_up_side_effect!
+          finalized = perform_sign_up_event(
+            :finalize, payload: { finalization_result: finalization_result },
           )
-          next
+          next unless finalized.success?
+
+          actor = context.pending_actor
+          # Avatar provisioning rejects a principal that cannot sign in. Such a principal
+          # fails the sign-in handoff below and is reported through that failure path.
+          if actor.login_allowed? && actor.access_enabled?
+            IdentityGraphProvisioner.call!(surface: sign_up_surface, principal: actor)
+          end
+          complete = perform_sign_up_event(:complete)
+          next unless complete.success?
+
+          sign_in_result = handoff_to_sign_in_flow!(context.pending_actor)
         end
-
-        finalization_result = finalize_sign_up_side_effect!
-        finalized = perform_sign_up_event(
-          :finalize, payload: { finalization_result: finalization_result },
-        )
-        next unless finalized.success?
-
-        actor = context.pending_actor
-        # Avatar provisioning rejects a principal that cannot sign in. Such a principal
-        # fails the sign-in handoff below and is reported through that failure path.
-        if actor.login_allowed? && actor.access_enabled?
-          IdentityGraphProvisioner.call!(surface: sign_up_surface, principal: actor)
-        end
-        complete = perform_sign_up_event(:complete)
-        next unless complete.success?
-
-        sign_in_result = handoff_to_sign_in_flow!(context.pending_actor)
       end
+
+    if outcome.is_a?(FlowTransitionResult)
+      finalized = SignUpResult.build(status: :expired, ticket: @sign_up_ticket, errors: ["ticket is expired"])
     end
 
     return render_sign_up_failure_result(finalized, json: json) unless finalized&.success?

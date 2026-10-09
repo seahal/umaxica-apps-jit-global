@@ -1069,7 +1069,6 @@ module PreferenceBase
         PreferenceClassRegistry.record_class(preference_prefix, child_type)
       end
 
-    child = record_class.new(attributes)
-    child
+    record_class.new(attributes)
   end
 end

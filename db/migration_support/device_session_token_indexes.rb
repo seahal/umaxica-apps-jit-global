@@ -236,7 +236,7 @@ module DeviceSessionTokenIndexes
   private_class_method :single_column_index_usable?
 
   def self.boolean(value)
-    value == true || value == "t"
+    [true, "t"].include?(value)
   end
   private_class_method :boolean
 

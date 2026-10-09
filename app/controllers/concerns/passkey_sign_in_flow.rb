@@ -282,9 +282,9 @@ module PasskeySignInFlow
 
     return reject_passkey_sign_in unless passkey.status_id == status_class::ACTIVE
 
-    if passkey.is_a?(ClientPasskey) || passkey.is_a?(VisitorPasskey)
-      return reject_passkey_sign_in unless passkey.class.where(id: passkey.id)
+    if (passkey.is_a?(ClientPasskey) || passkey.is_a?(VisitorPasskey)) && !passkey.class.where(id: passkey.id)
         .exists?(["discard_at > ?", passkey.class.database_now])
+      return reject_passkey_sign_in
     end
     return reject_passkey_sign_in unless actor&.active?
 

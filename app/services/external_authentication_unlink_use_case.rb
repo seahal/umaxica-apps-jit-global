@@ -67,7 +67,7 @@ class ExternalAuthenticationUnlinkUseCase
         transactions = ClientSocialCeremonyTransaction.lock.where(
           actor_ref: user.public_id,
           provider: identity.provider,
-          provider_subject_digest: subject_digest,
+          provider_subject_digest: [subject_digest, nil],
           status: SocialCeremonyTransactionable::STATUS_PENDING,
         )
         ids = transactions.pluck(:transaction_id)

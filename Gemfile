@@ -40,8 +40,8 @@ gem "pg_search"
 # PostgreSQL database inspection helpers.
 gem "rails-pg-extras", require: false
 # Redis client.
-gem "redis"
 gem "hiredis-client"
+gem "redis"
 # HTTP client for hand-written outbound requests. Already resolved transitively
 # through the OIDC and OAuth gem chain; declared here because application code
 # depends on it directly via OutboundHttp::Connection.
@@ -140,9 +140,9 @@ gem "lograge"
 # json
 gem "json-canonicalization"
 # ?
-gem "svix"
 gem "mcp"
 gem "rubydex", require: false
+gem "svix"
 
 # Switch
 # Sourced from git rather than the 1.4.2 release: that release calls
@@ -153,6 +153,9 @@ gem "rubydex", require: false
 gem "flipper", github: "flippercloud/flipper", branch: "main"
 gem "flipper-active_record", github: "flippercloud/flipper", branch: "main"
 
+# Schema verification is also an operational task in production deployments.
+gem "pg_query", require: false
+
 group :development, :test do
   # Test coverage reporting.
   gem "simplecov", "~> 1.0", require: false
@@ -162,8 +165,6 @@ group :development, :test do
   gem "test-prof", require: false
   # N+1 query detector alternative.
   gem "prosopite"
-  # SQL query parser.
-  gem "pg_query", require: false
   # OpenAPI contract checker.
   gem "committee-rails", require: false
   # Dead code detector.

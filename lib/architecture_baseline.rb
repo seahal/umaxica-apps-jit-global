@@ -3,7 +3,6 @@
 
 require "json"
 require "open3"
-require "pathname"
 require "yaml"
 
 # Reads and writes the technical-debt baseline for the Umaxica architecture cops.

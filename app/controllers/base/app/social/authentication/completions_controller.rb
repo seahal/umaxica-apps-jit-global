@@ -74,6 +74,8 @@ module Base
               ip_address: request.remote_ip,
               user_agent: request.user_agent,
             )
+            return render_social_completion_failure if commit.is_a?(FlowTransitionResult)
+
             raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless commit.user
 
             complete_admitted_social_signup!(commit, provider, binding)

@@ -156,7 +156,7 @@ class IdentitySocialCeremonyCandidateStore
 
   def payload_for(callback_result)
     principal = callback_result.principal
-    payload = {
+    {
       "principal" => {
         "provider" => principal.provider,
         "subject" => principal.subject,
@@ -166,7 +166,7 @@ class IdentitySocialCeremonyCandidateStore
         "verification_authority" => principal.verification_authority,
       },
     }
-    payload
+
   end
 
   def callback_result_from(payload)

@@ -238,7 +238,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
     when ClientRpSession then "client"
     when OperatorRpSession then "operator"
     when VisitorRpSession then "visitor"
-    else nil
     end
   end
 
@@ -663,7 +662,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
     when "client" then "app"
     when "visitor" then "com"
     when "operator" then "org"
-    else nil
     end
   end
 
@@ -710,7 +708,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
     when "operator" then Operator.find_by(public_id: public_id)
     when "visitor" then Visitor.find_by(public_id: public_id)
     when "client" then Client.find_by(public_id: public_id)
-    else nil
     end
   end
 
@@ -722,7 +719,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
     when "operator" then OperatorToken.find_by(public_id: ref)
     when "visitor" then VisitorToken.find_by(public_id: ref)
     when "client" then ClientToken.find_by(public_id: ref)
-    else nil
     end
   end
 

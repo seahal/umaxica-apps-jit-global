@@ -17,7 +17,18 @@ class AuthMethodGuardConcurrencyTest < ActiveSupport::TestCase
           uv_verified_at: Time.current,
         )
       end
-    @tokens = 2.times.map { ClientToken.create!(user: @client) }
+    @tokens =
+      @passkeys.map do |passkey|
+        ClientToken.create!(
+          user: @client, last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_passkey",
+          last_step_up_method: "passkey", last_step_up_credential_ref: passkey.public_id,
+          last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+          last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+          last_step_up_full_reauthentication: false,
+        ).tap do |token|
+          token.update!(last_step_up_session_public_id: token.public_id)
+        end
+      end
   end
 
   teardown do

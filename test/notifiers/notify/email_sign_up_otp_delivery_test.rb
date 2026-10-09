@@ -12,7 +12,7 @@ class EmailSignUpOtpDeliveryTest < ActiveJob::TestCase
 
   %w(app com).each do |surface|
     test "#{surface} signup Notifier sends only encrypted current transaction generation and rejects cancellation" do
-      _, email_model, flow_model, notifier, _, _ =
+      _, email_model, flow_model, notifier, =
         case surface
         when "app"
           [Client, ClientEmail, ClientSignUpFlow, Notify::App::OtpNotifier, :user_id,

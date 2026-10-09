@@ -98,7 +98,12 @@ class BranchCoverageBatch13MassGuardsTest < ActiveSupport::TestCase
       end
     end
     # RefreshTokenable private helpers via a usage model
-    usage = ClientRpSession.new rescue nil
+    usage =
+      begin
+        ClientRpSession.new
+      rescue StandardError
+        nil
+      end
     if usage
       usage.define_singleton_method(:refresh_token_digest) { nil }
       begin

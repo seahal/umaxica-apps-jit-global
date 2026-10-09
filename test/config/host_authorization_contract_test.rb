@@ -73,7 +73,7 @@ class HostAuthorizationContractTest < Minitest::Test
   }.freeze
 
   def test_effective_development_middleware_accepts_private_origins_and_rejects_an_unknown_host
-    runner = <<~'RUBY'
+    runner = <<~RUBY
       require "json"
       require "rack/mock"
 
@@ -116,7 +116,7 @@ class HostAuthorizationContractTest < Minitest::Test
   end
 
   def test_development_accepts_published_site_hosts_from_public_url_env_and_nothing_else
-    runner = <<~'RUBY'
+    runner = <<~RUBY
       require "json"
       require "rack/mock"
 

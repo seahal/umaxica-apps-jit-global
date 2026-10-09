@@ -41,8 +41,8 @@ class AvatarLegacyClientIdDetector
       return
     end
 
-    if node.is_a?(Prism::CallNode) && avatar_receiver?(node.receiver, bindings)
-      lines << node.location.start_line if legacy_write?(node, bindings)
+    if node.is_a?(Prism::CallNode) && avatar_receiver?(node.receiver, bindings) && legacy_write?(node, bindings)
+      lines << node.location.start_line
     end
 
     node.compact_child_nodes.each { |child| inspect_node(child, bindings, lines) }

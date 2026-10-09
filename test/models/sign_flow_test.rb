@@ -478,7 +478,7 @@ class SignFlowTest < ActiveSupport::TestCase
     )
 
     travel_to now do
-      assert_raises(FlowInvalidTransition) { cycle.advance_sign_in_to_mfa! }
+      assert_raises(FlowInvalidTransition) { cycle.advance_sign_in_to_mfa!.value! }
     end
 
     assert_equal ClientSignInFlowState::EXPIRED, cycle.reload.state_id
@@ -491,10 +491,141 @@ class SignFlowTest < ActiveSupport::TestCase
     )
 
     travel_to now do
-      assert_raises(FlowInvalidTransition) { cycle.advance_sign_in_to_mfa! }
+      assert_raises(FlowInvalidTransition) { cycle.advance_sign_in_to_mfa!.value! }
     end
 
     assert_equal ClientSignInFlowState::EXPIRED, cycle.reload.state_id
+  end
+
+  test "sign-in TTL is checked one microsecond below at and above the owning database clock" do
+    SIGN_IN_CLASSES.each do |model|
+      now = model.database_now
+      [-1, 0, 1].each do |microseconds|
+        flow = model.create!(
+          nonce_digest: model.digest_nonce(SecureRandom.hex(16)),
+          issued_at: now - 1.minute, expires_at: now + Rational(microseconds, 1_000_000),
+        )
+
+        model.stub(:database_now, now) do
+          if microseconds.positive?
+            flow.advance_sign_in_to_mfa!
+
+            assert_predicate flow.reload, :sign_in_mfa_pending?
+          else
+            assert_raises(FlowInvalidTransition) { flow.advance_sign_in_to_mfa!.value! }
+            assert_predicate flow.reload, :sign_in_expired?
+          end
+        end
+      end
+    end
+  end
+
+  test "expired deadlines never replace an existing terminal sign-in state in any realm" do
+    SIGN_IN_CLASSES.each do |model|
+      now = model.database_now
+      %w(COMPLETED FAILED EXPIRED CANCELLED HALTED).each do |state|
+        flow = model.create!(
+          state_id: model.state_id_for(state), completed_at: (now - 2.minutes if state == "COMPLETED"),
+          nonce_digest: model.digest_nonce(SecureRandom.hex(16)),
+          issued_at: now - 3.minutes, expires_at: now - 1.minute,
+        )
+
+        assert_raises(FlowInvalidTransition) { flow.advance_sign_in_to_mfa! }
+        assert_equal model.state_id_for(state), flow.reload.state_id
+      end
+    end
+  end
+
+  test "overdue sign-in refuses invalid source only after persisting expiry in every realm" do
+    SIGN_IN_CLASSES.each do |model|
+      now = model.database_now
+      flow = model.create!(
+        nonce_digest: model.digest_nonce(SecureRandom.hex(16)),
+        issued_at: now - 2.minutes, expires_at: now - 1.minute, return_to: "/dashboard",
+      )
+
+      error = assert_raises(FlowInvalidTransition) { flow.complete_sign_in!.value! }
+
+      assert_equal "cycle is expired", error.message
+      assert_equal model.state_id_for("EXPIRED"), flow.reload.state_id
+    end
+  end
+
+  test "joined sign-in transition returns expiry refusal for the outer owner to unwrap after commit" do
+    SIGN_IN_CLASSES.each do |model|
+      now = model.database_now
+      flow = model.create!(
+        nonce_digest: model.digest_nonce(SecureRandom.hex(16)),
+        issued_at: now - 2.minutes, expires_at: now - 1.minute, return_to: "/dashboard",
+      )
+
+      outcome = model.transaction(requires_new: true) { flow.advance_sign_in_to_mfa! }
+
+      assert_predicate outcome, :expired?
+      assert_equal model.state_id_for("EXPIRED"), flow.reload.state_id
+      assert_raises(FlowInvalidTransition) { outcome.value! }
+      assert_equal model.state_id_for("EXPIRED"), flow.reload.state_id
+    end
+  end
+
+  test "a nonjoinable transaction owner receives expiry refusal without rolling its expiry back" do
+    SIGN_IN_CLASSES.each do |model|
+      now = model.database_now
+      flow = model.create!(
+        nonce_digest: model.digest_nonce(SecureRandom.hex(16)),
+        issued_at: now - 2.minutes, expires_at: now - 1.minute,
+      )
+
+      outcome = model.transaction(requires_new: true, joinable: false) { flow.advance_sign_in_to_mfa! }
+
+      assert_predicate outcome, :expired?
+      assert_predicate flow.reload, :sign_in_expired?
+      assert_raises(FlowInvalidTransition) { outcome.value! }
+    end
+  end
+
+  test "expiry refusal rolls back preceding locked operation writes before committing only expiry" do
+    SIGN_IN_CLASSES.each do |model|
+      now = model.database_now
+      flow = model.create!(
+        nonce_digest: model.digest_nonce(SecureRandom.hex(16)),
+        issued_at: now - 2.minutes, expires_at: now - 1.minute, return_to: "/dashboard",
+      )
+
+      outcome =
+        model.transaction(requires_new: true) do
+          flow.with_cycle_lock do
+            flow.update!(return_to: "/unauthorized")
+            flow.advance_sign_in_to_mfa!
+
+            flunk("an expired operation must not continue to later writes")
+          end
+        end
+
+      assert_predicate outcome, :expired?
+      assert_equal "/dashboard", flow.reload.return_to
+      assert_equal model.state_id_for("EXPIRED"), flow.state_id
+      assert_raises(FlowInvalidTransition) { outcome.value! }
+    end
+  end
+
+  test "joined sign-up transition commits expiry before refusing completion in every realm" do
+    SIGN_UP_CLASSES.each do |model|
+      now = model.database_now
+      attributes = { step: "start" }
+      attributes[:entry_method] = "email" unless model == OperatorSignUpFlow
+      flow = model.create!(
+        **attributes,
+        nonce_digest: model.digest_nonce(SecureRandom.hex(16)),
+        issued_at: now - 2.minutes, expires_at: now - 1.minute, return_to: "/dashboard",
+      )
+
+      outcome = model.transaction(requires_new: true) { flow.complete_sign_up! }
+
+      assert_predicate outcome, :expired?
+      assert_equal model.status_id_for("EXPIRED"), flow.reload.status_id
+      assert_raises(FlowInvalidTransition) { outcome.value! }
+    end
   end
 
   test "sign-up cycles cannot complete before sign-in handoff" do

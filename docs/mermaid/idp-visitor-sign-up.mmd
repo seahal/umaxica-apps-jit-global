@@ -1,4 +1,8 @@
 stateDiagram-v2
+    %% Terminal absorption precedes TTL and requested source validation.
+    %% Where the lifecycle has expires_at, overdue requests persist EXPIRED first.
+    %% The owning transaction returns an expiry refusal; callers unwrap only after commit.
+    %% A refused locked operation rolls back its savepoint before persisting expiry.
     %% CURRENT implementation; sources and guards in transition inventory.
     state "STARTED id=10" as STARTED
     state "CONTACT_PENDING id=20" as CONTACT_PENDING

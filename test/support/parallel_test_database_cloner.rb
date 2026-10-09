@@ -3,7 +3,6 @@
 require "digest"
 require "fileutils"
 require "pg"
-require "set"
 
 module ParallelTestDatabaseCloner
   # CREATE DATABASE ... TEMPLATE fails when the template is used by another
@@ -170,7 +169,7 @@ module ParallelTestDatabaseCloner
 
             group.each { |task| rebuild_clone(connection, **task) }
           end
-        rescue => e
+        rescue StandardError => e
           errors << e
         ensure
           connection.close

@@ -14,6 +14,18 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
   end
 
   %w(app com).each do |surface|
+    test "#{surface} email OTP cancellation refuses a browser without sign-in admission" do
+      browser = open_session
+      host = (surface == "app") ? ENV.fetch("PUBLIC_AUTH_SERVICE_URL") : ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+      browser.host!(host)
+
+      browser.delete("/sign/in/email")
+
+      assert_equal 400, browser.response.status
+    end
+  end
+
+  %w(app com).each do |surface|
     test "#{surface} real and dummy code entry share microsecond expiry boundaries" do
       address = "expiry-real-#{SecureRandom.hex(8)}@example.test"
       if surface == "app"
@@ -323,6 +335,25 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
 
       assert source_unchanged,
              "flow-specific wrong-code verification must not rotate the Source OTP generation"
+
+      cancellation_paths = []
+      [real, dummy].each do |browser|
+        browser.delete("/sign/in/email", params: { pt: nil })
+
+        assert_equal 303, browser.response.status
+        cancellation_paths << URI.parse(browser.response.location).path
+        cancelled = model.find_active_by_raw_sid(browser.cookies[cookie_name])
+
+        assert cancelled.reload.email_otp_context.fetch("cancelled_at")
+        expected_contact = (browser == real) ? contact : nil
+
+        assert_not cancelled.email_otp_challenge_current?(contact: expected_contact)
+        assert_equal :missing_challenge, cancelled.verify_email_otp!(code: wrong).status
+        browser.get("/sign/in/email/edit", params: { ri: "jp" })
+
+        assert_equal 302, browser.response.status
+      end
+      assert_equal cancellation_paths.first, cancellation_paths.last
     end
   end
 

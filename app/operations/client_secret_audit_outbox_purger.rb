@@ -39,8 +39,8 @@ class ClientSecretAuditOutboxPurger
       return :undelivered unless event.delivered_at
       return :pending unless event.discard_at <= now && event.purge_eligible_at <= now
 
-      if event.event_name == "secret.issuance_purged"
-        return :replay_barrier unless replay_barrier_retirable?(event, owner, now)
+      if (event.event_name == "secret.issuance_purged") && !replay_barrier_retirable?(event, owner, now)
+        return :replay_barrier
       end
       return :held if (owner && owner.client_retention_holds.active_at(now).exists?) ||
         AppEnforcementCase.principal_effect_blocking?(event.client_ref, :withdrawal_purge_blocked) ||
@@ -103,8 +103,6 @@ class ClientSecretAuditOutboxPurger
         return nil unless terminal_statuses.include?(terminal_status) || authority.expired?(now)
 
         [authority.expires_at, authority.updated_at].compact.max
-      else
-        nil
       end
     end
 

@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "pathname"
-
 # Minimal dotenv-compatible loader for the repository's non-secret development contract.
 # It intentionally does not execute shell syntax and never overrides an explicitly exported
 # environment variable. Production processes do not read repository-local environment files.

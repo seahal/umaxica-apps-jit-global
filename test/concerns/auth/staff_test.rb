@@ -71,7 +71,7 @@ class AuthStaffTest < ActiveSupport::TestCase
         super(key, actual_value)
         @options[key] = opts
       else
-        super(key, value)
+        super
       end
     end
 

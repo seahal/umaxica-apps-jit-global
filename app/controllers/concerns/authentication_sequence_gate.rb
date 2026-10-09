@@ -21,6 +21,7 @@ module AuthenticationSequenceGate
         with_sign_in_flow_writing(cycle) do
           sign_in_guardrail_participant(cycle).advance_if_clear!
         end
+      return reject_invalid_sign_in_sequence_path(default_path) if result.is_a?(FlowTransitionResult)
       return default_path if result.blocking?
 
       return sign_in_checkpoint_path(pt: url_pt)
@@ -71,6 +72,7 @@ module AuthenticationSequenceGate
         with_sign_in_flow_writing(cycle) do
           sign_in_checkpoint_participant(cycle).advance_if_clear!
         end
+      return reject_invalid_sign_in_sequence! if result.is_a?(FlowTransitionResult)
       if result.blocking?
         return redirect_to(sign_in_checkpoint_path(pt: cycle.reload.return_to.presence || pt), **safe_redirect_options)
       end
@@ -96,6 +98,8 @@ module AuthenticationSequenceGate
         with_sign_in_flow_writing(cycle) do
           sign_in_checkpoint_participant(cycle).advance_if_clear!
         end
+      return reject_invalid_sign_in_sequence! if result.is_a?(FlowTransitionResult)
+
       if result.blocking?
         @checkpoint_items = result.stack
         return
@@ -115,20 +119,23 @@ module AuthenticationSequenceGate
       return
     end
 
-    if sign_in_sequence_required_for_participant?(:checkpoint)
-      return unless require_sign_in_sequence_participant!(
-        participant: :checkpoint,
-        policy_rule: :show_checkpoint?,
-      )
+    if sign_in_sequence_required_for_participant?(:checkpoint) && !require_sign_in_sequence_participant!(
+      participant: :checkpoint,
+      policy_rule: :show_checkpoint?,
+    )
+      return
     end
 
     redirect_after_checkpoint_sequence!(pt: signed_pt_param)
   end
 
   def redirect_local_checkpoint_result!(cycle)
-    with_sign_in_flow_writing(cycle) do
-      SignInSelectorParticipant.new(cycle: cycle, actor: sign_in_flow_actor(cycle)).auto_commit_single!
-    end
+    outcome =
+      with_sign_in_flow_writing(cycle) do
+        SignInSelectorParticipant.new(cycle: cycle, actor: sign_in_flow_actor(cycle)).auto_commit_single!
+      end
+    return reject_invalid_sign_in_sequence! if outcome.is_a?(FlowTransitionResult)
+
     redirect_to(after_login_path, status: :see_other)
   end
 
@@ -228,13 +235,16 @@ module AuthenticationSequenceGate
     return reject_invalid_sign_in_sequence! unless cycle.sign_in_selector_pending?
     return reject_invalid_sign_in_sequence! unless allowed_to?(:show_selector?, cycle)
 
-    with_sign_in_flow_writing(cycle) do
-      SignInSelectorParticipant.new(
-        cycle: cycle,
-        actor: sign_in_flow_actor(cycle),
-        authn_public_id: Actor.authn.login_public_id,
-      ).auto_commit_single!
-    end
+    outcome =
+      with_sign_in_flow_writing(cycle) do
+        SignInSelectorParticipant.new(
+          cycle: cycle,
+          actor: sign_in_flow_actor(cycle),
+          authn_public_id: Actor.authn.login_public_id,
+        ).auto_commit_single!
+      end
+
+    return reject_invalid_sign_in_sequence! if outcome.is_a?(FlowTransitionResult)
 
     result = issue_active_session_for_selector!(cycle.reload)
     return reject_invalid_sign_in_sequence! unless result[:status] == :success
@@ -470,11 +480,16 @@ module AuthenticationSequenceGate
       # nothing. Neither is terminal.
       sign_in_flow_locator_for(actor: resource).issue!(cycle) unless local_authentication_ceremony?
     when :success, :authentication_evidence_recorded
-      cycle.advance_sign_in_to_guardrail! if cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
-      if cycle.sign_in_guardrail_pending?
-        guardrail = SignInGuardrailParticipant.new(cycle: cycle, actor: resource)
-        guardrail.advance_if_clear!
-      end
+      outcome =
+        cycle.with_cycle_lock do
+          cycle.require_active_cycle!
+          cycle.advance_sign_in_to_guardrail! if cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
+          if cycle.sign_in_guardrail_pending?
+            SignInGuardrailParticipant.new(cycle: cycle, actor: resource).advance_if_clear!
+          end
+        end
+      return { status: :invalid_request, reason: :flow_expired } if outcome.is_a?(FlowTransitionResult)
+
       sign_in_flow_locator_for(actor: resource).issue!(cycle.reload) unless local_authentication_ceremony?
     else
       cycle.halt_sign_in! unless cycle.sign_in_completed? || cycle.sign_in_failed? || cycle.sign_in_expired? ||
@@ -536,9 +551,11 @@ module AuthenticationSequenceGate
 
     cycle = cycle.reload
     if cycle.sign_in_guardrail_pending?
-      with_sign_in_flow_writing(cycle) do
-        SignInGuardrailParticipant.new(cycle: cycle, actor: actor).advance_if_clear!
-      end
+      outcome =
+        with_sign_in_flow_writing(cycle) do
+          SignInGuardrailParticipant.new(cycle: cycle, actor: actor).advance_if_clear!
+        end
+      return false if outcome.is_a?(FlowTransitionResult)
     end
     sign_in_flow_locator_for(actor: actor, token: current_session).issue!(cycle.reload)
     reset_current_db_sign_in_flow_for_sequence!

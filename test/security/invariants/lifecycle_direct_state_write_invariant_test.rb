@@ -61,7 +61,7 @@ class LifecycleDirectStateWriteInvariantTest < ActiveSupport::TestCase
 
   test "production lifecycle code never selects the legacy failed terminal" do
     offenders = []
-    transition_writer = /(?:transition_(?:sign_in|sign_up|sign_out)_to!|transition_cycle_to!)\s*\(\s*[\"']FAILED/
+    transition_writer = /(?:transition_(?:sign_in|sign_up|sign_out)_to!|transition_cycle_to!)\s*\(\s*["']FAILED/
     legacy_event = /(?:event\s*:\s*|when\s+):fail\b/
 
     (Rails.root.glob("app/**/*.rb") + Rails.root.glob("lib/**/*.rb")).each do |path|

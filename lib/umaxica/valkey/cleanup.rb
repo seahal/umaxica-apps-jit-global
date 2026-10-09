@@ -1,8 +1,6 @@
 # typed: false
 # frozen_string_literal: true
 
-require "set"
-
 module Umaxica
   module Valkey
     # Prefix-scoped cleanup for tests. Never issues FLUSHALL/FLUSHDB.

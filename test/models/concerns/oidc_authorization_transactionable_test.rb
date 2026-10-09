@@ -394,7 +394,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
   private
 
   def create_transaction(transaction_class, surface:, unique: "one", prompt: nil, max_age: nil)
-    transaction = transaction_class.create_transaction!(
+    transaction_class.create_transaction!(
       surface: surface,
       intent: "sign_in",
       client_id: "core-app",
@@ -411,6 +411,6 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
       prompt: prompt,
       max_age: max_age,
     )
-    transaction
+
   end
 end

@@ -186,6 +186,14 @@ module Auth
             ensure_email_auth_verification_elapsed(start_time, code: @user_email&.pass_code)
           end
 
+          public
+
+          def destroy
+            admitted_auth_ceremony_session.cancel_email_otp_challenge!
+            SignAppInEmailAuthenticationState.clear!(session)
+            redirect_to(new_auth_app_sign_in_email_path(pt: peek_pt), status: :see_other)
+          end
+
           private
 
           def cache_sign_in_turnstile_validation
@@ -284,7 +292,6 @@ module Auth
               delivery_help: page_t("#{scope}.delivery_help"),
               back_link: {
                 label: page_t("#{scope}.return_page"),
-                href: new_auth_app_sign_in_email_path(pt: pt),
               },
             }
           end

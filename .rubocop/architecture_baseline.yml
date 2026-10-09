@@ -866,7 +866,6 @@ Umaxica/ExplicitMethodVisibility:
   app/models/concerns/email_verification_challengeable.rb: 6
   app/models/concerns/enforcement_appeal.rb: 4
   app/models/concerns/enforcement_recovery_ceremony_recordable.rb: 4
-  app/models/concerns/flow_base.rb: 5
   app/models/concerns/flow_sign_in.rb: 21
   app/models/concerns/flow_withdrawal.rb: 12
   app/models/concerns/has_birthdate.rb: 7
@@ -1117,7 +1116,6 @@ Umaxica/ExplicitMethodVisibility:
   app/policies/client_email_policy.rb: 4
   app/policies/client_external_identity_policy.rb: 1
   app/policies/client_oidc_connection_policy.rb: 2
-  app/policies/client_passkey_policy.rb: 7
   app/policies/client_policy.rb: 5
   app/policies/client_preference_policy.rb: 1
   app/policies/client_telephone_policy.rb: 4
@@ -1133,7 +1131,6 @@ Umaxica/ExplicitMethodVisibility:
   app/policies/operator_chronicle_policy.rb: 1
   app/policies/operator_lifecycle_request_policy.rb: 6
   app/policies/operator_oidc_connection_policy.rb: 2
-  app/policies/operator_passkey_policy.rb: 7
   app/policies/operator_policy.rb: 6
   app/policies/operator_preference_policy.rb: 1
   app/policies/operator_secret_credential_policy.rb: 7
@@ -1154,7 +1151,6 @@ Umaxica/ExplicitMethodVisibility:
   app/policies/sign_up_eligibility_policy.rb: 2
   app/policies/visitor_email_policy.rb: 4
   app/policies/visitor_oidc_connection_policy.rb: 2
-  app/policies/visitor_passkey_policy.rb: 7
   app/policies/visitor_policy.rb: 2
   app/policies/visitor_preference_policy.rb: 1
   app/policies/visitor_secret_credential_policy.rb: 8

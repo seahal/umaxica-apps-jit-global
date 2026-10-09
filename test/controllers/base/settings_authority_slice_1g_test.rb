@@ -196,8 +196,8 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
                    rp_session
                                       .issue_refresh_token!,
                  )}",].join("; ")
-    headers = headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
-    headers
+    headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+
   end
 
   def host_headers(host = nil)

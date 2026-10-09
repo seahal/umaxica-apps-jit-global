@@ -98,6 +98,24 @@ module SignIn
       end
     end
 
+    test "expired guardrail persists expiry and returns refusal after its outer transaction commits" do
+      now = ClientSignInFlow.database_now
+      cycle = ClientSignInFlow.create!(
+        state_id: ClientSignInFlow.state_id_for("GUARDRAIL_PENDING"),
+        nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.hex(16)),
+        issued_at: now - 2.minutes, expires_at: now - 1.minute,
+      )
+
+      outcome =
+        ClientSignInFlow.transaction(requires_new: true) do
+          SignInGuardrailParticipant.new(cycle: cycle, actor: nil, evaluators: []).advance_if_clear!
+        end
+
+      assert_predicate outcome, :expired?
+      assert_predicate cycle.reload, :sign_in_expired?
+      assert_raises(FlowInvalidTransition) { outcome.value! }
+    end
+
     private
 
     def create_client(status_id: ClientStatus::ACTIVE)

@@ -40,7 +40,7 @@ module AuthStepUpPasskeyCeremony
     credential = params.expect(
       credential: [
         :id, :rawId, :type, :authenticatorAttachment, :clientExtensionResults,
-        response: %i(authenticatorData clientDataJSON signature userHandle), clientExtensionResults: {},
+        { response: %i(authenticatorData clientDataJSON signature userHandle), clientExtensionResults: {} },
       ],
     ).to_h
     IdentityStepUpPasskeyVerificationCommitter.call!(

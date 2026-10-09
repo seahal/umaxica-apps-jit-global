@@ -97,7 +97,7 @@ module SignEmailRegistrable
       end
 
     return :cooldown if result[:cooldown]
-    return result[:status] if result[:status] == false || result[:status] == :cooldown
+    return result[:status] if [false, :cooldown].include?(result[:status])
     return false unless result[:status] == :ok
 
     send_verification_email(result[:otp_number])

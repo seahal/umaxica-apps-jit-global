@@ -131,34 +131,41 @@ class IdentityPasskeyRegistrationFinalCommitter
     def commit_ticket!(config, actor, token, transaction, payload, digest, ip_address, user_agent)
       config.fetch(:ticket_class).connected_to(role: :writing) do
         config.fetch(:ticket_class).transaction do
-          token.with_lock do
-            record = config.fetch(:session_class).lock.find_by!(
-              config.fetch(:token_key) => token.id,
-              :step_up_ceremony_transaction_ref => transaction.transaction_id,
-            )
-            transaction.with_lock do
-              ceremony = config.fetch(:ceremony_class).lock.find(payload.fetch("ceremony_session_ref"))
-              candidate = config.fetch(:candidate_class).lock.find_by!(
-                step_up_ceremony_transaction_ref: transaction.transaction_id,
-              )
-              now = transaction.class.database_now
-
-              validate_ticket!(config, actor, token, transaction, record, digest, payload, now)
-              validate_candidate!(config, actor, token, transaction, candidate, now)
-              validate_continuity!(ceremony, transaction, now)
-              return existing_credential!(actor, transaction, candidate, ceremony, config) if transaction.consumed?
-
-              refuse!("passkey registration already ended") if candidate.consumed_at || ceremony.completed?
-
-              credential = create_credential!(config, actor, candidate, ip_address, user_agent)
-              candidate.update!(consumed_at: now)
-              transaction.commit_registration_consumption!(
-                now: now, method: "passkey", registered_credential_ref: credential.public_id,
-              )
-              ceremony.complete!(now: now)
-              credential
-            end
+          token.device_session.with_lock do
+            commit_under_device_lock!(config, actor, token, transaction, payload, digest, ip_address, user_agent)
           end
+        end
+      end
+    end
+
+    def commit_under_device_lock!(config, actor, token, transaction, payload, digest, ip_address, user_agent)
+      token.with_lock do
+        record = config.fetch(:session_class).lock.find_by!(
+          config.fetch(:token_key) => token.id,
+          :step_up_ceremony_transaction_ref => transaction.transaction_id,
+        )
+        transaction.with_lock do
+          ceremony = config.fetch(:ceremony_class).lock.find(payload.fetch("ceremony_session_ref"))
+          candidate = config.fetch(:candidate_class).lock.find_by!(
+            step_up_ceremony_transaction_ref: transaction.transaction_id,
+          )
+          now = transaction.class.database_now
+
+          validate_ticket!(config, actor, token, transaction, record, digest, payload, now)
+          validate_candidate!(config, actor, token, transaction, candidate, now)
+          validate_continuity!(ceremony, transaction, now)
+          return existing_credential!(actor, transaction, candidate, ceremony, config) if transaction.consumed?
+
+          refuse!("passkey registration already ended") if candidate.consumed_at || ceremony.completed?
+          ensure_current_registration_authority!(actor, token, transaction)
+
+          credential = create_credential!(config, actor, candidate, ip_address, user_agent)
+          candidate.update!(consumed_at: now)
+          transaction.commit_registration_consumption!(
+            now: now, method: "passkey", registered_credential_ref: credential.public_id,
+          )
+          ceremony.complete!(now: now)
+          credential
         end
       end
     end
@@ -180,6 +187,28 @@ class IdentityPasskeyRegistrationFinalCommitter
         )
       end
       credential
+    end
+
+    def ensure_current_registration_authority!(actor, token, transaction)
+      return if transaction.purpose == "bootstrap"
+
+      policy =
+        case actor
+        when Client then ClientPasskeyPolicy.new(ClientPasskey, user: actor)
+        when Visitor then VisitorPasskeyPolicy.new(VisitorPasskey, user: actor)
+        when Operator then OperatorPasskeyPolicy.new(OperatorPasskey, user: actor)
+        else refuse!("unsupported passkey registration actor")
+        end
+      evidence = policy.management_credential(token: token)
+      refuse!("passkey registration evidence is unavailable") unless evidence
+
+      evidence.lock!
+      now = transaction.class.database_now
+      unless !transaction.expired?(now: now) &&
+          transaction.required_scope == policy.management_requirement(token: token).scope &&
+          policy.apply(:create?) && policy.management_authorized?(token: token, now: now)
+        refuse!("passkey registration requires current scoped Step-Up")
+      end
     end
 
     def validate_ticket!(config, actor, token, transaction, record, digest, payload, now)

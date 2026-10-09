@@ -37,7 +37,11 @@ if Rails.env.development?
         x_forwarded_p: env["HTTP_X_FORWARDED_PORT"],
         forwarded_present: env.key?("HTTP_FORWARDED"),
         origin: env["HTTP_ORIGIN"],
-        referer_host: (URI.parse(env["HTTP_REFERER"].to_s).host rescue "unparseable"),
+        referer_host: begin
+          URI.parse(env["HTTP_REFERER"].to_s).host
+        rescue StandardError
+          "unparseable"
+        end,
         sec_fetch_site: env["HTTP_SEC_FETCH_SITE"],
         sec_fetch_mode: env["HTTP_SEC_FETCH_MODE"],
         sec_fetch_dest: env["HTTP_SEC_FETCH_DEST"],

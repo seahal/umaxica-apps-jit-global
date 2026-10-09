@@ -185,8 +185,7 @@ class RecoveryPasscodeTopUp
 
   def recovery_status_association
     credential_class.reflect_on_all_associations(:belongs_to).find do |association|
-      association.name == :visitor_secret_credential_status ||
-        association.name == :staff_secret_credential_status
+      [:visitor_secret_credential_status, :staff_secret_credential_status].include?(association.name)
     end&.name
   end
 

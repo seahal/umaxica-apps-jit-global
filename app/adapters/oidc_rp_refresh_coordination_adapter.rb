@@ -26,7 +26,7 @@ class OidcRpRefreshCoordinationAdapter
     result = @connection.call(
       "SET", lease_key(resource_type:, rp_session_public_id:), owner.to_s, "NX", "PX", lease_ttl_milliseconds,
     )
-    result == "OK" || result == true
+    ["OK", true].include?(result)
   end
 
   def publish(resource_type:, rp_session_public_id:, ciphertext:)

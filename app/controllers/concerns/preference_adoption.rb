@@ -46,7 +46,7 @@ module PreferenceAdoption
 
   def adoptable_preference_class?
     name = preference_class.name
-    name == "AppPreference" || name == "OrgPreference" || name == "ComPreference"
+    %w(AppPreference OrgPreference ComPreference).include?(name)
   end
 
   # Find or create the 1:1 ClientPreference/OperatorPreference/VisitorPreference for this resource.
@@ -352,18 +352,18 @@ module PreferenceAdoption
           end
         end
 
-      if target_child.option_id != source_child.option_id
-        target_option_class = PreferenceClassRegistry.option_class(target_prefix, type)
-        # Map option by name since option IDs may differ across databases
-        resolved_id = resolve_cross_db_option_id(source_child, target_option_class)
-        next unless resolved_id
+      next unless target_child.option_id != source_child.option_id
 
-        connection_class = preference_connection_class(target)
-        if connection_class
-          connection_class.connected_to(role: :writing) { target_child.update!(option_id: resolved_id) }
-        else
-          target_child.update!(option_id: resolved_id)
-        end
+      target_option_class = PreferenceClassRegistry.option_class(target_prefix, type)
+      # Map option by name since option IDs may differ across databases
+      resolved_id = resolve_cross_db_option_id(source_child, target_option_class)
+      next unless resolved_id
+
+      connection_class = preference_connection_class(target)
+      if connection_class
+        connection_class.connected_to(role: :writing) { target_child.update!(option_id: resolved_id) }
+      else
+        target_child.update!(option_id: resolved_id)
       end
     end
 

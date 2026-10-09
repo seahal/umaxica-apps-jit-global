@@ -34,13 +34,13 @@ class DatabasePasswordConfigTest < ActiveSupport::TestCase
     # 20, not 21: the Solid Cache `cache` connection was removed with Solid Cache
     # itself (adr/solid-cache-removal-and-valkey-cache-separation.md). Application
     # cache is Valkey-backed and has no PostgreSQL database.
-    assert_equal 20, database_yml.scan(/host: <%= production_value\.call\("NEON_PGHOST"\) %>/).size
-    assert_equal 20, database_yml.scan(/username: <%= production_value\.call\("NEON_PGUSER"\) %>/).size
-    assert_equal 20, database_yml.scan(/password: <%= production_value\.call\("NEON_PGPASSWORD"\) %>/).size
-    assert_equal 18, database_yml.scan(/host: <%= production_value\.call\("NEON_REPLICA_PGHOST"\) %>/).size
-    assert_equal 18, database_yml.scan(/username: <%= production_value\.call\("NEON_REPLICA_PGUSER"\) %>/).size
-    assert_equal 18, database_yml.scan(/password: <%= production_value\.call\("NEON_REPLICA_PGPASSWORD"\) %>/).size
-    assert_equal 18, database_yml.scan(/sslmode: <%= production_value\.call\("NEON_REPLICA_PGSSLMODE"\) %>/).size
+    assert_equal 20, database_yml.scan('host: <%= production_value.call("NEON_PGHOST") %>').size
+    assert_equal 20, database_yml.scan('username: <%= production_value.call("NEON_PGUSER") %>').size
+    assert_equal 20, database_yml.scan('password: <%= production_value.call("NEON_PGPASSWORD") %>').size
+    assert_equal 18, database_yml.scan('host: <%= production_value.call("NEON_REPLICA_PGHOST") %>').size
+    assert_equal 18, database_yml.scan('username: <%= production_value.call("NEON_REPLICA_PGUSER") %>').size
+    assert_equal 18, database_yml.scan('password: <%= production_value.call("NEON_REPLICA_PGPASSWORD") %>').size
+    assert_equal 18, database_yml.scan('sslmode: <%= production_value.call("NEON_REPLICA_PGSSLMODE") %>').size
     channel_binding_pattern =
       /channel_binding: <%= production_value\.call\("NEON_REPLICA_PGCHANNELBINDING"\) %>/
 

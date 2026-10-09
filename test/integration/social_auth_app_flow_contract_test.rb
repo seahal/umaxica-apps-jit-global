@@ -455,14 +455,16 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
         @social_signup_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
         assert_predicate @social_signup_binding, :present?
-        assert_redirected_to ((flow2_config
-          .fetch(:normalized) == "google") ? auth_app_sign_up_check_google_confirmation_url(
-            ri: "jp",
-            fb: @social_signup_binding,
-          ) : auth_app_sign_up_check_apple_confirmation_url(
-            ri: "jp",
-            fb: @social_signup_binding,
-          ))
+        assert_redirected_to(
+          (flow2_config
+                    .fetch(:normalized) == "google") ? auth_app_sign_up_check_google_confirmation_url(
+                      ri: "jp",
+                      fb: @social_signup_binding,
+                    ) : auth_app_sign_up_check_apple_confirmation_url(
+                      ri: "jp",
+                      fb: @social_signup_binding,
+                    ),
+        )
         follow_redirect!
 
         assert_response :ok
@@ -486,14 +488,16 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
           headers: browser_headers.merge(@callback_headers),
         )
 
-        assert_redirected_to ((flow5_config
-          .fetch(:normalized) == "google") ? auth_app_sign_up_check_google_birthdate_url(
-            ri: "jp",
-            fb: @social_signup_binding,
-          ) : auth_app_sign_up_check_apple_birthdate_url(
-            ri: "jp",
-            fb: @social_signup_binding,
-          ))
+        assert_redirected_to(
+          (flow5_config
+                    .fetch(:normalized) == "google") ? auth_app_sign_up_check_google_birthdate_url(
+                      ri: "jp",
+                      fb: @social_signup_binding,
+                    ) : auth_app_sign_up_check_apple_birthdate_url(
+                      ri: "jp",
+                      fb: @social_signup_binding,
+                    ),
+        )
         follow_redirect!
 
         assert_no_difference("Client.count") do
@@ -1153,14 +1157,16 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
         @social_signup_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
         assert_predicate @social_signup_binding, :present?
-        assert_redirected_to ((flow9_config
-          .fetch(:normalized) == "google") ? auth_app_sign_up_check_google_confirmation_url(
-            ri: "jp",
-            fb: @social_signup_binding,
-          ) : auth_app_sign_up_check_apple_confirmation_url(
-            ri: "jp",
-            fb: @social_signup_binding,
-          ))
+        assert_redirected_to(
+          (flow9_config
+                    .fetch(:normalized) == "google") ? auth_app_sign_up_check_google_confirmation_url(
+                      ri: "jp",
+                      fb: @social_signup_binding,
+                    ) : auth_app_sign_up_check_apple_confirmation_url(
+                      ri: "jp",
+                      fb: @social_signup_binding,
+                    ),
+        )
         follow_redirect!
 
         assert_response :ok
@@ -1184,14 +1190,16 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
           headers: browser_headers.merge(@callback_headers),
         )
 
-        assert_redirected_to ((flow12_config
-          .fetch(:normalized) == "google") ? auth_app_sign_up_check_google_birthdate_url(
-            ri: "jp",
-            fb: @social_signup_binding,
-          ) : auth_app_sign_up_check_apple_birthdate_url(
-            ri: "jp",
-            fb: @social_signup_binding,
-          ))
+        assert_redirected_to(
+          (flow12_config
+                    .fetch(:normalized) == "google") ? auth_app_sign_up_check_google_birthdate_url(
+                      ri: "jp",
+                      fb: @social_signup_binding,
+                    ) : auth_app_sign_up_check_apple_birthdate_url(
+                      ri: "jp",
+                      fb: @social_signup_binding,
+                    ),
+        )
         follow_redirect!
 
         assert_no_difference("Client.count") do

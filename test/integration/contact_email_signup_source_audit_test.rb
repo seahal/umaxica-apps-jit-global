@@ -302,7 +302,8 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
           assert_not contact.reload.binding_effective?
           assert_not outbox.exists?(operation_ref: flow.public_id)
           assert_not flow.reload.sign_up_completed?
-          assert_equal((outcome == :suspended_owner) ? 422 : 403, browser.response.status)
+          assert_equal((outcome == :suspended_owner) ? 422 : 410, browser.response.status)
+          assert_predicate flow, :sign_up_expired? if outcome == :expired_before_locked_decision
           next
         end
 

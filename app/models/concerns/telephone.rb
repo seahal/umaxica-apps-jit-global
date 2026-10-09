@@ -45,13 +45,13 @@ module Telephone
     validate :validate_telephone_number
 
     validates :confirm_policy, acceptance: true,
-                               unless: Proc.new { |a| a.raw_number.blank? && a.pass_code.present? }
+                               unless: proc { |a| a.raw_number.blank? && a.pass_code.present? }
     validates :confirm_using_mfa, acceptance: true,
-                                  unless: Proc.new { |a| a.raw_number.blank? && a.pass_code.present? }
+                                  unless: proc { |a| a.raw_number.blank? && a.pass_code.present? }
     validates :pass_code, numericality: { only_integer: true },
                           length: { is: 6 },
                           presence: true,
-                          unless: Proc.new { |a| a.pass_code.blank? && a.raw_number.present? }
+                          unless: proc { |a| a.pass_code.blank? && a.raw_number.present? }
   end
 
   class_methods do

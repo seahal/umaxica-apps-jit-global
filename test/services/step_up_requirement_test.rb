@@ -115,15 +115,14 @@ class StepUpRequirementTest < ActiveSupport::TestCase
   end
 
   test "disabled requirements cannot carry step-up-only properties" do
-    requirement = StepUpRequirement.new(
-      step_up_required: false, phishing_resistant_required: false,
-      user_verification_required: false, full_reauthentication_required: false,
-      allowed_methods: [], ttl: nil, scope: nil, purpose: nil, audience: nil,
-      session_binding: nil, token_binding: nil, require_session_binding: false,
-      actor_ref: nil, resource_ref: nil, tenant_ref: nil,
-    )
+    requirement = StepUpRequirement.new(step_up_required: false)
 
     assert_not_predicate requirement, :step_up_required?
+    assert_equal({ step_up_required: false }, requirement.to_h)
+    assert_equal requirement.to_h, StepUpRequirement.build(requirement.to_h).to_h
+    assert_equal requirement.to_h, StepUpRequirement.build(step_up_required: false).to_h
+    assert_not requirement.method_allowed?(:passkey)
+    assert_predicate requirement, :frozen?
 
     assert_raises(ArgumentError) do
       StepUpRequirement.new(
@@ -134,6 +133,64 @@ class StepUpRequirementTest < ActiveSupport::TestCase
         token_binding: "token-1", require_session_binding: true, actor_ref: "actor-1",
         resource_ref: nil, tenant_ref: nil,
       )
+    end
+  end
+
+  test "disabled requirements reject explicitly supplied properties including nil false and empty values" do
+    {
+      required_aal: nil,
+      phishing_resistant_required: false,
+      user_verification_required: false,
+      full_reauthentication_required: false,
+      allowed_methods: [],
+      ttl: nil,
+      scope: nil,
+      purpose: nil,
+      audience: nil,
+      session_binding: nil,
+      token_binding: nil,
+      require_session_binding: false,
+      actor_ref: nil,
+      resource_ref: nil,
+      tenant_ref: nil,
+    }.each do |field, value|
+      assert_raises(StepUpRequirement::Invalid, field.to_s) do
+        StepUpRequirement.new(**{ :step_up_required => false, field => value })
+      end
+    end
+  end
+
+  test "disabled requirement rejects missing and nonboolean required flags" do
+    assert_raises(StepUpRequirement::Invalid) { StepUpRequirement.new }
+    [nil, "", "false", 0, [], {}].each do |value|
+      assert_raises(StepUpRequirement::Invalid) { StepUpRequirement.new(step_up_required: value) }
+    end
+  end
+
+  test "enabled requirements still require each explicit field after the disabled contract is accepted" do
+    attributes = {
+      step_up_required: true,
+      phishing_resistant_required: false,
+      user_verification_required: false,
+      full_reauthentication_required: false,
+      allowed_methods: [:passkey],
+      scope: "settings_passkey",
+      session_binding: "session-1",
+      token_binding: "session-1",
+      ttl: 15.minutes,
+      purpose: "step_up",
+      audience: "step_up:app",
+      require_session_binding: true,
+      actor_ref: "actor-1",
+      resource_ref: nil,
+      tenant_ref: nil,
+    }
+
+    assert_predicate StepUpRequirement.new(**attributes), :step_up_required?
+    attributes.each_key do |field|
+      assert_raises(StepUpRequirement::Invalid, field.to_s) do
+        StepUpRequirement.new(**attributes.except(field))
+      end
     end
   end
 end

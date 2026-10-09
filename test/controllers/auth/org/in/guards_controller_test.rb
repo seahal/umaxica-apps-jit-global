@@ -112,7 +112,7 @@ class Auth::Org::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     controller.define_singleton_method(:sign_in_flow_actor) { |_| @operator }
     controller.define_singleton_method(:auth_org_sign_in_path) { |ri: nil| "/sign/in?ri=#{ri}" }
     controller.define_singleton_method(:auth_org_sign_in_check_path) { |ri: nil, pt: nil|
-      "/sign/in/check?ri=#{ri}#{pt ? "&pt=#{pt}" : ""}"
+      "/sign/in/check?ri=#{ri}#{"&pt=#{pt}" if pt}"
     }
     controller.define_singleton_method(:sign_in_selector_path) { |pt: nil| "/sign/in/selector?pt=#{pt}" }
     controller.define_singleton_method(:sign_in_welcome_path) { |pt: nil| "/sign/in/welcome?pt=#{pt}" }

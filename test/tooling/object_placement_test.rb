@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "minitest/autorun"
-require "set"
 
 # Guards .agents/harnesses/rules/project/value-object-boundaries.mdc.
 #

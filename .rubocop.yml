@@ -93,6 +93,7 @@ AllCops:
     - "db/schema.rb"
     - "db/*_schema.rb"
     - "db/**/*_migrate/**/*.rb"
+    - "specs/avatar-organization-ownership/migration-drafts/**/*.rb"
     - "bin/**/*"
     - "tmp/**/*"
     - "log/**/*"
@@ -1740,25 +1741,10 @@ Style/SafeNavigationChainLength: # 7 / 5
 
 # ---------- Safe autocorrection available: mechanical, pending review of the diff ----------
 
-Bundler/OrderedGems: # 2 / 1
-  Enabled: false
-
 Lint/AmbiguousBlockAssociation: # 175 / 86
   Enabled: false
 
-Lint/DeprecatedOpenSSLConstant: # 1 / 1
-  Enabled: false
-
-Lint/DuplicateMagicComment: # 2 / 2
-  Enabled: false
-
 Lint/LiteralInInterpolation: # 23 / 8
-  Enabled: false
-
-Lint/ParenthesesAsGroupedExpression: # 4 / 1
-  Enabled: false
-
-Lint/RedundantRequireStatement: # 7 / 7
   Enabled: false
 
 Style/Alias: # 20 / 14
@@ -1770,22 +1756,10 @@ Style/BlockDelimiters: # 464 / 107
 Style/EmptyClassDefinition: # 26 / 19
   Enabled: false
 
-Style/EmptyElse: # 5 / 2
-  Enabled: false
-
-Style/EmptyStringInsideInterpolation: # 9 / 6
-  Enabled: false
-
 Style/ExplicitBlockArgument: # 251 / 217
   Enabled: false
 
-Style/HashAsLastArrayItem: # 1 / 1
-  Enabled: false
-
 Style/IfUnlessModifier: # 163 / 119
-  Enabled: false
-
-Style/IfUnlessModifierOfIfUnless: # 1 / 1
   Enabled: false
 
 Style/ItBlockParameter: # 24 / 1
@@ -1800,43 +1774,16 @@ Style/KeywordParametersOrder: # 81 / 35
 Style/Lambda: # 202 / 119
   Enabled: false
 
-Style/MethodCallWithoutArgsParentheses: # 5 / 1
-  Enabled: false
-
-Style/ModuleMemberExistenceCheck: # 1 / 1
-  Enabled: false
-
 Style/MultilineIfModifier: # 1222 / 321
   Enabled: false
 
 Style/MultilineTernaryOperator: # 186 / 74
   Enabled: false
 
-Style/MultipleComparison: # 9 / 9
-  Enabled: false
-
-Style/NestedModifier: # 1 / 1
-  Enabled: false
-
 Style/NestedTernaryOperator: # 143 / 143
   Enabled: false
 
-Style/Next: # 2 / 2
-  Enabled: false
-
-Style/OrAssignment: # 1 / 1
-  Enabled: false
-
 Style/ParallelAssignment: # 22 / 16
-  Enabled: false
-
-Style/PerlBackrefs: # 6 / 1
-  Enabled: false
-
-Style/Proc: # 5 / 2
-  Enabled: false
-
-Style/RedundantAssignment: # 8 / 8
   Enabled: false
 
 Style/RedundantBegin: # 80 / 25
@@ -1845,16 +1792,10 @@ Style/RedundantBegin: # 80 / 25
 Style/RedundantConstantBase: # 2057 / 903
   Enabled: false
 
-Style/RedundantDoubleSplatHashBraces: # 2 / 1
-  Enabled: false
-
 Style/RedundantException: # 854 / 88
   Enabled: false
 
 Style/RedundantFreeze: # 40 / 22
-  Enabled: false
-
-Style/RedundantHeredocDelimiterQuotes: # 2 / 1
   Enabled: false
 
 Style/RedundantParentheses: # 15 / 8
@@ -1863,34 +1804,7 @@ Style/RedundantParentheses: # 15 / 8
 Style/RedundantPercentQ: # 20 / 9
   Enabled: false
 
-Style/RedundantRegexpArgument: # 11 / 4
-  Enabled: false
-
-Style/RedundantRegexpEscape: # 3 / 2
-  Enabled: false
-
 Style/RegexpLiteral: # 31 / 23
-  Enabled: false
-
-Style/RescueModifier: # 3 / 3
-  Enabled: false
-
-Style/RescueStandardError: # 1 / 1
-  Enabled: false
-
-Style/SelfAssignment: # 2 / 2
-  Enabled: false
-
-Style/SingleLineMethods: # 5 / 2
-  Enabled: false
-
-Style/SoleNestedConditional: # 10 / 8
-  Enabled: false
-
-Style/SuperArguments: # 6 / 6
-  Enabled: false
-
-Style/TrailingUnderscoreVariable: # 2 / 2
   Enabled: false
 
 Style/TrivialAccessors: # 32 / 17

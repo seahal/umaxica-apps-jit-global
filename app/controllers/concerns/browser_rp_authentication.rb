@@ -319,6 +319,8 @@ module BrowserRpAuthentication
   # Presence flags only: they separate an access credential the browser stopped sending from a
   # refused one, without recording either credential.
   def log_browser_rp_authentication_required!
+    refused_status = @browser_rp_refused_access_status
+    refused_status = browser_rp_access_state.status if refused_status.nil?
     Rails.logger.info(
       JitLogEvent.format(
         "auth.session.authentication_required",
@@ -326,7 +328,7 @@ module BrowserRpAuthentication
         request_id: request.request_id,
         controller: self.class.name,
         action: action_name,
-        failure_reason: AUTHENTICATION_REQUIRED_REASONS.fetch(browser_rp_access_state.status),
+        failure_reason: AUTHENTICATION_REQUIRED_REASONS.fetch(refused_status),
         access_credential_presented: request.cookies.key?(OidcRpBrowserCredentialContract::ACCESS_COOKIE),
         refresh_credential_presented: request.cookies.key?(OidcRpBrowserCredentialContract::REFRESH_COOKIE),
         # Strict credentials are withheld on a cross-site navigation; this tells that case apart.
@@ -721,6 +723,8 @@ module BrowserRpAuthentication
       return :dependency
     end
 
+    # Clearing authority must not turn a presented invalid credential into a missing-credential log.
+    @browser_rp_refused_access_status = browser_rp_access_state.status
     clear_browser_rp_cookies!
     :invalid
   end

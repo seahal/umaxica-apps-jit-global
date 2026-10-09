@@ -2,7 +2,6 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "set"
 
 class TestEnvironmentIsolationContractTest < ActiveSupport::TestCase
   test "test boot uses an explicit PostgreSQL host and test-only Valkey databases" do
@@ -309,7 +308,7 @@ class TestEnvironmentIsolationContractTest < ActiveSupport::TestCase
     keys = Set.new
     loop do
       cursor, batch = connection.call("SCAN", cursor, "MATCH", pattern)
-      keys = keys | Array(batch)
+      keys |= Array(batch)
       break if cursor.to_s == "0"
     end
     keys

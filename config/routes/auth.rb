@@ -146,7 +146,7 @@ scope(module: :auth, as: :auth) do
         namespace :in do
           resource :device, only: :show
 
-          resource :email, only: %i(new create edit update)
+          resource :email, only: %i(new create edit update destroy)
 
           resource :passkey, only: :new
           resource :secret, only: %i(new create)
@@ -369,7 +369,7 @@ scope(module: :auth, as: :auth) do
 
         # Sign-in ceremony.
         namespace :in do
-          resource :email, only: %i(new create edit update)
+          resource :email, only: %i(new create edit update destroy)
 
           resource :passkey, only: :new
           namespace :passkey do

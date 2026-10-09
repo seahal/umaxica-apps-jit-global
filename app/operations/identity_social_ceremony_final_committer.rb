@@ -161,6 +161,14 @@ class IdentitySocialCeremonyFinalCommitter
     raise IdentitySocialCeremonyContract::Error, "birthdate is ineligible" unless
       SignUpEligibilityPolicy.minimum_age_reached?(birthdate, surface: surface, today: Time.zone.today)
 
+    cycle = ClientSignUpFlow.find_by!(public_id: result["actor_ref"])
+    cycle.with_cycle_lock do
+      cycle.require_active_cycle!
+      commit_signup_source!(candidate, birthdate, cycle)
+    end
+  end
+
+  def commit_signup_source!(candidate, birthdate, cycle)
     AppZenithRecord.connected_to(role: :writing) do
       AppPrincipalRecord.transaction do
         signup = ExternalAuthenticationSignupUseCase.call(
@@ -179,7 +187,7 @@ class IdentitySocialCeremonyFinalCommitter
               consumed_candidate = IdentitySocialCeremonyCandidateStore.consume!(result["candidate_ref"])
               validate_candidate!(consumed_candidate)
               IdentityGraphProvisioner.call!(surface: :app, principal: signup.user)
-              complete_signup_flow!(signup)
+              complete_signup_flow!(signup, cycle)
               Commit.new(
                 transaction: consumption.transaction, result: consumption.result,
                 identity: signup.identity, user: signup.user, existing_account: false,
@@ -192,8 +200,7 @@ class IdentitySocialCeremonyFinalCommitter
     end
   end
 
-  def complete_signup_flow!(signup)
-    cycle = ClientSignUpFlow.find_by!(public_id: result["actor_ref"])
+  def complete_signup_flow!(signup, cycle)
     cycle.with_cycle_lock do
       cycle.update!(
         principal_id: signup.user.id,

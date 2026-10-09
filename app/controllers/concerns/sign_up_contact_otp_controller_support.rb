@@ -19,21 +19,25 @@ module SignUpContactOtpControllerSupport
   # finalize when `next_event == :finalize`, otherwise continue to its own next
   # step. Failures carry the state-machine status for `render_sign_up_result`.
   def advance_sign_up_after_contact_otp!
-    @sign_up_ticket.with_cycle_lock do
-      result = perform_sign_up_event(:verify_contact)
-      return unexpected_sign_up_otp_transition(result, :enter_guardrail) unless result.success? &&
-        result.next_event == :enter_guardrail
+    outcome =
+      @sign_up_ticket.with_cycle_lock do
+        result = perform_sign_up_event(:verify_contact)
+        return unexpected_sign_up_otp_transition(result, :enter_guardrail) unless result.success? &&
+          result.next_event == :enter_guardrail
 
-      result = perform_sign_up_event(:enter_guardrail)
-      return unexpected_sign_up_otp_transition(result, :enter_checkpoint) unless result.success? &&
-        result.next_event == :enter_checkpoint
+        result = perform_sign_up_event(:enter_guardrail)
+        return unexpected_sign_up_otp_transition(result, :enter_checkpoint) unless result.success? &&
+          result.next_event == :enter_checkpoint
 
-      result = perform_sign_up_event(:enter_checkpoint)
-      return unexpected_sign_up_otp_transition(result, :clear_requirement) unless result.success? &&
-        result.next_event == :clear_requirement
+        result = perform_sign_up_event(:enter_checkpoint)
+        return unexpected_sign_up_otp_transition(result, :clear_requirement) unless result.success? &&
+          result.next_event == :clear_requirement
 
-      clear_sign_up_otp_requirement!
-    end
+        clear_sign_up_otp_requirement!
+      end
+    return outcome unless outcome.is_a?(FlowTransitionResult)
+
+    SignUpResult.build(status: :expired, ticket: @sign_up_ticket, errors: ["ticket is expired"])
   end
 
   def clear_sign_up_otp_requirement!

@@ -34,8 +34,11 @@ class OutboundChannelSuspension
         raise ArgumentError, "unsupported outbound channel: #{channel}"
       end
 
-    if channel.to_sym == :promotional_email
-      return true if FeatureFlags.enabled?(CHANNEL_FEATURE_NAMES.fetch(:email), flipper: @flipper)
+    if (channel.to_sym == :promotional_email) && FeatureFlags.enabled?(
+      CHANNEL_FEATURE_NAMES.fetch(:email),
+      flipper: @flipper,
+    )
+      return true
     end
 
     FeatureFlags.enabled?(feature_name, flipper: @flipper)

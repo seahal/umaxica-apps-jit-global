@@ -3,6 +3,306 @@
 require "test_helper"
 
 class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
+  uses_transaction :test_concurrent_signed_email_finalization_keeps_one_effective_destination_in_app_and_com
+  uses_transaction :test_concurrent_signed_telephone_finalization_keeps_one_effective_destination_in_app_and_com
+  uses_transaction :test_concurrent_signed_finalization_keeps_one_effective_Contact_per_actor_in_both_realms
+
+  test "concurrent signed email finalization keeps one effective destination in app and com" do
+    [
+      [Client, ClientEmail, ClientEmailCeremonyTransaction, ClientContactAuditOutbox, :user_id, "app"],
+      [Visitor, VisitorEmail, VisitorEmailCeremonyTransaction, VisitorContactAuditOutbox, :visitor_id, "com"],
+    ].each do |actor_class, contact_class, transaction_class, outbox_class, owner_key, surface|
+      actors = []
+      contacts = []
+      transactions = []
+      destination = "concurrent-#{surface}-#{SecureRandom.hex(12)}@example.test"
+      attempts =
+        2.times.map do
+          actor = actor_class.create!
+          actors << actor
+          contact = contact_class.create!(owner_key => actor.id, :address => destination, :confirm_policy => "1")
+          contacts << contact
+          now = transaction_class.database_now
+          transaction = transaction_class.create_transaction!(
+            actor_ref: actor.public_id, session_ref: "contact-race-#{SecureRandom.uuid}",
+            operation: "registration", email_candidate_ref: contact.public_id,
+            normalized_email_digest: contact.address_digest, now: now,
+          )
+          transactions << transaction
+          result = IdentityEmailCeremonyResult.issue(
+            { surface: surface,
+              actor_ref: actor.public_id,
+              session_ref: transaction.session_ref,
+              transaction_id: transaction.transaction_id,
+              grant_jti: transaction.grant_jti,
+              result_jti: SecureRandom.uuid,
+              operation: transaction.operation,
+              verified_at: now.to_i,
+              challenge_id: SecureRandom.uuid,
+              expires_at: transaction.expires_at.to_i,
+              email_candidate_ref: contact.public_id,
+              normalized_email_digest: contact.address_digest, },
+            issuer_id: IdentityEmailCeremonyContract.sign_issuer_id(surface), now: now,
+          )
+          [actor.id, transaction.id, result, now]
+        end
+
+      ready = Queue.new
+      release = Queue.new
+      outcomes = Queue.new
+      ActiveRecord::Base.connection_handler.clear_active_connections!
+      threads =
+        attempts.map do |actor_id, transaction_id, result, now|
+          Thread.new do
+            contact_class.connection_pool.with_connection do |connection|
+              backend_pid = connection.select_value("SELECT pg_backend_pid()")
+              ready << backend_pid
+              release.pop
+              actor = actor_class.find(actor_id)
+              transaction = transaction_class.find(transaction_id)
+              context = ActorValuesContext.empty.with(
+                subject: actor, actor_type: (surface == "app") ? :client : :visitor,
+                tld: surface.to_sym, surface: :base,
+              )
+              IdentityEmailCeremonyFinalCommitter.call!(
+                result_token: result, actor_context: context, actor: actor,
+                session_ref: transaction.session_ref, surface: surface, now: now,
+              )
+              outcomes << :finalized
+            rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid => e
+              outcomes << e.class
+            rescue StandardError => e
+              outcomes << e
+            end
+          end
+        end
+      backends = 2.times.map { ready.pop }
+      2.times { release << true }
+      threads.each(&:join)
+      results = 2.times.map { outcomes.pop }
+
+      assert_equal 2, backends.uniq.length, "#{surface}: separate database connections must race"
+      assert_equal 1, results.count(:finalized), "#{surface}: #{results.map(&:class).inspect}"
+      assert_equal 1, results.count { |result|
+        [ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid].include?(result)
+      }, "#{surface}: only one signed finalizer may win"
+      assert_equal 1, contact_class.effective_binding.where(address_digest: contacts.first.address_digest).count
+      assert_equal 1, outbox_class.where(operation_ref: transactions.map(&:transaction_id)).count
+      assert_equal 1, contacts.count { |contact| contact.reload.binding_effective? }
+    ensure
+      outbox_class.where(operation_ref: transactions.map(&:transaction_id)).delete_all if transactions.any?
+      transaction_class.where(id: transactions.map(&:id)).delete_all if transactions.any?
+      contact_class.where(id: contacts.map(&:id)).delete_all if contacts.any?
+      actor_class.where(id: actors.map(&:id)).delete_all if actors.any?
+    end
+  end
+
+  test "concurrent signed telephone finalization keeps one effective destination in app and com" do
+    [
+      [Client, ClientTelephone, ClientTelephoneCeremonyTransaction, ClientContactAuditOutbox, :user_id, "app"],
+      [Visitor, VisitorTelephone, VisitorTelephoneCeremonyTransaction, VisitorContactAuditOutbox, :visitor_id, "com"],
+    ].each do |actor_class, contact_class, transaction_class, outbox_class, owner_key, surface|
+      actors = []
+      contacts = []
+      transactions = []
+      destination = "+8190#{SecureRandom.random_number(100_000_000).to_s.rjust(8, "0")}"
+      attempts =
+        2.times.map do
+          actor = actor_class.create!
+          actors << actor
+          contact = contact_class.create!(owner_key => actor.id, :number => destination, :confirm_policy => "1")
+          contacts << contact
+          now = transaction_class.database_now
+          transaction = transaction_class.create_transaction!(
+            actor_ref: actor.public_id, session_ref: "telephone-race-#{SecureRandom.uuid}",
+            operation: "registration", telephone_candidate_ref: contact.public_id,
+            normalized_number_digest: contact.number_digest, now: now,
+          )
+          transactions << transaction
+          result = IdentityTelephoneCeremonyResult.issue(
+            { surface: surface,
+              actor_ref: actor.public_id,
+              session_ref: transaction.session_ref,
+              transaction_id: transaction.transaction_id,
+              grant_jti: transaction.grant_jti,
+              result_jti: SecureRandom.uuid,
+              operation: transaction.operation,
+              verified_at: now.to_i,
+              challenge_id: SecureRandom.uuid,
+              expires_at: transaction.expires_at.to_i,
+              telephone_candidate_ref: contact.public_id,
+              normalized_number_digest: contact.number_digest, },
+            issuer_id: IdentityTelephoneCeremonyContract.sign_issuer_id(surface), now: now,
+          )
+          [actor.id, transaction.id, result, now]
+        end
+
+      ready = Queue.new
+      release = Queue.new
+      outcomes = Queue.new
+      ActiveRecord::Base.connection_handler.clear_active_connections!
+      threads =
+        attempts.map do |actor_id, transaction_id, result, now|
+          Thread.new do
+            contact_class.connection_pool.with_connection do |connection|
+              backend_pid = connection.select_value("SELECT pg_backend_pid()")
+              ready << backend_pid
+              release.pop
+              actor = actor_class.find(actor_id)
+              transaction = transaction_class.find(transaction_id)
+              context = ActorValuesContext.empty.with(
+                subject: actor, actor_type: (surface == "app") ? :client : :visitor,
+                tld: surface.to_sym, surface: :base,
+              )
+              IdentityTelephoneCeremonyFinalCommitter.call!(
+                result_token: result, actor_context: context, actor: actor,
+                session_ref: transaction.session_ref, surface: surface, now: now,
+              )
+              outcomes << :finalized
+            rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid => e
+              outcomes << e.class
+            rescue StandardError => e
+              outcomes << e
+            end
+          end
+        end
+      backends = 2.times.map { ready.pop }
+      2.times { release << true }
+      threads.each(&:join)
+      results = 2.times.map { outcomes.pop }
+
+      assert_equal 2, backends.uniq.length, "#{surface}: separate database connections must race"
+      assert_equal 1, results.count(:finalized), "#{surface}: #{results.map(&:class).inspect}"
+      assert_equal 1, results.count { |result|
+        [ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid].include?(result)
+      }, "#{surface}: only one signed finalizer may win"
+      assert_equal 1, contact_class.effective_binding.where(number_digest: contacts.first.number_digest).count
+      assert_equal 1, outbox_class.where(operation_ref: transactions.map(&:transaction_id)).count
+      assert_equal 1, contacts.count { |contact| contact.reload.binding_effective? }
+    ensure
+      outbox_class.where(operation_ref: transactions.map(&:transaction_id)).delete_all if transactions.any?
+      transaction_class.where(id: transactions.map(&:id)).delete_all if transactions.any?
+      contact_class.where(id: contacts.map(&:id)).delete_all if contacts.any?
+      actor_class.where(id: actors.map(&:id)).delete_all if actors.any?
+    end
+  end
+
+  test "concurrent signed finalization keeps one effective Contact per actor in both realms" do
+    [
+      [Client, ClientEmail, ClientEmailCeremonyTransaction, ClientContactAuditOutbox, :user_id, "app", :email],
+      [Visitor, VisitorEmail, VisitorEmailCeremonyTransaction, VisitorContactAuditOutbox, :visitor_id, "com", :email],
+      [Client, ClientTelephone, ClientTelephoneCeremonyTransaction, ClientContactAuditOutbox, :user_id, "app",
+       :telephone,],
+      [Visitor, VisitorTelephone, VisitorTelephoneCeremonyTransaction, VisitorContactAuditOutbox, :visitor_id, "com",
+       :telephone,],
+    ].each do |actor_class, contact_class, transaction_class, outbox_class, owner_key, surface, kind|
+      actor = actor_class.create!
+      contacts = []
+      transactions = []
+      attempts =
+        2.times.map do |index|
+          destination =
+            if kind == :email
+              "owner-race-#{surface}-#{SecureRandom.hex(12)}-#{index}@example.test"
+            else
+              "+8190#{SecureRandom.random_number(100_000_000).to_s.rjust(8, "0")}"
+            end
+          contact_attributes = { owner_key => actor.id,
+                                 :confirm_policy => "1",
+                                 (kind == :email) ? :address : :number => destination, }
+          contact = contact_class.create!(contact_attributes)
+          contacts << contact
+          now = transaction_class.database_now
+          candidate_ref = (kind == :email) ? :email_candidate_ref : :telephone_candidate_ref
+          digest_key = (kind == :email) ? :normalized_email_digest : :normalized_number_digest
+          digest = (kind == :email) ? contact.address_digest : contact.number_digest
+          transaction = transaction_class.create_transaction!(
+            :actor_ref => actor.public_id, :session_ref => "owner-race-#{SecureRandom.uuid}",
+            :operation => "registration", candidate_ref => contact.public_id, digest_key => digest, :now => now,
+          )
+          transactions << transaction
+          claims = {
+            :surface => surface,
+            :actor_ref => actor.public_id,
+            :session_ref => transaction.session_ref,
+            :transaction_id => transaction.transaction_id,
+            :grant_jti => transaction.grant_jti,
+            :result_jti => SecureRandom.uuid,
+            :operation => transaction.operation,
+            :verified_at => now.to_i,
+            :challenge_id => SecureRandom.uuid,
+            :expires_at => transaction.expires_at.to_i,
+            candidate_ref => contact.public_id,
+            digest_key => digest,
+          }
+          result =
+            if kind == :email
+              IdentityEmailCeremonyResult.issue(
+                claims, issuer_id: IdentityEmailCeremonyContract.sign_issuer_id(surface), now: now,
+              )
+            else
+              IdentityTelephoneCeremonyResult.issue(
+                claims, issuer_id: IdentityTelephoneCeremonyContract.sign_issuer_id(surface), now: now,
+              )
+            end
+          [transaction.id, result, now]
+        end
+
+      ready = Queue.new
+      release = Queue.new
+      outcomes = Queue.new
+      ActiveRecord::Base.connection_handler.clear_active_connections!
+      threads =
+        attempts.map do |transaction_id, result, now|
+          Thread.new do
+            contact_class.connection_pool.with_connection do |connection|
+              ready << connection.select_value("SELECT pg_backend_pid()")
+              release.pop
+              current_actor = actor_class.find(actor.id)
+              transaction = transaction_class.find(transaction_id)
+              context = ActorValuesContext.empty.with(
+                subject: current_actor, actor_type: (surface == "app") ? :client : :visitor,
+                tld: surface.to_sym, surface: :base,
+              )
+              finalizer =
+                if kind == :email
+                  IdentityEmailCeremonyFinalCommitter
+                else
+                  IdentityTelephoneCeremonyFinalCommitter
+                end
+              finalizer.call!(
+                result_token: result, actor_context: context, actor: current_actor,
+                session_ref: transaction.session_ref, surface: surface, now: now,
+              )
+              outcomes << :finalized
+            rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid => e
+              outcomes << e.class
+            rescue StandardError => e
+              outcomes << e
+            end
+          end
+        end
+      backends = 2.times.map { ready.pop }
+      2.times { release << true }
+      threads.each(&:join)
+      results = 2.times.map { outcomes.pop }
+
+      assert_equal 2, backends.uniq.length, "#{surface}/#{kind}: separate database connections must race"
+      assert_equal 1, results.count(:finalized), "#{surface}/#{kind}: #{results.map(&:class).inspect}"
+      assert_equal 1, results.count { |result|
+        [ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid].include?(result)
+      }, "#{surface}/#{kind}: only one signed finalizer may win"
+      assert_equal 1, contact_class.effective_binding.where(owner_key => actor.id).count
+      assert_equal 1, outbox_class.where(operation_ref: transactions.map(&:transaction_id)).count
+      assert_equal 1, contacts.count { |contact| contact.reload.binding_effective? }
+    ensure
+      outbox_class.where(operation_ref: transactions.map(&:transaction_id)).delete_all if transactions.any?
+      transaction_class.where(id: transactions.map(&:id)).delete_all if transactions.any?
+      contact_class.where(id: contacts.map(&:id)).delete_all if contacts.any?
+      actor_class.where(id: actor.id).delete_all if actor
+    end
+  end
+
   test "a signed email result cannot substitute another candidate of the same Ticket owner" do
     [
       [Client, ClientEmail, :user_id, ClientEmailCeremonyTransaction, ClientContactAuditOutbox, "app"],

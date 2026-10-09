@@ -160,7 +160,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
             )
           end
         fv5022 = {}
-        fv5020 = fv5022.except()
+        fv5020 = fv5022.except
         ClientAuthAdmissionBinding.create!(
           begin
             {
@@ -282,7 +282,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
           base_token_id: client_tokens(:one).id,
           base_browser_digest: digest,
         }
-        fv5015 = fv5017.except()
+        fv5015 = fv5017.except
         ClientAuthAdmissionBinding.create!(
           begin
             {
@@ -343,7 +343,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
             )
           end
         fv5012 = {}
-        fv5010 = fv5012.except()
+        fv5010 = fv5012.except
         ClientAuthAdmissionBinding.create!(
           begin
             {
@@ -395,7 +395,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
       begin
         fv5006 = parent
         fv5007 = {}
-        fv5005 = fv5007.except()
+        fv5005 = fv5007.except
         ClientAuthAdmissionBinding.create!(
           begin
             {
@@ -448,7 +448,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
             )
           end
         fv5002 = { expires_at: 1.second.ago }
-        fv5000 = fv5002.except()
+        fv5000 = fv5002.except
         ClientAuthAdmissionBinding.create!(
           begin
             {

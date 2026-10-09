@@ -41,8 +41,10 @@ class ClientSecretCredentialPurger
         event.credential_ref == credential.public_id && event.event_name == "secret.discarded"
       }
 
-      if credential.confirmed_at.nil? && events.none? { |event| event.reason == "withdrawal" }
-        return false unless events.any? { |event| event.credential_ref.nil? }
+      if credential.confirmed_at.nil? && events.none? { |event| event.reason == "withdrawal" } && !events.any? { |event|
+        event.credential_ref.nil?
+      }
+        return false
       end
 
       events.all? { |event| durable_event?(event) }

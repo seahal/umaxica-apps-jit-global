@@ -17,6 +17,45 @@ class ClientSecretLookupQueryTest < ActiveSupport::TestCase
                  ClientSecretLookupQuery.call(client: clients(:sample_user), secret: "c" * 32).id
   end
 
+  test "equal Secret values on different Clients resolve within the selected owner and choose its lowest ID" do
+    raw = SecureRandom.base58(32)
+    first_owner = Client.create!(status_id: ClientStatus::ACTIVE)
+    second_owner = Client.create!(status_id: ClientStatus::ACTIVE)
+    unrelated_owner = Client.create!(status_id: ClientStatus::ACTIVE)
+    now = Client.database_now
+
+    first_issuance = ClientSecretIssuance.create!(
+      client: first_owner, origin_operation_id: SecureRandom.uuid, origin: "manual",
+      attempt_number: 1, browser_session_ref: "first-owner-session", planned_count: 1,
+      expires_at: now + 1.hour, presented_at: now, confirmed_at: now,
+    )
+    first_owner_second_issuance = ClientSecretIssuance.create!(
+      client: first_owner, origin_operation_id: SecureRandom.uuid, origin: "manual",
+      attempt_number: 1, browser_session_ref: "first-owner-second-session", planned_count: 1,
+      expires_at: now + 1.hour, presented_at: now, confirmed_at: now,
+    )
+    second_issuance = ClientSecretIssuance.create!(
+      client: second_owner, origin_operation_id: SecureRandom.uuid, origin: "manual",
+      attempt_number: 1, browser_session_ref: "second-owner-session", planned_count: 1,
+      expires_at: now + 1.hour, presented_at: now, confirmed_at: now,
+    )
+    first = ClientSecretCredential.create!(
+      client: first_owner, issuance: first_issuance, name: "First", password: raw, confirmed_at: now,
+    )
+    ClientSecretCredential.create!(
+      client: first_owner, issuance: first_owner_second_issuance, name: "Second", password: raw, confirmed_at: now,
+    )
+    second = ClientSecretCredential.create!(
+      client: second_owner, issuance: second_issuance, name: "Other owner", password: raw, confirmed_at: now,
+    )
+
+    assert_equal first.id, ClientSecretLookupQuery.call(client: first_owner, secret: raw).id
+    assert_equal second.id, ClientSecretLookupQuery.call(client: second_owner, secret: raw).id
+    assert_nil ClientSecretLookupQuery.call(client: unrelated_owner, secret: raw)
+    assert_nil first.reload.claimed_at
+    assert_nil second.reload.claimed_at
+  end
+
   test "invalid format unknown value and exact case mismatch return no credential without mutation" do
     before_count = ClientSecretCredential.count
 

@@ -57,13 +57,13 @@ module Base
                        organization.public_id, membership.id,
                        ri: params[:ri],
                      ), }
-          if allowed_to?(:edit?, membership, with: OrganizationMembershipPolicy)
-            links << { label: t("base.app.navigation.edit_membership", id: membership.id),
-                       href: edit_base_app_organization_membership_path(
-                         organization.public_id, membership.id,
-                         ri: params[:ri],
-                       ), }
-          end
+          next unless allowed_to?(:edit?, membership, with: OrganizationMembershipPolicy)
+
+          links << { label: t("base.app.navigation.edit_membership", id: membership.id),
+                     href: edit_base_app_organization_membership_path(
+                       organization.public_id, membership.id,
+                       ri: params[:ri],
+                     ), }
         end
         links
       end

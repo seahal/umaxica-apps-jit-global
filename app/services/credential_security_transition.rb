@@ -89,7 +89,14 @@ class CredentialSecurityTransition
           .where.not(state_id: flow_model.state_ids_for("COMPLETED", "FAILED", "HALTED"))
         flows.lock.find_each do |flow|
           now = flow_model.database_now
-          flow.halt_sign_in! unless flow.expired?(now)
+          unless flow.sign_in_expired? || flow.sign_in_cancelled?
+            if flow.expired?(now)
+              flow.expire_sign_in!
+            else
+              flow.halt_sign_in!
+            end
+          end
+          # Expiry is also a refusal: dependent authority must still be revoked.
           if flow.result_digest
             flow.update!(result_expires_at: [flow.result_expires_at, now].min)
           end

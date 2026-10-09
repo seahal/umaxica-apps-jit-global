@@ -106,7 +106,7 @@ class SecretCredentialTest < ActiveSupport::TestCase
   end
 
   test "expire_if_needed! expires when time passed" do
-    record, _ = DummySecret.issue!(name: "test", discard_at: 1.hour.ago)
+    record, = DummySecret.issue!(name: "test", discard_at: 1.hour.ago)
 
     assert record.expire_if_needed!
     assert_equal DummySecret.status_id_for(:expired), record[:secret_credential_status_id]

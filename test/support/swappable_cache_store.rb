@@ -20,7 +20,7 @@ module TestSupport
   class SwappableCacheStore < SimpleDelegator
     def initialize(default_backend)
       @default_backend = default_backend
-      super(default_backend)
+      super
     end
 
     attr_accessor :default_backend

@@ -158,6 +158,16 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         # COM provisioning requires contact, but unverified contact is not a compatible fallback.
         contact&.reload&.update!(visitor_email_status_id: VisitorEmailStatus::UNVERIFIED)
         token = token_model.create!(token_key => actor.id, :id => 9_920_000_000_011)
+        unless surface == :totp
+          evidence_ref = (surface == :org) ? credentials.first.external_id : credentials.first.public_id
+          token.update!(
+            last_step_up_at: token_model.database_now, last_step_up_scope: "settings_passkey",
+            last_step_up_method: "passkey", last_step_up_credential_ref: evidence_ref,
+            last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
+            last_step_up_audience: "step_up:#{surface}", last_step_up_phishing_resistant: true,
+            last_step_up_user_verified: true, last_step_up_full_reauthentication: false,
+          )
+        end
         ActiveRecord::Base.connection_handler.clear_active_connections!
         threads =
           credentials.map do |credential|

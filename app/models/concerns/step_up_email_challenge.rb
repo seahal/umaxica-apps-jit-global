@@ -34,7 +34,7 @@ module StepUpEmailChallenge
   end
 
   def mark_bound_email_delivery!(transaction:, generation:, success:)
-    raise ArgumentError, "delivery outcome must be boolean" unless success == true || success == false
+    raise ArgumentError, "delivery outcome must be boolean" unless [true, false].include?(success)
 
     self.class.connection_class_for_self.connected_to(role: :writing) do
       with_lock do

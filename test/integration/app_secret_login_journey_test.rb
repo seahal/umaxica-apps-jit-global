@@ -43,12 +43,15 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       )
       BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
       BaseSelectorAuthority.prepare(surface: :app, principal: actor, session: token)
+      authority_passkey = actor.client_passkeys.create!(
+        webauthn_id: SecureRandom.uuid, public_key: "existing-authority-key", uv_verified_at: Client.database_now,
+      )
       token.update!(
         last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_passkey",
         last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
         last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
-        last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
+        last_step_up_credential_ref: authority_passkey.public_id, last_step_up_full_reauthentication: false,
       )
       now = Client.database_now
       active_count.times do

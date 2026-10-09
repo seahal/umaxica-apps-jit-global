@@ -61,7 +61,7 @@ module Base
 
           def verified_email_status_id = ClientEmailStatus::VERIFIED
 
-          def on_email_registration_verified!(*); nil end
+          def on_email_registration_verified!(*) = nil
 
           def create_audit_event!(event_id)
             ClientChronicle.create!(
@@ -70,9 +70,9 @@ module Base
             )
           end
 
-          def cleanup_pending_signup!; nil end
+          def cleanup_pending_signup! = nil
 
-          def remove_existing_unverified_emails!; nil end
+          def remove_existing_unverified_emails! = nil
         end
       end
     end

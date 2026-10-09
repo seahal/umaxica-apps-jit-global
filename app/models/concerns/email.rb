@@ -45,11 +45,11 @@ module Email
 
     validate :validate_email_address
     validates :confirm_policy, acceptance: true, on: :create,
-                               unless: Proc.new { |a| a.raw_address.blank? && a.pass_code.present? }
+                               unless: proc { |a| a.raw_address.blank? && a.pass_code.present? }
     validates :pass_code, numericality: { only_integer: true },
                           length: { is: 6 },
                           presence: true,
-                          unless: Proc.new { |a| a.pass_code.blank? && a.raw_address.present? }
+                          unless: proc { |a| a.pass_code.blank? && a.raw_address.present? }
   end
 
   class_methods do

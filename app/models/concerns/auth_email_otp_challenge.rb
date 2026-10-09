@@ -37,7 +37,7 @@ module AuthEmailOtpChallenge
             "expires_at" => [
               now + EmailOtpPolicy::AUTHENTICATION_TTL, expires_at, email_otp_parent_deadline(parent),
             ].min.utc.iso8601(6),
-            "verified_at" => nil, "result_expires_at" => nil,
+            "verified_at" => nil, "result_expires_at" => nil, "cancelled_at" => nil,
           )
           context["code_digest"] = AuthEmailOtpCodeDigest.for(context: context, code: code)
           update!(email_otp_context: context)
@@ -59,6 +59,7 @@ module AuthEmailOtpChallenge
       return email_otp_refusal(:missing_challenge) if context.nil?
       raise ArgumentError, "unsupported email OTP context" unless context.fetch("version") == 1
       return email_otp_refusal(:binding_mismatch) unless email_otp_scope_current?(context)
+      return email_otp_refusal(:missing_challenge) if context["cancelled_at"]
 
       contact =
         email_otp_contact_model.find_by(public_id: context.fetch("contact_ref")) if context.fetch("mode") == "real"
@@ -85,7 +86,7 @@ module AuthEmailOtpChallenge
 
   def email_otp_challenge_current?(contact:)
     context = email_otp_context
-    return false if context.nil? || !email_otp_scope_current?(context)
+    return false if context.nil? || context["cancelled_at"] || !email_otp_scope_current?(context)
     return false unless email_otp_binding_current?(context, contact, require_login_allowed: false)
 
     now = self.class.database_now
@@ -95,12 +96,24 @@ module AuthEmailOtpChallenge
       Time.iso8601(deadline) > now
   end
 
+  def cancel_email_otp_challenge!
+    with_email_otp_parent_lock(refuse_unavailable: true) do |_parent, now|
+      context = email_otp_context
+      return false if context.nil? || !email_otp_scope_current?(context)
+      return false if context.fetch("verified_at") || context["cancelled_at"]
+
+      update!(email_otp_context: context.merge("cancelled_at" => now.utc.iso8601(6)))
+      true
+    end
+  end
+
   # The mailer opts into the final delivery boundary. Owner, parent and continuity
   # locks serialize reissue/release/verification with the actual transport call.
   def with_email_otp_delivery!(generation:, code:, destination:)
     with_email_otp_parent_lock(refuse_unavailable: true) do |parent, _now|
       context = email_otp_context
       return false unless context && email_otp_scope_current?(context) && context.fetch("mode") == "real"
+      return false if context["cancelled_at"]
       return false unless context.fetch("generation") == generation && context.fetch("verified_at").nil?
 
       contact = email_otp_contact_model.find_by(public_id: context.fetch("contact_ref"))

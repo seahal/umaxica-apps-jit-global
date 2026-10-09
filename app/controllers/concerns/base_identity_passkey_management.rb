@@ -73,35 +73,6 @@ module BaseIdentityPasskeyManagement
     render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
   end
 
-  def update
-    @passkey = passkey_relation.find_by!(passkey_reference_attribute => params.expect(:id))
-    authorize!(@passkey)
-    description = params.expect(passkey: [:description]).fetch(:description)
-    @passkey.update!(description: description.to_s.strip)
-    redirect_to(passkey_path(@passkey.public_id), status: :see_other)
-  rescue ActiveRecord::RecordInvalid, ActionController::ParameterMissing
-    render inertia: passkey_show_component, props: passkey_show_props(error: I18n.t("errors.messages.invalid_request")),
-           status: :unprocessable_content
-  end
-
-  def destroy
-    @passkey = passkey_relation.find_by!(passkey_reference_attribute => params.expect(:id))
-    authorize!(@passkey)
-    removed = IdentityCredentialRemovalCommitter.call!(
-      actor: identity_actor, credential: @passkey, current_session: current_session_token, request: request,
-    )
-    unless removed
-      return render inertia: passkey_show_component,
-                    props: passkey_show_props(error: I18n.t("errors.messages.invalid_request")),
-                    status: :unprocessable_content
-    end
-    redirect_to(passkeys_path, status: :see_other)
-  rescue ArgumentError, ActiveRecord::RecordInvalid
-    render inertia: passkey_show_component,
-           props: passkey_show_props(error: I18n.t("errors.messages.invalid_request")),
-           status: :unprocessable_content
-  end
-
   private
 
   def passkey_relation

@@ -44,7 +44,7 @@ class TelephoneOtpVerificationFailureBudget
     unless destination_digest.is_a?(String) && destination_digest.match?(/\A[0-9a-f]{64}\z/)
       raise ArgumentError, "invalid OTP destination digest"
     end
-    raise ArgumentError, "OTP comparison result must be boolean" unless valid == true || valid == false
+    raise ArgumentError, "OTP comparison result must be boolean" unless [true, false].include?(valid)
 
     key = @connection.key("#{surface}:#{purpose}:#{channel}:#{destination_digest}")
     status = @connection.call(

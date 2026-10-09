@@ -3,7 +3,7 @@
 // The resend control talks to the same JSON endpoint with the same opaque resend state the Stimulus
 // controller used, so the cooldown stays a server decision. The code itself is only ever typed here;
 // it is never rendered into the page.
-import { useForm } from "@inertiajs/react";
+import { router, useForm } from "@inertiajs/react";
 
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
@@ -22,7 +22,7 @@ export type SignInEmailEditProps = {
   field_placeholder: string;
   submit_label: string;
   delivery_help: string;
-  return_link: { label: string; href: string };
+  return_link: { label: string };
   resend: { endpoint: string; state: string; messages: OtpResendMessages };
   turnstile: TurnstileConfiguration;
 };
@@ -102,12 +102,14 @@ export default function SignInEmailEdit({
       <p className="text-base text-fg-muted">{deliveryHelp}</p>
 
       <p className="text-base">
-        <a
-          href={returnLink.href}
+        <button
+          type="button"
+          onClick={() => router.delete(action, { data: { pt } })}
+          disabled={form.processing}
           className="ui-text-link text-fg underline underline-offset-4 hover:underline"
         >
           <span>{returnLink.label}</span>
-        </a>
+        </button>
       </p>
     </Page>
   );

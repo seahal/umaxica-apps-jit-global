@@ -1,5 +1,56 @@
 # Current transition inventory
 
+## Sign-flow expiry refusal transaction ownership
+
+`FlowBase` validates terminal absorption before TTL and requested source state. An overdue
+non-terminal row with `expires_at` becomes `EXPIRED` even when the requested edge is illegal.
+The sign-out graph retains its existing deadline fields; this change introduces no new sign-out TTL.
+
+`with_cycle_lock` retains the row lock while a savepoint owns the operation's same-database writes. An expiry
+refusal unwinds that savepoint, reloads the row, and writes only the named `EXPIRED` transition.
+It returns `FlowTransitionResult(status: :expired)` instead of raising through an enclosing writer
+transaction. Named transition methods return that result whenever a transaction is already open, including a
+nonjoinable owner. Transaction ownership is read from the concrete writer connection even when
+the caller temporarily selected the reading role; standalone calls raise `FlowInvalidTransition` only after their own transaction commits. A transaction
+owner must stop on this result and may call `value!` only after its final commit. No callback commits
+an unrelated write or raises a deferred exception.
+
+Sign-in participants, root issuance, local authentication completion, social signup completion,
+and signup state-machine/controller owners propagate refusal before success effects. The root
+issuer returns `invalid_request` with `reason: flow_expired`; local completion preserves the expired
+state instead of attempting a second terminal transition. Nested operations reuse the same locked
+flow instance so a refusal aborts remaining writes in the owning operation.
+
+Regression coverage lives in `test/models/sign_flow_test.rb` and
+`test/services/sign_in/guardrail_participant_test.rb`, `test/models/flow_expiry_commit_test.rb`, and
+`test/controllers/concerns/auth/session_issuance_boundary_surfaces_test.rb`, including all three realms, invalid-source
+expiry, caller-owned transactions, rollback of earlier operation writes, terminal absorption, and
+the adjacent representable microsecond TTL values.
+
+### Sign-flow writer callers and refusal ownership
+
+| Caller | Refusal disposition |
+| --- | --- |
+| `FlowSignIn`, `FlowSignUp`, `FlowSignOut`, `SignUpFlowTicket#complete_sign_up!` | Return the canonical named writer outcome unchanged. |
+| `SignInGuardrailParticipant#advance_if_clear!`, `SignInCheckpointParticipant#advance_if_clear!`, `SignInSelectorParticipant#auto_commit_single!` | Own `with_cycle_lock`; return expiry without evaluating further participants or selection writes. |
+| `AuthenticationBase#commit_login_session!`, `#advance_sign_in_flow_to_issuance!`, `#complete_sign_in_flow_issuance!` | One locked flow instance encloses token/device/refresh/receipt writes. Expiry unwinds those writes; `log_in` returns `invalid_request` before browser success effects. |
+| `LocalAuthenticationSessionCommitter#commit` / `#commit_locked!` | Own the encompassing flow lock; return expiry after commit. Explicit expiry is never rewritten as `HALTED`. |
+| `AuthenticationSequenceGate` guardrail/checkpoint/selector redirects, `#advance_pending_sign_in_flow_after_primary!`, pending-session resume | Check participant refusal before issuing locators, gates or session continuation. AuthenticationBase preserves the returned failure. |
+| `AuthenticationBase` primary-to-MFA entry | Owns a locked transition and refuses before setting the pending MFA session. |
+| `AuthenticationBase#cancel_pending_mfa!`, `BaseSignInLimitations#cancel_pending_resolution!`, app limitations cancellation | Standalone named writers raise only after expiry commit. Any joined refusal permits only cancellation/locator clearing/Secret retirement, never issuance. |
+| `CredentialSecurityTransition#revoke_authentication_admissions!` | Explicitly expires overdue non-terminal flows; retains existing terminals. A deadline crossed while halting still commits expiry, and dependent authority revocation deliberately continues. |
+| `ClientSecretClaimFinalizer#expire_failed_flow_if_due!` | Calls explicit expiry while holding the Ticket owner transaction; no expiry refusal is needed for the requested expiry operation. Remaining effects only retire the claimed Secret. |
+| `AuthEmailOtpChallenge#expire_email_otp_local_parent!` | Calls explicit expiry, returns unavailable inside the parent transaction, and raises only after that owner returns. |
+| `SignUpStateMachine` dispatch/finalize/complete methods | Same locked instance; the outer state-machine call maps a returned expiry refusal to `SignUpResult(:expired)`. |
+| `SignUpTermination#call` | Commits state-machine refusal before returning; subsequent cleanup requires its actual terminal state. |
+| `SignUpContactOtpControllerSupport#advance_sign_up_after_contact_otp!` | Maps expiry to `SignUpResult(:expired)` before further OTP progression. |
+| `SignUpSequenceControllerSupport#finalize_sign_up_from_checkpoint!` | Checks liveness before side effects and maps expiry before handoff/session cleanup/success response. |
+| `IdentitySocialCeremonyFinalCommitter#commit_signup!` / `#complete_signup_flow!` | One flow lock encloses source/Ticket transactions; nested transitions share that instance. Base social completion handles the returned refusal before issuing a session. |
+| `SignAppUpTelephoneRegistrationFinalizer#call`, `SignComUpTelephoneRegistrationFinalizer#call`, `EmailContactBinding#finalize_sign_up_binding!` / `#mark_sign_up_verified!` | Lock-only callers; perform no named lifecycle transition and cannot produce an expiry result. Their existing source/binding guards remain in effect. |
+| `SignUpPhaseViolationEnforcer#call`, `SignUpTermination#ensure_cleanup_pending!`, `SignUpArtifactCleanup#call`, Base social `#record_social_signup_completion!` | Lock-only inspection/retention/auxiliary writes; no named lifecycle transition inside these blocks. |
+| `FlowBase#discard_cycle!`, `FlowWithdrawal#transition_withdrawal_to!` | Retention or legacy withdrawal writer; neither raises the sign-flow expiry signal. |
+| `ClientSecretPasskeyReservationIssuer#complete_sign_up!`, `ClientSecretLifecycleJob` | The similarly named method activates a reservation from an already completed signup; it is not a sign-flow transition writer. |
+
 ## Ceremony-owned channel OTP primitives (2026-10-07)
 
 Storage is the six existing realm/channel ceremony tables. New facts are purpose, otp_generation,
@@ -129,6 +180,8 @@ refuses transport without advancing this axis.
 | idp-auth-email-otp-challenge:T003 | issued               | wrong code         | issued            | Atomic shared failure count and real candidate failures; stale scope refuses before comparison                                                                                             |
 | idp-auth-email-otp-challenge:T004 | verified             | verification retry | verified          | Original result deadline remains live; original proof unchanged; already_verified receipt, not a second successful OTP consumption; controllers explicitly continue from verified evidence |
 | idp-auth-email-otp-challenge:T005 | issued or verified   | deadline elapsed   | expired predicate | No state write; parent and Auth expiry cap both deadlines                                                                                                                                  |
+| idp-auth-email-otp-challenge:T006 | issued               | cancel_email_otp_challenge! | cancelled | App/com DELETE under pending parent and ceremony locks; retained cancellation time refuses verification and delivery; the browser's temporary email state is removed |
+| idp-auth-email-otp-challenge:T007 | cancelled            | issue_email_otp!   | issued            | A new generation may start on the still-pending parent; the cancelled generation does not regain authority |
 
 Verified proof reissue is refused. Source Contact OTP generations and root/RP authority remain
 unchanged. Forward shape checks and verified-proof immutability triggers are installed. The final

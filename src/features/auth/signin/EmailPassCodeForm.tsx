@@ -3,7 +3,7 @@
 // The code itself never reaches this page - only the field that collects it. Whether the code is
 // correct, how many attempts remain, and whether the account is locked are all decided by the
 // server, which re-renders this page with the resulting messages.
-import { useForm } from "@inertiajs/react";
+import { router, useForm } from "@inertiajs/react";
 import { useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
@@ -12,7 +12,7 @@ import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 import { readString } from "@/lib/payload";
 
 import OtpResendButton, { type OtpResend } from "./OtpResendButton";
-import type { SignInLink, SignInTurnstile } from "./types";
+import type { SignInTurnstile } from "./types";
 
 export type EmailPassCodeField = {
   scope: string;
@@ -40,7 +40,7 @@ export type EmailPassCodeFormProps = {
   turnstile: SignInTurnstile;
   form_errors: string[];
   delivery_help: string;
-  back_link: SignInLink;
+  back_link: { label: string };
 };
 
 export default function EmailPassCodeForm({
@@ -160,13 +160,14 @@ export default function EmailPassCodeForm({
       <p className="text-base text-fg-muted">{deliveryHelp}</p>
 
       <p className="text-base">
-        {/* Document visit: restarting the ceremony issues a new code. */}
-        <a
-          href={backLink.href}
+        <button
+          type="button"
+          onClick={() => router.delete(form.action, { data: { pt: form.pt } })}
+          disabled={processing}
           className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
         >
           {backLink.label}
-        </a>
+        </button>
       </p>
     </Page>
   );

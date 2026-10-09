@@ -169,6 +169,18 @@ module Auth
             ensure_email_auth_verification_elapsed(start_time, code: @user_email&.pass_code)
           end
 
+          public
+
+          def destroy
+            admitted_auth_ceremony_session.cancel_email_otp_challenge!
+            session.delete(:user_email_authentication_id)
+            session.delete(:user_email_authentication_address)
+            redirect_to(
+              new_auth_com_sign_in_email_path(pt: peek_pt, ri: current_region_identifier),
+              status: :see_other,
+            )
+          end
+
           private
 
           def cache_sign_in_turnstile_validation
@@ -240,8 +252,7 @@ module Auth
               field_placeholder: t("sign.app.authentication.email.edit.code_placeholder"),
               submit_label: t("sign.app.authentication.email.edit.submit"),
               delivery_help: t("sign.app.authentication.email.edit.delivery_help"),
-              return_link: { label: t("sign.app.authentication.email.edit.return_page"),
-                             href: new_auth_com_sign_in_email_path(pt: pt), },
+              return_link: { label: t("sign.app.authentication.email.edit.return_page") },
               resend: {
                 endpoint: auth_com_web_v0_in_email_otp_path,
                 state: @otp_resend_state.to_s,

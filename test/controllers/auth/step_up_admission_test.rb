@@ -8,9 +8,12 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
 
   fixtures :clients, :client_statuses, :visitor_statuses
 
+  setup do
+    TurnstileVerifierStub.reset!
+  end
+
   teardown do
-    TurnstileVerifierStub.enabled = false
-    TurnstileVerifierStub.response = nil
+    TurnstileVerifierStub.reset!
   end
 
   test "verification pages refuse missing admission on every supported surface" do

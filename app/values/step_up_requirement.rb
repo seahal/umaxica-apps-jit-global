@@ -24,6 +24,8 @@ class StepUpRequirement
 
     if value.is_a?(Hash)
       new(**value.symbolize_keys.merge(attributes))
+    elsif value.nil?
+      new(**attributes)
     else
       new(scope: value, **attributes)
     end
@@ -40,6 +42,15 @@ class StepUpRequirement
                  audience: UNSET, require_session_binding: UNSET, actor_ref: UNSET,
                  resource_ref: UNSET, tenant_ref: UNSET)
     @step_up_required = strict_boolean(step_up_required, :step_up_required)
+    if !step_up_required && %w(bootstrap credential_registration).exclude?(purpose.to_s)
+      initialize_disabled!(
+        [required_aal, phishing_resistant_required, user_verification_required,
+         full_reauthentication_required, allowed_methods, scope, session_binding, token_binding,
+         ttl, purpose, audience, require_session_binding, actor_ref, resource_ref, tenant_ref,],
+      )
+      return
+    end
+
     @phishing_resistant_required = strict_boolean(phishing_resistant_required, :phishing_resistant_required)
     @user_verification_required = strict_boolean(user_verification_required, :user_verification_required)
     @full_reauthentication_required = strict_boolean(
@@ -80,6 +91,8 @@ class StepUpRequirement
   end
 
   def to_h
+    return { step_up_required: false } unless step_up_required || purpose
+
     {
       step_up_required: step_up_required,
       allowed_methods: allowed_methods,
@@ -101,25 +114,31 @@ class StepUpRequirement
 
   private
 
-  def validate_contract!
-    registration = %w(bootstrap credential_registration).include?(purpose)
-    active = step_up_required || registration
-
-    if active
-      require_present!(scope, :scope)
-      require_present!(allowed_methods, :allowed_methods)
-      require_present!(ttl, :ttl)
-      require_present!(purpose, :purpose)
-      require_present!(audience, :audience)
-      require_present!(session_binding, :session_binding)
-      require_present!(token_binding, :token_binding)
-      require_present!(actor_ref, :actor_ref)
-      require_present!(resource_ref, :resource_ref, allow_nil: true)
-      require_present!(tenant_ref, :tenant_ref, allow_nil: true)
-      raise Invalid, "require_session_binding must be true" unless require_session_binding
-    else
-      reject_unexpected_disabled_fields!
+  def initialize_disabled!(properties)
+    unless properties.all? { |value| value.equal?(UNSET) }
+      raise Invalid, "step_up_required false cannot carry step-up properties"
     end
+
+    @phishing_resistant_required = false
+    @user_verification_required = false
+    @full_reauthentication_required = false
+    @require_session_binding = false
+    @allowed_methods = [].freeze
+    freeze
+  end
+
+  def validate_contract!
+    require_present!(scope, :scope)
+    require_present!(allowed_methods, :allowed_methods)
+    require_present!(ttl, :ttl)
+    require_present!(purpose, :purpose)
+    require_present!(audience, :audience)
+    require_present!(session_binding, :session_binding)
+    require_present!(token_binding, :token_binding)
+    require_present!(actor_ref, :actor_ref)
+    require_present!(resource_ref, :resource_ref, allow_nil: true)
+    require_present!(tenant_ref, :tenant_ref, allow_nil: true)
+    raise Invalid, "require_session_binding must be true" unless require_session_binding
 
     unless purpose.nil? || PURPOSES.include?(purpose.to_s)
       raise Invalid, "purpose is invalid"
@@ -139,16 +158,8 @@ class StepUpRequirement
 
   end
 
-  def reject_unexpected_disabled_fields!
-    return if purpose.blank? && scope.blank? && allowed_methods.empty? && ttl.nil? &&
-      session_binding.blank? && token_binding.blank? && audience.blank? && actor_ref.blank? &&
-      resource_ref.nil? && tenant_ref.nil? && !require_session_binding
-
-    raise Invalid, "step_up_required false cannot carry step-up properties"
-  end
-
   def strict_boolean(value, name)
-    return value if value == true || value == false
+    return value if [true, false].include?(value)
 
     raise Invalid, "#{name} must be explicitly boolean"
   end

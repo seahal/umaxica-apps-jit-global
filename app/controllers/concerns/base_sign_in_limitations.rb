@@ -253,7 +253,7 @@ module BaseSignInLimitations
   end
 
   def promote_oidc_resolution_session!
-    login_result = log_in(
+    log_in(
       @actor,
       establishment: :root_login,
       sign_in_flow: @resolution.sign_in_flow,
@@ -265,7 +265,6 @@ module BaseSignInLimitations
       established_authentication_method: established_authentication_method_for(@oidc_transaction.auth_method),
       oidc_authorization_transaction: @oidc_transaction,
     )
-    login_result
   end
 
   def issue_authorization_code!
