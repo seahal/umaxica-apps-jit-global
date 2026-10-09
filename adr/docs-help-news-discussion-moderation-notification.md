@@ -6,9 +6,9 @@ Proposed (2026-06-16)
 
 Constraint added 2026-10-05:
 `adr/oidc-oauth-participation-allowlist-and-non-participant-surfaces.md` keeps Docs, Help, and News
-outside the OAuth/OIDC RP system. Per-user state in this proposal, such
-as `watch_state`, `tracking_state`, and `muted_state`, must be served through an authenticated
-RP-owned boundary rather than by making a content surface an RP.
+outside the OAuth/OIDC RP system. Per-user state in this proposal, such as `watch_state`,
+`tracking_state`, and `muted_state`, must be served through an authenticated RP-owned boundary
+rather than by making a content surface an RP.
 
 ## Context
 
@@ -145,5 +145,5 @@ Rejected / Deferred:
   identity authority.
 - `docs/architecture/docs-help-news-content-boundary.md` — current Rails / Next.js responsibility
   split.
-- `memos/2026-06-16-claude-content-discussion-profile-feed-boundary.md` — implementation-leaning
+- `research/2026-06-16-claude-content-discussion-profile-feed-boundary.md` — implementation-leaning
   scope notes and future checkpoints for this ADR.

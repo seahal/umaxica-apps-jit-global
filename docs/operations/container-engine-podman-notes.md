@@ -59,8 +59,8 @@ document records the rootless Podman requirements that are easy to miss.
 No service uses `restart: always` or `restart: unless-stopped`. Podman applies no backoff to a
 restart policy, so a container that exits immediately on a bad configuration is recreated several
 times a second until netns, veth, conmon, and journald churn saturates a CPU — the failure mode
-recorded in `notes/implementation/2026-08-23-cloudflare-tunnel-restart-storm.md`. The attempt count
-is the only bound Compose can express, so every long-running service declares `on-failure:N`:
+recorded in `research/implementation/2026-08-23-cloudflare-tunnel-restart-storm.md`. The attempt
+count is the only bound Compose can express, so every long-running service declares `on-failure:N`:
 
 | Service                                                                                                                 | Policy         |
 | ----------------------------------------------------------------------------------------------------------------------- | -------------- |

@@ -162,7 +162,7 @@ remove confirmed-dead retired-IdP controllers/views/tests. §5 items gated on hu
 Follow `plans/active/identity-authority-inversion-first-slice.md` first-slice rules: do not change
 DB placement, preserve old URLs via redirect where practical, no open redirects, preserve CSRF on
 destructive actions, keep surfaces local, no hardcoded absolute URLs. Leave a
-`notes/implementation/` entry recording the inverted-premise resolution and the residual-endpoint
+`research/implementation/` entry recording the inverted-premise resolution and the residual-endpoint
 classification.
 
 ## Verification

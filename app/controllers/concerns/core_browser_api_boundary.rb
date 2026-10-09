@@ -150,7 +150,7 @@ module CoreBrowserApiBoundary
     # `{"ok": true}` placeholder. The previous 200 with `{"refreshed": true}` was justified in a
     # comment here by the claim that the Next.js edge application read that key; an audit of
     # `seahal/umaxica-apps-edge` on 2026-08-22 found it forwards `/api/v0/*` without parsing it and
-    # has no reader for the key. See decision D14 in plans/analysis/rails-nextjs-openapi-contract-audit.md.
+    # has no reader for the key. See decision D14 in research/rails-nextjs-openapi-contract-audit.md.
     head :no_content
   end
 

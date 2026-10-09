@@ -179,7 +179,7 @@ this boundary.
 
 1. Record any fakecloud-vs-real-AWS discrepancy in the "Differences from Real AWS" section of
    `docs/operations/local-aws-fakecloud.md`, so it can be rechecked at production migration.
-2. Update `notes/implementation/fakecloud-aws-development-baseline.md` — replace the "Not Done"
+2. Update `research/implementation/fakecloud-aws-development-baseline.md` — replace the "Not Done"
    section with what was actually observed.
 3. Delete this document.
 

@@ -13,7 +13,7 @@ storage matrix.
 
 Several decisions are already expressed in that code but were never recorded as decisions. They live
 as inline comments and as an amendment banner on
-`notes/implementation/fakecloud-aws-development-baseline.md`:
+`research/implementation/fakecloud-aws-development-baseline.md`:
 
 - OpenTofu was the original intent for the HCL under `terraform/`; it was not adopted, and Terraform
   is used instead, installed in the dev container through
@@ -48,10 +48,10 @@ against an emulator.
 
 2. **Terraform is the provisioning tool.** Not OpenTofu, not shell scripts, not console clicks. This
    ratifies the amendment already applied to
-   `notes/implementation/fakecloud-aws-development-baseline.md`. The supported installation path is
-   the `ghcr.io/devcontainers/features/terraform` devcontainer feature — which this ADR originally
-   described as already present. It was not: three documents and a `providers.tf` comment had
-   claimed it since 2026-08-31 while the binary was absent from `core`. The feature was added on
+   `research/implementation/fakecloud-aws-development-baseline.md`. The supported installation path
+   is the `ghcr.io/devcontainers/features/terraform` devcontainer feature — which this ADR
+   originally described as already present. It was not: three documents and a `providers.tf` comment
+   had claimed it since 2026-08-31 while the binary was absent from `core`. The feature was added on
    2026-09-14; see `evidence/2026-09-14-terraform-devcontainer-feature.md`.
 
 3. **Module / environment split is the boundary.** `terraform/modules/` stays environment-agnostic —
@@ -174,9 +174,9 @@ The decision is ahead of the code, and this ADR does not claim otherwise.
   `object_storage:verify` was exercised against local FakeCloud only, never a staging host.
 
 Deferred with the reasons already recorded in
-`notes/implementation/fakecloud-aws-development-baseline.md`: Kafka produce/consume (FakeCloud's MSK
-support does not reach a working broker, so `GetBootstrapBrokers` returns an unreachable address),
-OpenSearch, and the remaining AWS services (SQS, SNS, SES, KMS).
+`research/implementation/fakecloud-aws-development-baseline.md`: Kafka produce/consume (FakeCloud's
+MSK support does not reach a working broker, so `GetBootstrapBrokers` returns an unreachable
+address), OpenSearch, and the remaining AWS services (SQS, SNS, SES, KMS).
 
 ## Consequences
 
@@ -218,6 +218,6 @@ OpenSearch, and the remaining AWS services (SQS, SNS, SES, KMS).
 - `docs/operations/fakecloud-migration-verification.md` — the unrun verification checklist.
 - `docs/operations/development-host-port-exposure.md` — the port publication rule this ADR stays
   inside.
-- `notes/implementation/fakecloud-aws-development-baseline.md` — OpenTofu-to-Terraform amendment and
-  the deferral reasons.
+- `research/implementation/fakecloud-aws-development-baseline.md` — OpenTofu-to-Terraform amendment
+  and the deferral reasons.
 - `lib/object_storage_shrine_configuration.rb` — the `DEPLOYMENT_TIER` switch.

@@ -6,8 +6,9 @@ Repository documents are separated by purpose.
   surfaces, and the repository boundary with the separate regional codebase.
 - `plans/` contains future work, proposals, drafts, migration plans, and backlog notes.
 - `adr/` contains accepted architecture and design decisions, including rationale and tradeoffs.
-- `notes/` contains non-authoritative ADR-adjacent notes and implementation handoff notes.
-- `memos/` contains exploratory observations and rough analysis that do not affect implementation.
+- `research/` contains non-authoritative ADR-adjacent notes and implementation handoff notes.
+- `research/` contains exploratory observations and rough analysis that do not affect
+  implementation.
 - `evidence/` contains records of verification that was actually performed - what was checked, how,
   what was observed, and what was concluded. Tests, validations, audits, security checks,
   performance checks, migration verification, and defect reproduction belong here.
@@ -17,9 +18,9 @@ Rules:
 - Write repository documentation in English. Non-English text is allowed only for explicit
   localization material, translation fixtures, or quoted external sources where the original
   language matters. See `docs/reference/repository-language-policy.md`.
-- Keep non-authoritative implementation notes out of `docs/`, `plans/`, and `adr/`; use `notes/`
+- Keep non-authoritative implementation notes out of `docs/`, `plans/`, and `adr/`; use `research/`
   instead.
-- Keep exploratory notes that do not affect implementation in `memos/`.
+- Keep exploratory notes that do not affect implementation in `research/`.
 - Keep future-facing material out of `docs/`.
 - Keep stable operational guidance out of `plans/`.
 - Record major accepted design decisions in `adr/`.

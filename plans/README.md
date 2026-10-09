@@ -4,14 +4,15 @@ This directory contains planning material that has not yet become an implementat
 
 ## Directories
 
-- `analysis/` contains investigation and decision-support material. Analysis documents are not
-  implementation specifications.
 - `backlog/` contains proposed future work that has not yet been accepted for implementation.
 - `archive/` contains historical planning material retained only when useful for traceability.
 
+Investigation and decision-support material lives in `research/`, not here.
+
 ## Source of truth
 
-GitHub issues are the source of truth for accepted active implementation work.
+An accepted change is specified in `specs/<feature>/` when it warrants a written specification (see
+`specs/README.md`); GitHub issues track accepted work.
 
 Documents under `plans/` MUST NOT override current accepted ADRs, explicit architecture contracts,
 or current implementation decisions.
@@ -22,7 +23,7 @@ An open, recent, or detailed plan does not by itself establish current architect
 
 Planning material should normally move through:
 
-`analysis -> backlog -> GitHub issue -> implementation`
+`research -> backlog -> accepted (GitHub issue, and specs/<feature>/ when warranted) -> implementation`
 
 After implementation, obsolete planning documents should be deleted or moved to `archive/` only when
 historical traceability is useful.

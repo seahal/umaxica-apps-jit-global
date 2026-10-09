@@ -22,7 +22,7 @@ class ObjectPlacementTest < Minitest::Test
 
   # A suffix and the single root that owns it. Only unambiguous suffixes belong here; roles such as
   # `Issuer`, which names both a persisting operation and a pure token minter, are decided per file
-  # in memos/2026-08-29-object-placement-inventory.md rather than by name.
+  # in research/2026-08-29-object-placement-inventory.md rather than by name.
   OWNED_SUFFIXES = {
     "consumer" => "app/consumers",
     "query" => "app/queries",
@@ -64,7 +64,7 @@ class ObjectPlacementTest < Minitest::Test
 
   # Token minters keep the Issuer name and live in app/lib: they build and sign a payload and
   # persist nothing, so the suffix describes the domain act rather than a state change. Decided in
-  # memos/2026-08-29-object-placement-inventory.md after reading each Issuer individually.
+  # research/2026-08-29-object-placement-inventory.md after reading each Issuer individually.
   TOKEN_MINTERS = %w(
     app/lib/jump_rt_issuer.rb
     app/lib/oidc_id_token_issuer.rb
@@ -161,7 +161,7 @@ class ObjectPlacementTest < Minitest::Test
     # Chronicle.capture writes Chronicle rows through these operations. The model here is the audit
     # table itself, so this is a model persisting its own records through extracted steps, not a
     # service orchestrating it - see
-    # memos/2026-08-29-chronicle-and-enforcement-write-dependencies.md. #869 also found that
+    # research/2026-08-29-chronicle-and-enforcement-write-dependencies.md. #869 also found that
     # Chronicle.capture has no production caller, which is the question to settle first.
     "ChronicleIntentWriter" => 869,
     "ChronicleResultWriter" => 869,

@@ -291,12 +291,12 @@ AAL documentation reconciliation, inert self-service Create actions, a Base Root
 pages, sign-up email value restoration, and React behavior tests. These changes are now current
 repository evidence; they are not independent verification. Twelve tracked Auth/app-com email and
 OTP files also had user changes in the starting worktree. Four untracked files predated this run:
-misc.md, notes/implementation/2026-09-14-refactor-plan-before-execution.md,
-notes/implementation/2026-09-14-refactor-plan-history.md, and refactor.md. They are preserved; only
-refactor.md is updated. The auxiliary untracked notes/memo say D-ENTRY was adopted for a cycle,
-which conflicts with the current V2 requirement and is not an accepted ADR. Current Auth/Base source
-also shows an anonymous entry redirect-cycle candidate; neither the draft nor current code alone
-resolves the product choice.
+misc.md, research/implementation/2026-09-14-refactor-plan-before-execution.md,
+research/implementation/2026-09-14-refactor-plan-history.md, and refactor.md. They are preserved;
+only refactor.md is updated. The auxiliary untracked research/memo say D-ENTRY was adopted for a
+cycle, which conflicts with the current V2 requirement and is not an accepted ADR. Current Auth/Base
+source also shows an anonymous entry redirect-cycle candidate; neither the draft nor current code
+alone resolves the product choice.
 
 The S1 original 18-section/95-ID plan file was not found (supplied SHA-256:
 2ae07102f486fd13c64fc45acfca65b990cc438db1098610dcb09415b52a92c8); S2 Sol review was not found
@@ -434,76 +434,76 @@ continuation slices recorded in §19 change the current source ordering and fail
 public effects remain unverified until isolated services are available.
 
 | ID / reviewer / severity | Affected REQ IDs | Evidence and prerequisite | Invariant / likely
-impact | Counter-test that could falsify it | Proposed resolution / synthesis effect |
-|---|---|---|---|---| | ADV-001 Requirement / BLOCKER to full freeze | REQ-001–095, especially 095 |
-S1/S2 files are absent; previous Appendix summaries are secondary; REQ-095 is truncated. | A missing
-requirement could be invented or omitted while the plan appears complete. | Recover and hash source
-files; compare each ID and P00–P17 against both matrices. | ACCEPTED. Full-plan freeze remains
-NO_GO; independent work continues. | | ADV-002 Architecture + security / HIGH | REQ-011, 030 |
-Issuer still supplies current time; the bounded exchange slice now uses only explicit payload
-`auth_time` and rejects missing values. A credential event earlier than code issuance remains the
-condition for the upstream defect. | auth_time invariant; stale authentication may appear fresh and
-undermine max_age/audit. | Instrument T0 credential event, T1 delayed code, T2 exchange and assert
-both claims remain T0; test SSO, reauth and any supported refresh. An alternate trusted event field
-propagated on every route would falsify that route’s defect. | ACCEPTED as a source-proven upstream
-timestamp-mapping defect on the inspected OIDC path, not a reproduced request impact. Carry actual
-Base-accepted event time; no now/created_at fallback. | | ADV-003 Security / HIGH | REQ-059, 060,
-062 | At the initial review snapshot Ruby and Lua classified replay before current code-owner
-checks; the bounded slice now checks ownership first in both layers. Prerequisite for the residual
-risk test: valid client B possesses A’s raw code. | Owner-scoped revocation; before the slice B
-could potentially revoke A’s RP session/family. | Use valid same-realm A and B, fresh client
-assertion JTI per request, and a fresh DPoP proof except deliberate replay; assert the target branch
-is reached and A/B/unrelated session/family/Base state is unchanged. Same-owner valid replay remains
-denied. | ACCEPTED as mandatory owner-binding test, not a confirmed exploit. The source fix is
-applied; dynamic Ruby/Lua race and side-effect tests remain pending. | | ADV-004 Operations/security
-/ HIGH | REQ-059, 061, 062 | At the initial review snapshot `link_consumed_family!` ignored
-missing/invalid_state returns and swallowed selected Valkey exceptions; the bounded slice now
-requires `:linked` and re-raises selected failures. | Fail-closed required-state invariant; before
-the slice a new credential response could be returned with replay linkage absent/unknown. | Inject
-returned missing, invalid_state, exception, timeout where Lua may have succeeded, token-signing
-failure after link, DB commit failure, and HTTP response loss after commit. Observe code/Valkey
-state, PG state, usable credentials, retry and recovery. | ACCEPTED. Treat positive required linkage
-as success; source fix is applied, but cross-store outcomes remain unexecuted. Do not unconsume or
-assume one ACID transaction. | | ADV-005 Security/testability / HIGH | REQ-016, 030, 031, 059 | At
-the initial review snapshot authorization code was consumed before DPoP proof validation. The
-bounded slice validates the proof before consume. Separately, resource authentication can emit
-`DPoP-Nonce` after failed resolution, but the verifier accepts a proof with no nonce even after such
-a response. Nonce state is stored by actor type only; the schema does not identify the issuing
-server/role. | Invalid AS proof must fail; the pre-consume source fix prevents that proof from
-burning the code. If the RS header is intended as a challenge, accepting the next nonce-less proof
-weakens that elected policy. | At AS token endpoint, exercise absent proof per Bearer policy,
-malformed proof, wrong key, stale iat and replayed `jti`; assert error/header and code/family state.
-At RS, follow the exact failed-auth response with a valid proof first omitting, then supplying its
-nonce; assert the selected policy and token/session state. Obtain a nonce from one authority and
-present it to another only where the architecture says they are distinct; assert rejection. |
-PARTIALLY_ACCEPTED. Keep invalid proof rejected and preserve no-challenge AS behavior unless policy
-changes. RFC nonce use is optional, but if the RS response is a nonce challenge, require it on the
-follow-up and scope it to the issuing server. Dynamic endpoint behavior remains pending. | | ADV-006
-Architecture/security / HIGH | REQ-007–010, 032, 051–056, 065 | Selector admission exists; inherited
-selector gate returns for anonymous actors; leaf routes exist; email success may call
-AuthenticationSessionCommitter → establish_signed_in_session!. | If an unauthenticated leaf can
-produce state Base accepts as identity/session, Base-only authority is violated. Impact is unknown
-pending Base acceptance trace. | For each actor/surface, test absent, valid, expired, replayed and
-purpose/actor/realm/surface/browser-mismatched admissions; inspect response, Auth/Base cookies,
-ceremony rows, token rows, DBSC, Base acceptance, code and RP session. Include valid flow to avoid
-vacuous earlier rejection. | PARTIALLY_ACCEPTED. Keep as a required boundary test, not a confirmed
-bypass. Local-entry UX is independently BLOCKED_BY_DECISION. | | ADV-007 Operations / BLOCKER to
-Rails dynamic baseline | REQ-006, 064, 066, 069 | CI begins `db:prepare`; config declares
-test-specific PostgreSQL database names, but test host can fall back to the shared host.
-Request-path Valkey keys use fixed namespaces on logical DB 2, also assigned by development
-examples. Test helpers do not establish suite-wide external egress denial. | Tests could cross-talk
-through Valkey or contact real providers; Rails output would not meet the requested attributable,
-isolated test condition. | Confirm fully resolved test database identities; provide disposable
-Valkey and run/worker key namespaces; exercise external call denial/stubs before any behavior test.
-| ACCEPTED. A targeted test was attempted and stopped before assertions at PostgreSQL schema
-inspection (`primary` unresolved); no DB mutation occurred. Full tests, coverage and `bin/ci` remain
-blocked. Read-only routes/notes succeeded with temporary filesystem overlays and do not require
-claiming test-service isolation. | | ADV-008 Architecture/API / HIGH local blocker | REQ-021–027,
-038–040 | Public GUID route exists but no resolver model; database ownership was not found; OpenAPI
-treats net as internal. | Arbitrary DB attachment couples identifiers to wrong owner; no documented
-public JSON contract leaves a gap. | Establish deployment and database ownership, decide a net
-OpenAPI artifact, then test that the selected boundary owns lookup and covers the live host. |
-PARTIALLY_ACCEPTED. Block only GUID persistence/public net contract, not other routes or
+impact | Counter-test that could falsify it | Proposed resolution / synthesis
+effect | |---|---|---|---|---| | ADV-001 Requirement / BLOCKER to full freeze | REQ-001–095,
+especially 095 | S1/S2 files are absent; previous Appendix summaries are secondary; REQ-095 is
+truncated. | A missing requirement could be invented or omitted while the plan appears complete. |
+Recover and hash source files; compare each ID and P00–P17 against both matrices. | ACCEPTED.
+Full-plan freeze remains NO_GO; independent work continues. | | ADV-002 Architecture + security /
+HIGH | REQ-011, 030 | Issuer still supplies current time; the bounded exchange slice now uses only
+explicit payload `auth_time` and rejects missing values. A credential event earlier than code
+issuance remains the condition for the upstream defect. | auth_time invariant; stale authentication
+may appear fresh and undermine max_age/audit. | Instrument T0 credential event, T1 delayed code, T2
+exchange and assert both claims remain T0; test SSO, reauth and any supported refresh. An alternate
+trusted event field propagated on every route would falsify that route’s defect. | ACCEPTED as a
+source-proven upstream timestamp-mapping defect on the inspected OIDC path, not a reproduced request
+impact. Carry actual Base-accepted event time; no now/created_at fallback. | | ADV-003 Security /
+HIGH | REQ-059, 060, 062 | At the initial review snapshot Ruby and Lua classified replay before
+current code-owner checks; the bounded slice now checks ownership first in both layers. Prerequisite
+for the residual risk test: valid client B possesses A’s raw code. | Owner-scoped revocation; before
+the slice B could potentially revoke A’s RP session/family. | Use valid same-realm A and B, fresh
+client assertion JTI per request, and a fresh DPoP proof except deliberate replay; assert the target
+branch is reached and A/B/unrelated session/family/Base state is unchanged. Same-owner valid replay
+remains denied. | ACCEPTED as mandatory owner-binding test, not a confirmed exploit. The source fix
+is applied; dynamic Ruby/Lua race and side-effect tests remain pending. | | ADV-004
+Operations/security / HIGH | REQ-059, 061, 062 | At the initial review snapshot
+`link_consumed_family!` ignored missing/invalid_state returns and swallowed selected Valkey
+exceptions; the bounded slice now requires `:linked` and re-raises selected failures. | Fail-closed
+required-state invariant; before the slice a new credential response could be returned with replay
+linkage absent/unknown. | Inject returned missing, invalid_state, exception, timeout where Lua may
+have succeeded, token-signing failure after link, DB commit failure, and HTTP response loss after
+commit. Observe code/Valkey state, PG state, usable credentials, retry and recovery. | ACCEPTED.
+Treat positive required linkage as success; source fix is applied, but cross-store outcomes remain
+unexecuted. Do not unconsume or assume one ACID transaction. | | ADV-005 Security/testability /
+HIGH | REQ-016, 030, 031, 059 | At the initial review snapshot authorization code was consumed
+before DPoP proof validation. The bounded slice validates the proof before consume. Separately,
+resource authentication can emit `DPoP-Nonce` after failed resolution, but the verifier accepts a
+proof with no nonce even after such a response. Nonce state is stored by actor type only; the schema
+does not identify the issuing server/role. | Invalid AS proof must fail; the pre-consume source fix
+prevents that proof from burning the code. If the RS header is intended as a challenge, accepting
+the next nonce-less proof weakens that elected policy. | At AS token endpoint, exercise absent proof
+per Bearer policy, malformed proof, wrong key, stale iat and replayed `jti`; assert error/header and
+code/family state. At RS, follow the exact failed-auth response with a valid proof first omitting,
+then supplying its nonce; assert the selected policy and token/session state. Obtain a nonce from
+one authority and present it to another only where the architecture says they are distinct; assert
+rejection. | PARTIALLY_ACCEPTED. Keep invalid proof rejected and preserve no-challenge AS behavior
+unless policy changes. RFC nonce use is optional, but if the RS response is a nonce challenge,
+require it on the follow-up and scope it to the issuing server. Dynamic endpoint behavior remains
+pending. | | ADV-006 Architecture/security / HIGH | REQ-007–010, 032, 051–056, 065 | Selector
+admission exists; inherited selector gate returns for anonymous actors; leaf routes exist; email
+success may call AuthenticationSessionCommitter → establish_signed_in_session!. | If an
+unauthenticated leaf can produce state Base accepts as identity/session, Base-only authority is
+violated. Impact is unknown pending Base acceptance trace. | For each actor/surface, test absent,
+valid, expired, replayed and purpose/actor/realm/surface/browser-mismatched admissions; inspect
+response, Auth/Base cookies, ceremony rows, token rows, DBSC, Base acceptance, code and RP session.
+Include valid flow to avoid vacuous earlier rejection. | PARTIALLY_ACCEPTED. Keep as a required
+boundary test, not a confirmed bypass. Local-entry UX is independently BLOCKED_BY_DECISION. | |
+ADV-007 Operations / BLOCKER to Rails dynamic baseline | REQ-006, 064, 066, 069 | CI begins
+`db:prepare`; config declares test-specific PostgreSQL database names, but test host can fall back
+to the shared host. Request-path Valkey keys use fixed namespaces on logical DB 2, also assigned by
+development examples. Test helpers do not establish suite-wide external egress denial. | Tests could
+cross-talk through Valkey or contact real providers; Rails output would not meet the requested
+attributable, isolated test condition. | Confirm fully resolved test database identities; provide
+disposable Valkey and run/worker key namespaces; exercise external call denial/stubs before any
+behavior test. | ACCEPTED. A targeted test was attempted and stopped before assertions at PostgreSQL
+schema inspection (`primary` unresolved); no DB mutation occurred. Full tests, coverage and `bin/ci`
+remain blocked. Read-only routes/notes succeeded with temporary filesystem overlays and do not
+require claiming test-service isolation. | | ADV-008 Architecture/API / HIGH local blocker |
+REQ-021–027, 038–040 | Public GUID route exists but no resolver model; database ownership was not
+found; OpenAPI treats net as internal. | Arbitrary DB attachment couples identifiers to wrong owner;
+no documented public JSON contract leaves a gap. | Establish deployment and database ownership,
+decide a net OpenAPI artifact, then test that the selected boundary owns lookup and covers the live
+host. | PARTIALLY_ACCEPTED. Block only GUID persistence/public net contract, not other routes or
 workstreams. | | ADV-009 Data/privacy / MEDIUM | REQ-045–050, 075–084 | Current ActivityLogPresenter
 ranks/filters risk and visibility; SessionPresenter renders discarded_at expiry;
 SessionTimestampHelper exists; shared expiry cap is called in several token paths. | Duplicate
@@ -519,18 +519,18 @@ coverage without broad exemptions or indefinite FIXME. | | ADV-011 Complexity / 
 028, 038, 045, 067–068, 078, 083, 092 | Shared RP primitives, activity presenter, timestamp helper
 and expiry cap already exist. | Reimplementation could create independent policy owners or
 unnecessary tables/services. | Require each proposed abstraction to cite a failing public behavior,
-contract owner and measurable benefit. | ACCEPTED. Smallest coherent change; no parallel framework.
-| | ADV-012 Architecture + regression / MEDIUM | REQ-010, REQ-041–044 | Auth app/com/org selector
-controllers include AuthCeremonyAdmission and call admit_or_render_sign_ceremony!; anonymous
-no-admission path calls bridge_to_base_admission! to Base root. Base app/com/org RootsController
-ceremony_sign_in_href/ceremony_sign_up_href generate direct Auth entry URLs without admission. |
-Anonymous click can alternate Base root → Auth selector → Base root and never reach a credential
-ceremony; this is a usability/availability defect, not evidence of identity bypass. | Follow one
-app/com/org entry across local test hosts; assert the request sequence reaches an admitted ceremony
-or returns the selected explicit error, not a cycle. Verify actual root links and redirect chain. |
-ACCEPTED as static redirect-cycle candidate. D-ENTRY remains undecided; choose and test an explicit
-no-loop entry contract. Runtime reproduction not run. | | ADV-013 Testability / MEDIUM | REQ-088,
-REQ-020 | Pre-existing dirty
+contract owner and measurable benefit. | ACCEPTED. Smallest coherent change; no parallel
+framework. | | ADV-012 Architecture + regression / MEDIUM | REQ-010, REQ-041–044 | Auth app/com/org
+selector controllers include AuthCeremonyAdmission and call admit_or_render_sign_ceremony!;
+anonymous no-admission path calls bridge_to_base_admission! to Base root. Base app/com/org
+RootsController ceremony_sign_in_href/ceremony_sign_up_href generate direct Auth entry URLs without
+admission. | Anonymous click can alternate Base root → Auth selector → Base root and never reach a
+credential ceremony; this is a usability/availability defect, not evidence of identity bypass. |
+Follow one app/com/org entry across local test hosts; assert the request sequence reaches an
+admitted ceremony or returns the selected explicit error, not a cycle. Verify actual root links and
+redirect chain. | ACCEPTED as static redirect-cycle candidate. D-ENTRY remains undecided; choose and
+test an explicit no-loop entry contract. Runtime reproduction not run. | | ADV-013 Testability /
+MEDIUM | REQ-088, REQ-020 | Pre-existing dirty
 `test/controllers/auth/{app,com}/sign/up/check/email/otps_controller_test.rb` stubs
 `FeatureFlags.enabled?` to `true` around a result marked `unavailable: true`.
 `TurnstileDegradation#apply` treats that result as success when `turnstile_degraded_mode` is
@@ -541,11 +541,11 @@ fail or assert the wrong policy when executed. | Run with unrelated signup flags
 unchanged. Separately test that enabling the degraded flag accepts only upstream-unavailable
 results, while invalid/missing tokens still fail. | ACCEPTED as a dirty-test contradiction, not a
 production defect. Narrow the test flag setup; retain and separately verify the existing documented
-outage risk unless a user decision explicitly changes that policy. Runtime failure was not observed.
-| | ADV-014 Protocol / security / HIGH | REQ-011, REQ-030 | `oidc_authorization_url` cannot emit
-`prompt`/`max_age`; app/com/org Base fixed allowlists omit them; resolver and transaction
-serialization/resume omit them; verifier has no freshness input or `auth_time` check. The
-authorization action has an already-authenticated code-issue shortcut. A valid request reaching
+outage risk unless a user decision explicitly changes that policy. Runtime failure was not
+observed. | | ADV-014 Protocol / security / HIGH | REQ-011, REQ-030 | `oidc_authorization_url`
+cannot emit `prompt`/`max_age`; app/com/org Base fixed allowlists omit them; resolver and
+transaction serialization/resume omit them; verifier has no freshness input or `auth_time` check.
+The authorization action has an already-authenticated code-issue shortcut. A valid request reaching
 these routes is the prerequisite; middleware or an alternate handler could falsify the path-level
 conclusion. | OIDC OP prompt/max_age contract; stale authentication can be accepted as fresh,
 `prompt=login` may be ignored for an existing session, and `prompt=none` may proceed interactively

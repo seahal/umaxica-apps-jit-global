@@ -11,7 +11,8 @@ Related:
   since 2026-05-19)
 - `plans/backlog/refresh-token-reuse-overlap-and-stale-cookie-recovery.md` — recovery already
   shipped vs remaining work
-- `notes/implementation/2026-09-12-refresh-token-reuse-cookie-detach.md` — what landed on 2026-09-12
+- `research/implementation/2026-09-12-refresh-token-reuse-cookie-detach.md` — what landed on
+  2026-09-12
 - `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md` — reuse is a compromise event
 - `adr/two-base-authentication-mode-boundaries.md` — `:open` must not ignore invalid credentials
 

@@ -9,8 +9,8 @@ News content is stored in the central `publishing` database as entries within th
 not in a `Timeline` model family. The premise recorded below -- that Timeline models and their
 categories and tags already store news content -- was a design assumption rather than a schema fact;
 no such tables existed in the live schema, as
-`memos/2026-06-16-claude-content-discussion-profile-feed-boundary.md` first noted. Category and tag
-now exist as publishing vocabularies.
+`research/2026-06-16-claude-content-discussion-profile-feed-boundary.md` first noted. Category and
+tag now exist as publishing vocabularies.
 
 Retained as the historical record of the 2026-04-13 decision.
 

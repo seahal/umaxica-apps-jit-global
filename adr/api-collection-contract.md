@@ -72,8 +72,8 @@ Offset pagination must not be added to any public collection.
 ## Migration constraint
 
 > **Superseded 2026-08-22.** The premise below — that edge applications consume the entries API —
-> was disproved by the audit in `plans/analysis/rails-nextjs-openapi-contract-audit.md`. Retained as
-> the reasoning at the time. See [Implementation 2026-08-22](#implementation-2026-08-22).
+> was disproved by the audit in `research/rails-nextjs-openapi-contract-audit.md`. Retained as the
+> reasoning at the time. See [Implementation 2026-08-22](#implementation-2026-08-22).
 
 This contract cannot be applied to the existing entries API without an externally coordinated
 breaking change.

@@ -8,7 +8,7 @@ require "digest"
 
 catalog = JSON.parse(File.read(ARGV.fetch(0)))
 output = ARGV.fetch(1)
-abort "output must be a memo" unless output.match?(%r{\Amemos/[a-z0-9-]+\.md\z})
+abort "output must be a memo" unless output.match?(%r{\Aresearch/[a-z0-9-]+\.md\z})
 host = ENV.fetch("POSTGRESQL_AUDIT_HOST")
 port = Integer(ENV.fetch("POSTGRESQL_AUDIT_PORT"), 10)
 user = ENV.fetch("POSTGRESQL_AUDIT_USER")

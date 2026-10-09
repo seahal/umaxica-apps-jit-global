@@ -184,7 +184,7 @@ supplies only service topology. Each route host constraint lists the configured 
 localhost literal. Development is published through Cloudflare Tunnel behind Cloudflare Access;
 Access, not Host Authorization, keeps the development listener non-public. See
 `docs/architecture/cloudflare-request-paths.md` for the trust boundaries and
-`notes/implementation/2026-08-10-development-tunnel-access-verification.md` for the measured
+`research/implementation/2026-08-10-development-tunnel-access-verification.md` for the measured
 end-to-end evidence.
 
 `sign.{app,com,org}.localhost` resolves only when `AUTH_*_URL` and `PUBLIC_AUTH_*_URL` are unset.
@@ -339,10 +339,10 @@ run in CI, not in the hooks.
 
 - `adr/` — accepted architecture and design decisions, with the tradeoffs behind them.
 - `docs/` — current, stable documentation of how the system works.
-- `memos/` — exploratory field notes and rough analysis not yet stable enough for `docs/`, `plans/`,
-  `adr/`, or `notes/`.
-- `notes/` — non-authoritative implementation handoff and ADR-adjacent notes, candidates for later
-  promotion.
+- `research/` — exploratory field notes and rough analysis not yet stable enough for `docs/`,
+  `plans/`, `adr/`, or `research/`.
+- `research/` — non-authoritative implementation handoff and ADR-adjacent notes, candidates for
+  later promotion.
 - `plans/` — planning material not yet an implementation source of truth; GitHub issues remain the
   source of truth for accepted active work.
 - `evidence/` — dated, flat records of completed tests, verifications, and audits.

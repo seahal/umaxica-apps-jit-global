@@ -11,7 +11,7 @@ change the current operating architecture.
 
 Current behavior and operator commands are documented in
 `docs/operations/remote-codex-over-tailscale.md`. Implementation evidence and known limitations are
-recorded in `notes/implementation/2026-07-22-core-tailscale-ssh-userspace-poc.md`.
+recorded in `research/implementation/2026-07-22-core-tailscale-ssh-userspace-poc.md`.
 
 ## Gate 1 completion record
 

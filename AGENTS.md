@@ -2,8 +2,8 @@
 
 Ruby on Rails application, not the Rails framework monorepo.
 
-This repository is built for production deployment, not as a proof of concept. Treat every change
-as code that will run in production and serve real users.
+This repository is built for production deployment, not as a proof of concept. Treat every change as
+code that will run in production and serve real users.
 
 `README.md` describes the repository and its current topology. This file contains only
 repository-wide agent rules that cannot be reliably derived from the code. Task-specific rules under
@@ -38,9 +38,8 @@ Always load `generic/model-behavior-calibration.mdc` — it applies to every tas
 the remaining entries matching the task.
 
 - Controllers or endpoints: `generic/controllers.mdc`, `generic/routing.mdc`,
-  `project/surfaces.mdc`, `project/controller-inheritance.mdc`,
-  `project/browser-rp-contract.mdc`, `generic/authentication-boundaries.mdc`,
-  `docs/architecture/controller-lifecycle.md`
+  `project/surfaces.mdc`, `project/controller-inheritance.mdc`, `project/browser-rp-contract.mdc`,
+  `generic/authentication-boundaries.mdc`, `docs/architecture/controller-lifecycle.md`
 - JSON API endpoints, error responses, or API versioning: `docs/reference/api-design-standards.md`
 - Minitest or behavior changes: `generic/testing.mdc`, `generic/no-test-only-code.mdc`,
   `project/static-invariant-guards.mdc`
@@ -92,13 +91,14 @@ the remaining entries matching the task.
 - Rails Concern creation, modification, review, or refactoring (controller or model concerns),
   including method visibility or `included do` hooks: `generic/rails-concerns.mdc`,
   `docs/architecture/method-visibility-and-concerns.md`
+- Behavior changes in an area covered by `docs/checklists/`: `project/acceptance-checklists.mdc`
 - Non-trivial decisions, plan deviations, or handoff context: `generic/implementation-notes.mdc`,
   `project/repository-knowledge-tree.mdc`
 
 For non-trivial architecture, routing, authentication, authorization, database, preference, surface,
 or service-layer work, use `project/repository-knowledge-tree.mdc` to load and prioritize material
-under `memos/`, `notes/`, `adr/`, `plans/`, and `docs/`. Surface conflicts between current code and
-an accepted ADR before choosing an implementation path.
+under `research/`, `adr/`, `specs/`, `plans/`, and `docs/`. Surface conflicts between current code
+and an accepted ADR before choosing an implementation path.
 
 ## Governing Principles
 

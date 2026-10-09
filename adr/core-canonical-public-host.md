@@ -57,8 +57,8 @@ adding private hosts solely for a Worker caller.
 
 The canonical public host decision remains in force. Concrete browser-to-Rails routing and the
 reviewed host/proxy configuration still require verification. DNS selects hosts; same-host path
-selection requires an HTTP routing mechanism. The serving path must satisfy the accepted AWS
-ingress restrictions in `adr/dos-and-firewall-controls-at-cdn-aws-edge-not-in-rails.md`.
+selection requires an HTTP routing mechanism. The serving path must satisfy the accepted AWS ingress
+restrictions in `adr/dos-and-firewall-controls-at-cdn-aws-edge-not-in-rails.md`.
 
 This amendment records the target architecture only; it does not establish that the connection has
 been removed from infrastructure or authorize runtime configuration changes. Other surfaces,
@@ -122,7 +122,7 @@ repository. Do not conflate the two.
 
 ## Related
 
-- `memos/2026-10-04-codex-core-cloudfront-browser-boundary-considerations.md`
+- `research/2026-10-04-codex-core-cloudfront-browser-boundary-considerations.md`
 - `adr/dos-and-firewall-controls-at-cdn-aws-edge-not-in-rails.md`
 - `docs/operations/core-nextjs-zero-cookie-edge-contract.md`
 - `docs/architecture/cloudflare-request-paths.md`

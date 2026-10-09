@@ -9,44 +9,50 @@ Repository knowledge is separated by purpose. Use these as required context inpu
 background.
 
 - `adr/` — accepted architecture and design decisions.
-- `plans/` — implementation plans, active work, proposals, and backlog items.
-- `docs/` — current stable documentation for implemented behavior and operations.
+- `specs/` — accepted changes: what, why, how and tasks, one directory per change.
+- `docs/` — the current system, for programmers, operators and agents.
 - `docs/dictionary/` — DDD ubiquitous-language definitions for this application.
-- `notes/` — non-authoritative, ADR-adjacent notes and implementation handoff context.
-- `memos/` — exploratory observations that do not affect implementation.
+- `docs/checklists/` — durable behavior that must keep working.
+- `evidence/` — what was actually observed against a particular commit.
+- `plans/backlog/` — proposed work that has not been accepted.
+- `research/` — investigations, rejected approaches, failures and handoff context.
+- `manuals/` — prose for product users; presence here does not mean published.
 
-Only `adr/`, `docs/`, and current `plans/` are source-of-truth decision material. Do not treat
-`notes/`, `memos/`, or `plans/archive/` as source of truth.
+Only `adr/`, `docs/`, and an open spec in `specs/` are source-of-truth decision material. Do not
+treat `research/`, `plans/`, `evidence/`, or a closed spec as a description of the current system.
 
 ## Decision priority when sources disagree
 
 1. Explicit user instruction in the current conversation.
 2. Current code and tests.
 3. Accepted ADRs in `adr/`.
-4. Stable docs in `docs/`.
-5. Active plans in `plans/active/`.
-6. Backlog notes in `plans/backlog/`.
-7. Notes in `notes/`.
+4. Stable docs in `docs/`, including `docs/checklists/`.
+5. An open spec in `specs/`, for the change it covers.
+6. Backlog items in `plans/backlog/`.
+7. Material in `research/`.
 8. Archived plans in `plans/archive/`.
 
-If an ADR or doc conflicts with current code, call out the conflict before choosing an
+If an ADR, doc or checklist conflicts with current code, call out the conflict before choosing an
 implementation path.
 
-## Where notes and memos go
+## Where research goes
 
-- Use `notes/implementation/YYYY-MM-DD-<task-slug>.md` for durable implementation decisions, plan
-  deviations, compromises, and handoff context discovered while carrying out a plan. For the
+- Use `research/implementation/YYYY-MM-DD-<task-slug>.md` for durable implementation decisions, plan
+  deviations, compromises, and handoff context discovered while carrying out a change. For the
   contents and discipline of a note, see `implementation-notes`.
-- Use `memos/` for exploratory field notes from investigation, audit, planning, surprising
-  repository behavior, and failed approaches that are not yet handoff context.
-- Keep notes and memos out of stable docs, plans, and ADRs until they are ready to be promoted.
+- Use `research/` for investigation, audit, surprising repository behavior, and failed or rejected
+  approaches.
+- Research has no maintenance obligation and may be stale. Re-verify a fact before relying on it.
+- Keep research out of docs, specs, and ADRs until it is ready to be promoted.
 
 ## Promotion
 
-Before finishing, review any notes created for the task and promote stable content out of `notes/`:
+Before finishing, review anything written under `research/` for the task and promote stable content:
 
 - accepted design decisions → `adr/`
-- future work → `plans/active/` or `plans/backlog/`
+- future work → `plans/backlog/`
+- an accepted change → `specs/<feature>/`
 - implemented stable behavior → `docs/`
+- behavior that must keep working → `docs/checklists/`
 
-Leave only provisional or handoff context in `notes/`.
+Leave only provisional or handoff context in `research/`.

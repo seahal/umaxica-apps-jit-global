@@ -14,8 +14,8 @@ The English-only rule applies to:
 - `adr/`
 - `docs/`
 - `plans/`
-- `notes/`
-- `memos/`
+- `research/`
+- `research/`
 - code comments and test names
 - implementation summaries that are intended to be committed
 

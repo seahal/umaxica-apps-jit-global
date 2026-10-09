@@ -102,7 +102,7 @@ Before setting `CORE_BROWSER_JWT_COOKIE_ENABLED=1` in production, record evidenc
 Development published `jp.umaxica.{app,com,org}` through Cloudflare Tunnel behind a Cloudflare
 Access application on 2026-08-10. Rails Core answers every path on those hostnames today; the
 Next.js origin does not exist yet, so the split above is not in force. Evidence:
-`notes/implementation/2026-08-10-development-tunnel-access-verification.md`.
+`research/implementation/2026-08-10-development-tunnel-access-verification.md`.
 
 Two consequences for the work that implements this contract.
 

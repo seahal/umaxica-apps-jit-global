@@ -303,7 +303,7 @@ The second and third items were verified for development on 2026-08-10 against t
 Rails hostnames: every unauthenticated external request returned an Access login redirect, a nonce
 probe confirmed no such request reached the origin, and authenticated browser traffic was observed
 arriving at Rails from a public client address. Evidence is in
-`notes/implementation/2026-08-10-development-tunnel-access-verification.md`. That run covers
+`research/implementation/2026-08-10-development-tunnel-access-verification.md`. That run covers
 development only; the first and fourth items remain unverified, and production remains blocked on
 all four. A dated verification run is evidence, not a substitute for re-checking after any account
 change.

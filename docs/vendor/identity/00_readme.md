@@ -27,7 +27,7 @@ behavior as evidenced by the current repository.
 
 # Distribution Warning
 
-- `notes/oauth2-1-compliance-gap.md` is INTERNAL ONLY.
+- `research/oauth2-1-compliance-gap.md` is INTERNAL ONLY.
 - It must not be included in any RFI/RFP/vendor package.
 - It contains stale vocabulary such as `sign.*` as AS.
 - Vendor-facing authority is defined by `01_responsibility_matrix.md` and

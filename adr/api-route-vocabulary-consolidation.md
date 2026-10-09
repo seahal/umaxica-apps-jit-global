@@ -13,8 +13,8 @@ preference API migration amended (decision approved 2026-10-01; implemented 2026
 
 ## Status
 
-Accepted (2026-06-13); amended for the Core preference migration (2026-09-15) and for the Base, Auth,
-and Warp preference migration (decision approved 2026-10-01; implemented 2026-10-02).
+Accepted (2026-06-13); amended for the Core preference migration (2026-09-15) and for the Base,
+Auth, and Warp preference migration (decision approved 2026-10-01; implemented 2026-10-02).
 
 This decision establishes preferred long-term vocabulary for API route namespaces. It is a naming
 and direction decision. The implementation amendment below records a reviewed Core preference API
@@ -132,7 +132,7 @@ These requirements constrain any _future_ implementation; they are not actions t
 - The content-read endpoints `/edge/v0/entries` (docs/help/news) are an open classification question
   and require separate review before any decision; they are intentionally not classified here.
 - Exploratory implementation notes, the candidate-route inventory, risks, and open questions are
-  recorded in `memos/2026-06-13-claude-api-route-vocabulary-consolidation.md`.
+  recorded in `research/2026-06-13-claude-api-route-vocabulary-consolidation.md`.
 
 ## Implementation amendment — Core preference APIs (2026-09-15)
 
@@ -154,15 +154,15 @@ The following reviewed migration slice is now implemented on the `feature` branc
 This amendment does not migrate Auth, Base, Side, Docs, Help, News, or other protocol/ceremony
 endpoints. Their legacy route vocabulary remains subject to endpoint-specific compatibility review.
 (The Base, Auth, and Side/Warp theme and cookie endpoints were since migrated by the 2026-10-02
-amendment below.)
-The route contract, DBSC wiring, preference registry, and security invariant tests were updated to
-follow the canonical controller locations. Runtime request tests remain required before accepting
-the migration because the current environment has no reachable isolated PostgreSQL/Valkey targets.
+amendment below.) The route contract, DBSC wiring, preference registry, and security invariant tests
+were updated to follow the canonical controller locations. Runtime request tests remain required
+before accepting the migration because the current environment has no reachable isolated
+PostgreSQL/Valkey targets.
 
 ## Implementation amendment — Base, Auth, and Warp preference APIs (2026-10-02)
 
-Decision approved 2026-10-01 by the user's preference transport instruction; implemented
-2026-10-02. The family capability and host-local transport rationale is recorded in
+Decision approved 2026-10-01 by the user's preference transport instruction; implemented 2026-10-02.
+The family capability and host-local transport rationale is recorded in
 `adr/preference-browser-transport-family-capability.md`.
 
 Classification (per the rule above): `/web/v0/theme` and `/web/v0/cookie` are actual API endpoints.
@@ -180,26 +180,26 @@ is not part of it either.
   callers were this repository's own browser code (`src/lib/theme.ts`,
   `src/components/chrome/CookieBanner.tsx`, and the `theme`, `cookie-banner`, and `cookie-toggle`
   Stimulus controllers), which move in the same change; neither endpoint is in any OpenAPI document;
-  the Next.js edge application forwards only `/api/v0/*` (`plans/analysis/rails-nextjs-openapi-contract-audit.md`,
-  decision D14); and the application has not been deployed. The legacy paths are therefore removed
-  without a Sunset window, redirect, alias, or dual route. This is not a removal of a published
-  client contract, and it does not relax the Sunset rule for any endpoint that has a deployed client.
+  the Next.js edge application forwards only `/api/v0/*`
+  (`research/rails-nextjs-openapi-contract-audit.md`, decision D14); and the application has not
+  been deployed. The legacy paths are therefore removed without a Sunset window, redirect, alias, or
+  dual route. This is not a removal of a published client contract, and it does not relax the Sunset
+  rule for any endpoint that has a deployed client.
 
 ### Route exception record (routing harness)
 
-| Field | Value |
-| --- | --- |
-| Date | Approved 2026-10-01; implemented 2026-10-02 |
-| Status | Accepted, permanent |
-| Route files | `config/routes/base.rb`, `config/routes/auth.rb`, `config/routes/warp.rb` (app, com, org blocks) |
-| Snippet | `namespace :api { namespace :v0 { namespace :preferences { get :cookie, to: "cookies#show"; patch :cookie, to: "cookies#update"; get :theme, to: "themes#show"; patch :theme, to: "themes#update" } } }` |
-| Exception type | Explicit `get` / `patch` with `to:` instead of `resource` |
-| Reason | `resource … only: %i(show update)` also maps `PUT`; the shared contract and the OpenAPI documents allow only `PATCH`, matching the Core precedent in the 2026-09-15 amendment |
-| Approval source | The user's 2026-10-01 instruction ("PUT is not added; respect Core's explicit GET + PATCH; record the same exception in an accepted ADR") |
-| Lifetime | Permanent while the preference APIs keep a `PATCH`-only update contract |
-| Removal plan | Replace with a resourceful route only if Rails offers a `PATCH`-only update mapping or the contract adopts `PUT` |
-| Tests | `test/integration/routes/{base,auth_sign_ceremony,warp,core}_route_contract_test.rb`, `test/integration/routes/legacy_api_namespace_guard_test.rb`, `test/integration/preference_browser_api_contract_test.rb`, `test/contracts/openapi_route_coverage_test.rb` |
-| Controller/action | `{base,auth,warp}/{app,com,org}/api/v0/preferences/{cookies,themes}#{show,update}` |
-| Helper / path / verb | `<family>_<surface>_api_v0_preferences_{cookie,theme}`; `GET` and `PATCH /api/v0/preferences/{cookie,theme}`; no `PUT` |
-| Risk | Low: same-origin JSON endpoints behind the family's forgery protection; an accidental `PUT` mapping is caught by the route contract tests |
-
+| Field                | Value                                                                                                                                                                                                                                                           |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Date                 | Approved 2026-10-01; implemented 2026-10-02                                                                                                                                                                                                                     |
+| Status               | Accepted, permanent                                                                                                                                                                                                                                             |
+| Route files          | `config/routes/base.rb`, `config/routes/auth.rb`, `config/routes/warp.rb` (app, com, org blocks)                                                                                                                                                                |
+| Snippet              | `namespace :api { namespace :v0 { namespace :preferences { get :cookie, to: "cookies#show"; patch :cookie, to: "cookies#update"; get :theme, to: "themes#show"; patch :theme, to: "themes#update" } } }`                                                        |
+| Exception type       | Explicit `get` / `patch` with `to:` instead of `resource`                                                                                                                                                                                                       |
+| Reason               | `resource … only: %i(show update)` also maps `PUT`; the shared contract and the OpenAPI documents allow only `PATCH`, matching the Core precedent in the 2026-09-15 amendment                                                                                   |
+| Approval source      | The user's 2026-10-01 instruction ("PUT is not added; respect Core's explicit GET + PATCH; record the same exception in an accepted ADR")                                                                                                                       |
+| Lifetime             | Permanent while the preference APIs keep a `PATCH`-only update contract                                                                                                                                                                                         |
+| Removal plan         | Replace with a resourceful route only if Rails offers a `PATCH`-only update mapping or the contract adopts `PUT`                                                                                                                                                |
+| Tests                | `test/integration/routes/{base,auth_sign_ceremony,warp,core}_route_contract_test.rb`, `test/integration/routes/legacy_api_namespace_guard_test.rb`, `test/integration/preference_browser_api_contract_test.rb`, `test/contracts/openapi_route_coverage_test.rb` |
+| Controller/action    | `{base,auth,warp}/{app,com,org}/api/v0/preferences/{cookies,themes}#{show,update}`                                                                                                                                                                              |
+| Helper / path / verb | `<family>_<surface>_api_v0_preferences_{cookie,theme}`; `GET` and `PATCH /api/v0/preferences/{cookie,theme}`; no `PUT`                                                                                                                                          |
+| Risk                 | Low: same-origin JSON endpoints behind the family's forgery protection; an accidental `PUT` mapping is caught by the route contract tests                                                                                                                       |

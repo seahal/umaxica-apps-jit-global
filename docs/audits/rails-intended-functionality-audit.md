@@ -488,7 +488,7 @@ project-wide percentage change is unmeasured.
 - `docs/hld.md` — removed Shrine and Active Storage from the "Integration" layer; neither integrates
   anything (§4).
 - `docs/audits/rails-intended-functionality-audit.md` (this file, new).
-- `notes/implementation/2026-08-11-rails-intended-functionality-audit.md` (new).
+- `research/implementation/2026-08-11-rails-intended-functionality-audit.md` (new).
 
 ## 10. Architecture after this audit
 

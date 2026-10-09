@@ -125,8 +125,9 @@ behalf. Broad or long-lived credentials are not issued for convenience.
 
 A credential you receive stays out of the repository. Put it in the gitignored `.env`, in Rails
 encrypted credentials, or in the provider's own secret store. Never place it in a tracked file, a
-Compose file, a container image, a plan under `plans/`, or a note under `notes/`. When a credential
-is no longer needed, or may have been exposed, tell the development lead so it can be revoked.
+Compose file, a container image, a plan under `plans/`, or a note under `research/`. When a
+credential is no longer needed, or may have been exposed, tell the development lead so it can be
+revoked.
 
 ## Development service passwords: fixed literals
 

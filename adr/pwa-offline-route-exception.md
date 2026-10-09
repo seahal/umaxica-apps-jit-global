@@ -212,4 +212,4 @@ Steps 1 and 2 alone are enough to disable the fallback in an emergency.
 - `docs/architecture/docs-help-news-content-boundary.md`
 - `docs/operations/core-nextjs-zero-cookie-edge-contract.md`
 - `docs/security/public-entrypoints.md`
-- `notes/implementation/2026-08-07-pwa-offline-rails-standard.md`
+- `research/implementation/2026-08-07-pwa-offline-rails-standard.md`

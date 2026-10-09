@@ -33,8 +33,7 @@ prematurely constrain the still-fluid Experience architecture.
   Server.
 - Auth public `auth.*` origins remain stable external contracts.
 - Xper apex origins remain the planned Experience origins.
-- The current cycle does not refactor or add Auth or Xper workflow, token, or cookie
-  implementation.
+- The current cycle does not refactor or add Auth or Xper workflow, token, or cookie implementation.
 - The current cycle does not create a shared transient-capability implementation for Auth and Xper.
 - The current RP/Base redesign must not import Auth or Xper legacy authentication concerns as a
   generic RP pattern.
@@ -43,8 +42,8 @@ prematurely constrain the still-fluid Experience architecture.
   boundary.
 
 The alternatives discussed are recorded in
-`memos/2026-10-05-claude-auth-xper-transient-workflow-future-design.md`. They are informative, not
-normative.
+`research/2026-10-05-claude-auth-xper-transient-workflow-future-design.md`. They are informative,
+not normative.
 
 ## Consequences
 
@@ -58,9 +57,9 @@ The cost is a known future redesign item for both Auth and Xper. That work is re
 
 This ADR is amended by the Unified Implementation Plan in `two.md`. The plan makes one narrow
 exception to the Auth workflow freeze: D-82 may add the Base/Auth admission binding required to
-prove the initiating browser before a ceremony is admitted. That exception includes the three
-realm binding records, the Base browser nonce digest, Auth sid attachment, confirmation and
-redemption transitions, explicit restart and cancellation handoff, and their retention holds.
+prove the initiating browser before a ceremony is admitted. That exception includes the three realm
+binding records, the Base browser nonce digest, Auth sid attachment, confirmation and redemption
+transitions, explicit restart and cancellation handoff, and their retention holds.
 
 The exception does not authorize a generic Auth login session, a shared-domain cookie, an Xper
 abstraction, a new Auth workflow framework, or any unrelated Auth or Xper cookie, token, route, or

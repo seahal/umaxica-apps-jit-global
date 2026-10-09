@@ -5,9 +5,9 @@
 Accepted (2026-10-03). Implementation and deployment verification remain deferred.
 
 Supersedes the Core UI-origin and SSR portions of
-`adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md` for TanStack Start.
-Rails credential authority, RP issuer/audience/transport binding, and other surfaces' contracts
-retain their existing governing ADRs.
+`adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md` for TanStack Start. Rails
+credential authority, RP issuer/audience/transport binding, and other surfaces' contracts retain
+their existing governing ADRs.
 
 ## Context
 
@@ -19,8 +19,8 @@ vocabulary must preserve that separation and the existing GET refresh prohibitio
 
 TanStack Start inherits the existing zero-cookie UI-origin invariant:
 
-- No `Cookie` request header reaches the TanStack Start UI origin. The serving boundary strips
-  the entire header on Core UI/page routes, including SSR and assets, regardless of cookie name.
+- No `Cookie` request header reaches the TanStack Start UI origin. The serving boundary strips the
+  entire header on Core UI/page routes, including SSR and assets, regardless of cookie name.
 - TanStack Start must not emit `Set-Cookie`. The serving boundary removes every UI-origin
   `Set-Cookie` response field before the response reaches the browser.
 - TanStack holds no browser credential, refresh handle, signing/decryption secret, or client secret.
@@ -29,8 +29,8 @@ TanStack Start inherits the existing zero-cookie UI-origin invariant:
 `auth_access`, `auth_refresh`, and `auth_dbsc` are Rails/browser authentication transport slots.
 `feel_access`, `feel_refresh`, and `feel_dbsc` are Rails/browser Preference credential transport
 slots, never Xper/TanStack surface cookies. `continuity` is a reserved, unimplemented name; its
-future handling belongs at the Rails/browser boundary and grants TanStack no credential access.
-This decision performs no cookie migration or continuity implementation.
+future handling belongs at the Rails/browser boundary and grants TanStack no credential access. This
+decision performs no cookie migration or continuity implementation.
 
 The browser independently requests Core UI content and explicit Rails APIs. The Rails API serving
 path preserves cookies required by its existing contracts and separate Rails `Set-Cookie` fields,
@@ -70,12 +70,12 @@ executed for this documentation-only decision; existing route rollout gates rema
 - `adr/app-rails-edge-route-ownership.md`
 - `adr/invalid-browser-credential-recovery.md`
 - `adr/home-dashboard-authentication-boundary.md`
-- `memos/2026-10-04-codex-core-cloudfront-browser-boundary-considerations.md`
+- `research/2026-10-04-codex-core-cloudfront-browser-boundary-considerations.md`
 
 ## Delivered reconciliation (2026-10-06)
 
 The Rails half of this boundary is implemented: Core browser requests use the shared RP credential
-contract and validate unsafe-request CSRF, Origin and Fetch Metadata before refresh or mutation.
-The TanStack/edge deployment remains deferred until external route ownership, cookie stripping and
+contract and validate unsafe-request CSRF, Origin and Fetch Metadata before refresh or mutation. The
+TanStack/edge deployment remains deferred until external route ownership, cookie stripping and
 health-blocking evidence exists. This ADR therefore remains a deployment prerequisite, not a claim
 that Cloudflare or a real browser edge has been verified locally.

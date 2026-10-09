@@ -9,7 +9,7 @@ Revisit Auth and Xper after the current RP/Base work and decide whether both sho
 transient-capability substrate while retaining separate domain workflows.
 
 The discussion behind this plan is in
-`memos/2026-10-05-claude-auth-xper-transient-workflow-future-design.md`.
+`research/2026-10-05-claude-auth-xper-transient-workflow-future-design.md`.
 
 ## Required future work
 

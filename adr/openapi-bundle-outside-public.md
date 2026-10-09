@@ -49,7 +49,7 @@ Files updated with the move: `redocly.yaml`, `package.json`, `.oxfmtrc.json`, `l
 `openapi/shared/components.yml`, and `test/support/openapi_contract.rb`. The files were moved with
 `git mv` so history follows.
 
-Historical records under `adr/`, `evidence/`, `notes/`, and `plans/analysis/` still say
+Historical records under `adr/`, `evidence/`, `research/`, and `research/` still say
 `public/openapi*.yml`. They describe what was true when they were written and were left alone.
 
 ## Consequences

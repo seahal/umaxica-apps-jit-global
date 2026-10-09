@@ -10,10 +10,10 @@ from pathlib import Path
 source = Path(sys.argv[1])
 target = Path(sys.argv[2])
 assert source.as_posix().startswith("tmp/") and source.suffix == ".json"
-assert target.as_posix().startswith("memos/") and target.suffix == ".md"
+assert target.as_posix().startswith("research/") and target.suffix == ".md"
 catalog = json.loads(source.read_text())
 tables = catalog["tables"]
-inventory = Path("memos/postgresql-integrity-current-static-inventory.md").read_text()
+inventory = Path("research/postgresql-integrity-current-static-inventory.md").read_text()
 classifications = {}
 logical = None
 kind = None

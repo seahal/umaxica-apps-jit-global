@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted 2026-09-14. Completes Step 3 of `plans/analysis/docker-to-podman-directory-migration.md`
-(Steps 1 and 2 done 2026-08-10).
+Accepted 2026-09-14. Completes Step 3 of `research/docker-to-podman-directory-migration.md` (Steps 1
+and 2 done 2026-08-10).
 
 ## Decision
 

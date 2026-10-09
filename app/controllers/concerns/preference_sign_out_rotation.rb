@@ -6,7 +6,7 @@
 # end the auth session). Before this concern existed, ordinary sign-out never
 # touched the `preference_access`/`preference_refresh`/`preference_dbsc`
 # cookies or the underlying AppPreference/ComPreference/OrgPreference row at
-# all (see memos/2026-07-21-preference-lifecycle-sign-out-audit.md section 4): the
+# all (see research/2026-07-21-preference-lifecycle-sign-out-audit.md section 4): the
 # same token/jti stayed live across the sign-out boundary and rode into the
 # next sign-in's adoption merge unchanged.
 #

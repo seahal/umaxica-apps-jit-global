@@ -80,4 +80,4 @@ end
 # restores `coverage/.last_run.json` (actions cache, keyed per branch with a fallback to the default
 # branch) these two checks have nothing to compare against in CI and pass without comparing. The
 # `minimum` values above are what hold there. See
-# `notes/implementation/2026-09-01-simplecov-1x-coverage-settings.md` for the workflow step this needs.
+# `research/implementation/2026-09-01-simplecov-1x-coverage-settings.md` for the workflow step this needs.

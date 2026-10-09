@@ -9,7 +9,7 @@ from pathlib import Path
 
 catalog = json.loads(Path(sys.argv[1]).read_text())
 output = Path(sys.argv[2])
-assert output.as_posix().startswith("memos/") and output.suffix == ".md"
+assert output.as_posix().startswith("research/") and output.suffix == ".md"
 live = defaultdict(set)
 for table in catalog["tables"]:
     live[table["logical_database"]].add((table["schema"], table["table_name"]))

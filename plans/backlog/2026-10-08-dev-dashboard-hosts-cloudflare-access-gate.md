@@ -13,7 +13,7 @@ Related:
 - `docs/architecture/cloudflare-request-paths.md` — "Development Is Tunnel-Exposed Behind Access"
 - `docs/operations/cloudflare-private-origin.md` — "Browser Traffic Through Access" and "External
   Checks"
-- `notes/implementation/2026-08-10-development-tunnel-access-verification.md` — the only measured
+- `research/implementation/2026-08-10-development-tunnel-access-verification.md` — the only measured
   Access verification
 - `evidence/2026-10-02-dev-rails-info-tunnel-exposure-K7Q2.md`,
   `evidence/2026-10-05-dev-detailed-errors-tunnel-exposure-Q4T8.md` — earlier tunnel exposure
@@ -62,9 +62,9 @@ The original exposure itself was not measured; it rests on the owner's report.
 ### How the gap went unnoticed
 
 The repository states that Access fronts the dashboard hosts, as a fact, in at least these places:
-`config/routes/{mission,flipper,coverband}.rb`, `config/initializers/{blazer,pghero,rails_performance}.rb`,
-`lib/diagnostic_surface_credentials.rb`, and `adr/diagnostic-surfaces-performance-coverband-swagger.md`.
-None of them rests on a measurement:
+`config/routes/{mission,flipper,coverband}.rb`,
+`config/initializers/{blazer,pghero,rails_performance}.rb`, `lib/diagnostic_surface_credentials.rb`,
+and `adr/diagnostic-surfaces-performance-coverband-swagger.md`. None of them rests on a measurement:
 
 - The 2026-08-10 verification covered ten `umaxica.{app,com,org}` hostnames and no `.dev` hostname.
 - The ADR that added three of the dashboards says Tunnel, DNS, and Access "were not touched".
@@ -73,9 +73,9 @@ None of them rests on a measurement:
   verified". The check was never run for `.dev`, and nothing forces it to run.
 
 The two earlier evidence records show the same pattern outside `.dev`: scanner traffic reached the
-development origin through the tunnel on `edit.umaxica.org` and on the apex
-`umaxica.{com,app,org}` hosts. Access coverage is therefore unconfirmed for every published
-hostname that the 2026-08-10 run did not measure.
+development origin through the tunnel on `edit.umaxica.org` and on the apex `umaxica.{com,app,org}`
+hosts. Access coverage is therefore unconfirmed for every published hostname that the 2026-08-10 run
+did not measure.
 
 ### Why Basic Auth alone was not enough
 
@@ -101,8 +101,9 @@ Basic Auth held as designed: it fails closed, and it is the reason the report is
 Each published dashboard route should also enable Access validation at the connector
 (`originRequest.access` with `required`, `teamName`, `audTag`), so `cloudflared` refuses a request
 without a valid Access token even if the edge application is later deleted. Whether the five gated
-routes have this is not measured. A wildcard `*.umaxica.dev` Access application would make "gated" the default for any new
-`.dev` hostname, but it would also cover `www` and `jp`, which then each need an explicit exception.
+routes have this is not measured. A wildcard `*.umaxica.dev` Access application would make "gated"
+the default for any new `.dev` hostname, but it would also cover `www` and `jp`, which then each
+need an explicit exception.
 
 ## 3. Remaining steps
 
@@ -117,24 +118,23 @@ routes have this is not measured. A wildcard `*.umaxica.dev` Access application 
    client addresses with the staff's own. Record what the logs can and cannot show, including how
    far back they reach.
 4. **Correct the repository.**
-   - Once step 1 is measured, the "Cloudflare Access fronts ..." comments and the ADR passage
-     listed in section 1 describe a verified fact and can stay. Cite the evidence record from the
-     ADR.
+   - Once step 1 is measured, the "Cloudflare Access fronts ..." comments and the ADR passage listed
+     in section 1 describe a verified fact and can stay. Cite the evidence record from the ADR.
    - Record in `docs/architecture/cloudflare-request-paths.md` that `www.umaxica.dev` and
      `jp.umaxica.dev` are published without Access by decision. Its section "Development Is
      Tunnel-Exposed Behind Access" currently says otherwise for all development hostnames.
    - Add the `.dev` hostnames to "External Checks" in
      `docs/operations/cloudflare-private-origin.md`.
-5. **Repeat the probe** whenever a hostname is published or an ingress rule changes, and
-   record it in `evidence/`. Under `adr/no-test-suite-for-environment-construction.md` this is a
+5. **Repeat the probe** whenever a hostname is published or an ingress rule changes, and record it
+   in `evidence/`. Under `adr/no-test-suite-for-environment-construction.md` this is a
    run-and-record check, not a Minitest case.
 
 ## 4. Open questions
 
 - Since when each dashboard hostname had been published.
-- Why `www.umaxica.dev`, `jp.umaxica.dev`, and `pghero.umaxica.dev` answered `500` during the
-  probe. `log/development.log` held `ActiveRecord::PendingMigrationError` entries at the time; the
-  link is not confirmed.
+- Why `www.umaxica.dev`, `jp.umaxica.dev`, and `pghero.umaxica.dev` answered `500` during the probe.
+  `log/development.log` held `ActiveRecord::PendingMigrationError` entries at the time; the link is
+  not confirmed.
 - Whether `jp.umaxica.dev` is published with a path restriction like the one recorded for
   `jp.umaxica.{app,com,org}`, or with every path.
 - Whether the apex `umaxica.{app,com,org}` hosts and `edit.umaxica.org` are meant to be

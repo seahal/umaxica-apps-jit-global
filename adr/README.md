@@ -3,8 +3,8 @@
 This directory stores accepted architecture and design decisions.
 
 Current Rails naming note (2026-09-25): references to the Rails `Side`/`Wide` surface in older
-decisions are historical. Its current internal namespace is `Warp`; registered OIDC client IDs,
-JWT namespaces, MCP realm, persisted logout values, and public hostnames retain their established
+decisions are historical. Its current internal namespace is `Warp`; registered OIDC client IDs, JWT
+namespaces, MCP realm, persisted logout values, and public hostnames retain their established
 values.
 
 - Write ADRs in English. Do not add Japanese or other non-English prose unless the ADR explicitly
@@ -12,7 +12,7 @@ values.
 - Keep decision records focused on what was decided and why.
 - Include tradeoffs when they matter to future readers.
 - Update `docs/` separately when implementation changes become current behavior.
-- Keep non-authoritative decision notes and implementation handoff notes in `notes/`, not under
+- Keep non-authoritative decision notes and implementation handoff notes in `research/`, not under
   `adr/`.
 
 Current Inertia decision:
@@ -38,9 +38,9 @@ Current identity authority decision:
   handoff/result, Root homes, one-shot `/sign/out`, and Valkey auth-state topology for nonprod.
 
 - `adr/oidc-oauth-participation-allowlist-and-non-participant-surfaces.md` — OAuth/OIDC
-  participation is allowlisted and never inferred from hostname, TLD, or shared code; all `.dev`
-  and `.net` surfaces, the Info/Docs/News/Help content faces, Auth, and Xper are Non-Participants,
-  and reclassifying one requires a new accepted ADR.
+  participation is allowlisted and never inferred from hostname, TLD, or shared code; all `.dev` and
+  `.net` surfaces, the Info/Docs/News/Help content faces, Auth, and Xper are Non-Participants, and
+  reclassifying one requires a new accepted ADR.
 
 - `adr/defer-auth-xper-transient-workflow-redesign.md` — scope decision for the current Base/RP
   cycle: no Auth or Xper workflow, token, or cookie redesign and no shared transient-capability
@@ -64,9 +64,9 @@ Current browser credential recovery decision:
 
 Current configuration decision:
 
-- `adr/env-fetch-without-default.md` — environment variables are read without a code-side default
-  in every Ruby file, tests included: one-argument `ENV.fetch` for a needed variable, `ENV[...]`
-  with an explicit `nil` branch for an optional one. Existing defaults are debt tracked in
+- `adr/env-fetch-without-default.md` — environment variables are read without a code-side default in
+  every Ruby file, tests included: one-argument `ENV.fetch` for a needed variable, `ENV[...]` with
+  an explicit `nil` branch for an optional one. Existing defaults are debt tracked in
   `plans/backlog/env-fetch-default-removal.md`.
 
 Current backend transport decision:

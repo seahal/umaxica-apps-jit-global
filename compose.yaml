@@ -535,7 +535,7 @@ services:
     # --metrics serves cloudflared's own /ready endpoint to the compose network, which is
     # what tells a connected tunnel apart from a restarting one -- a container id alone does
     # not. The transport probe in docs/operations/cloudflare-private-origin.md reads it, and
-    # so does incident triage (notes/implementation/2026-08-23-cloudflare-tunnel-restart-storm.md).
+    # so does incident triage (research/implementation/2026-08-23-cloudflare-tunnel-restart-storm.md).
     # It publishes no host port.
     command: tunnel --no-autoupdate --protocol auto --metrics 0.0.0.0:2000 run
     environment:

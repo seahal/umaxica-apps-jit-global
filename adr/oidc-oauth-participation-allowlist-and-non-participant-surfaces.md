@@ -137,9 +137,9 @@ not change its classification.
 
 ## User-Specific Content State
 
-`adr/docs-help-news-discussion-moderation-notification.md` is Proposed and describes future
-per-user values such as `watch_state`, `tracking_state`, and `muted_state` for Docs, Help, and News.
-This decision constrains any implementation of that proposal:
+`adr/docs-help-news-discussion-moderation-notification.md` is Proposed and describes future per-user
+values such as `watch_state`, `tracking_state`, and `muted_state` for Docs, Help, and News. This
+decision constrains any implementation of that proposal:
 
 - Docs, Help, and News remain Non-Participants by default.
 - Public, read-oriented content endpoints may continue to live on those content surfaces.
@@ -196,13 +196,12 @@ unchanged.
 The reasons for removing rather than keeping them:
 
 - `ActorSupport` is the concern that authenticating surfaces use to install an actor. On a
-  Non-Participant it is exactly the shared authentication concern the contract above forbids
-  keeping for convenience or future use. These two were the only Non-Participant stacks that
-  included it.
+  Non-Participant it is exactly the shared authentication concern the contract above forbids keeping
+  for convenience or future use. These two were the only Non-Participant stacks that included it.
 - It did no work there. Each controller is inherited only by its `RootsController`. Neither defines
-  a credential source, so the concern could only install an anonymous context, and neither root
-  page reads that context: the developer page is a standalone document that takes its theme from
-  the `ct` cookie, and the network page renders plain text.
+  a credential source, so the concern could only install an anonymous context, and neither root page
+  reads that context: the developer page is a standalone document that takes its theme from the `ct`
+  cookie, and the network page renders plain text.
 - Nothing else in the two stacks depends on it. `FqdnAvailabilityGate`, `RateLimit`, and
   `DefaultNoStore` do not read `Actor`, and `Actor` returns an empty context without raising when
   none is installed.
@@ -241,8 +240,8 @@ the authenticated portion stays behind an RP-owned API boundary.
 - Info, Docs, News, and Help stay public-content Non-Participants as regional hostnames expand.
 - User-specific discussion and notification state cannot pull Docs, Help, or News into the RP
   architecture.
-- Authentication-concern leakage into a Non-Participant is an architectural and security
-  regression, not an ordinary refactor.
+- Authentication-concern leakage into a Non-Participant is an architectural and security regression,
+  not an ordinary refactor.
 
 ## Related
 
@@ -256,5 +255,5 @@ the authenticated portion stays behind an RP-owned API boundary.
 - `plans/backlog/oidc-non-participant-contract-tests.md` — regression guards still to be written.
 - `adr/defer-auth-xper-transient-workflow-redesign.md` — defers the Auth and Xper workflow redesign
   and keeps their public origins stable.
-- `memos/2026-10-05-claude-auth-xper-transient-workflow-future-design.md` — non-authoritative
+- `research/2026-10-05-claude-auth-xper-transient-workflow-future-design.md` — non-authoritative
   discussion of a future Auth and Xper transient-workflow redesign; not a decision.

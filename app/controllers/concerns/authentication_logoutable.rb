@@ -37,7 +37,7 @@ module AuthenticationLogoutable
     ensure
       # Detach the browser from the signed-out principal's preference
       # credential before ending the auth session (target semantics section 6.1;
-      # see memos/2026-07-21-preference-lifecycle-sign-out-audit.md section 4 for
+      # see research/2026-07-21-preference-lifecycle-sign-out-audit.md section 4 for
       # the gap this closes). Non-fatal by construction: never allowed to
       # block or fail ordinary sign-out.
       rotate_preference_after_sign_out! if respond_to?(:rotate_preference_after_sign_out!, true)
@@ -64,7 +64,7 @@ module AuthenticationLogoutable
   #     auth regardless of its Preference cookie state.
   #   - Preference is never an authentication/authorization authority (see
   #     security invariant 9 in
-  #     memos/2026-07-21-preference-lifecycle-hardening-implementation.md):
+  #     research/2026-07-21-preference-lifecycle-hardening-implementation.md):
   #     an un-retired remote Preference credential can still resolve display
   #     preferences for that device but cannot grant access to the account.
   #   - Preference tokens are not enumerable per-account server-side (they

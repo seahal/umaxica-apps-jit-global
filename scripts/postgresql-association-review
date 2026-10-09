@@ -9,7 +9,7 @@ from pathlib import Path
 catalog = json.loads(Path(sys.argv[1]).read_text())
 associations = json.loads(Path(sys.argv[2]).read_text())
 output = Path(sys.argv[3])
-assert output.as_posix().startswith("memos/") and output.suffix == ".md"
+assert output.as_posix().startswith("research/") and output.suffix == ".md"
 tables = {(table["logical_database"], table["table_name"]): table for table in catalog["tables"]}
 counts = Counter()
 missing = []
