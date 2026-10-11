@@ -177,6 +177,9 @@ Current database naming decisions:
   decisions.
 - `adr/cross-db-reference-policy.md` — accepted policy forbidding new cross-DB bigint/integer ID
   associations and native cross-DB FK assumptions.
+- `adr/identifier-contract.md` — accepted user contract for database-local bigint identity, NanoID
+  issuance/capacity, semantic classification, preserved identities and scoped DB enforcement;
+  implementation/verification remain in progress.
 - `adr/authority-lifecycle-table-policy.md` — accepted policy requiring relationship semantics to
   live in lifecycle-rich authority tables written through use-case services, not controllers.
 - `adr/actor-db-naming-policy.md`

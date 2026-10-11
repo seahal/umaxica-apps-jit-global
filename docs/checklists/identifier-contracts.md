@@ -2,11 +2,11 @@
 
 These are user-approved I requirements, expressed as observable criteria, not verification results.
 Scope and interpretation follow C01–C15 in the [integrated acceptance index](integrated-stack.md).
-An identifier-specific ADR/guideline is planned if no current owner exists; do not cite the proposed
-`adr/identifier-contract.md` as an existing decision. The existing
-[cross-database reference policy](../../adr/cross-db-reference-policy.md) remains a governing
-source. Use the index's investigation procedure and separate evidence dispositions for every
-criterion.
+The accepted [identifier contract](../../adr/identifier-contract.md) records the user decisions;
+per-table classification/guidelines remain incomplete and must not be inferred from ADR status. The
+existing [cross-database reference policy](../../adr/cross-db-reference-policy.md) remains a
+governing source. Use the index's investigation procedure and separate evidence dispositions for
+every criterion.
 
 ## ID-1 — Physical identity and ownership
 
