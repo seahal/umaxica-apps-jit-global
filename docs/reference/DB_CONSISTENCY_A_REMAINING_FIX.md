@@ -1,5 +1,11 @@
 # DB Consistency Priority A Fixes - Remaining Issues Resolution
 
+This is a historical migration report, not current verification or operation authorization.
+Revalidate its table/column names and results against the actual checkout/catalog. Current
+identifier requirements belong to the [identifier ADR](../../adr/identifier-contract.md) and
+[conventions](identifier-conventions.md); do not infer approval for destructive repair from this
+report.
+
 ## Overview
 
 This document details the fixes applied to resolve Priority A `database_consistency` issues. The

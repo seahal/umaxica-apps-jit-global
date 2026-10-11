@@ -1,5 +1,11 @@
 # Database Refactoring: ID Unification and Consistency Fixes
 
+This is a historical implementation report, not the current identifier or migration contract. Its
+UUIDv7 recommendation and destructive/raw-SQL techniques do not authorize new work. Use the
+[accepted identifier ADR](../../adr/identifier-contract.md),
+[current conventions](identifier-conventions.md) and applicable migration approval boundaries.
+Historical success statements below do not establish current catalog or acceptance results.
+
 ## Overview
 
 This document details the refactoring of database schemas to unify ID types to `bigint` and resolve

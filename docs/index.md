@@ -1,19 +1,21 @@
 # Documentation Index
 
-Natural-language repository documentation for programmers, reviewers, maintainers, operators and
-AI coding agents. Product-user prose belongs in [manuals](../manuals/README.md).
+Natural-language repository documentation for programmers, reviewers, maintainers, operators and AI
+coding agents. Product-user prose belongs in [manuals](../manuals/README.md).
 
-- [Knowledge architecture](reference/repository-knowledge-architecture.md): directory responsibilities,
-  authority and maintenance.
-- [Runtime compatibility](reference/agent-runtime-compatibility.md): shared guidance and vendor adapters.
+- [Knowledge architecture](reference/repository-knowledge-architecture.md): directory
+  responsibilities, authority and maintenance.
+- [Runtime compatibility](reference/agent-runtime-compatibility.md): shared guidance and vendor
+  adapters.
 - [Durable checklists](checklists/README.md): behavior that must keep working.
 - [Risk management](risk-management/README.md): actual risks, responses and ownership.
 - [Spec lifecycle](../specs/README.md): accepted changes, evidence and closure.
 
-Write repository prose in English, following [language policy](reference/repository-language-policy.md).
-Keep current descriptions aligned with delivered behavior. A future design is not evidence of delivery.
-Historical evidence remains in flat `evidence/` Markdown records named
-`YYYY-MM-DD-<topic>-XXXX.md`, with full commit hash and relevant dirty-worktree qualification.
+Write repository prose in English, following
+[language policy](reference/repository-language-policy.md). Keep current descriptions aligned with
+delivered behavior. A future design is not evidence of delivery. Historical evidence remains in flat
+`evidence/` Markdown records named `YYYY-MM-DD-<topic>-XXXX.md`, with full commit hash and relevant
+dirty-worktree qualification.
 
 For current redirect guidance, use signed `ReturnTargetToken` handling rather than the deprecated
 `safe_path_from_encoded_rt` helper.
@@ -129,3 +131,5 @@ Current content-model references:
 - `docs/reference/repository-language-policy.md`
 - `docs/reference/ruby-static-analysis.md`
 - `docs/reference/url-identifier-policy.md`
+- [Identifier conventions](reference/identifier-conventions.md): scoped semantic column mapping,
+  accepted decision owners and explicit incomplete transitions.
