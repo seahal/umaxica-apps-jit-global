@@ -118,13 +118,30 @@ OIDs/owners/comments and verifies both parent and worker identities before estab
 The framework's default connection is explicitly `primary`; YAML order does not determine it.
 
 The parent retains the process lock through Minitest's exit-time execution and verified worker
-cleanup. Children do not unlock or clean up the parent's resources. Cleanup requires matching
-receipts and inactive connections, drops only those worker databases, and atomically records
-completion. It does not terminate connections, remove shared databases or delete copied HMAC roles.
-Keep receipts under `tmp/` for failed-run diagnosis. If a run was interrupted or names/OIDs changed,
-preserve the resources for review; do not bypass the creation/identity checks or reuse stale copies.
-The existing cleanup entry point can reconcile a proven worker receipt in a verified test process;
-it refuses non-test admission, mismatched objects and reused completed names.
+cleanup. Suite cleanup uses Minitest's public `after_run` hook, after parallel worker shutdown;
+standalone construction runners retain parent-only exit cleanup. Children do not unlock or clean up
+the parent's resources. Cleanup requires matching receipts and inactive connections, drops only
+those worker databases, and atomically records completion. It does not terminate connections, remove
+shared databases or delete copied HMAC roles. Keep receipts under `tmp/` for failed-run diagnosis.
+If a run was interrupted or names/OIDs changed, preserve the resources for review; do not bypass the
+creation/identity checks or reuse stale copies. The existing cleanup entry point can reconcile a
+proven worker receipt in a verified test process; it refuses non-test admission, mismatched objects
+and reused completed names.
+
+Committed-history cases call the existing cloner's `verify_owned_worker_execution!` before writes.
+It verifies live parent/worker creation receipts and rejects missing receipts, mixed targets or
+non-test admission. A small selection may execute serially despite a configured worker count; these
+cases refuse the parent template rather than falling back to shared storage. Use an affected
+collection that actually starts verified disposable workers, and retain its command/output. Add no
+dummy tests, skip or mock substitute. The current seven-file Avatar collection (58 cases) runs with
+four workers in the verified environment.
+
+Retain committed Avatar/owner/history/operation rows for whole-worker cleanup. Mutable test-created
+cross-DB membership/unit rows and synthetic Persona/principal rows need scoped cleanup when other
+fixtures reconstruct principal IDs; leaving those joins alive can alias a new fixture principal and
+return a missing collective. That scoped cleanup does not delete Avatar ownership history or
+authorize production data changes. Always check the final process status and post-exit catalogs;
+test counts alone do not prove cleanup.
 
 These environment checks do not prove Avatar's real-COMMIT temporal invariants or isolation-level
 concurrency. Those behavior tests must still run with the actual constraints enabled in disposable

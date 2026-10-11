@@ -173,6 +173,18 @@ can establish that a past Red or full gate actually ran.
   incomplete receipts or unverifiable cleanup stays explicitly incomplete; it is not a permanent
   PASS.
 
+- Before a committed-history case writes, the existing cloner verifies its live run-owned worker
+  receipt and actual target. Missing receipts, serial parent templates, mixed workers and non-test
+  execution refuse admission without a shared-storage fallback. Inspect the actual framework
+  execution mode, not merely PARALLEL_WORKERS's value. Ordinary rollback-only cases remain separate.
+- Successful suite counts alone do not certify resource cleanup. Verify Minitest after_run/worker
+  shutdown, the final exit status, exact inactive receipt reconciliation when needed, and post-exit
+  catalogs. Preserve Avatar/organization identities and ownership history; narrowly scoped mutable
+  cross-DB test joins and synthetic principals may be cleaned to prevent fixture-ID aliasing. This
+  is no authority for shared or production row deletion. Existing committed
+  moniker/transfer/retention/reservation cases are references, not full MVCC or ownerless-creation
+  acceptance.
+
 ## MIG-4 — Avatar cutover barrier and forward recovery
 
 - Basis: A11/A12/A15, D-9/D-10; P12b depends on P9/P10a/P10b/P11b.
