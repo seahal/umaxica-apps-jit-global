@@ -127,29 +127,51 @@ The Avatar ownership and transfer work uses only the narrow cross-table mechanis
 ownership decisions. The trigger inventory test in `test/models/enforcement_triggers_test.rb`
 asserts this set exactly:
 
-- `avatar_enterprise_ownership_periods_integrity` and
-  `avatar_bureau_ownership_periods_integrity` are deferred row triggers for INSERT/UPDATE/DELETE.
-  They lock and increment `avatars.ownership_integrity_version`, then reject a missing owner,
-  multiple current periods, a gap, or a cross-family overlap at commit with SQLSTATE `23514` or
-  `23P01`. They do not rewrite ownership rows or emit audit/notification side effects.
+- `avatar_enterprise_ownership_periods_integrity` and `avatar_bureau_ownership_periods_integrity`
+  are deferred row triggers for INSERT/UPDATE/DELETE. They lock and increment
+  `avatars.ownership_integrity_version`, then reject a missing owner, multiple current periods, a
+  gap, or a cross-family overlap at commit with SQLSTATE `23514` or `23P01`. They do not rewrite
+  ownership rows or emit audit/notification side effects.
 - `avatar_enterprise_ownership_periods_immutability` and
-  `avatar_bureau_ownership_periods_immutability` reject deletion and owner/start-time mutation;
-  only one finite close of the open period is permitted, with SQLSTATE `45000`.
+  `avatar_bureau_ownership_periods_immutability` reject deletion and owner/start-time mutation; only
+  one finite close of the open period is permitted, with SQLSTATE `45000`.
 - `avatar_enterprise_ownership_periods_no_truncate` and
   `avatar_bureau_ownership_periods_no_truncate` reject TRUNCATE with SQLSTATE `45000`.
 - `avatar_transfer_reservations_cardinality` and the four
   `avatar_transfer_detail_{ee,eb,be,bb}_cardinality` deferred constraint triggers require one
-  concrete detail of the registry's declared family at commit. They reject orphan or multiple
-  detail rows with SQLSTATE `23514`; the registry remains type-neutral and the four detail tables
-  remain concrete.
+  concrete detail of the registry's declared family at commit. They reject orphan or multiple detail
+  rows with SQLSTATE `23514`; the registry remains type-neutral and the four detail tables remain
+  concrete.
 - `avatar_transfer_reservations_source_period_avatar_integrity` and the four
-  `avatar_transfer_detail_{ee,eb,be,bb}_source_period_avatar_integrity` deferred constraint
-  triggers require each concrete detail's source ownership period to belong to the same Avatar as
-  its registry reservation. They raise SQLSTATE `23514` and do not rewrite rows or choose an owner.
+  `avatar_transfer_detail_{ee,eb,be,bb}_source_period_avatar_integrity` deferred constraint triggers
+  require each concrete detail's source ownership period to belong to the same Avatar as its
+  registry reservation. They raise SQLSTATE `23514` and do not rewrite rows or choose an owner.
 
 These triggers are created and attached by the same reversible Avatar migrations that create their
-tables. Their execution and direct-SQL rejection are tested against disposable PostgreSQL
-catalogs; no production or shared-database trigger change is authorized by this note.
+tables. Their execution and direct-SQL rejection are tested against disposable PostgreSQL catalogs;
+no production or shared-database trigger change is authorized by this note.
+
+## Approved ORG Telephone permanent-identity exception
+
+The user explicitly approved the scoped proposal in
+`evidence/2026-10-11-org-telephone-db-enforcement-map-M5Q8.md` on 2026-10-11. This is a named
+exception to the general cross-row/table requirement, not permission for arbitrary same-row triggers
+or other identifier tables.
+
+For `operator_telephones.public_id` only, a BEFORE UPDATE OF public_id trigger may reject any change
+from an already non-NULL identity, including replacement with NULL, with SQLSTATE `23514`. A
+NULL-only operational backfill remains permitted; assigning the same identity and updating unrelated
+fields remain permitted. The function must never generate, rewrite, log or silently ignore values.
+CHECK/UNIQUE/FK cannot compare OLD and NEW, and the currently observed application connection owns
+the table, so column permissions do not establish this invariant.
+
+Create the function and attach its named trigger in one reversible migration; reverse by dropping
+the trigger before the function. This row-local check acquires no additional row/table locks beyond
+the UPDATE itself, performs no cross-database access, and has no recursive writes or side effects.
+Register the exact trigger in the inventory and prove rejection through real direct SQL and bulk
+updates, recovering the transaction after expected errors. Also prove the admitted NULL backfill and
+unrelated updates. Approval alone is not evidence of implementation or passing tests. No
+production/shared-database application or deliberate administrator bypass protection is claimed.
 
 ## Related
 
