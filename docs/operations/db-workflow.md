@@ -99,14 +99,23 @@ roles from a migration that was never reached are expected; unrelated and shared
 selected. A failed role preflight stops before database drop. Do not use this command for shared,
 development or production databases.
 
+Use the same command with `--verify-only` to run the database/role preflight without deletion,
+recreation or migrations. Unknown arguments fail explicitly. A run-specific PostgreSQL advisory lock
+prevents two instances of this rebuild command from operating on the same fleet concurrently; active
+database sessions still prevent rebuild.
+
 ## Cluster role creation evidence
 
 Database ownership does not prove PostgreSQL role creation ownership. Before the isolated rebuild
 command deletes existing fleet HMAC roles, the manifest must contain `created_roles` entries with
 exact `name` and `oid` values, plus `role_creation_log_sha256` for the successful creation record.
-The actual role set and OIDs must match; missing metadata, duplicate entries or changed identities
-stop before database drop. Role attribute, membership and foreign-dependency checks still apply.
-This is not permission to adopt or delete an unknown cluster role.
+Keep the actual record at `role_creation_log_path` in the manifest. For an older manifest with an
+already recorded checksum but no path, explicitly supply `POSTGRESQL_ISOLATED_ROLE_CREATION_LOG`.
+The command verifies the file checksum and exact CREATE ROLE names before any database drop;
+supplying another file or reconstructing a receipt from current names is insufficient. The actual
+role set and OIDs must match; missing metadata, duplicate entries or changed identities stop before
+database drop. Role attribute, membership and foreign-dependency checks still apply. This is not
+permission to adopt or delete an unknown cluster role.
 
 For a fresh run, first verify that its unique database and role names are absent, create its owned
 databases, and record their OIDs/owner/comment. Run normal migrations from source, retain the actual
@@ -114,10 +123,15 @@ successful CREATE ROLE record, and record the resulting role OIDs. Never reconst
 ownership solely from current names or dependencies. A failed manifest write can be recovered by
 read-only identity checks on resources whose creation was observed; it does not justify recreation.
 
-Rebuilding creates new database and role identities. Before another cleanup/rebuild, record the new
-successful role creation evidence and OIDs; the previous role OIDs are not valid ownership metadata
-for replacement objects. An unavailable creation record keeps role deletion blocked. Only run-owned
-disposable resources are eligible; shared/production resources remain excluded.
+Rebuilding creates new database and role identities. The command captures the normal
+`bundle exec rails db:test:prepare` and `bundle exec rails db:migrate` output in a private local
+file under `tmp/`, then replaces the manifest's creation-record path, checksum and role OIDs with
+the actual replacement objects. Preserve this file locally; do not commit raw migration logs.
+Migration failure remains failure even when receipts for partially created resources are retained.
+Missing or mismatched creation evidence stops further cleanup rather than adopting unknown roles.
+The previous role OIDs are not ownership metadata for replacement objects. Only run-owned disposable
+resources are eligible; shared/production resources remain excluded. This reconstruction does not
+prove Avatar ownership COMMIT or concurrency behavior; those require their own dynamic checks.
 
 ## Stop the Server Before Resetting Databases
 

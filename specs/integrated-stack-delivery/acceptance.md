@@ -152,6 +152,14 @@ can establish that a past Red or full gate actually ran.
   substitute successful mock. A required full-gate outage also invokes PROC-4.
 - Check harness identity/ownership guards and actual creation/transactions/cleanup evidence. Full
   new concrete isolated acceptance is planned; existing concurrency tests need applicability review.
+- When rebuilding a run-owned fleet that created cluster-wide HMAC roles, a mismatched creation
+  record, role OID, authority, membership or foreign dependency must refuse cleanup before database
+  drop. A successful rebuild preserves fresh creation records and OIDs, so a subsequent rebuild can
+  verify the replacement objects without adopting or deleting an unknown/shared role. Inspect
+  [the existing fleet rebuild command](../../scripts/postgresql-rebuild-isolated-test-fleet) and
+  [the operational procedure](../../docs/operations/db-workflow.md#cluster-role-creation-evidence).
+  Verify both a rejected preflight and repeated owned reconstruction directly; static checks or
+  suite success alone do not prove this resource lifecycle or Avatar's separate COMMIT invariants.
 
 ## MIG-4 — Avatar cutover barrier and forward recovery
 
