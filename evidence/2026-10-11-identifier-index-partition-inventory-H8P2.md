@@ -8,7 +8,8 @@ During the pending backfill Gate 2, a temporary Rails runner script used
 `Umaxica::TestEnvironment::DatabaseSafety.verify!` and the public
 `ActiveRecord::Tasks::DatabaseTasks.with_temporary_connection` interface to inspect the twenty
 distinct physical databases in owned fleet `20261010p3d2`. The complete manifest preparation list,
-test configuration and workers 1 were retained. No shared/production catalogs or secrets were read.
+test configuration and workers 1 were retained. No shared/production catalogs were inspected; secret
+values were excluded from the output.
 
 The script queried public-schema `pg_index`, `pg_class`, `pg_namespace` and `pg_am` for Hash indexes
 or indexes whose valid, ready or live flag was false. It also queried `pg_partitioned_table` for
