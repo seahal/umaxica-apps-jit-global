@@ -49,8 +49,17 @@ D-3/D-4/D-10 exceptions; no new SQL/trigger permission is granted here. Follow t
   explicitly, leaving prior history unchanged. Do not invent historical timestamps or rely only on
   model validation, partial current uniqueness or per-table exclusions.
 - Check actual constraints/deferred triggers and real COMMIT in a new disposable catalog (MIG-3).
-  The same-Avatar interval checks are implemented and verified; full concrete cross-table COMMIT
-  coverage remains planned and is not established by transactional fixtures.
+  Period-row checks have local tests, but their firing scope is not universal Avatar creation
+  protection. A committed Avatar-only INSERT has been observed to bypass the existing period-table
+  triggers; AV-1/AV-2 acceptance remains incomplete until creation writers/fixtures are prepared and
+  a commit-time creation guard is proven. The accepted contract is unchanged.
+- Finite starts are independently enforced by validated CHECK constraints introduced through
+  `db/avatars_migrate/20261011041046_add_finite_concrete_avatar_ownership_period_starts.rb` and
+  `db/avatars_migrate/20261011041103_validate_finite_concrete_avatar_ownership_period_starts.rb`. A
+  matching nonfinite Avatar creation timestamp must not bypass them. Check both concrete tables,
+  bypass model validation, inspect SQLSTATE/constraint identity, and verify real COMMIT/refusal on
+  independent connections. The existing concrete-period test contains the direct bulk-write
+  regression cases. This additive CHECK work does not prove the missing-owner or MVCC invariants.
 
 ## AV-3 — Concurrency and trigger boundary
 

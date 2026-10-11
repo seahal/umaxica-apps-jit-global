@@ -147,6 +147,12 @@ asserts this set exactly:
   require each concrete detail's source ownership period to belong to the same Avatar as its
   registry reservation. They raise SQLSTATE `23514` and do not rewrite rows or choose an owner.
 
+The ownership-integrity triggers above fire on ownership-period writes, not Avatar-only INSERT. They
+therefore do not yet prove the required rejection of ownerless Avatar creation. A separately
+verified creation guard and writer preparation remain necessary within the existing D-3/D-4
+boundary. Finite start-time protection uses declarative CHECK constraints rather than expanding the
+trigger set. These observations do not relax the approved invariants or authorize additional SQL.
+
 These triggers are created and attached by the same reversible Avatar migrations that create their
 tables. Their execution and direct-SQL rejection are tested against disposable PostgreSQL catalogs;
 no production or shared-database trigger change is authorized by this note.
