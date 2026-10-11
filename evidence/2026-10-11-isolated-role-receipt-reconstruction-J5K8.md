@@ -39,7 +39,8 @@ Migration failure remains failure; an unavailable or mismatched transcript leave
 No environment-construction Minitest/Vitest case was added.
 
 Both required full suites started on the second rebuilt fleet. Vitest completed: 99 files, 1,140
-tests, 13.44 seconds. Rails remains running; no next feature edit is permitted until its outcome is
+tests, 13.44 seconds, exit 0. Rails completed with exit 0: 15,033 runs, 127,498 assertions, zero
+failures/errors/skips, 940.671728 seconds. No next feature edit occurred before both outcomes were
 resolved. This reconstruction is not proof of Avatar ownership real COMMIT, concurrency, dump/
 restore, safe parallel clones, production readiness or independent acceptance. The isolated catalog
 still enforces one worker until parallel clone ownership/cleanup is established.
