@@ -45,3 +45,18 @@ with 99 files and 1,140 tests, 13.33 seconds. Rails is still running; no further
 begin until both results are inspected and any new regression repaired. Application/migration/test
 changes remain uncommitted under the limited owned-document commit permission. No push or external
 sending occurred.
+
+## Subsequent read-only catalog and consumer inspection
+
+At documentation HEAD `dc581749cd8be237b6330f344bd35a15a1d472b1`, with the same uncommitted
+implementation, a normal Rails runner inspected the owned fleet's actual PostgreSQL catalog. The new
+column is character varying(25), nullable; the public_id index is B-tree, unique, valid and ready.
+The nonblank CHECK is not yet validated. This proves additive shape, not final ID-4 acceptance. No
+catalog mutation or data output occurred.
+
+Read-only inspection additionally found that TelephonesController generates an edit link using the
+model (now public-ID to_param), while edit/destroy still find by primary key and the delete link
+explicitly passes id. Registration session lookup also retains the source id. These producer and
+consumer inconsistencies require a subsequent scoped Red/Green slice after the running full gate;
+they are not treated as permanent exceptions or accepted completion. The Rails process remains live
+and its result remains pending. No new application edits occurred during this inspection.
