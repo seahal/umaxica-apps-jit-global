@@ -49,7 +49,9 @@ remain incomplete.
   No reset or unauthorized code/schema commit was used to conceal it; the committed-schema gate
   remains unfulfilled.
 - Both full Gate 2 suites started after the local checks. Vitest exited 0: 99 files, 1,140 tests,
-  13.25 seconds. Rails is running; no next feature is permitted until its outcome is resolved.
+  13.25 seconds. Rails completed: 15,033 runs, 127,494 assertions, zero failures/errors/skips,
+  970.496308 seconds. The captured terminal summary confirms completion; a later session poll
+  reported the already-closed process handle. No next feature was edited before this result.
 
 ID-4a now references the actual public test. The conventions and trigger ADR reference actual
 objects/migration/tests without claiming deployment, final NOT NULL readiness, independent
