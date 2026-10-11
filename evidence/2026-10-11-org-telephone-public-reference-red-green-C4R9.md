@@ -85,3 +85,13 @@ bundle exec rails test test/models/concerns/telephone_test.rb test/operations/te
 RuboCop checked the corrected concern test: one file, zero offenses, exit 0. Both recovery full
 commands (`bundle exec rails test`, `bun run test`) started on the same owned fleet and dirty
 implementation. Their completion is pending; no next feature editing has begun.
+
+## Recovery full gates
+
+Rails recovery exited 0: 15,014 runs, 127,318 assertions, zero failures/errors/skips, 967.774397
+seconds. Vitest recovery exited 0: 99 files, 1,140 tests, 13.54 seconds. Both used the exact full
+commands recorded above; Rails used the same owned isolated fleet and workers 1. The corrected
+numeric expectation is no longer failing, and no targets were excluded. These results close this
+slice's Gate 3 hold, not all identifier/stack acceptance. Subsequent new work begins only after
+these actual results were inspected. HEAD at inspection was
+`bfb1fb8880e443672caafd9fd0f5e75087cb97fe`, with the implementation still uncommitted.

@@ -164,3 +164,23 @@ criterion.
 - Existing-row operational backfill, NOT NULL cutover and DB immutability remain separately required
   by ID-4/MIG-1; an additive nullable column is not completion of those criteria. Local controller
   PK-based URL/session consumers remain an inventory item under ID-3, not an approved exception.
+
+## ID-3b — ORG Telephone management URLs
+
+- Basis: I03/I07/I10 and ID-3; scope: owner-scoped ORG Telephone index/edit/delete.
+- Given an owned candidate with its public identity, the listed public_id and generated edit/delete
+  links carry that public identity. Following the edit link succeeds under normal authorization;
+  neither the displayed identifier nor new links carry the database PK.
+- A foreign candidate's public reference returns not found and leaves both owners' credentials
+  unchanged. Malformed or unknown references do not retry against a different identity column.
+- Existing positive decimal PK URLs remain explicit transitional compatibility for established
+  callers/bookmarks: classify at most 19 decimal digits separately from 21-character public IDs,
+  always scope lookup to the authenticated Operator, and never generate new numeric links. Remove
+  that legacy reader only after consumer migration and a separately authorized compatibility
+  cutover; it is not a permanent exception or permission for new remote bigint references.
+- Check: generated-link HTTP test in
+  `test/controllers/base/org/identity/telephones/registrations_controller_test.rb`, existing numeric
+  coverage in `test/integration/identity_settings_page_coverage_test.rb` and credential-removal
+  integration tests. Foreign/malformed/delete coverage must be retained and extended where absent.
+- Existing candidates lacking public IDs require operational backfill before new-link deployment; no
+  request-time identity generation or source proof fallback is permitted.
