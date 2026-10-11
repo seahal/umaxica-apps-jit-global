@@ -63,6 +63,26 @@ Per-column code exception comments and a complete credential-consumer inventory 
 
 ## Other classified areas and remaining inventory
 
+The following additional mappings are source-observed, not a complete writer/API inventory or
+catalog-conformance claim. Their current UUID generation is not a provider-format justification.
+
+| Producer / column                                     | Role and meaning                                                                  | Required boundary and remaining work                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Client/Visitor/Operator Email ceremony transaction_id | Owned ceremony identity in the concrete realm/channel transaction family          | EmailCeremonyTransactionable.create_transaction! currently creates a UUID when no explicit value is supplied. Preserve issued transaction identity and its signed/proof-bound consumers; normal new standard issuance is independent of acceptance of existing UUID strings.                                              |
+| The same Email ceremony grant_jti                     | Identity of the ceremony's grant, distinct from transaction_id and result_jti     | The creation method generates a separate UUID and grant_claims publishes it as jti. Do not reuse the resource ID or merge grant lifetime with result lifetime. Trace explicit supplied/import values and token validators before changing issuance.                                                                       |
+| The same Email ceremony result_jti                    | Result identity, absent until consumption                                         | consume_registration_result! creates it under lock; consume_result! accepts an explicitly supplied result. Preserve NULL before result and one-time consumption; do not create dummy IDs or blanket immutability that blocks initial result establishment. Full result producer/consumer provenance remains to be traced. |
+| chronicles.event_uuid                                 | Owned audit-event identity                                                        | ChronicleCapturable.capture generates a UUID; ChronicleIntentWriter persists it, and result/failure/invalidation writers retain the same event identity. Preserve existing audit references. Current model uniqueness is not proof of DB immutability or bounded capacity.                                                |
+| chronicle_outbox_entries.event_uuid                   | Shared reference/correlation to an audit event, not the outbox row's own identity | Multiple outbox records may refer to the same event; retain the ordinary lookup index rather than adding blanket single-column UNIQUE. Follow fallback/retry consumers before changing producer format or storage bounds.                                                                                                 |
+
+The Email concrete classes bind app/com/org explicitly through ceremony_surface; neither request
+host inference nor cross-realm lookup is admitted by these mappings. Generation standardization must
+not rewrite values already bound into OTP verifiers, signed claims, jobs or stored results. The
+reviewed app Ticket dump has unbounded varchar transaction/grant/result fields and native UUID
+otp_generation; the Chronicle dump has unbounded varchar in the two event_uuid columns above. Those
+are pending capacity/compatibility work, not permanent exceptions or evidence that migrations
+already changed them. The separately named client_chronicles.event_uuid native UUID is not covered
+by these producer mappings and must not be converted on the basis of the shared column name.
+
 Avatar transfer idempotency keys retain the explicitly approved canonical UUID v4/v7 request
 contract in AV-5. That exception does not extend to all internally generated transaction IDs.
 Ceremony transaction/grant/result IDs and OTP generations need their actual purpose, entropy and
