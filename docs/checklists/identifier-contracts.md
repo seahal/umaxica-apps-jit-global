@@ -100,7 +100,9 @@ criterion.
   readiness.
 - Check the actual function and attached trigger, exact inventory in
   [enforcement tests](../../test/models/enforcement_triggers_test.rb), direct-SQL/bulk rejection
-  tests (planned/not yet implemented), and
+  tests in
+  [the ORG Telephone identity suite](../../test/models/operator_telephone_public_id_immutability_test.rb),
+  and
   [operational backfill tests](../../test/operations/operator_telephone_public_id_backfill_operation_test.rb).
   Use only verified run-owned PostgreSQL catalogs. Approval and this criterion do not establish
   implementation, production application, or protection against intentional administrator bypass.

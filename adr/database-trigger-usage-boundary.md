@@ -173,6 +173,16 @@ updates, recovering the transaction after expected errors. Also prove the admitt
 unrelated updates. Approval alone is not evidence of implementation or passing tests. No
 production/shared-database application or deliberate administrator bypass protection is claimed.
 
+The implementation is named `operator_telephones_public_id_immutability`, attached to
+`prevent_operator_telephone_public_id_mutation()` by
+`db/org_principals_migrate/20261011024019_protect_operator_telephone_public_id.rb`.
+`test/models/operator_telephone_public_id_immutability_test.rb` exercises direct SQL, single/bulk
+bypass updates, upsert conflict updates and permitted same-ID/state writes.
+`test/operations/operator_telephone_public_id_backfill_operation_test.rb` exercises the transitional
+NULL insertion and one-time backfill. `test/models/enforcement_triggers_test.rb` asserts the exact
+ORG inventory, including the existing rotation-audit trigger. Final deployment/NOT NULL cutover and
+other tables' DB immutability remain independent requirements; these references alone are not PASS.
+
 ## Related
 
 - `adr/unified-enforcement.md`
