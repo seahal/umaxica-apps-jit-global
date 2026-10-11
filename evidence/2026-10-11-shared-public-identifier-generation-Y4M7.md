@@ -53,9 +53,14 @@ exactly one removal in each, the resolved PublicId visibility entry; no allowanc
 increased and the Concern inclusion-hook debt remains.
 `bundle exec ruby test/tooling/architecture_baseline_test.rb` then passed 3 runs, 2,748 assertions,
 zero failures/errors/skips, 3.774391 seconds. Both full Gate 3 recovery commands were restarted:
-`bundle exec rails test` against the same owned fleet and `bun run test`. Their results remain
-pending in this update. No next feature may begin before their result is resolved. The later local
-adapter restoration record C8P4 supersedes the earlier knowledge-checker availability observation;
-it does not rewrite that failed run as success. Subsequent owned document commits and unrelated OTP
-documentation changes are present in the worktree; the application state remains dirty. No
-application/test/migration commit, external delivery, production change or push occurred.
+`bundle exec rails test` against the same owned fleet and `bun run test`. Recovery Rails exited 0:
+15,028 runs, 127,456 assertions, zero failures/errors/skips, 947.982606 seconds. Recovery Vitest
+exited 0: 99 files, 1,140 tests, 13.46 seconds. The stale-baseline failure is resolved and both
+required full suites are successful. No subsequent feature was edited during the pending gate.
+Documentation-only commits occurred during the run, ending at
+`444be21a5c25aa97f72bb47d2f20ec190068f21d` (the application and generated baseline remain
+uncommitted). The later local adapter restoration record C8P4 supersedes the earlier
+knowledge-checker availability observation; it does not rewrite that failed run as success.
+Subsequent owned document commits and unrelated OTP documentation changes are present in the
+worktree; the application state remains dirty. No application/test/migration commit, external
+delivery, production change or push occurred.
