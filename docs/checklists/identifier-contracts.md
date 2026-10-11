@@ -190,3 +190,22 @@ criterion.
   integration tests. Foreign/malformed/delete coverage must be retained and extended where absent.
 - Existing candidates lacking public IDs require operational backfill before new-link deployment; no
   request-time identity generation or source proof fallback is permitted.
+
+## ID-3c — Missing ORG Telephone identity backfill
+
+- Basis: I06/I07/I11 and ID-3a/MIG-1; scope: explicit maintenance of OperatorTelephone rows that
+  lack public identity after the additive schema expansion.
+- Given a bounded, explicitly selected ORG source relation, dry-run reports missing rows without
+  generating IDs or changing data. Apply assigns NanoID-21 only to NULL identities under row locks,
+  preserving existing public IDs, source attributes/timestamps and all ceremony/verifier facts.
+  Repeating or resuming the operation does not replace a previously assigned identity.
+- A collision on the actual public-ID unique constraint retries with a usable savepoint and stops at
+  the documented finite bound. Exhaustion leaves that source unchanged and fails explicitly;
+  unrelated uniqueness errors are not treated as ID collisions. Invalid realm/scope/mode/batch
+  inputs fail before writing. Batch size is explicitly 1–1000, not an unbounded all-row load.
+- Check: `test/operations/operator_telephone_public_id_backfill_operation_test.rb` and explicit Rake
+  inventory/backfill tasks. Test-only construction of legacy NULL rows bypasses validations;
+  ordinary creation and read/update must not become missing-ID repair paths.
+- This procedure assigns missing identity only. It does not certify writer quiescence, migrate
+  numeric proof bindings, activate NOT NULL, enforce DB immutability or authorize production data
+  mutation. ID-3a's independent proof-drain and ID-4/MIG-1 remain required.

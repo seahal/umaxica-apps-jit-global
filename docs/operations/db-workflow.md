@@ -194,3 +194,39 @@ generated from the isolated test databases and are deterministic on repeat dump.
 isolated test fleet was rebuilt from migrations, seeded twice, and dumped twice; all configured
 database versions reached their expected current migration and the two dump sets matched. The
 reconstruction verification is recorded in `evidence/2026-09-21-phase-09-reconstruction-X4Y5.md`.
+
+## ORG Telephone public-identity transition
+
+This is an additive ID-3a/ID-3c transition, not authorization to change production/shared data. Use
+only a separately permitted target; verify the actual connection/owner and preserve other work. The
+first schema expansion adds nullable public_id without changing source values or issued proof.
+Before consumer deployment, complete the following controlled sequence:
+
+1. Run `bundle exec rake 'org_telephone_public_ids:inventory[100]'` against the permitted target. It
+   returns aggregate assigned/missing counts and writes nothing. Batch size must be explicit,
+   1–1000. Existing malformed/non-NULL identities require separate review; they are not overwritten.
+2. With a verified target and recovery approval, run
+   `bundle exec rake 'org_telephone_public_ids:backfill[EXACT_DATABASE_NAME,100]'`. The exact
+   physical database name must match the model's current connection. Each missing row is locked and
+   assigned one NanoID-21; existing identities and source timestamps/proof facts remain unchanged.
+   Work is committed per row and is resumable; rerun after an interruption rather than regenerating
+   IDs. A public-ID collision has three retries after the first attempt; other failures propagate.
+3. Control all old numeric-reference writers, web workers and queued delivery producers. Let their
+   valid proof and bounded original-operation receipts finish through the old authorized consumer
+   before switching consumers. Confirm aggregate legacy-reference admission and queued work are
+   drained. Do not rewrite telephone_candidate_ref: it is part of the keyed verifier input. No
+   weaker proof fallback or forced session invalidation is part of this transition.
+4. Reconcile zero missing source identities and preservation of source/candidate relationships. Only
+   after writer/drain verification deploy consumers generating public-ID links and bindings.
+   Existing numeric management URLs have the bounded owner-scoped ID-3b contract; new links do not
+   expose PKs. A failed public lookup never retries by PK.
+5. Validate nonblank/NOT NULL and the approved DB immutability mechanism in separate reviewed
+   migrations after those preconditions. These final constraints and executable cutover admission
+   checks remain planned/not yet implemented; neither an inventory count nor this runbook proves
+   them complete.
+
+Pre-cutover failure leaves the additive column and assigned IDs intact; stop and resume the
+operational task after fixing the cause. Post-cutover recovery must preserve assigned IDs and proof
+semantics rather than clearing the column or restoring a numeric proof fallback. There is no
+automatic production application, legacy-table deletion or shared-cluster operation in these tasks.
+See [identifier acceptance](../checklists/identifier-contracts.md) and separate per-run evidence.
