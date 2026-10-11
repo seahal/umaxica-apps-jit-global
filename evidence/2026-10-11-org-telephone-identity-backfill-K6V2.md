@@ -51,7 +51,13 @@ separate source-backfill/proof-drain/cutover steps. Their added paragraphs belon
 Final NOT NULL/check validation, DB immutability, actual writer quiescence and executable legacy
 proof admission/cutover checks remain incomplete.
 
-Full `bundle exec rails test` and `bun run test` Gate 2 commands have started. Vitest exited 0: 99
-files, 1,140 tests, 13.28 seconds. Rails is still running; no next feature edits may begin until
-both results are inspected. No production/shared access, external sending, application-code commit
-or push occurred.
+Full `bundle exec rails test` and `bun run test` Gate 2 completed with exit 0 for both commands.
+Rails: 15,021 runs, 127,411 assertions, zero failures/errors/skips, 970.892912 seconds. Vitest: 99
+files, 1,140 tests, 13.28 seconds. Relative to the preceding public-link gate's 15,016 runs and
+127,373 assertions, this run adds five backfill tests and 38 assertions without a failed-test set.
+The start HEAD was `e091786d132176d2957a2db7b81a2439818a7208`; finish HEAD was
+`0f46fa6857978de59f82c836581c62797d73ac25`. Intervening commits contained only catalog evidence and
+identifier decision documentation, not application/test changes. The owned fleet and uncommitted
+backfill code remained the tested target; these document commits are not complete application
+snapshots. No next feature edits began while the gate was pending. No production/shared access,
+external sending, application-code commit or push occurred.
