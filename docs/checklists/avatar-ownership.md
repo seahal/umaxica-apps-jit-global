@@ -21,8 +21,8 @@ D-3/D-4/D-10 exceptions; no new SQL/trigger permission is granted here. Follow t
   references retain public identity; local period/Avatar FKs retain concrete DB integrity (ID-3).
 - `AvatarProvisioning::Create` writes the concrete Enterprise or Bureau first period in the same
   Avatar transaction, using `Avatar.created_at` as its initial boundary. The legacy period remains
-  for the staged reader transition; retained data and direct test factories are not silently
-  treated as migrated concrete ownership.
+  for the staged reader transition; retained data and direct test factories are not silently treated
+  as migrated concrete ownership.
 - Check schema/associations/resolvers, app initial and org optional provisioning, existing
   [transfer operation tests](../../test/operations/avatar_ownership_transfers_test.rb) and app/org
   controller tests. New concrete-model/provisioning coverage is planned; legacy test names are not
@@ -143,25 +143,25 @@ D-3/D-4/D-10 exceptions; no new SQL/trigger permission is granted here. Follow t
   management/transfer authority is distinct. Exclusive Bindings retain their documented meaning
   rather than becoming Grants by an index drop. No polymorphic subject/owner or disguised
   owner-generation reference.
-- The P10a additive slice now provides explicit concrete tables
-  (`avatar_enterprise_persona_grants` and `avatar_bureau_agent_grants`), bounded capability and
-  revocation constraints, `AvatarAccessGrants::IssueOperation`, and
-  `AvatarAccessGrantResolver`. `AvatarPermissionResolver` consults a matching current-period Grant
-  only when an Avatar is supplied; existing organization-management authority remains a separate
-  membership decision. `test/services/avatar_access_grants_test.rb`,
-  `test/resolvers/avatar_permission_resolver_test.rb`, and the transfer regression cover the
-  implemented public behavior (`24 runs, 132 assertions` in the latest focused run).
+- The P10a additive slice now provides explicit concrete tables (`avatar_enterprise_persona_grants`
+  and `avatar_bureau_agent_grants`), bounded capability and revocation constraints,
+  `AvatarAccessGrants::IssueOperation`, and `AvatarAccessGrantResolver`. `AvatarPermissionResolver`
+  consults a matching current-period Grant only when an Avatar is supplied; existing
+  organization-management authority remains a separate membership decision.
+  `test/services/avatar_access_grants_test.rb`, `test/resolvers/avatar_permission_resolver_test.rb`,
+  and the transfer regression cover the implemented public behavior (`24 runs, 132 assertions` in
+  the latest focused run).
 - Check resolver/policy/provisioning public behavior, N:M positives and denial cases plus direct DB
-  integrity. The legacy Binding meaning remains unchanged. The Request/Accept/Cancel transport
-  still has to cut over to the registry and concrete period generations before the complete
-  O1→O2→O1 acceptance path can be claimed. Group membership attach, reorder, and detach now
-  recheck the concrete Avatar Grant under the locked Avatar state while preserving existing
-  organization-owner authority; the public service and policy coverage is in
+  integrity. The legacy Binding meaning remains unchanged. The Request/Accept/Cancel transport still
+  has to cut over to the registry and concrete period generations before the complete O1→O2→O1
+  acceptance path can be claimed. Group membership attach, reorder, and detach now recheck the
+  concrete Avatar Grant under the locked Avatar state while preserving existing organization-owner
+  authority; the public service and policy coverage is in
   `test/services/group_avatar_memberships_test.rb` and
-  `test/policies/group_avatar_membership_policy_test.rb`. Transfer registry cutover and full
-  Group transition consequences remain required before Avatar cutover. P10a and this Grant
-  integration are independently reviewable and are not blocked solely by the unresolved Group
-  account semantics in AV-8.
+  `test/policies/group_avatar_membership_policy_test.rb`. Transfer registry cutover and full Group
+  transition consequences remain required before Avatar cutover. P10a and this Grant integration are
+  independently reviewable and are not blocked solely by the unresolved Group account semantics in
+  AV-8.
 
 ## AV-8 — Group account meaning is not assumed ownership
 
@@ -175,8 +175,12 @@ D-3/D-4/D-10 exceptions; no new SQL/trigger permission is granted here. Follow t
 - Check Group policies/resolvers/provisioning and
   [existing Group period tests](../../test/models/avatar_group_ownership_period_test.rb), then
   planned concrete Group and transfer consequence tests. This hold affects P10b/P12b, not
-  independent Grants or identifier history. Definition is accepted; the missing domain evidence is
-  not resolved here.
+  independent Grants or identifier history. Current `GroupManagement::Create` and
+  `AvatarGroupPolicy` compare/filter selected subject account separately from owning collective; the
+  app Avatar controller resolves that account as `ClientPersona`. The owning specification records
+  these concrete observations. Account identity must not be replaced by owner identity. These
+  observations do not establish data reconciliation, a concrete account relationship, migrated
+  consumers, or passing transfer consequences; those remain required for this criterion.
 
 ## AV-9 — Observable retention deferral
 
@@ -190,9 +194,8 @@ D-3/D-4/D-10 exceptions; no new SQL/trigger permission is granted here. Follow t
 - Check [retention job tests](../../test/jobs/retention_purge_job_test.rb) and the focused
   [Avatar retention tests](../../test/jobs/avatar_retention_purge_test.rb). The implemented
   `avatar_purge_deferrals` table records an idempotent `(avatar_id, reason_code)` observation and
-  increments it under a row lock; ownership history is never physically deleted by the purge job.
-  An eligible Avatar without concrete ownership history also remains intact, with an explicit
+  increments it under a row lock; ownership history is never physically deleted by the purge job. An
+  eligible Avatar without concrete ownership history also remains intact, with an explicit
   `retention_policy_pending` deferral; encrypted moniker history is preserved. The absence of
-  ownership periods does not authorize deletion. Personal-data retention
-  duration and final deletion/anonymization policy remain unresolved and are not inferred from
-  this deferral mechanism.
+  ownership periods does not authorize deletion. Personal-data retention duration and final
+  deletion/anonymization policy remain unresolved and are not inferred from this deferral mechanism.
