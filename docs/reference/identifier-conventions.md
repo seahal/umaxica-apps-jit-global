@@ -14,11 +14,19 @@ verdict. Standard self-controlled non-secret issuance is NanoID-21 with varchar 
 Preserve issued references and independently validate accepted compatibility. Never
 shorten/case-convert values or invent additional mapping/public-ID layers solely to match spelling.
 
-Use existing PublicId generation/lifecycle behavior where correct. Direct Nanoid calls in
-Preference, TOTP and RP-session writers still require shared-generation/consumer review; listing
-them here does not exempt them. Ownership-ID DB protection and bulk/collision handling must satisfy
-ID-4/ID-5 and the explicit authority map. Model callbacks do not establish DB immutability. New
-same-row identifier triggers and shared-role changes are not authorized by this document.
+`PublicId.generate` owns standard generation with size 21 and the installed library's safe
+alphabet/CSPRNG path, explicitly non_secure=false. Preference, TOTP, RP-session and ORG Telephone
+backfill writers call that mechanism without sharing their distinct lifecycle policies. Existing
+resource values and callback timing are preserved. Ownership-ID DB protection and bulk/collision
+handling must satisfy ID-4/ID-5 and the explicit authority map. Model callbacks do not establish DB
+immutability. New same-row identifier triggers and shared-role changes are not authorized by this
+document.
+
+The public generation contract is tested in `test/lib/public_id_generation_test.rb`. The existing
+invariant suite's `test/security/invariants/identifier_generation_invariant_test.rb` parses Ruby
+ASTs under `app/` to reject direct Nanoid calls outside the shared mechanism. It does not classify
+every identifier or prove dynamic aliases, crypto quality, database constraints or protocol
+exceptions. The rest of ID-8 remains independently required.
 
 ## ORG Telephone transition
 

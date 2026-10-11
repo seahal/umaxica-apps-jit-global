@@ -54,6 +54,7 @@ the remaining entries matching the task.
   `project/value-object-boundaries.mdc`
 - Migrations: `generic/migrations.mdc`, `generic/rails-change-discipline.mdc`
 - Persistent data or API shape, including JSON and database schemas: `generic/data-shape-design.mdc`
+- Identifier generation, public references or identifier constraints: `project/identifiers.mdc`
 - Security-sensitive work or broad refactors: `generic/absolute-rules.mdc`,
   `generic/no-silent-fallback.mdc`, `generic/fail-fast.mdc`, `project/regression-guards.mdc`
 - Configuration or environment variables: `generic/no-silent-fallback.mdc`, `generic/fail-fast.mdc`
@@ -104,11 +105,13 @@ and an accepted ADR before choosing an implementation path.
 ## Governing Principles and Constraints
 
 Security bounds our ability to create value. Within that boundary, performance, experience,
-documentation, longevity and observability are coequal. Category order is not priority.
-**MUST**, **SHOULD**, and **MAY** follow BCP 14; express requirements positively.
+documentation, longevity and observability are coequal. Category order is not priority. **MUST**,
+**SHOULD**, and **MAY** follow BCP 14; express requirements positively.
 
 - **MUST:** preserve surface trust, ownership, session and state boundaries, and applicable
-  authentication, authorization, web application security controls (including protections against CSRF, XSS, SSRF, and SQL injection), verification, rate limits and security-relevant control order.
+  authentication, authorization, web application security controls (including protections against
+  CSRF, XSS, SSRF, and SQL injection), verification, rate limits and security-relevant control
+  order.
 - **MUST:** prevent SQL injection and XSS through parameterized access, contextual escaping and
   appropriate sanitization; keep untrusted data separate from executable content.
 - **MUST:** protect people from foreseeable harm and protect credentials, tokens, cookies,
@@ -125,15 +128,16 @@ documentation, longevity and observability are coequal. Category order is not pr
   persistence operations, including bulk updates/deletes and irreversible migrations.
 - **SHOULD:** make ownership, visibility, dependencies and failures explicit; implement the smallest
   coherent solution. Adjacent cleanup belongs only within the authorized change.
-- **SHOULD:** preserve replaceability and proportional abstractions. **MAY:** use bounded transitional
-  mechanisms when safe deployment or migration requires them; record their exit conditions.
+- **SHOULD:** preserve replaceability and proportional abstractions. **MAY:** use bounded
+  transitional mechanisms when safe deployment or migration requires them; record their exit
+  conditions.
 - **SHOULD:** code states how, tests state what, commit messages state why, and comments state why
   not. Preserve non-obvious decisions in their owning knowledge artifacts. Maintain affected current
   documentation; historical research has no general maintenance obligation.
 - **MUST:** test public contract boundaries immediately below, at and above each range, limit,
   format or classification boundary. Use the nearest valid/reachable value when necessary and
-  explain the exception in the test name or comment. Cover type-appropriate missing, empty, zero
-  and other reachable sentinel inputs. **SHOULD:** use one representative per equivalence partition
+  explain the exception in the test name or comment. Cover type-appropriate missing, empty, zero and
+  other reachable sentinel inputs. **SHOULD:** use one representative per equivalence partition
   unless the contract distinguishes more, and make the technique recoverable from names/assertions.
 
 ## Repository Content
@@ -178,10 +182,10 @@ execution outweighs re-establishing context.
 
 ## Spec Driven Development
 
-Use `specs/README.md` for scope, lifecycle and traceability, and the `spec-driven-development`
-Skill when a significant accepted change needs a workflow. Small obvious edits remain lightweight.
-Current knowledge ownership is defined in `docs/reference/repository-knowledge-architecture.md`.
-Closed specs preserve change history; current behavior belongs in docs and durable checklists.
+Use `specs/README.md` for scope, lifecycle and traceability, and the `spec-driven-development` Skill
+when a significant accepted change needs a workflow. Small obvious edits remain lightweight. Current
+knowledge ownership is defined in `docs/reference/repository-knowledge-architecture.md`. Closed
+specs preserve change history; current behavior belongs in docs and durable checklists.
 
 ### Evidence
 

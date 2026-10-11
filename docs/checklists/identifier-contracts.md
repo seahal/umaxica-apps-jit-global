@@ -144,8 +144,13 @@ criterion.
 - Discovery includes unloaded/model-less tables; column regex or any historical SecureRandom.uuid
   occurrence alone is not a semantic verdict. No new runtime multi-DB governance framework.
 - Check: actual guard execution and current CI entry, not a sentence in a harness. Comprehensive
-  identifier regression guard remains planned until Luna records actual paths and evidence; existing
-  PublicId tests cover only their own public behavior.
+  identifier regression coverage remains incomplete. The actual
+  `test/security/invariants/identifier_generation_invariant_test.rb` detects direct production
+  Nanoid-call bypass under `app/` through Ruby AST inspection, including a deliberate owned
+  synthetic source violation. `test/lib/public_id_generation_test.rb` covers the public
+  standard-generation API. Those checks do not establish schema/classification/exception coverage or
+  detect every possible dynamic generator alias. Existing PublicId tests retain their distinct
+  public persistence scope.
 
 ## ID-3a — ORG Telephone ceremony references
 

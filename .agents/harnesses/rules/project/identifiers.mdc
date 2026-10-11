@@ -1,0 +1,26 @@
+---
+name: identifiers
+description: Apply semantic identifier contracts without changing issued identity or DB authority.
+---
+
+# Identifiers
+
+Paths below are repository-root relative. `adr/identifier-contract.md` owns the accepted decision;
+`docs/reference/identifier-conventions.md` maps concrete columns and consumers;
+`docs/checklists/identifier-contracts.md` owns durable ID-* criteria. Read the affected mapping
+before edits and maintain its real test/consumer references. Complete classification is still in
+progress; a partial mapping is not a global acceptance result.
+
+Use `PublicId.generate` for standard self-controlled non-secret NanoID issuance. It fixes length 21
+and the dependency's safe generation path. Share that mechanism without merging resource/session/
+JWT meanings or channel lifecycle policies. Preserve existing values and explicit compatibility;
+do not apply it mechanically to secrets, protocol values or provider identifiers.
+
+Map required DB invariants to actual authorized constraints/privileges/mechanisms. Model callbacks
+do not protect raw SQL. The trigger ADR and named Avatar/proof exceptions remain scoped; this rule
+grants no extra SQL, trigger, role, destructive-operation or cutover authority.
+
+Retain the public generator and direct-call AST invariant tests in the existing Rails suite. The
+AST guard covers direct named Nanoid calls under `app/` only, not complete semantic classification or every
+dynamic bypass. Preserve independent schema/ownership/exception and producer-consumer checks under
+ID-8; do not weaken a criterion or broaden an allowlist merely to make a failure disappear.
