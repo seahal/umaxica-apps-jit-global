@@ -1066,9 +1066,12 @@ class SignUpSuspensionRequestTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: "app", phase: "PRIMARY_PENDING",
+      )
     end
 
-    post auth_app_social_google_session_path
+    post auth_app_social_google_session_path(fb: phase_binding)
 
     assert_response :temporary_redirect
   end

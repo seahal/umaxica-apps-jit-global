@@ -42,6 +42,12 @@ module Auth::App::In
       post auth_app_sign_in_path, params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
 
       assert_response :see_other
+      @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+        flow: ClientSignInFlow.find_by!(
+          public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+        ),
+        surface: "app", phase: "PRIMARY_PENDING",
+      )
     end
 
     teardown do
@@ -59,7 +65,7 @@ module Auth::App::In
       end
 
       with_prosopite_paused do
-        get new_auth_app_sign_in_challenge_totp_path(ri: "jp")
+        get sign_in_mfa_path(:new_auth_app_sign_in_challenge_totp_path, ri: "jp")
       end
 
       assert_response :success
@@ -93,7 +99,7 @@ module Auth::App::In
       with_prosopite_paused { establish_pending_mfa_via_email! }
 
       with_prosopite_paused do
-        get new_auth_app_sign_in_challenge_totp_path(ri: "jp")
+        get sign_in_mfa_path(:new_auth_app_sign_in_challenge_totp_path, ri: "jp")
       end
 
       selector = inertia_props.fetch("form").fetch("credential_selector")
@@ -105,13 +111,13 @@ module Auth::App::In
       assert selector.fetch("options").none? { |option| option.key?("id") }
     end
 
-    test "new redirects to sign in when pending_mfa is missing" do
+    test "new refuses an unbound request when pending_mfa is missing" do
       with_prosopite_paused do
-        get new_auth_app_sign_in_challenge_totp_path(ri: "jp")
+        get sign_in_mfa_path(:new_auth_app_sign_in_challenge_totp_path, ri: "jp")
       end
 
-      assert_response :see_other
-      assert_redirected_to auth_app_sign_in_path(ri: "jp")
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
     end
 
     test "create with valid TOTP code advances Auth evidence without issuing Root credentials" do
@@ -142,7 +148,7 @@ module Auth::App::In
           totp_code = ROTP::TOTP.new(@totp.private_key).now
 
           with_prosopite_paused do
-            post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+            post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
               totp_challenge_form: { token: totp_code },
             }
           end
@@ -174,7 +180,7 @@ module Auth::App::In
         totp_code = ROTP::TOTP.new(@totp.private_key).now
 
         with_prosopite_paused do
-          post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+          post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
             totp_challenge_form: { token: totp_code },
           }
         end
@@ -191,7 +197,7 @@ module Auth::App::In
       end
 
       with_prosopite_paused do
-        post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+        post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
           totp_challenge_form: { token: "000000" },
         }
       end
@@ -211,7 +217,7 @@ module Auth::App::In
         totp_code = ROTP::TOTP.new(@totp.private_key).now
 
         with_prosopite_paused do
-          post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+          post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
             totp_challenge_form: { token: totp_code },
           }
         end
@@ -240,7 +246,7 @@ module Auth::App::In
         @totp.update!(last_otp_at: Time.zone.at(otp_window_at))
 
         with_prosopite_paused do
-          post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+          post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
             totp_challenge_form: { token: totp_code },
           }
         end
@@ -315,22 +321,25 @@ module Auth::App::In
       assert_equal 0, @totp.reload.otp_attempts_count
     end
 
-    test "create without pending_mfa redirects to sign in" do
+    test "create refuses an unbound request without pending_mfa" do
       with_prosopite_paused do
-        post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+        post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
           totp_challenge_form: { token: "123456" },
         }
       end
 
-      assert_response :see_other
-      assert_redirected_to auth_app_sign_in_path(ri: "jp")
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
     end
 
     private
 
     def post_totp(token)
       with_prosopite_paused do
-        post(auth_app_sign_in_challenge_totp_path(ri: "jp"), params: { totp_challenge_form: { token: token } })
+        post(
+          sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"),
+          params: { totp_challenge_form: { token: token } },
+        )
       end
     end
 
@@ -430,8 +439,6 @@ class Auth::App::In::MfaTotpsControllerTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -445,8 +452,6 @@ class Auth::App::In::MfaTotpsControllerTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -695,8 +700,6 @@ class Auth::App::In::MfaTotpsControllerTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

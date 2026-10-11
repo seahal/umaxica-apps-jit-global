@@ -61,8 +61,7 @@ class TelephoneCredentialRegistrationOtpFormQuery
 
   def candidate_ref
     case telephone
-    when ClientTelephone, VisitorTelephone then telephone.public_id
-    when OperatorTelephone then telephone.id.to_s
+    when ClientTelephone, VisitorTelephone, OperatorTelephone then telephone.public_id
     end
   end
 

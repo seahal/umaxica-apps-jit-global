@@ -8,9 +8,14 @@ module Auth
         include ::SurfaceInertiaPage
         include ::AuthenticationModeSwitchGuard
         include ::AuthCeremonyAdmission
+        include ::SignInPhaseBindingControllerSupport
 
         AUTHENTICATION_MODE = :guest
         declare_authentication_mode! :guest
+
+        before_action -> {
+          enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") if params[:entry_ref].blank?
+        }
 
         def show
           admit_or_render_sign_ceremony!(expected_intent: auth_ceremony_entry_intent) { render_method_selection! }
@@ -43,19 +48,25 @@ module Auth
 
         def method_selection_links(scope)
           pt = signed_pt_param
+          binding = sign_in_flow_binding_params(auth_ceremony_local_sign_in_flow, phase: "PRIMARY_PENDING")
 
           [
-            { key: "email", label: page_t("#{scope}.links.email"), href: new_auth_app_sign_in_email_path(pt: pt) },
+            {
+              key: "email",
+              label: page_t("#{scope}.links.email"),
+              href: new_auth_app_sign_in_email_path(pt: pt, **binding),
+            },
             { key: "passkey",
               label: page_t("#{scope}.links.passkey"),
-              href: new_auth_app_sign_in_passkey_path(pt: pt), },
+              href: new_auth_app_sign_in_passkey_path(pt: pt, **binding), },
             { key: "device",
               label: page_t("sign.app.authentication.new.links.device"),
-              href: auth_app_sign_in_device_path(pt: pt), },
+              href: auth_app_sign_in_device_path(pt: pt, **binding), },
             { key: "secret",
               label: t("sign.app.authentication.new.links.secret"),
               href: new_auth_app_sign_in_secret_url(
                 pt: pt, ri: current_region_identifier,
+                **binding,
                 host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
               ), },
           ]
@@ -72,7 +83,9 @@ module Auth
           {
             key: "google",
             label: page_t("#{scope}.links.google"),
-            action: auth_app_social_google_session_path,
+            action: auth_app_social_google_session_path(
+              **sign_in_flow_binding_params(auth_ceremony_local_sign_in_flow, phase: "PRIMARY_PENDING"),
+            ),
             authenticity_token: form_authenticity_token,
             aria_label: "Sign in with Google",
             artwork: {
@@ -94,7 +107,9 @@ module Auth
           {
             key: "apple",
             label: page_t("#{scope}.links.apple"),
-            action: auth_app_social_apple_session_path,
+            action: auth_app_social_apple_session_path(
+              **sign_in_flow_binding_params(auth_ceremony_local_sign_in_flow, phase: "PRIMARY_PENDING"),
+            ),
             authenticity_token: form_authenticity_token,
             aria_label: nil,
             artwork: nil,

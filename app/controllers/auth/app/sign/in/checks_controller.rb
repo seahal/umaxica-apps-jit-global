@@ -7,6 +7,7 @@ module Auth
       module In
         class ChecksController < ::Auth::App::ApplicationController
           include SignAppInCheckControllerSupport
+          include SignInPhaseBindingControllerSupport
 
           AUTHENTICATION_MODE = :open
           declare_authentication_mode! :open
@@ -15,6 +16,7 @@ module Auth
           ensure_fqdn_gate_first!
           # Restores the inherited default no-store ahead of the gate (DefaultNoStore).
           prepend_before_action :apply_default_no_store
+          before_action -> { enforce_sign_in_phase_binding!(expected_phase: %w(GUARDRAIL_PENDING CHECKPOINT_PENDING)) }
           before_action :continue_checkpoint_sequence_without_content!
 
           def show = super

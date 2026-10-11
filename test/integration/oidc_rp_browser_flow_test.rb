@@ -347,7 +347,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         self.login_cooldown = original_login_cooldown
       end
 
-      assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+      assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
       follow_redirect!
       follow_redirect!
 

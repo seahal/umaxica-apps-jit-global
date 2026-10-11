@@ -4,6 +4,7 @@ require "test_helper"
 
 class ClientSecretIssuanceTest < ActiveSupport::TestCase
   self.fixture_table_names = []
+  fixtures :clients
 
   test "zero planned candidates is terminal omission without an expiry or reservation" do
     issuance = ClientSecretIssuance.new(planned_count: 0)
@@ -12,6 +13,26 @@ class ClientSecretIssuanceTest < ActiveSupport::TestCase
     assert_equal :omitted, issuance.state(at: now)
     assert_equal :omitted, issuance.state(at: now + 1.year)
     assert_equal 0, issuance.reserved_count(at: now)
+  end
+
+  test "does not regenerate for a different unique constraint" do
+    attributes = {
+      client: clients(:one),
+      origin_operation_id: SecureRandom.uuid,
+      origin: "manual",
+      attempt_number: 1,
+      browser_session_ref: "unique-constraint-probe",
+      planned_count: 0,
+    }
+    ClientSecretIssuance.create!(**attributes)
+    generated = ["freshpublicid12345678"]
+
+    Nanoid.stub(:generate, ->(**_args) { generated.shift }) do
+      duplicate = ClientSecretIssuance.new(**attributes)
+
+      assert_raises(ActiveRecord::RecordNotUnique) { duplicate.save!(validate: false) }
+      assert_empty generated
+    end
   end
 
   test "positive pending batch reserves its immutable count before and after presentation" do

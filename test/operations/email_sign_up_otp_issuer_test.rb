@@ -199,7 +199,10 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
       )
-      original = email.attributes.slice("otp_private_key", "otp_counter", "otp_expires_at", "sign_up_otp_context")
+      original = email.attributes.slice(
+        "public_id", "address_digest", "number_digest", "user_id", "visitor_id",
+        "staff_id",
+      )
       denied = EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: flow.public_id)
 
       assert_equal :session_mismatch, denied.status
@@ -282,7 +285,10 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
       )
-      original = email.attributes.slice("otp_private_key", "otp_counter", "otp_expires_at", "sign_up_otp_context")
+      original = email.attributes.slice(
+        "public_id", "address_digest", "number_digest", "user_id", "visitor_id",
+        "staff_id",
+      )
       resend = EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: nonce)
       scope = { flow: flow, email: email, session_nonce: nonce }
       foreign = EmailSignUpOtpVerificationCommitter.call(

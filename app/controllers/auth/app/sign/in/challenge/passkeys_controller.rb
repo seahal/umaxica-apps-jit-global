@@ -11,6 +11,7 @@ module Auth
           class PasskeysController < ::Auth::App::ApplicationController
             include ::AuthenticationModeSwitchGuard
             include ::SurfaceInertiaPage
+            include ::SignInPhaseBindingControllerSupport
 
             include ::PasskeyCeremonyContext
 
@@ -49,6 +50,10 @@ module Auth
               },
             )
 
+            # Keep the repository-wide no-store/FQDN callbacks first.  The phase binding still runs
+            # before the pending-MFA guard and action, so a stale request cannot issue a challenge
+            # or mutate the pending ceremony.
+            before_action -> { enforce_sign_in_phase_binding!(expected_phase: "MFA_PENDING") }
             before_action :ensure_pending_mfa!
 
             def new
@@ -57,7 +62,7 @@ module Auth
 
               if passkeys.empty?
                 redirect_to(
-                  auth_app_sign_in_challenge_path,
+                  auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
                   status: :see_other,
                 )
                 return
@@ -73,7 +78,7 @@ module Auth
             rescue Webauthn::RelyingPartyConfigResolver::MissingConfigurationError => e
               Rails.logger.error(JitLogEvent.format("webauthn.origin_validation_failed", error: e.message))
               redirect_to(
-                auth_app_sign_in_challenge_path,
+                auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
                 status: :see_other,
               )
             end
@@ -81,7 +86,7 @@ module Auth
             def create
               unless cloudflare_turnstile_stealth_validation["success"]
                 redirect_to(
-                  new_auth_app_sign_in_challenge_passkey_path,
+                  new_auth_app_sign_in_challenge_passkey_path(**sign_in_mfa_binding_params),
                   status: :see_other,
                 )
                 return
@@ -94,7 +99,7 @@ module Auth
             rescue Webauthn::ChallengeStore::ChallengeError,
                    Webauthn::AssertionVerifier::VerificationError, WebAuthn::Error
               redirect_to(
-                auth_app_sign_in_challenge_path,
+                auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
                 status: :see_other,
               )
             end
@@ -108,7 +113,7 @@ module Auth
                 title: page_t("#{scope}.title"),
                 description: page_t("#{scope}.description"),
                 form: {
-                  action: auth_app_sign_in_challenge_passkey_path,
+                  action: auth_app_sign_in_challenge_passkey_path(**sign_in_mfa_binding_params),
                   # The assertion is posted as a native document POST, so the form carries the same
                   # masked per-session authenticity token the ERB form embedded.
                   authenticity_token: form_authenticity_token,
@@ -119,8 +124,15 @@ module Auth
                   request_options: @passkey_request_options,
                   submit_label: page_t("#{scope}.authenticate"),
                 },
-                back_link: { label: page_t("#{scope}.back"), href: auth_app_sign_in_challenge_path },
-                cancel: { label: t("actions.cancel"), action: auth_app_sign_in_challenge_path, method: "delete" },
+                back_link: {
+                  label: page_t("#{scope}.back"),
+                  href: auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
+                },
+                cancel: {
+                  label: t("actions.cancel"),
+                  action: auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
+                  method: "delete",
+                },
               }
             end
 
@@ -159,7 +171,9 @@ module Auth
               credential_payload = mfa_credential_payload
               ClientPasskey.connection_class_for_self.connected_to(role: :writing) do
                 user = pending_mfa_user
-                return redirect_to(auth_app_sign_in_challenge_path, status: :see_other) unless user
+                return redirect_to(
+                  auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params), status: :see_other,
+                ) unless user
 
                 user.with_lock do
                   passkey = user.client_passkeys.lock.find_by(webauthn_id: credential_payload["id"])
@@ -169,7 +183,9 @@ module Auth
                       "auth_failed", user_id: user.id, ip: request.remote_ip,
                                      reason: "mfa_passkey_mismatch",
                     )
-                    return redirect_to(auth_app_sign_in_challenge_path, status: :see_other)
+                    return redirect_to(
+                      auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params), status: :see_other,
+                    )
                   end
 
                   context = Webauthn::AssertionVerifier.verify!(
@@ -190,7 +206,7 @@ module Auth
               end
             rescue JSON::ParserError
               redirect_to(
-                auth_app_sign_in_challenge_path,
+                auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
                 status: :see_other,
               )
             end

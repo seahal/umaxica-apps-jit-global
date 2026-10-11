@@ -32,8 +32,12 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
          params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: { "Host" => @host }
 
     assert_response :see_other
+    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+      flow: VisitorSignInFlow.find_by!(public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref),
+      surface: "com", phase: "PRIMARY_PENDING",
+    )
     address = "dummy-budget-#{SecureRandom.hex(8)}@example.test"
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { :user_email => { address: address }, "cf-turnstile-response" => "test_token" },
          headers: { "Host" => @host }
 
@@ -41,7 +45,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_nil session[:user_email_authentication_id]
     assert_equal address, session[:user_email_authentication_address]
     [nil, "", " ", "12345", "1234567", "abcdef", "-12345"].each do |code|
-      patch auth_com_sign_in_email_url(ri: "jp"),
+      patch auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
             params: { visitor_email: { pass_code: code } }, headers: { "Host" => @host }
 
       assert_response :unprocessable_content
@@ -52,7 +56,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
     assert_no_difference ["Visitor.count", "VisitorEmail.count", "VisitorToken.count"] do
       5.times do
-        patch auth_com_sign_in_email_url(ri: "jp"),
+        patch auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
               params: { visitor_email: { pass_code: "000000" } }, headers: { "Host" => @host }
 
         assert_response :unprocessable_content
@@ -84,11 +88,15 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
          params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: { "Host" => @host }
 
     assert_response :see_other
+    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+      flow: VisitorSignInFlow.find_by!(public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref),
+      surface: "com", phase: "PRIMARY_PENDING",
+    )
 
     visitor = create_verified_visitor_with_email(email_address: "shared-signin-#{SecureRandom.hex(8)}@example.test")
     contact = visitor.visitor_emails.last
     contact.finalize_binding!
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { :user_email => { address: contact.address }, "cf-turnstile-response" => "test_token" },
          headers: { "Host" => @host }
 
@@ -104,7 +112,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
         destination_digest: contact.address_digest, valid: false,
       )
     end
-    patch auth_com_sign_in_email_url(ri: "jp"),
+    patch auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { visitor_email: { pass_code: code } },
           headers: { "Host" => @host }
 
@@ -152,6 +160,11 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
          params: { entry_ref: admission.reference, authenticity_token: csrf }, headers: { "Host" => @host }
 
     assert_response :see_other
+    flow_ref = binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref
+    flow = VisitorSignInFlow.find_by!(public_id: flow_ref)
+    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+      flow: flow, surface: "com", phase: "PRIMARY_PENDING",
+    )
   end
 
   teardown do
@@ -160,7 +173,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "get new renders email form" do
-    get new_auth_com_sign_in_email_url(ri: "jp"), headers: { "Host" => @host }
+    get new_auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding), headers: { "Host" => @host }
 
     assert_response :success
     assert_equal "auth/com/sign/in/emails/new", inertia_component
@@ -177,7 +190,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   test "post create with unknown email redirects to edit without visitor email session id" do
     assert_no_difference -> { ActionMailer::Base.deliveries.count } do
-      post auth_com_sign_in_email_url(ri: "jp"),
+      post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
            params: {
              user_email: { address: "missing-visitor@example.com" },
              "cf-turnstile-response": "test",
@@ -194,7 +207,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     visitor = create_verified_visitor_with_email(email_address: "com-login-#{SecureRandom.hex(4)}@example.com")
     email = visitor.visitor_emails.last
 
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            user_email: { address: email.address },
            "cf-turnstile-response": "test",
@@ -212,7 +225,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "post create with invalid email format" do
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            user_email: { address: "invalid-email" },
            "cf-turnstile-response": "test",
@@ -223,7 +236,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "get edit redirects when session is expired" do
-    get edit_auth_com_sign_in_email_url(ri: "jp"), headers: { "Host" => @host }
+    get edit_auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding), headers: { "Host" => @host }
 
     assert_response :redirect
     assert_redirected_to %r{/sign/in/email/new}
@@ -233,13 +246,13 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     visitor = create_verified_visitor_with_email(email_address: "cooldown@example.com")
     email = visitor.visitor_emails.last
 
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
     assert_response :redirect
 
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
@@ -250,13 +263,13 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     visitor = create_verified_visitor_with_email(email_address: "cooldown-message@example.com")
     email = visitor.visitor_emails.last
 
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
     assert_response :redirect
 
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
@@ -273,7 +286,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     travel EmailOtpPolicy::SEND_COOLDOWN + 1.second do
       assert_no_difference -> { ActionMailer::Base.deliveries.count } do
-        post auth_com_sign_in_email_url(ri: "jp"),
+        post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
              params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
              headers: { "Host" => @host }
       end
@@ -286,7 +299,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   test "post create with turnstile failure returns unprocessable content" do
     TurnstileVerifierStub.challenge_response = { "success" => false }
 
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { user_email: { address: "test@example.com" }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
@@ -294,7 +307,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "get edit renders the code page from the address held in session for an unknown address" do
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            user_email: { address: "unknown-visitor-#{SecureRandom.hex(4)}@example.com" },
            "cf-turnstile-response": "test",
@@ -305,7 +318,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_nil session[:user_email_authentication_id]
     assert_predicate session[:user_email_authentication_address], :present?
 
-    get edit_auth_com_sign_in_email_url(ri: "jp"), headers: { "Host" => @host }
+    get edit_auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding), headers: { "Host" => @host }
 
     assert_response :success
     assert_equal "auth/com/sign/in/emails/edit", inertia_component
@@ -316,7 +329,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     visitor = create_verified_visitor_with_email(email_address: "stale-otp-#{SecureRandom.hex(4)}@example.com")
     email = visitor.visitor_emails.last
 
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
@@ -329,7 +342,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_predicate ceremony, :admitted?
     deadline = Time.iso8601(ceremony.email_otp_context.fetch("expires_at"))
     VisitorAuthCeremonySession.stub(:database_now, deadline) do
-      get edit_auth_com_sign_in_email_url(ri: "jp"), headers: { "Host" => @host }
+      get edit_auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding), headers: { "Host" => @host }
     end
 
     assert_response :redirect
@@ -341,7 +354,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     email = visitor.visitor_emails.last
     email.update!(otp_last_sent_at: Time.current)
 
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
@@ -365,7 +378,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
     )
 
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
@@ -377,7 +390,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     visitor = create_verified_visitor_with_email(email_address: "com-otp-#{SecureRandom.hex(4)}@example.com")
     email = visitor.visitor_emails.last
 
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
@@ -390,7 +403,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_predicate ceremony, :admitted?
     code = ceremony.issue_email_otp!(contact: email, destination: email.address)
 
-    patch auth_com_sign_in_email_url(ri: "jp"),
+    patch auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: {
             "visitor_email" => { "pass_code" => code },
             "cf-turnstile-response" => "valid-turnstile-token",
@@ -408,7 +421,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     visitor = create_verified_visitor_with_email(email_address: "com-turnstile-update@example.com")
     email = visitor.visitor_emails.last
 
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            "user_email" => { "address" => email.address },
            "cf-turnstile-response" => "valid-create-token",
@@ -436,7 +449,8 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
       params = { visitor_email: { pass_code: valid_pass_code } }
       params["cf-turnstile-response"] = turnstile_token if turnstile_token
 
-      patch auth_com_sign_in_email_url(ri: "jp"), params: params, headers: { "Host" => @host }
+      patch auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding), params: params,
+                                                                                headers: { "Host" => @host }
 
       assert_response :unprocessable_content
       assert_equal "auth/com/sign/in/emails/edit", inertia_component
@@ -456,13 +470,13 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     visitor = create_verified_visitor_with_email(email_address: "com-bad-#{SecureRandom.hex(4)}@example.com")
     email = visitor.visitor_emails.last
 
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
     assert_response :redirect
 
-    patch auth_com_sign_in_email_url(ri: "jp"),
+    patch auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { visitor_email: { pass_code: "not-a-code" } },
           headers: { "Host" => @host }
 
@@ -475,7 +489,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     visitor = create_verified_visitor_with_email(email_address: "com-wrong-#{SecureRandom.hex(4)}@example.com")
     email = visitor.visitor_emails.last
 
-    post auth_com_sign_in_email_url(ri: "jp"),
+    post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
@@ -492,7 +506,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     correct_code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
     wrong_code = format("%06d", (Integer(correct_code, 10) + 1) % 1_000_000)
 
-    patch auth_com_sign_in_email_url(ri: "jp"),
+    patch auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { visitor_email: { pass_code: wrong_code } },
           headers: { "Host" => @host }
 

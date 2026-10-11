@@ -639,7 +639,7 @@ module Auth::App::Up
       }
 
       assert_response :redirect
-      assert_equal auth_app_sign_in_check_path(ri: "jp"), URI.parse(response.location).request_uri
+      assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
 
       user.reload
 

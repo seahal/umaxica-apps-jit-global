@@ -62,6 +62,12 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
     post auth_com_sign_in_path, params: { entry_ref: @issuance.reference, authenticity_token: csrf, ri: "jp" }
 
     assert_response :see_other
+    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+      flow: VisitorSignInFlow.find_by!(
+        public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+      ),
+      surface: "com", phase: "PRIMARY_PENDING",
+    )
   end
 
   teardown do
@@ -70,17 +76,16 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
   end
 
   test "new requires pending MFA session" do
-    get new_auth_com_sign_in_challenge_passkey_path(ri: "jp"), headers: @origin_headers
+    get mfa_passkey_path, headers: @origin_headers
 
-    assert_response :redirect
-
-    assert_redirected_to auth_com_sign_in_path(ri: "jp")
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
   end
 
   %i(failed foreign_actor advanced).each do |interruption|
     test "late #{interruption} interruption of local MFA returns to Base without issuing root credentials" do
       email = @visitor.visitor_emails.first
-      post auth_com_sign_in_email_path,
+      post auth_com_sign_in_email_path(fb: @primary_sign_in_binding),
            params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test-only", :ri => "jp" }
       delivery_class = OtpEmailNotifierRollout.enabled?(:com) ? OtpNotifierEmailDeliveryJob : OtpMailDeliveryJob
       delivery =
@@ -89,13 +94,13 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
         end
       payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
       code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
-      patch auth_com_sign_in_email_path,
+      patch auth_com_sign_in_email_path(fb: @primary_sign_in_binding),
             params: { :user_email => { pass_code: code },
                       "cf-turnstile-response" => "test-only",
                       :ri => "jp", }
 
       assert_predicate @issuance.transaction.reload, :sign_in_mfa_pending?
-      get new_auth_com_sign_in_challenge_passkey_path(ri: "jp")
+      get mfa_passkey_path
 
       assert_response :success
       challenge_id = session[:passkey_challenges].keys.first
@@ -115,7 +120,7 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
         end
 
       Webauthn::AssertionVerifier.stub(:verify!, verification) do
-        post auth_com_sign_in_challenge_passkey_path(ri: "jp"), params: {
+        post mfa_passkey_submit_path, params: {
           mfa_passkey_form: { challenge_id: challenge_id, credential_json: { id: @passkey.webauthn_id }.to_json },
         }
       end
@@ -141,11 +146,11 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
   test "a stale MFA Cookie cannot reopen a Base flow that has advanced past MFA" do
     establish_pending_mfa!
     @issuance.transaction.advance_sign_in_to_guardrail!
-    get new_auth_com_sign_in_challenge_passkey_path(ri: "jp")
+    get mfa_passkey_path
 
-    assert_response :see_other
-    assert_redirected_to auth_com_sign_in_path(ri: "jp")
-    assert_nil session[:pending_mfa]
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
+    assert_predicate session[:pending_mfa], :present?
     assert_nil session[:passkey_challenges]
     assert_predicate @issuance.transaction.reload, :sign_in_guardrail_pending?
     assert_nil @issuance.transaction.authentication_event_at
@@ -155,11 +160,11 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
     establish_pending_mfa!
     foreign = Visitor.create!(id: 9_118_000_000_000)
     @issuance.transaction.update!(principal_id: foreign.id)
-    get new_auth_com_sign_in_challenge_passkey_path(ri: "jp")
+    get mfa_passkey_path
 
-    assert_response :see_other
-    assert_redirected_to auth_com_sign_in_path(ri: "jp")
-    assert_nil session[:pending_mfa]
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
+    assert_predicate session[:pending_mfa], :present?
     assert_nil session[:passkey_challenges]
     assert_nil @issuance.transaction.reload.authentication_event_at
   end
@@ -171,19 +176,19 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
     @passkey.destroy!
     establish_pending_mfa!
 
-    get new_auth_com_sign_in_challenge_passkey_path(ri: "jp"), headers: @origin_headers
+    get mfa_passkey_path, headers: @origin_headers
 
     assert_response :see_other
-    assert_redirected_to auth_com_sign_in_challenge_path(ri: "jp")
+    assert_redirected_to_path(mfa_challenge_path)
   end
 
   test "new refuses an ACTIVE Passkey whose writer deadline has passed" do
     establish_pending_mfa!
     @passkey.update!(discard_at: VisitorPasskey.database_now)
-    get new_auth_com_sign_in_challenge_passkey_path(ri: "jp")
+    get mfa_passkey_path
 
     assert_response :see_other
-    assert_redirected_to auth_com_sign_in_challenge_path(ri: "jp")
+    assert_redirected_to_path(mfa_challenge_path)
     assert_nil session[:passkey_challenges]
     assert_predicate @issuance.transaction.reload, :sign_in_mfa_pending?
   end
@@ -196,37 +201,37 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
       end
 
     Webauthn::RelyingPartyConfigResolver.stub(:resolve, missing_config) do
-      get new_auth_com_sign_in_challenge_passkey_path(ri: "jp"), headers: @origin_headers
+      get mfa_passkey_path, headers: @origin_headers
     end
 
     assert_response :see_other
-    assert_redirected_to auth_com_sign_in_challenge_path(ri: "jp")
+    assert_redirected_to_path(mfa_challenge_path)
   end
 
   test "create refuses a failed stealth challenge without consuming the passkey challenge" do
     establish_pending_mfa!
-    get new_auth_com_sign_in_challenge_passkey_path(ri: "jp"), headers: @origin_headers
+    get mfa_passkey_path, headers: @origin_headers
     challenge_id = session[:passkey_challenges].keys.first
     TurnstileVerifierStub.challenge_response = { "success" => false }
 
-    post auth_com_sign_in_challenge_passkey_path(ri: "jp"),
+    post mfa_passkey_submit_path,
          params: { mfa_passkey_form: { challenge_id: challenge_id } },
          headers: @origin_headers
 
     assert_response :see_other
-    assert_redirected_to new_auth_com_sign_in_challenge_passkey_path(ri: "jp")
+    assert_redirected_to_path(mfa_passkey_path)
     assert_includes session[:passkey_challenges].keys, challenge_id,
                     "a refused challenge must still be there for the retry"
   end
 
   test "create sends the visitor back to the chooser when the assertion does not verify" do
     establish_pending_mfa!
-    get new_auth_com_sign_in_challenge_passkey_path(ri: "jp"), headers: @origin_headers
+    get mfa_passkey_path, headers: @origin_headers
     challenge_id = session[:passkey_challenges].keys.first
     failure = ->(**) { raise Webauthn::AssertionVerifier::VerificationError, "bad assertion" }
 
     Webauthn::AssertionVerifier.stub(:verify!, failure) do
-      post auth_com_sign_in_challenge_passkey_path(ri: "jp"),
+      post mfa_passkey_submit_path,
            params: {
              mfa_passkey_form: {
                challenge_id: challenge_id,
@@ -244,21 +249,21 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
     end
 
     assert_response :see_other
-    assert_redirected_to auth_com_sign_in_challenge_path(ri: "jp")
+    assert_redirected_to_path(mfa_challenge_path)
   end
 
   test "MFA rejects missing empty scalar array and NUL credential JSON without advancing Base evidence" do
     establish_pending_mfa!
     [nil, "", "{not-json", "null", "[]", "0", "false", "{}", '{"id":null}', '{"id":0}', '{"id":""}',
      '{"id":"\\u0000"}',].each_with_index do |payload, index|
-      get new_auth_com_sign_in_challenge_passkey_path(ri: "jp")
+      get mfa_passkey_path
       challenge_id = session[:passkey_challenges].keys.first
-      post auth_com_sign_in_challenge_passkey_path(ri: "jp"),
+      post mfa_passkey_submit_path,
            params: { mfa_passkey_form: { challenge_id: challenge_id, credential_json: payload }.compact },
            headers: { "REMOTE_ADDR" => "192.0.2.#{index + 1}" }
 
       assert_response :see_other
-      assert_redirected_to auth_com_sign_in_challenge_path(ri: "jp")
+      assert_redirected_to_path(mfa_challenge_path)
       assert_predicate @issuance.transaction.reload, :sign_in_mfa_pending?
       assert_nil @issuance.transaction.authentication_event_at
       assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
@@ -269,11 +274,11 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
   test "create sends the visitor back to the chooser when the credential belongs to another account" do
     other_visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
     establish_pending_mfa!
-    get new_auth_com_sign_in_challenge_passkey_path(ri: "jp"), headers: @origin_headers
+    get mfa_passkey_path, headers: @origin_headers
     challenge_id = session[:passkey_challenges].keys.first
     @passkey.update!(visitor_id: other_visitor.id)
 
-    post auth_com_sign_in_challenge_passkey_path(ri: "jp"),
+    post mfa_passkey_submit_path,
          params: {
            mfa_passkey_form: {
              challenge_id: challenge_id,
@@ -290,13 +295,13 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
          headers: @origin_headers
 
     assert_response :see_other
-    assert_redirected_to auth_com_sign_in_challenge_path(ri: "jp")
+    assert_redirected_to_path(mfa_challenge_path)
   end
 
   test "create verifies passkey and redirects on success" do
     establish_pending_mfa!
 
-    get new_auth_com_sign_in_challenge_passkey_path(ri: "jp"), headers: @origin_headers
+    get mfa_passkey_path, headers: @origin_headers
 
     assert_response :success
 
@@ -305,7 +310,7 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
     verification_context = Struct.new(:sign_count, :verified_at).new(6, Time.current)
 
     Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_com_sign_in_challenge_passkey_path(ri: "jp"),
+      post mfa_passkey_submit_path,
            params: {
              mfa_passkey_form: {
                challenge_id: challenge_id,
@@ -338,6 +343,26 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
   end
 
   private
+
+  def assert_redirected_to_path(path)
+    assert_equal URI.parse(path).path, URI.parse(response.location).path
+  end
+
+  def mfa_binding_params
+    { fb: SignInFlowBindingCodec.encode(flow: @issuance.transaction, surface: "com", phase: "MFA_PENDING") }
+  end
+
+  def mfa_challenge_path
+    auth_com_sign_in_challenge_path(ri: "jp", **mfa_binding_params)
+  end
+
+  def mfa_passkey_path
+    new_auth_com_sign_in_challenge_passkey_path(ri: "jp", **mfa_binding_params)
+  end
+
+  def mfa_passkey_submit_path
+    auth_com_sign_in_challenge_passkey_path(ri: "jp", **mfa_binding_params)
+  end
 
   def establish_pending_mfa!
     email_record = @visitor.visitor_emails.first

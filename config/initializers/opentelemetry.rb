@@ -54,7 +54,16 @@ OpenTelemetry::SDK.configure do |c|
   c.use("OpenTelemetry::Instrumentation::ActionView")
   c.use("OpenTelemetry::Instrumentation::ActiveSupport")
   c.use("OpenTelemetry::Instrumentation::ActiveRecord")
-  c.use("OpenTelemetry::Instrumentation::ActionMailer")
+  c.use(
+    "OpenTelemetry::Instrumentation::ActionMailer",
+    email_address: :omit,
+    notification_payload_transform: lambda { |payload|
+      { "email.x_mailer" => payload["email.x_mailer"] }.compact
+    },
+    process_payload_transform: lambda { |payload|
+      { mailer: payload[:mailer], action: payload[:action] }.compact
+    },
+  )
   c.use("OpenTelemetry::Instrumentation::ActiveJob")
   c.use("OpenTelemetry::Instrumentation::ConcurrentRuby")
   c.use("OpenTelemetry::Instrumentation::Faraday")

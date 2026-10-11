@@ -29,6 +29,7 @@ module GroupAvatarMemberships
         subject_public_id: subject_public_id,
         owner_collective_public_id: observed_group_owner.owner_collective_public_id,
         permission: "avatar.group.detach",
+        avatar: observed_membership.avatar,
       ) do
         Avatar.transaction do
           current_membership = GroupAvatarMembership.find(membership.id)
@@ -37,12 +38,13 @@ module GroupAvatarMemberships
           end
 
           group = AvatarGroup.lock.find(current_membership.avatar_group_id)
+          avatar = Avatar.lock.find(current_membership.avatar_id)
           locked_membership = GroupAvatarMembership.lock.find(membership.id)
           unless locked_membership.avatar_group_id == group.id
             raise ArgumentError, "membership group changed while detaching"
           end
 
-          authorize_group_owner!(group, observed_group_owner)
+          authorize_group_owner!(group, avatar, observed_group_owner)
           next locked_membership unless locked_membership.active?
 
           locked_membership.update!(state: "removed", removed_at: Time.current)
@@ -55,7 +57,7 @@ module GroupAvatarMemberships
 
     attr_reader :membership, :actor, :surface, :subject_public_id, :account_public_id
 
-    def authorize_group_owner!(group, observed_group_owner)
+    def authorize_group_owner!(group, avatar, observed_group_owner)
       unless %w(app org).include?(surface) && account_public_id.present? &&
           account_public_id == subject_public_id && group.account_surface == surface &&
           group.account_public_id == account_public_id
@@ -64,10 +66,25 @@ module GroupAvatarMemberships
 
       owner = AvatarGroupOwnershipPeriod.current.lock.find_by(avatar_group_id: group.id)
       raise ArgumentError, "current group owner missing" unless owner && owner.owner_surface == surface
-      return if [owner.owner_surface, owner.owner_collective_public_id] ==
-        [observed_group_owner.owner_surface, observed_group_owner.owner_collective_public_id]
+      unless [owner.owner_surface, owner.owner_collective_public_id] ==
+          [observed_group_owner.owner_surface, observed_group_owner.owner_collective_public_id]
+        raise AuthorizationDenied, "current group owner changed while detaching"
+      end
 
-      raise AuthorizationDenied, "current group owner changed while detaching"
+      ensure_avatar_permission!(avatar, owner.owner_collective_public_id, "avatar.group.detach")
+    end
+
+    def ensure_avatar_permission!(avatar, collective_public_id, permission)
+      return if AvatarPermissionResolver.call(
+        actor: actor,
+        surface: surface,
+        subject_public_id: subject_public_id,
+        owner_collective_public_id: collective_public_id,
+        permission: permission,
+        avatar: avatar,
+      )
+
+      raise AuthorizationDenied, "#{permission} permission required"
     end
   end
 end

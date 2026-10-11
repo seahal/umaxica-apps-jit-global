@@ -10,6 +10,7 @@ module Auth
             include ::AuthenticationModeSwitchGuard
             include ::PasskeyCeremonyContext
             include ::SurfaceInertiaPage
+            include ::SignInPhaseBindingControllerSupport
 
             include SessionLimitGate
 
@@ -46,6 +47,10 @@ module Auth
               },
             )
 
+            # Keep the repository-wide no-store/FQDN callbacks first.  The phase binding still runs
+            # before the pending-MFA guard and action, so a stale request cannot issue a challenge
+            # or mutate the pending ceremony.
+            before_action -> { enforce_sign_in_phase_binding!(expected_phase: "MFA_PENDING") }
             before_action :ensure_pending_mfa!
 
             def new
@@ -54,7 +59,9 @@ module Auth
 
               if passkeys.empty?
                 redirect_to(
-                  auth_com_sign_in_challenge_path(ri: current_region_identifier),
+                  auth_com_sign_in_challenge_path(
+                    ri: current_region_identifier, **sign_in_mfa_binding_params,
+                  ),
                   status: :see_other,
                 )
                 return
@@ -70,7 +77,9 @@ module Auth
             rescue Webauthn::RelyingPartyConfigResolver::MissingConfigurationError => e
               Rails.logger.error(JitLogEvent.format("webauthn.origin_validation_failed", message: e.message))
               redirect_to(
-                auth_com_sign_in_challenge_path(ri: current_region_identifier),
+                auth_com_sign_in_challenge_path(
+                  ri: current_region_identifier, **sign_in_mfa_binding_params,
+                ),
                 status: :see_other,
               )
             end
@@ -78,7 +87,9 @@ module Auth
             def create
               unless cloudflare_turnstile_stealth_validation["success"]
                 redirect_to(
-                  new_auth_com_sign_in_challenge_passkey_path(ri: current_region_identifier),
+                  new_auth_com_sign_in_challenge_passkey_path(
+                    ri: current_region_identifier, **sign_in_mfa_binding_params,
+                  ),
                   status: :see_other,
                 )
                 return
@@ -91,7 +102,9 @@ module Auth
             rescue Webauthn::ChallengeStore::ChallengeError,
                    Webauthn::AssertionVerifier::VerificationError, WebAuthn::Error
               redirect_to(
-                auth_com_sign_in_challenge_path(ri: current_region_identifier),
+                auth_com_sign_in_challenge_path(
+                  ri: current_region_identifier, **sign_in_mfa_binding_params,
+                ),
                 status: :see_other,
               )
             end
@@ -105,7 +118,9 @@ module Auth
                 title: t("sign.app.in.mfa.passkey.title"),
                 description: t("sign.app.in.mfa.passkey.description"),
                 form: {
-                  action: auth_com_sign_in_challenge_passkey_path(ri: ri),
+                  action: auth_com_sign_in_challenge_passkey_path(
+                    ri: ri, **sign_in_mfa_binding_params,
+                  ),
                   # The assertion is posted as a native document POST, so the form carries the same
                   # masked per-session authenticity token.
                   authenticity_token: form_authenticity_token,
@@ -115,10 +130,19 @@ module Auth
                   request_options: @passkey_request_options,
                   submit_label: t("sign.app.in.mfa.passkey.authenticate"),
                 },
-                back_link: { label: t("sign.app.in.mfa.passkey.back"), href: auth_com_sign_in_challenge_path(ri: ri) },
-                cancel: { label: t("actions.cancel"),
-                          action: auth_com_sign_in_challenge_path(ri: ri),
-                          method: "delete", },
+                back_link: {
+                  label: t("sign.app.in.mfa.passkey.back"),
+                  href: auth_com_sign_in_challenge_path(
+                    ri: ri, **sign_in_mfa_binding_params,
+                  ),
+                },
+                cancel: {
+                  label: t("actions.cancel"),
+                  action: auth_com_sign_in_challenge_path(
+                    ri: ri, **sign_in_mfa_binding_params,
+                  ),
+                  method: "delete",
+                },
               }
             end
 
@@ -156,45 +180,52 @@ module Auth
             def verify_passkey!(challenge)
               credential_payload = mfa_credential_payload
               VisitorPasskey.connection_class_for_self.connected_to(role: :writing) do
-                visitor = pending_mfa_user
-                return redirect_to(
-                  auth_com_sign_in_challenge_path(ri: current_region_identifier),
-                  status: :see_other,
-                ) unless visitor
-
-                visitor.with_lock do
-                  passkey = visitor.visitor_passkeys.lock.find_by(webauthn_id: credential_payload["id"])
-                  unless passkey && visitor.login_allowed? && passkey.status_id == VisitorPasskeyStatus::ACTIVE &&
-                      VisitorPasskey.where(id: passkey.id).exists?(["discard_at > ?", VisitorPasskey.database_now])
-                    SignRiskEmitter.emit(
-                      "auth_failed", visitor_id: visitor.id, ip: request.remote_ip,
-                                     reason: "mfa_passkey_mismatch",
-                    )
-                    return redirect_to(
-                      auth_com_sign_in_challenge_path(ri: current_region_identifier),
-                      status: :see_other,
-                    )
-                  end
-
-                  context = Webauthn::AssertionVerifier.verify!(
-                    credential_params: credential_payload,
-                    challenge: challenge,
-                    config: webauthn_relying_party_config,
-                    public_key: passkey.public_key,
-                    sign_count: passkey.sign_count,
-                    purpose: :mfa_challenge,
-                  )
-                  passkey.update!(
-                    sign_count: context.sign_count, last_used_at: context.verified_at,
-                    uv_verified_at: context.verified_at,
-                  )
-
-                  complete_mfa_login!(visitor)
-                end
+                verify_passkey_for_visitor!(pending_mfa_user, challenge, credential_payload)
               end
             rescue JSON::ParserError
+              redirect_to_mfa_challenge!
+            end
+
+            def verify_passkey_for_visitor!(visitor, challenge, credential_payload)
+              return redirect_to_mfa_challenge! unless visitor
+
+              visitor.with_lock do
+                passkey = visitor.visitor_passkeys.lock.find_by(webauthn_id: credential_payload["id"])
+                unless usable_mfa_passkey?(visitor, passkey)
+                  SignRiskEmitter.emit(
+                    "auth_failed", visitor_id: visitor.id, ip: request.remote_ip,
+                                   reason: "mfa_passkey_mismatch",
+                  )
+                  return redirect_to_mfa_challenge!
+                end
+
+                context = Webauthn::AssertionVerifier.verify!(
+                  credential_params: credential_payload,
+                  challenge: challenge,
+                  config: webauthn_relying_party_config,
+                  public_key: passkey.public_key,
+                  sign_count: passkey.sign_count,
+                  purpose: :mfa_challenge,
+                )
+                passkey.update!(
+                  sign_count: context.sign_count, last_used_at: context.verified_at,
+                  uv_verified_at: context.verified_at,
+                )
+
+                complete_mfa_login!(visitor)
+              end
+            end
+
+            def usable_mfa_passkey?(visitor, passkey)
+              passkey && visitor.login_allowed? && passkey.status_id == VisitorPasskeyStatus::ACTIVE &&
+                VisitorPasskey.where(id: passkey.id).exists?(["discard_at > ?", VisitorPasskey.database_now])
+            end
+
+            def redirect_to_mfa_challenge!
               redirect_to(
-                auth_com_sign_in_challenge_path(ri: current_region_identifier),
+                auth_com_sign_in_challenge_path(
+                  ri: current_region_identifier, **sign_in_mfa_binding_params,
+                ),
                 status: :see_other,
               )
             end

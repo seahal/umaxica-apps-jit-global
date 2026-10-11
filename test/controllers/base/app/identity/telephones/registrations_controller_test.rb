@@ -162,7 +162,7 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
 
     assert_equal 4, payload.fetch(:version)
-    assert_nil pending.credential_registration_otp_context
+    assert_not pending.attributes.key?("credential_registration_otp_context")
     transaction = ClientTelephoneCeremonyTransaction.find_by!(transaction_id: payload.fetch(:otp_binding).fetch(2))
 
     assert_equal pending.public_id, transaction.telephone_candidate_ref

@@ -41,6 +41,37 @@ Existing decisions remain governing:
 - [Notification orchestration via Noticed](notification-orchestration-via-noticed.md).
 - [Observability boundary](../docs/security/observability-boundary.md).
 
+## Local P1 implementation amendment
+
+The first local implementation slice applies the primary controls without changing mail
+delivery, Noticed orchestration, suspension behavior, Sentry, or production infrastructure.
+`config.filter_parameters` keeps broad matching for meaningful secret names, while short
+ambiguous names use explicit Rails `ParameterFilter` regular expressions. `code_verifier` remains
+an explicit sensitive key so narrowing the exact `code` match cannot weaken PKCE protection.
+
+`config.action_mailer.logger = nil` is the common Rails configuration. The installed Rails Railtie
+was inspected and the resulting `ActionMailer::Base.logger` is nil after boot; the test delivery
+adapter and existing surface mailers remain available. The Rails process does not replace
+ActionMailer internals or rewrite MIME.
+
+The installed `opentelemetry-instrumentation-action_mailer` version is 0.8.1. Its formal
+`notification_payload_transform`, `process_payload_transform`, and `email_address: :omit` options
+are configured allowlist-first: delivery spans retain only `email.x_mailer`, and process spans
+retain only `mailer` and `action`. Subject, addresses, arguments, body, MIME and future unknown
+keys are excluded before export. `ObservabilityRedactor` and `ObservabilitySpanScrubber` remain
+secondary controls.
+
+The development Alloy configuration adds a secondary deletion rule for ActionMailer subject,
+address, body/MIME, arguments, OTP and token-shaped attributes. The existing read-only Compose
+mount declarations remain the host-managed configuration boundary. This container has no Alloy or
+Podman binary, so effective remount/write-denial and processor-runtime checks remain unrun. The
+production topology, retention and access policy remain unbuilt and require a separate deployment
+acceptance review.
+
+This amendment records a local implementation slice; it does not close this ADR or the active
+remediation plan. Current evidence is recorded in
+`evidence/2026-10-10-p1-observability-gate3-N6T2.md`.
+
 ## Consequences
 
 Turning off DEBUG alone and encrypting job arguments alone are insufficient completion evidence:

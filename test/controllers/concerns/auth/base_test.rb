@@ -172,11 +172,12 @@ module Auth
         ri.present? ? "/settings?ri=#{ri}" : "/settings"
       end
 
-      def auth_app_sign_in_check_path(ri: nil, pt: nil)
+      def auth_app_sign_in_check_path(ri: nil, pt: nil, fb: nil)
         path = "/sign/in/check"
         query = []
         query << "ri=#{ri}" if ri.present?
         query << "pt=#{pt}" if pt.present?
+        query << "fb=#{fb}" if fb.present?
         query.any? ? "#{path}?#{query.join("&")}" : path
       end
 

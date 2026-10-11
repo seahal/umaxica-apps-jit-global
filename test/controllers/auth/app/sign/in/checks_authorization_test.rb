@@ -55,6 +55,12 @@ class Auth::App::Sign::In::ChecksAuthorizationTest < ActionDispatch::Integration
       assert_equal 303, admission_browser.response.status
     end
     @binding = admission_binding.reload
+    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+      flow: ClientSignInFlow.find_by!(
+        public_id: @binding.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+      ),
+      surface: "app", phase: "PRIMARY_PENDING",
+    )
     @email = @user.client_emails.create!(
       address: "checkpoint-policy-#{SecureRandom.hex(8)}@example.test",
       user_email_status_id: ClientEmailStatus::VERIFIED, confirm_policy: true,
@@ -68,18 +74,19 @@ class Auth::App::Sign::In::ChecksAuthorizationTest < ActionDispatch::Integration
 
   test "the admitted checkpoint authorizes its real actor before handing evidence to Base" do
     perform_enqueued_jobs do
-      post auth_app_sign_in_email_path(ri: "jp"), params: {
+      post auth_app_sign_in_email_path(ri: "jp", fb: @primary_sign_in_binding), params: {
         user_email: { address: @email.address }, "cf-turnstile-response": "test",
       }
     end
 
     assert_response :redirect
     code = ActionMailer::Base.deliveries.last.text_part.body.decoded.match(/Pass Code:\s*([0-9]{6})/).captures.fetch(0)
-    patch auth_app_sign_in_email_path(ri: "jp"), params: { user_email: { pass_code: code } }
+    patch auth_app_sign_in_email_path(ri: "jp", fb: @primary_sign_in_binding),
+          params: { user_email: { pass_code: code } }
 
-    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
     before = ClientToken.where(user_id: @user.id).count
-    get auth_app_sign_in_check_path(ri: "jp")
+    get response.location
 
     assert_response :see_other
     assert_equal auth_app_sign_handoff_path(ri: "jp"), URI.parse(response.location).request_uri

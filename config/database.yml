@@ -63,7 +63,9 @@ default: &default
 <% end %>
 test_default: &test_default
   !!merge <<: *default
-  pool: 2
+  # The committed-transaction concurrency tests retain the test thread's lease
+  # while two worker threads use independent connections.
+  pool: 3
   port: <%= test_port %>
   timeout: 20000
   prepared_statements: false

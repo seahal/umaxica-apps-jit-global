@@ -86,7 +86,18 @@ deletion, secret rotation or production authority.
   Noticed/interceptor semantics.
 - Raw code is absent from durable plaintext job args/logs; existing encrypted envelopes retain exact
   purpose/generation bindings. Email and Telephone migrate separately with no old HOTP/envelope
-  fallback. Removing source proof fields/methods leaves every supported
+  fallback. The runtime `store_otp`/`get_otp`/`clear_otp`/expiry helpers and withdrawal writes to
+  identifier-owned proof fields are removed; the remaining physical source columns are transitional
+  schema data only and may be dropped only after a complete reader/fixture/constraint inventory. At
+  the completed retirement boundary, all six identifier tables lack `otp_private_key`, `otp_counter`
+  and `otp_expires_at`; APP/COM source tables also lack `sign_up_otp_context` and
+  `credential_registration_otp_context`. Ceremony proof fields remain with their concrete owners.
+  Source-proof-only CHECKs, triggers and functions no longer reference the retired columns; current
+  ceremony integrity protections remain. Retirement refuses non-NULL legacy contexts rather than
+  silently destroying proof facts. Inspect PostgreSQL catalogs as well as public model attributes:
+  `ignored_columns` alone does not establish physical removal. Exercise the six-model public
+  contract in `test/models/otp_failure_retention_test.rb`, then supported issuer/consumer
+  regressions. Removing source proof fields/methods leaves every supported
   issuer/resend/verifier/finalizer usable. A Source commit then Ticket failure does not masquerade
   as distributed rollback; original receipt/ audit provenance governs retry and cannot authorize
   another operation.

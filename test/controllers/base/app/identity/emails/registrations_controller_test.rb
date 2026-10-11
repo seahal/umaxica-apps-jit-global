@@ -422,8 +422,8 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     operation_ref = session[:email_registration_transaction_ref]
     flow = ClientEmailCeremonyTransaction.find_by!(transaction_id: operation_ref)
 
-    assert_nil pending.credential_registration_otp_context
-    assert_equal(-Float::INFINITY, pending.otp_expires_at)
+    assert_not pending.attributes.key?("credential_registration_otp_context")
+    assert_not pending.attributes.key?("otp_expires_at")
     assert flow.email_otp_deliverable?(generation: flow.otp_generation, at: flow.class.database_now)
 
     assert_not ClientContactAuditOutbox.exists?(operation_ref: operation_ref)

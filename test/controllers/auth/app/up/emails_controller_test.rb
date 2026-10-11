@@ -485,7 +485,6 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       binding_finalized_at: ClientEmail.database_now,
     )
     before_otp_last_sent_at = existing_email.otp_last_sent_at
-    before_otp_counter = existing_email.otp_counter
     before_otp_attempts_count = existing_email.otp_attempts_count
 
     assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
@@ -502,7 +501,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :redirect
     assert_equal before_otp_last_sent_at, existing_email.reload.otp_last_sent_at
-    assert_equal before_otp_counter, existing_email.otp_counter
+    assert_not existing_email.attributes.key?("otp_counter")
     assert_equal before_otp_attempts_count, existing_email.otp_attempts_count
   end
 
@@ -1308,7 +1307,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     uri = URI.parse(response.location)
 
     assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), uri.host
-    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
 
     user = user_email.reload.user
 
@@ -1626,7 +1625,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     uri = URI.parse(response.location)
 
     assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), uri.host
-    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
     assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
     committed_flow = cycle.attributes
     committed_contact = user_email.reload.attributes
@@ -2264,8 +2263,6 @@ class Auth::App::Sign::Up::EmailsControllerTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -2279,8 +2276,6 @@ class Auth::App::Sign::Up::EmailsControllerTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -2518,8 +2513,6 @@ class Auth::App::Sign::Up::EmailsControllerTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

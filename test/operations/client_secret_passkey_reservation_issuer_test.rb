@@ -13,7 +13,6 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
       if path == :signup
         telephone = actor.client_telephones.create!(
           raw_number: "+819012349876", confirm_policy: "1", confirm_using_mfa: "1",
-          otp_counter: "1", otp_private_key: ROTP::Base32.random_base32,
           user_telephone_status_id: ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
         )
         passkey = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public-key")
@@ -113,7 +112,6 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
     actor = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     telephone = actor.client_telephones.create!(
       raw_number: "+819012349876", confirm_policy: "1", confirm_using_mfa: "1",
-      otp_counter: "1", otp_private_key: ROTP::Base32.random_base32,
       user_telephone_status_id: ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
     )
     passkey = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public-key")

@@ -121,6 +121,36 @@ surface is duplicated deliberately per surface rather than shared.
 - Adding a trigger is deliberately more expensive than adding a validation. That asymmetry is
   intended.
 
+## Current approved Avatar integrity triggers
+
+The Avatar ownership and transfer work uses only the narrow cross-table mechanisms approved by the
+ownership decisions. The trigger inventory test in `test/models/enforcement_triggers_test.rb`
+asserts this set exactly:
+
+- `avatar_enterprise_ownership_periods_integrity` and
+  `avatar_bureau_ownership_periods_integrity` are deferred row triggers for INSERT/UPDATE/DELETE.
+  They lock and increment `avatars.ownership_integrity_version`, then reject a missing owner,
+  multiple current periods, a gap, or a cross-family overlap at commit with SQLSTATE `23514` or
+  `23P01`. They do not rewrite ownership rows or emit audit/notification side effects.
+- `avatar_enterprise_ownership_periods_immutability` and
+  `avatar_bureau_ownership_periods_immutability` reject deletion and owner/start-time mutation;
+  only one finite close of the open period is permitted, with SQLSTATE `45000`.
+- `avatar_enterprise_ownership_periods_no_truncate` and
+  `avatar_bureau_ownership_periods_no_truncate` reject TRUNCATE with SQLSTATE `45000`.
+- `avatar_transfer_reservations_cardinality` and the four
+  `avatar_transfer_detail_{ee,eb,be,bb}_cardinality` deferred constraint triggers require one
+  concrete detail of the registry's declared family at commit. They reject orphan or multiple
+  detail rows with SQLSTATE `23514`; the registry remains type-neutral and the four detail tables
+  remain concrete.
+- `avatar_transfer_reservations_source_period_avatar_integrity` and the four
+  `avatar_transfer_detail_{ee,eb,be,bb}_source_period_avatar_integrity` deferred constraint
+  triggers require each concrete detail's source ownership period to belong to the same Avatar as
+  its registry reservation. They raise SQLSTATE `23514` and do not rewrite rows or choose an owner.
+
+These triggers are created and attached by the same reversible Avatar migrations that create their
+tables. Their execution and direct-SQL rejection are tested against disposable PostgreSQL
+catalogs; no production or shared-database trigger change is authorized by this note.
+
 ## Related
 
 - `adr/unified-enforcement.md`

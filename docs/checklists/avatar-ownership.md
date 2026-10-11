@@ -19,6 +19,10 @@ D-3/D-4/D-10 exceptions; no new SQL/trigger permission is granted here. Follow t
 - Owner persistence has concrete target families: no polymorphic association/STI/type+ID/exclusive
   arc. Shared Ruby interfaces do not become generic persistence. Cross-DB organization/subject
   references retain public identity; local period/Avatar FKs retain concrete DB integrity (ID-3).
+- `AvatarProvisioning::Create` writes the concrete Enterprise or Bureau first period in the same
+  Avatar transaction, using `Avatar.created_at` as its initial boundary. The legacy period remains
+  for the staged reader transition; retained data and direct test factories are not silently
+  treated as migrated concrete ownership.
 - Check schema/associations/resolvers, app initial and org optional provisioning, existing
   [transfer operation tests](../../test/operations/avatar_ownership_transfers_test.rb) and app/org
   controller tests. New concrete-model/provisioning coverage is planned; legacy test names are not
@@ -30,13 +34,23 @@ D-3/D-4/D-10 exceptions; no new SQL/trigger permission is granted here. Follow t
   a creation-consistent boundary. Across Enterprise and Bureau periods, finite immutable start and
   immutable Avatar/owner, strictly later end, `[from,to)` adjacency and final positive infinity
   yield exactly one owner at every valid point, with no gap/overlap.
+- The local concrete period slice now enforces strict intervals, same-family non-overlap, cross-
+  family overlap rejection, an uninterrupted chain, exactly one current period, and direct-SQL
+  history protections in PostgreSQL through
+  `db/avatars_migrate/20261010130000_create_concrete_avatar_ownership_periods.rb`, its validation
+  migration, and the forward immutability repair migration. The concrete Enterprise and Bureau
+  models are explicit, and `test/models/avatar_concrete_ownership_period_test.rb` exercises these
+  paths against the disposable database. New app/org provisioning is covered by
+  `test/services/avatar_provisioning/create_test.rb` and the transfer provisioning regression.
+  Transfer registry integration, independent-connection MVCC coverage, and full four-direction
+  concrete period transition behavior remain unestablished.
 - Attempt missing owner, equal/reversed/nonfinite start, cross-family overlap/gap, duplicate current
   periods and closed-history update/delete/truncate through SQL: DB rejects invalid commit
   explicitly, leaving prior history unchanged. Do not invent historical timestamps or rely only on
   model validation, partial current uniqueness or per-table exclusions.
 - Check actual constraints/deferred triggers and real COMMIT in a new disposable catalog (MIG-3).
-  [Existing period tests](../../test/models/avatar_ownership_period_test.rb) are a starting point;
-  full concrete cross-table COMMIT coverage is planned, not established by transactional fixtures.
+  The same-Avatar interval checks are implemented and verified; full concrete cross-table COMMIT
+  coverage remains planned and is not established by transactional fixtures.
 
 ## AV-3 — Concurrency and trigger boundary
 
@@ -65,9 +79,25 @@ D-3/D-4/D-10 exceptions; no new SQL/trigger permission is granted here. Follow t
 - Source/destination/actor facts stay in concrete detail models. No transfer_type+transfer_id,
   owner_type+owner_id or exclusive arc in the registry. A later lookup that discovers duplicate keys
   is not acceptable eventual consistency; no residual cross-table uniqueness gap.
-- Check registry/detail FKs/uniqueness/deferred checks and simultaneous cross-family transactions.
-  Comprehensive registry schema/tests are planned; use the existing operation/concurrency tests only
-  as legacy behavior references, not substitutes for these new cases.
+- The additive registry/detail schema is implemented in
+  `db/avatars_migrate/20261010150000_create_avatar_transfer_reservations.rb`. It uses one shared
+  idempotency namespace, one pending reservation per Avatar, concrete detail FKs, and a deferred
+  PostgreSQL cardinality trigger that requires exactly one detail of the operation's family at
+  commit. `AvatarOwnershipTransfers::ReservationCreator` creates the registry and its concrete
+  detail in one Avatar-DB transaction and returns the existing reservation only when the immutable
+  request tuple matches. A changed payload is rejected.
+- The forward migration
+  `db/avatars_migrate/20261010180000_enforce_avatar_transfer_source_period_avatar.rb` adds a
+  deferred database guard for the second cross-table invariant: every concrete detail's source
+  ownership period must belong to the same Avatar as its registry reservation. The guard raises
+  SQLSTATE `23514` and cannot be bypassed by direct SQL.
+- `test/models/avatar_transfer_reservation_test.rb` covers direct-SQL cardinality, source-period
+  Avatar mismatch, pending/key uniqueness, same-request replay, changed-input refusal, and two
+  independent committed connections racing on one key. The exact trigger inventory is asserted by
+  `test/models/enforcement_triggers_test.rb`. Existing Request/Accept/Cancel transports still use
+  the legacy transfer table; their writer cutover, four-direction period transition, five-day
+  expiry, authority/generation rechecks, and retry result mapping remain unestablished until the
+  later P12b transition.
 
 ## AV-5 — Stable-key API and recorded-result retry
 
@@ -113,9 +143,25 @@ D-3/D-4/D-10 exceptions; no new SQL/trigger permission is granted here. Follow t
   management/transfer authority is distinct. Exclusive Bindings retain their documented meaning
   rather than becoming Grants by an index drop. No polymorphic subject/owner or disguised
   owner-generation reference.
+- The P10a additive slice now provides explicit concrete tables
+  (`avatar_enterprise_persona_grants` and `avatar_bureau_agent_grants`), bounded capability and
+  revocation constraints, `AvatarAccessGrants::IssueOperation`, and
+  `AvatarAccessGrantResolver`. `AvatarPermissionResolver` consults a matching current-period Grant
+  only when an Avatar is supplied; existing organization-management authority remains a separate
+  membership decision. `test/services/avatar_access_grants_test.rb`,
+  `test/resolvers/avatar_permission_resolver_test.rb`, and the transfer regression cover the
+  implemented public behavior (`24 runs, 132 assertions` in the latest focused run).
 - Check resolver/policy/provisioning public behavior, N:M positives and denial cases plus direct DB
-  integrity. New Grant tests are planned. Independent P10a is not blocked solely by Group semantics;
-  transfer/Group integration remains required before Avatar cutover.
+  integrity. The legacy Binding meaning remains unchanged. The Request/Accept/Cancel transport
+  still has to cut over to the registry and concrete period generations before the complete
+  O1→O2→O1 acceptance path can be claimed. Group membership attach, reorder, and detach now
+  recheck the concrete Avatar Grant under the locked Avatar state while preserving existing
+  organization-owner authority; the public service and policy coverage is in
+  `test/services/group_avatar_memberships_test.rb` and
+  `test/policies/group_avatar_membership_policy_test.rb`. Transfer registry cutover and full
+  Group transition consequences remain required before Avatar cutover. P10a and this Grant
+  integration are independently reviewable and are not blocked solely by the unresolved Group
+  account semantics in AV-8.
 
 ## AV-8 — Group account meaning is not assumed ownership
 
@@ -141,7 +187,12 @@ D-3/D-4/D-10 exceptions; no new SQL/trigger permission is granted here. Follow t
 - Ownership during suspension/logical deletion remains valid. Unresolved attribute/handle/media
   deletion/anonymization policy is recorded separately; preserving history is not indefinite PII
   retention permission. Identifier dead history follows CONTACT-7/9 independently.
-- Check [retention job tests](../../test/jobs/retention_purge_job_test.rb), actual deferral
-  mechanism and repeat/failure paths. Avatar-specific deferral tests are planned where absent. P11b
-  has no prerequisite on P11a, but shared RetentionPurgeJob edits require serialized writes and
-  neighboring regressions.
+- Check [retention job tests](../../test/jobs/retention_purge_job_test.rb) and the focused
+  [Avatar retention tests](../../test/jobs/avatar_retention_purge_test.rb). The implemented
+  `avatar_purge_deferrals` table records an idempotent `(avatar_id, reason_code)` observation and
+  increments it under a row lock; ownership history is never physically deleted by the purge job.
+  An eligible Avatar without concrete ownership history also remains intact, with an explicit
+  `retention_policy_pending` deferral; encrypted moniker history is preserved. The absence of
+  ownership periods does not authorize deletion. Personal-data retention
+  duration and final deletion/anonymization policy remain unresolved and are not inferred from
+  this deferral mechanism.

@@ -46,13 +46,15 @@ class AvatarPermissionResolver
     new(...).call
   end
 
-  def initialize(actor:, surface:, subject_public_id:, owner_collective_public_id:, permission:, lock: false)
+  def initialize(actor:, surface:, subject_public_id:, owner_collective_public_id:, permission:, lock: false,
+                 avatar: nil)
     @actor = actor
     @surface = surface.to_s
     @subject_public_id = subject_public_id.to_s
     @owner_collective_public_id = owner_collective_public_id.to_s
     @permission = permission.to_s
     @lock = lock
+    @avatar = avatar
   end
 
   def call
@@ -63,36 +65,67 @@ class AvatarPermissionResolver
     return false unless actor.is_a?(config.fetch(:actor))
     return false if subject_public_id.blank? || owner_collective_public_id.blank?
 
-    subject = config.fetch(:subject)
-      .joins(config.fetch(:identity_association))
-      .where(public_id: subject_public_id)
-      .where(config.fetch(:identity_table) => { source_record_id: actor.id })
-      .first
+    subject = find_subject(config)
     return false unless subject
 
-    membership_class = config.fetch(:membership)
-    membership_scope = membership_class
-      .active
-      .joins(membership_class.collective_association_name)
-      .where(
-        membership_class.collective_association_name => {
-          public_id: owner_collective_public_id,
-        },
-      )
-      .where(membership_class.account_foreign_key => subject.id)
-    if lock
-      transaction_open = membership_class.connection_pool.with_connection(&:transaction_open?)
-      raise ArgumentError, "membership lock requires an open membership transaction" unless transaction_open
+    membership = find_membership(config, subject)
+    return true if membership.present? && permissions_for_membership(membership, config).include?(permission)
+    return false unless avatar.is_a?(Avatar)
 
-      membership_scope = membership_scope.lock("FOR UPDATE OF #{membership_class.quoted_table_name}")
-    end
-    membership = membership_scope.first
-    membership.present? && permissions_for_membership(membership, config).include?(permission)
+    resolve_avatar_grant(subject)
   end
 
   private
 
-  attr_reader :actor, :surface, :subject_public_id, :owner_collective_public_id, :permission, :lock
+  attr_reader :actor, :surface, :subject_public_id, :owner_collective_public_id, :permission, :lock, :avatar
+
+  def find_subject(config)
+    config.fetch(:subject)
+      .joins(config.fetch(:identity_association))
+      .where(public_id: subject_public_id)
+      .where(config.fetch(:identity_table) => { source_record_id: actor.id })
+      .first
+  end
+
+  def find_membership(config, subject)
+    membership_class = config.fetch(:membership)
+    scope = membership_class
+      .active
+      .joins(membership_class.collective_association_name)
+      .where(membership_class.collective_association_name => { public_id: owner_collective_public_id })
+      .where(membership_class.account_foreign_key => subject.id)
+    return scope.first unless lock
+
+    transaction_open = membership_class.connection_pool.with_connection(&:transaction_open?)
+    raise ArgumentError, "membership lock requires an open membership transaction" unless transaction_open
+
+    scope.lock("FOR UPDATE OF #{membership_class.quoted_table_name}").first
+  end
+
+  def resolve_avatar_grant(subject)
+    concrete_period = current_concrete_period_for(owner_collective_public_id)
+    concrete_period && AvatarAccessGrantResolver.call(
+      avatar: avatar,
+      ownership_period: concrete_period,
+      subject: subject,
+      capability: permission,
+    )
+  end
+
+  def current_concrete_period_for(collective_public_id)
+    case surface
+    when "app"
+      AvatarEnterpriseOwnershipPeriod.current.find_by(
+        avatar_id: avatar.id,
+        enterprise_public_id: collective_public_id,
+      )
+    when "org"
+      AvatarBureauOwnershipPeriod.current.find_by(
+        avatar_id: avatar.id,
+        bureau_public_id: collective_public_id,
+      )
+    end
+  end
 
   def permissions_for_membership(membership, config)
     return OWNER_PERMISSIONS if membership.membership_kind_id == config.fetch(:kind).const_get(:OWNER)

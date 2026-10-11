@@ -528,7 +528,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     assert_no_difference(["Client.count", "ClientExternalIdentity.count", "ClientToken.count"]) do
       get auth_app_social_google_callback_path(ri: "jp"), params: { state: state }, headers: @callback_headers
     end
-    assert_redirected_to auth_app_sign_in_check_url(ri: "jp")
+    assert_equal URI.parse(auth_app_sign_in_check_url(ri: "jp")).path, URI.parse(response.location).path
     assert_equal winner.id, identity.reload.user_id
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
@@ -7843,8 +7843,6 @@ class SocialAuthLoginTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -7858,8 +7856,6 @@ class SocialAuthLoginTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -8119,8 +8115,6 @@ class SocialAuthLoginTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

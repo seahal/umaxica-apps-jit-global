@@ -25,7 +25,10 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     email.finalize_binding!
-    original_proof = email.attributes.slice("otp_private_key", "otp_counter", "otp_expires_at")
+    original_proof = email.attributes.slice(
+      "public_id", "address_digest", "number_digest", "user_id", "visitor_id",
+      "staff_id",
+    )
 
     assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post base_app_identity_withdrawal_session_url(ri: "jp", host: host),
@@ -187,7 +190,10 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
     email.finalize_binding!
-    original_proof = email.attributes.slice("otp_private_key", "otp_counter", "otp_expires_at")
+    original_proof = email.attributes.slice(
+      "public_id", "address_digest", "number_digest", "user_id", "visitor_id",
+      "staff_id",
+    )
 
     assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post base_com_identity_withdrawal_session_url(ri: "jp", host: host),

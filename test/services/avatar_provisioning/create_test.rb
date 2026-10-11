@@ -33,6 +33,10 @@ class AvatarProvisioningCreateTest < ActiveSupport::TestCase
               assert_equal bootstrap.collective.public_id,
                            result.avatar.current_ownership_period.owner_collective_public_id
               assert_predicate result.avatar.current_ownership_period, :current?
+              concrete_period = result.avatar.reload.enterprise_ownership_periods.current.first
+
+              assert_equal bootstrap.collective.public_id, concrete_period.enterprise_public_id
+              assert_equal result.avatar.created_at, concrete_period.valid_from
             end
           end
         end

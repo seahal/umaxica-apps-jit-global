@@ -88,9 +88,15 @@ module Auth
                       )
 
                       assert_equal 303, entry0_browser.response.status
+                      entry0_flow_binding = SignInFlowBindingCodec.encode(
+                        flow: VisitorSignInFlow.find_by!(
+                          public_id: entry0_binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+                        ),
+                        surface: "com", phase: "PRIMARY_PENDING",
+                      )
                     end
                     fx0_session.post(
-                      auth_com_sign_in_email_url(ri: "jp"), params: {
+                      auth_com_sign_in_email_url(ri: "jp", fb: entry0_flow_binding), params: {
                         :user_email => { address: fx0_address },
                         "cf-turnstile-response" => "test_token",
                       },
@@ -163,9 +169,15 @@ module Auth
                       )
 
                       assert_equal 303, entry1_browser.response.status
+                      entry1_flow_binding = SignInFlowBindingCodec.encode(
+                        flow: VisitorSignInFlow.find_by!(
+                          public_id: entry1_binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+                        ),
+                        surface: "com", phase: "PRIMARY_PENDING",
+                      )
                     end
                     fx1_session.post(
-                      auth_com_sign_in_email_url(ri: "jp"), params: {
+                      auth_com_sign_in_email_url(ri: "jp", fb: entry1_flow_binding), params: {
                         :user_email => { address: fx1_address },
                         "cf-turnstile-response" => "test_token",
                       },

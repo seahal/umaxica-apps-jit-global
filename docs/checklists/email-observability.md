@@ -22,8 +22,9 @@ older production/Sentry/broader-review obligations: those remain separately owne
   retain useful matching without uncontrolled widening. Test case/nesting and true/false matches,
   including boundary-similar keys; a regex example is not a substitute for current key inventory.
 - Check [filter tests](../../test/unit/security/filter_parameter_logging_test.rb) and the actual
-  filter_parameter_logging initializer. Extend missing two-sided cases; no current execution is
-  claimed.
+  filter_parameter_logging initializer. The current test covers the two-sided short-key boundary,
+  including `code_verifier`; re-run it against the current checkout rather than treating this
+  statement as a permanent PASS.
 
 ## MAIL-2 — Standard delivery without raw email application logging
 
@@ -37,8 +38,13 @@ older production/Sentry/broader-review obligations: those remain separately owne
   events are not newly forwarded to external sinks. An internal framework payload may still contain
   MIME; this criterion does not claim its removal.
 - Check config/application.rb, installed Rails Railtie setters/order, event_subscribers, three
-  surface mailers and OutboundEmailSuspensionInterceptor. Perform direct safe boot and synthetic
-  capture; all-surface success/suspension/failure/retry behavior coverage is planned where absent.
+  surface mailers and OutboundEmailSuspensionInterceptor. The local logger policy and delivery
+  contract are represented by
+  [the ActionMailer policy test](../../test/unit/security/action_mailer_logging_policy_test.rb),
+  existing [surface mailer tests](../../test/mailers/email/surface_mailers_test.rb), and the
+  interceptor tests. Perform direct safe boot and synthetic capture; all-surface
+  success/suspension/failure/retry behavior coverage remains a current-checkout investigation,
+  not a permanent PASS.
   Do not add setup-only Minitest cases or send real mail to prove configuration.
 
 ## MAIL-3 — Pre-export fixed allowlists
@@ -56,8 +62,11 @@ older production/Sentry/broader-review obligations: those remain separately owne
 - Check installed gem source, initializer and actual synthetic in-memory exported attributes;
   [redactor tests](../../test/unit/security/observability_redactor_test.rb) and
   [span scrubber tests](../../test/unit/security/observability_span_scrubber_test.rb) cover their
-  own behavior. Full ActionMailer allowlist capture tests are planned where absent; source config
-  alone cannot establish the dynamic export boundary. No live collector is used.
+  own behavior. The [initializer contract test](../../test/unit/security/opentelemetry_initializer_test.rb)
+  checks the formal options; the development boot evidence also exercised the two transforms
+  against a synthetic payload. Full exported-span capture remains a separate current-checkout
+  check; source config alone cannot establish the dynamic export boundary. No live collector is
+  used.
 
 ## MAIL-4 — Collector secondary defense
 
@@ -69,7 +78,9 @@ older production/Sentry/broader-review obligations: those remain separately owne
   historical. Startup config loading remains; no management/reload API/port, SIGHUP sender or Rails
   config notifier. Collector protection is not permission for Rails to export secrets first.
 - Check podman/alloy/config.alloy, Compose pin/routing and direct local binary configuration
-  validation; static syntax success and synthetic processor behavior are separate observations.
+  validation; static syntax success and synthetic processor behavior are separate observations. The
+  current static rules are recorded, but the Alloy/Podman runtime is unavailable in this container,
+  so processor execution is NOT_RUN.
   Dynamic processor acceptance is NOT_RUN/BLOCKED if no safe local facility exists. No
   Grafana/Tempo/Loki/SES query or production verification. Do not introduce setup tests or an
   alternate verification framework.

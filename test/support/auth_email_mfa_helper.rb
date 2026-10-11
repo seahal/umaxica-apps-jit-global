@@ -3,7 +3,9 @@
 
 module AuthEmailMfaHelper
   def sign_in_with_email_to_mfa!(surface:, email_record:, email:, headers: {})
-    email_path = public_send("auth_#{surface}_sign_in_email_path", ri: "jp")
+    email_path = public_send(
+      "auth_#{surface}_sign_in_email_path", ri: "jp", fb: @primary_sign_in_binding,
+    )
     challenge_path = public_send("auth_#{surface}_sign_in_challenge_path", ri: "jp")
 
     post(
@@ -39,5 +41,30 @@ module AuthEmailMfaHelper
 
     assert_response((surface.to_sym == :com) ? :see_other : :found)
     assert_equal URI.parse(challenge_path).path, URI.parse(response.location).path
+
+    cycle_class, principal_id =
+      if surface.to_sym == :app
+        [ClientSignInFlow, email_record.user_id]
+      else
+        [VisitorSignInFlow, email_record.visitor_id]
+      end
+    cycle = cycle_class.where(principal_id: principal_id).order(id: :desc).first
+    remember_sign_in_mfa_binding!(cycle, surface)
+  end
+
+  def remember_sign_in_mfa_binding!(cycle, surface)
+    raise RuntimeError, "sign-in flow for MFA binding was not persisted" unless cycle
+
+    @sign_in_mfa_binding = SignInFlowBindingCodec.encode(
+      flow: cycle,
+      surface: surface,
+      phase: "MFA_PENDING",
+    )
+  end
+
+  def sign_in_mfa_path(path_helper, **params)
+    attrs = params.dup
+    attrs[:fb] = @sign_in_mfa_binding if @sign_in_mfa_binding.present?
+    public_send(path_helper, **attrs)
   end
 end

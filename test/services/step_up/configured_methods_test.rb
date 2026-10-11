@@ -63,8 +63,6 @@ class StepUpConfiguredMethodsTest < ActiveSupport::TestCase
     staff.operator_emails.create!(
       address: "configured-staff@example.com",
       staff_identity_email_status_id: OperatorEmailStatus::ACTIVE,
-      otp_counter: "0",
-      otp_private_key: "private_key",
     )
     passkey = staff.operator_passkeys.new(
       webauthn_id: "configured_staff_passkey_#{SecureRandom.hex(4)}",
@@ -194,8 +192,6 @@ class StepUpConfiguredMethodsTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -209,8 +205,6 @@ class StepUpConfiguredMethodsTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -448,8 +442,6 @@ class StepUpConfiguredMethodsTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

@@ -17,6 +17,7 @@ module Auth
         class PasskeysController < ::Auth::App::ApplicationController
           include ::AuthenticationModeSwitchGuard
           include ::SurfaceInertiaPage
+          include ::SignInPhaseBindingControllerSupport
 
           include EmailValidation
 
@@ -31,6 +32,7 @@ module Auth
           prepend_before_action :require_sign_in_ceremony_admission!
           ensure_fqdn_gate_first!
           prepend_before_action :apply_default_no_store
+          before_action -> { enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") }
           before_action :start_minimum_response_budget
           after_action :enforce_minimum_response_budget
 
@@ -46,13 +48,14 @@ module Auth
             scope = "sign.app.authentication.passkey.new"
             pt = signed_pt_param
             ri = current_region_identifier
+            binding = sign_in_flow_binding_params(sign_in_phase_binding_current_flow, phase: "PRIMARY_PENDING")
 
             {
               title: page_t("#{scope}.page_title"),
               description: page_t("#{scope}.description"),
               panel: {
-                options_url: auth_app_sign_in_passkey_options_path(pt: pt, ri: ri),
-                verification_url: auth_app_sign_in_passkey_verification_path(pt: pt, ri: ri),
+                options_url: auth_app_sign_in_passkey_options_path(pt: pt, ri: ri, **binding),
+                verification_url: auth_app_sign_in_passkey_verification_path(pt: pt, ri: ri, **binding),
                 region: ri.to_s,
                 identifier_param: nil,
                 # The stealth site key is public by design and the ERB already published it in the
@@ -64,7 +67,7 @@ module Auth
               },
               back_link: {
                 label: t("sign.app.authentication.new.back"),
-                href: auth_app_sign_in_path(pt: pt, ri: ri),
+                href: auth_app_sign_in_path(pt: pt, ri: ri, **binding),
               },
             }
           end

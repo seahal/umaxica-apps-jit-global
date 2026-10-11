@@ -64,6 +64,12 @@ module Auth::App::In
       post auth_app_sign_in_path, params: { entry_ref: @issuance.reference, authenticity_token: csrf, ri: "jp" }
 
       assert_response :see_other
+      @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+        flow: ClientSignInFlow.find_by!(
+          public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+        ),
+        surface: "app", phase: "PRIMARY_PENDING",
+      )
     end
 
     teardown do
@@ -72,16 +78,17 @@ module Auth::App::In
     end
 
     test "new redirects to sign in when pending_mfa is missing" do
-      get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
+      get mfa_passkey_path
 
-      assert_response :see_other
-      assert_redirected_to auth_app_sign_in_path(ri: "jp")
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
+      assert_nil response.location
     end
 
     %i(failed foreign_actor advanced).each do |interruption|
       test "late #{interruption} interruption of local MFA returns to Base without issuing root credentials" do
         email = @user.client_emails.first
-        post auth_app_sign_in_email_path,
+        post auth_app_sign_in_email_path(fb: @primary_sign_in_binding),
              params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test-only", :ri => "jp" }
         delivery_class = OtpEmailNotifierRollout.enabled?(:app) ? OtpNotifierEmailDeliveryJob : OtpMailDeliveryJob
         delivery =
@@ -90,13 +97,13 @@ module Auth::App::In
           end
         payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
         code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
-        patch auth_app_sign_in_email_path,
+        patch auth_app_sign_in_email_path(fb: @primary_sign_in_binding),
               params: { :user_email => { pass_code: code },
                         "cf-turnstile-response" => "test-only",
                         :ri => "jp", }
 
         assert_predicate @issuance.transaction.reload, :sign_in_mfa_pending?
-        get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
+        get mfa_passkey_path
 
         assert_response :success
         challenge_id = session[:passkey_challenges].keys.first
@@ -116,7 +123,7 @@ module Auth::App::In
           end
 
         Webauthn::AssertionVerifier.stub(:verify!, verification) do
-          post auth_app_sign_in_challenge_passkey_path(ri: "jp"), params: {
+          post mfa_passkey_submit_path, params: {
             mfa_passkey_form: { challenge_id: challenge_id, credential_json: { id: @passkey.webauthn_id }.to_json },
           }
         end
@@ -142,11 +149,11 @@ module Auth::App::In
     test "a stale MFA Cookie cannot reopen a Base flow that has advanced past MFA" do
       travel(31.seconds) { establish_pending_mfa_via_email! }
       @issuance.transaction.advance_sign_in_to_guardrail!
-      get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
+      get mfa_passkey_path
 
-      assert_response :see_other
-      assert_redirected_to auth_app_sign_in_path(ri: "jp")
-      assert_nil session[:pending_mfa]
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
+      assert_predicate session[:pending_mfa], :present?
       assert_nil session[:passkey_challenges]
       assert_predicate @issuance.transaction.reload, :sign_in_guardrail_pending?
       assert_nil @issuance.transaction.authentication_event_at
@@ -156,11 +163,11 @@ module Auth::App::In
       travel(31.seconds) { establish_pending_mfa_via_email! }
       foreign = Client.create!(id: 9_118_000_000_000)
       @issuance.transaction.update!(principal_id: foreign.id)
-      get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
+      get mfa_passkey_path
 
-      assert_response :see_other
-      assert_redirected_to auth_app_sign_in_path(ri: "jp")
-      assert_nil session[:pending_mfa]
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
+      assert_predicate session[:pending_mfa], :present?
       assert_nil session[:passkey_challenges]
       assert_nil @issuance.transaction.reload.authentication_event_at
     end
@@ -172,19 +179,19 @@ module Auth::App::In
       @passkey.destroy!
       travel(31.seconds) { establish_pending_mfa_via_email! }
 
-      get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
+      get mfa_passkey_path
 
       assert_response :see_other
-      assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
+      assert_redirected_to_path(mfa_challenge_path)
     end
 
     test "new refuses an ACTIVE Passkey whose writer deadline has passed" do
       travel(31.seconds) { establish_pending_mfa_via_email! }
       @passkey.update!(discard_at: ClientPasskey.database_now)
-      get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
+      get mfa_passkey_path
 
       assert_response :see_other
-      assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
+      assert_redirected_to_path(mfa_challenge_path)
       assert_nil session[:passkey_challenges]
       assert_predicate @issuance.transaction.reload, :sign_in_mfa_pending?
     end
@@ -197,35 +204,35 @@ module Auth::App::In
         end
 
       Webauthn::RelyingPartyConfigResolver.stub(:resolve, missing_config) do
-        get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
+        get mfa_passkey_path
       end
 
       assert_response :see_other
-      assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
+      assert_redirected_to_path(mfa_challenge_path)
     end
 
     test "create refuses a failed stealth challenge and keeps the passkey challenge for a retry" do
       travel(31.seconds) { establish_pending_mfa_via_email! }
-      get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
+      get mfa_passkey_path
       challenge_id = session[:passkey_challenges].keys.first
       TurnstileVerifierStub.challenge_response = { "success" => false }
 
-      post auth_app_sign_in_challenge_passkey_path(ri: "jp"),
+      post mfa_passkey_submit_path,
            params: { mfa_passkey_form: { challenge_id: challenge_id } }
 
       assert_response :see_other
-      assert_redirected_to new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
+      assert_redirected_to_path(mfa_passkey_path)
       assert_includes session[:passkey_challenges].keys, challenge_id
     end
 
     test "create sends the client back to the chooser when the assertion does not verify" do
       travel(31.seconds) { establish_pending_mfa_via_email! }
-      get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
+      get mfa_passkey_path
       challenge_id = session[:passkey_challenges].keys.first
       failure = ->(**) { raise Webauthn::AssertionVerifier::VerificationError, "bad assertion" }
 
       Webauthn::AssertionVerifier.stub(:verify!, failure) do
-        post auth_app_sign_in_challenge_passkey_path(ri: "jp"), params: {
+        post mfa_passkey_submit_path, params: {
           mfa_passkey_form: {
             challenge_id: challenge_id,
             credential_json: {
@@ -241,21 +248,21 @@ module Auth::App::In
       end
 
       assert_response :see_other
-      assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
+      assert_redirected_to_path(mfa_challenge_path)
     end
 
     test "MFA rejects missing empty scalar array and NUL credential JSON without advancing Base evidence" do
       travel(31.seconds) { establish_pending_mfa_via_email! }
       [nil, "", "{not-json", "null", "[]", "0", "false", "{}", '{"id":null}', '{"id":0}', '{"id":""}',
        '{"id":"\\u0000"}',].each_with_index do |payload, index|
-        get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
+        get mfa_passkey_path
         challenge_id = session[:passkey_challenges].keys.first
-        post auth_app_sign_in_challenge_passkey_path(ri: "jp"),
+        post mfa_passkey_submit_path,
              params: { mfa_passkey_form: { challenge_id: challenge_id, credential_json: payload }.compact },
              headers: { "REMOTE_ADDR" => "192.0.2.#{index + 1}" }
 
         assert_response :see_other
-        assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
+        assert_redirected_to_path(mfa_challenge_path)
         assert_predicate @issuance.transaction.reload, :sign_in_mfa_pending?
         assert_nil @issuance.transaction.authentication_event_at
         assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
@@ -266,11 +273,11 @@ module Auth::App::In
     test "create sends the client back to the chooser when the credential belongs to another account" do
       other_user = Client.create!(mfa_level_enabled: true)
       travel(31.seconds) { establish_pending_mfa_via_email! }
-      get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
+      get mfa_passkey_path
       challenge_id = session[:passkey_challenges].keys.first
       @passkey.update!(user_id: other_user.id)
 
-      post auth_app_sign_in_challenge_passkey_path(ri: "jp"), params: {
+      post mfa_passkey_submit_path, params: {
         mfa_passkey_form: {
           challenge_id: challenge_id,
           credential_json: {
@@ -285,7 +292,7 @@ module Auth::App::In
       }
 
       assert_response :see_other
-      assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
+      assert_redirected_to_path(mfa_challenge_path)
     end
 
     test "create verifies passkey and finalizes login with pending_mfa" do
@@ -293,7 +300,7 @@ module Auth::App::In
         establish_pending_mfa_via_email!
       end
 
-      get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
+      get mfa_passkey_path
 
       assert_response :success
 
@@ -304,7 +311,7 @@ module Auth::App::In
       verification_context = Struct.new(:sign_count, :verified_at).new(11, Time.current)
 
       Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-        post auth_app_sign_in_challenge_passkey_path(ri: "jp"), params: {
+        post mfa_passkey_submit_path, params: {
           mfa_passkey_form: {
             challenge_id: challenge_id,
             credential_json: {
@@ -335,6 +342,26 @@ module Auth::App::In
     end
 
     private
+
+    def assert_redirected_to_path(path)
+      assert_equal URI.parse(path).path, URI.parse(response.location).path
+    end
+
+    def mfa_binding_params
+      { fb: SignInFlowBindingCodec.encode(flow: @issuance.transaction, surface: "app", phase: "MFA_PENDING") }
+    end
+
+    def mfa_challenge_path
+      auth_app_sign_in_challenge_path(ri: "jp", **mfa_binding_params)
+    end
+
+    def mfa_passkey_path
+      new_auth_app_sign_in_challenge_passkey_path(ri: "jp", **mfa_binding_params)
+    end
+
+    def mfa_passkey_submit_path
+      auth_app_sign_in_challenge_passkey_path(ri: "jp", **mfa_binding_params)
+    end
 
     def establish_pending_mfa_via_email!
       sign_in_with_email_to_mfa!(surface: :app, email_record: @email_record, email: @email)

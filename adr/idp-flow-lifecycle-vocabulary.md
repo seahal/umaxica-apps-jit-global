@@ -4,10 +4,12 @@
 
 Accepted (2026-10-01) as documentation and target vocabulary.
 
-Implementation status: the vocabulary and invariants in this ADR are accepted. Runtime migration has
-**not** been performed. Current sign-in, sign-up, and sign-out code still uses its own status names,
-events, and result statuses (including `FAILED`). Nothing in this ADR claims that runtime already
-uses `ACTIVE`, `HALTED`, or the canonical event names. The future migration is planned in
+Implementation status: the vocabulary and invariants in this ADR are accepted. The broad lifecycle
+migration remains incremental. Current sign-in, sign-up, and sign-out code still uses its own
+status names, events, and result statuses (including legacy `FAILED`) where a slice has not yet
+been migrated. The strict sign-in phase-admission amendment below is implemented for its listed
+local flow paths and does not claim that every ceremony has adopted one universal state object. The
+future migration is planned in
 `plans/backlog/idp-flow-state-machine-unification.md`; the reference and current-to-target mapping
 live in `docs/security/idp-flow-lifecycle.md`.
 
@@ -252,6 +254,29 @@ The following are normative for any future shared lifecycle implementation:
 - `docs/security/sign-in-sequence.md`
 - `docs/security/sign-up-sequence.md`
 - `docs/security/logout-sequence.md`
+
+## Strict sign-in phase-admission amendment (2026-10-10)
+
+The implementation adds a purpose-bound, signed server binding for local sign-in requests. It
+records the expected surface, flow public identifier, phase, and immutable generation. The
+binding is an admission capability only; the locked flow row, actor binding, expiry, provider
+transaction where applicable, and the existing Auth/Base session-issuance boundary remain the
+authorities.
+
+Same-phase reload is valid. A contradictory GET or HEAD is rejected with HTTP 409 and the exact
+plain-text body `戻るはだめです`, with no redirect, lifecycle mutation, or credential/session
+side effect. A state-changing request that is bound to the original flow but uses an obsolete or
+otherwise contradictory phase enters `HALTED = 930` with an auditable `phase_regression` or
+`phase_violation` reason. HALTED is absorbing and cannot issue a new session, OTP, challenge, or
+provider transaction. A missing, malformed, cross-surface, or cross-flow binding is refused and
+must not be redirected onto the current session locator or used to halt another flow.
+
+The amendment is intentionally scoped. Local app/com routes and other routes with a local
+`SignInFlow` use the binding; social, Entra, and other provider-owned ceremonies continue to use
+their concrete state and correlation contracts. No browser History API, client-side Back
+detection, raw nonce exposure, or reuse of OAuth state, PKCE, CSRF, or return-target tokens is
+introduced. The existing `commit_login_session!` and `lock_sign_in_flow_for_issuance!` checks are
+retained.
 
 ## Unified implementation amendment (2026-10-06)
 

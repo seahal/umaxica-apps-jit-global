@@ -30,12 +30,25 @@ class SignUpTermination
   def self.call(...)
     new(...).call
   end
+  public_class_method :call
+
+  # Evaluate a system-only halt predicate and, when it matches, perform the halt while the
+  # predicate's row lock is still held. This is intentionally narrower than `call`: callers cannot
+  # supply an arbitrary transition or lifecycle status, and the predicate receives the reloaded
+  # cycle that owns the lock. Cleanup remains after commit, but the decision and HALTED transition
+  # are one database transaction.
+  def self.halt_if_phase_violation(cycle:, &)
+    new(cycle: cycle, event: :halt).halt_if_phase_violation(&)
+  end
+  public_class_method :halt_if_phase_violation
 
   def initialize(cycle:, event:, actor_context: nil)
     @cycle = cycle
     @event = event.to_sym
     @actor_context = actor_context
   end
+
+  public
 
   def call
     return SignUpResult.build(status: :blocked, ticket: cycle, errors: ["ticket is required"]) unless cycle
@@ -61,6 +74,31 @@ class SignUpTermination
 
     run_artifact_cleanup
     SignUpResult.build(status: (event == :cancel) ? :ok : result.status, ticket: cycle.reload, cleanup_required: true)
+  end
+
+  def halt_if_phase_violation
+    raise ArgumentError, "phase-violation predicate required" unless block_given?
+    return nil unless cycle
+
+    decision = nil
+    cycle.with_cycle_lock do
+      cycle.reload
+      decision = yield(cycle)
+      next unless decision.is_a?(Hash) && decision[:halt]
+
+      SignUpStateMachine.call(ticket: cycle, event: :halt, actor_context: nil)
+      cycle.reload
+      schedule_terminal_retention! if terminal_status_reached?
+      decision = decision.merge(
+        halted: cycle.respond_to?(:sign_up_halted?) && cycle.sign_up_halted?,
+        subject: cycle.principal,
+      )
+    end
+
+    return decision unless decision.is_a?(Hash) && decision[:halted]
+
+    run_artifact_cleanup
+    decision
   end
 
   private

@@ -193,8 +193,10 @@ has no lifecycle or policy state; old plain-Root encoding is not accepted by the
 Issuance and verification preserve the existing live Root/device/candidate requirements while
 placing the random verifier, consumption and bounded receipt on the Email ceremony. APP/COM settings
 Email HTTP callers now use this series and store the original child UUID in their surface-local
-session. They do not issue or verify Source HOTP or registration JSON. Those legacy columns and
-remaining Telephone/ORG callers still require retirement before overall completion. The Email
+session. They do not issue or verify Source HOTP or registration JSON. Identifier-owned HOTP
+runtime methods and withdrawal proof writes are retired; the legacy physical columns and remaining
+Telephone/ORG schema consumers still require a verified forward migration before overall completion.
+The Email
 registration delivery binding moves from `{contact_ceremony_transaction_ref,contact_otp_counter}` to
 `{contact_ceremony_transaction_ref,contact_otp_generation}`. Both UUIDs are authoritative ceremony
 facts supplied by issuance; the random code travels only in the existing encrypted transport
@@ -261,7 +263,8 @@ realms have their independent issuer/verifier/finalizer and bound SMS series wir
 coverage passes, while broader authentication regression verification remains open. The unused
 shared signup/registration issuer, finalizer, delivery and `SignOtpCeremony` definitions are removed
 after caller migration; the post-removal focused selection passed 333 cases. Source HOTP/context
-columns and their remaining fixture references still await complete retirement. Full verification
+columns and their remaining fixture references still await complete retirement; the runtime policies
+no longer expose those lifecycle methods or write withdrawal proof markers. Full verification
 remains open.
 
 Internal Email and Telephone transactions can name the supported OTP operations independently of the

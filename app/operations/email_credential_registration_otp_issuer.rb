@@ -124,8 +124,7 @@ class EmailCredentialRegistrationOtpIssuer
     def uncommitted_candidate?(email, now)
       case email
       when ClientEmail, VisitorEmail
-        email.accessible?(now) && !email.binding_finalized_at && !email.binding_released? &&
-          !email.credential_registration_otp_context
+        email.accessible?(now) && !email.binding_finalized_at && !email.binding_released?
       when OperatorEmail then email.staff_email_status_id == OperatorEmailStatus::UNVERIFIED
       else raise ArgumentError, "unsupported Email registration candidate"
       end

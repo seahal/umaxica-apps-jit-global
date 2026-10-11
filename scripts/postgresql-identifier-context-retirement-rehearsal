@@ -1,0 +1,131 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Run through bundle exec rails runner in a manifest-owned disposable test fleet.
+# Requires synthetic fixture principals. Each DDL/proof scenario is fully rolled back.
+raise RuntimeError, "a test-only Rails environment is required" unless Rails.env.test?
+raise RuntimeError, "an owned isolated run is required" if ENV.fetch("POSTGRESQL_ISOLATED_TEST_RUN_ID").empty?
+
+require "json"
+require "securerandom"
+require Rails.root.join("db/app_principals_migrate/20261010232748_retire_client_identifier_otp_contexts")
+require Rails.root.join("db/com_principals_migrate/20261010232752_retire_visitor_identifier_otp_contexts")
+Umaxica::TestEnvironment::DatabaseSafety.verify!
+ActiveRecord::Migration.verbose = false
+cases = 0
+context_columns = %w(sign_up_otp_context credential_registration_otp_context).freeze
+[
+  ["app", Client, ClientEmail, ClientTelephone, :user_id, RetireClientIdentifierOtpContexts],
+  ["com", Visitor, VisitorEmail, VisitorTelephone, :visitor_id, RetireVisitorIdentifierOtpContexts],
+].each do |realm, owner_model, email_model, telephone_model, owner_key, migration_class|
+  owner = owner_model.first!
+  [email_model, telephone_model].each do |model|
+    context_columns.each do |context_column|
+      channel = (model == email_model) ? "email" : "telephone"
+      candidate = (channel == "email") ? "context-refusal@example.test" : "+819012399998"
+      pii_column = (channel == "email") ? "address" : "number"
+      ciphertext = model.type_for_attribute(pii_column).serialize(candidate)
+      status_model = "#{model.name}Status".constantize
+      status_column = "#{owner_key.to_s.delete_suffix("_id")}_#{channel}_status_id"
+      status_column = model.attribute_aliases.fetch(status_column, status_column)
+      status_id = status_model::UNVERIFIED
+      config = model.connection_pool.db_config
+      ActiveRecord::Tasks::DatabaseTasks.with_temporary_connection(config) do |connection|
+        connection.transaction(requires_new: true) do
+          migration_class.new.migrate(:down)
+          now = connection.select_value("SELECT clock_timestamp()").to_time.utc
+          public_id = SecureRandom.urlsafe_base64(16)[0, 21]
+          channel = (model == email_model) ? "email" : "telephone"
+          candidate = (channel == "email") ? "context-refusal@example.test" : "+819012399998"
+          pii_column = (channel == "email") ? "address" : "number"
+          digest =
+            (channel == "email") ? IdentifierBlindIndex.bidx_for_email(
+              candidate,
+              realm: realm,
+            ) : IdentifierBlindIndex.bidx_for_telephone(
+              candidate, realm: realm,
+            )
+          context = {
+            "version" => 1,
+            "surface" => realm,
+            "purpose" => "sign_up",
+            "flow_ref" => "syntheticFlow12345678",
+            "nonce_digest" => "0" * 64,
+            "owner_ref" => owner.public_id,
+            "contact_ref" => public_id,
+            "destination_digest" => digest,
+            "counter" => "0",
+            "code_digest" => "0" * 64,
+            "issued_at" => now.iso8601(6),
+            "expires_at" => (now + 60).iso8601(6),
+            "verified_at" => nil,
+            "result_expires_at" => nil,
+          }
+          if context_column == "credential_registration_otp_context"
+            context.delete("nonce_digest")
+            context.merge!(
+              "purpose" => "credential_registration", "flow_ref" => SecureRandom.uuid,
+              "browser_digest" => "0" * 64, "session_ref" => "syntheticSession12345",
+            )
+          end
+          status_table = connection.quote_table_name(status_model.table_name)
+          exists = connection.select_value(
+            "SELECT EXISTS(SELECT 1 FROM #{status_table} WHERE id = #{connection.quote(status_id)})",
+          )
+          connection.execute("INSERT INTO #{status_table} (id) VALUES (#{connection.quote(status_id)})") unless exists
+          attributes = {
+            owner_key.to_s => owner.id,
+            "public_id" => public_id,
+            status_column => status_id,
+            pii_column => ciphertext,
+            "#{pii_column}_digest" => digest,
+            "created_at" => now,
+            "updated_at" => now,
+            context_column => JSON.generate(context),
+          }
+          names = attributes.keys.map { |name| connection.quote_column_name(name) }.join(", ")
+          values = attributes.values.map { |value| connection.quote(value) }.join(", ")
+          table = connection.quote_table_name(model.table_name)
+          connection.execute("INSERT INTO #{table} (#{names}) VALUES (#{values})")
+          before_checks = connection.check_constraints(model.table_name).map(&:name).sort!
+          trigger_query = <<~SQL.squish
+            SELECT trigger_name FROM information_schema.triggers
+            WHERE event_object_table = #{connection.quote(model.table_name)}
+          SQL
+          before_triggers = connection.select_values(trigger_query).sort!
+          refused = false
+          begin
+            connection.transaction(requires_new: true) { migration_class.new.migrate(:up) }
+          rescue ActiveRecord::MigrationError => e
+            raise unless e.message.include?("#{model.table_name} retains legacy proof contexts")
+
+            refused = true
+          end
+          raise RuntimeError, "non-NULL legacy proof was not refused" unless refused
+
+          stored = connection.select_value(
+            "SELECT #{connection.quote_column_name(context_column)} FROM #{table} " \
+            "WHERE public_id = #{connection.quote(public_id)}",
+          )
+          stored = JSON.parse(stored) if stored.is_a?(String)
+          raise RuntimeError, "proof changed after refusal" unless stored == context
+
+          after_checks = connection.check_constraints(model.table_name).map(&:name).sort!
+          raise RuntimeError, "checks changed after refusal" unless after_checks == before_checks
+
+          after_triggers = connection.select_values(trigger_query).sort!
+          raise RuntimeError, "triggers changed after refusal" unless after_triggers == before_triggers
+
+          puts "#{model.name} #{context_column}: refused; proof, checks and triggers preserved"
+          cases += 1
+          raise ActiveRecord::Rollback
+        end
+        remaining = connection.columns(model.table_name).map(&:name) & context_columns
+        raise RuntimeError, "rehearsal left legacy columns" unless remaining.empty?
+      end
+    end
+  end
+end
+raise RuntimeError, "missing refusal cases" unless cases == 8
+
+puts "Eight non-NULL legacy-proof refusal cases verified; all synthetic changes rolled back"

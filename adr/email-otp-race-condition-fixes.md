@@ -130,9 +130,9 @@ consume the code or count as a failed OTP attempt. This keeps login/account elig
 turning a valid but unauthorized record into a consumed code while still preventing two eligible
 requests from accepting the same code.
 
-The helper remains used by enforcement-recovery and withdrawal-reentry paths. App/com email
-sign-in uses the subordinate Auth challenge below; authenticated settings confirmation uses its
-separate Source proof below rather than the generic consume-before-binding path.
+The helper remains used by enforcement-recovery and withdrawal-reentry paths. App/com email sign-in
+uses the subordinate Auth challenge below; authenticated settings confirmation uses its separate
+Source proof below rather than the generic consume-before-binding path.
 
 Malformed OTP input is rejected before the constant-time comparison. Every record-backed verifier
 must keep the comparison operands at the generated code length; a short, oversized, non-numeric, or
@@ -152,11 +152,11 @@ record is not eligible for delivery, and the resend path does not alter the lock
 
 ### Sign-up ticket binding
 
-The app and com sign-up `SignOtpCeremony` requires the caller to present the `public_id` of the
-same `ClientSignUpFlow` or `VisitorSignUpFlow` ticket that owns the contact record. The service
-rejects a missing or mismatched `session_nonce` before contact lookup, OTP verification, or
-consumption. This is a transaction binding check, not an account identity claim: the ticket and
-its signed flow context remain the authority for progressing the sign-up ceremony.
+The app and com sign-up `SignOtpCeremony` requires the caller to present the `public_id` of the same
+`ClientSignUpFlow` or `VisitorSignUpFlow` ticket that owns the contact record. The service rejects a
+missing or mismatched `session_nonce` before contact lookup, OTP verification, or consumption. This
+is a transaction binding check, not an account identity claim: the ticket and its signed flow
+context remain the authority for progressing the sign-up ceremony.
 
 ### OTP lifetime and secret storage
 
@@ -169,44 +169,46 @@ continues to decrypt it for verification.
 ### App/com flow-specific email authentication evidence
 
 The approved app/com Auth ceremony `email_otp_context` JSONB stores version, server UUID generation,
-surface, authentication purpose, SID digest, parent kind/reference, real/dummy mode, original Contact
-and owner references, destination digest, finalized-binding snapshot, code digest, issue/OTP expiry,
-verification and result-expiry facts. It stores neither a plaintext code nor root/RP authority.
-Verification resolves the original Contact, not a successor owner of the same destination. A dummy
-challenge never authenticates. Resend changes only that ceremony's generation and does not rotate
-the effective Contact's shared code. The OTP deadline is at most ten minutes and is capped by the
-Auth and parent deadlines; the retained verified result has a separate maximum sixty-second deadline
-with the same caps. Reissue after verification is refused, and retries retain the original proof.
+surface, authentication purpose, SID digest, parent kind/reference, real/dummy mode, original
+Contact and owner references, destination digest, finalized-binding snapshot, code digest, issue/OTP
+expiry, verification and result-expiry facts. It stores neither a plaintext code nor root/RP
+authority. Verification resolves the original Contact, not a successor owner of the same
+destination. A dummy challenge never authenticates. Resend changes only that ceremony's generation
+and does not rotate the effective Contact's shared code. The OTP deadline is at most ten minutes and
+is capped by the Auth and parent deadlines; the retained verified result has a separate maximum
+sixty-second deadline with the same caps. Reissue after verification is refused, and retries retain
+the original proof.
 
 New forward migrations add nullable storage, validate the JSON shape, and install owner-approved
-PostgreSQL triggers refusing any change or clearing after `verified_at` is set. Historical migrations
-and committed Contact binding facts are not rewritten.
+PostgreSQL triggers refusing any change or clearing after `verified_at` is set. Historical
+migrations and committed Contact binding facts are not rewritten.
 
-Sign-in mailer and Noticed payloads add `auth_ceremony_session_ref` and
-`auth_email_otp_generation` alongside the existing encrypted OTP. The reference is the canonical
-ceremony `id.to_s` used by the admission/result contract; these models have no public_id column.
-Other purposes omit both fields. Missing or malformed sign-in metadata is an explicit producer
-error. Immediately before transport, each realm's mailer checks the original ceremony, generation,
-destination, bound code, unverified state, active continuity, pending parent and effective Contact
-under parent, Auth and Source owner/Contact locks. Delivery refuses stale evidence without reviving
-it. Issuance and verification also reacquire the owning database clock after Source locking.
-The delivery guard keeps the actual provider call inside these locks; provider latency therefore
-affects contention and must be measured before making production throughput claims. Refusal emits
-an allowlisted operational event without references or code; it is not an authoritative audit row.
+Sign-in mailer and Noticed payloads add `auth_ceremony_session_ref` and `auth_email_otp_generation`
+alongside the existing encrypted OTP. The reference is the canonical ceremony `id.to_s` used by the
+admission/result contract; these models have no public_id column. Other purposes omit both fields.
+Missing or malformed sign-in metadata is an explicit producer error. Immediately before transport,
+each realm's mailer checks the original ceremony, generation, destination, bound code, unverified
+state, active continuity, pending parent and effective Contact under parent, Auth and Source
+owner/Contact locks. Delivery refuses stale evidence without reviving it. Issuance and verification
+also reacquire the owning database clock after Source locking. The delivery guard keeps the actual
+provider call inside these locks; provider latency therefore affects contention and must be measured
+before making production throughput claims. Refusal emits an allowlisted operational event without
+references or code; it is not an authoritative audit row.
 
 ### Shared verification failure budget
 
-The destination counter is shared across candidates, not across channel policy implementations.
-The former `OtpVerificationFailureBudget` class is superseded by independent
+The destination counter is shared across candidates, not across channel policy implementations. The
+former `OtpVerificationFailureBudget` class is superseded by independent
 `EmailOtpVerificationFailureBudget` and `TelephoneOtpVerificationFailureBudget` classes under the
 2026-10-07 current contract. Their existing Valkey key is
 `otp-verification:<surface>:<purpose>:<channel>:<existing destination digest>`. Candidate, flow,
 browser and owner are deliberately absent so recreating those objects cannot reset the shared
-budget. Existing candidate attempt limits remain independent. Atomic verification counts five
-failed comparisons and refuses further comparisons, including a correct code, until the fixed
+budget. Existing candidate attempt limits remain independent. Atomic verification counts five failed
+comparisons and refuses further comparisons, including a correct code, until the fixed
 fifteen-minute window from the first failure expires. Success, resend and refusal do not reset or
 extend that window. Malformed input and stale binding refusal are not comparisons. Invalid stored
-counter state or a dependency outage produces explicit failure, not an account-nonexistence response.
+counter state or a dependency outage produces explicit failure, not an account-nonexistence
+response.
 
 A third party knowing a destination can exhaust its same-scope budget: this deliberate bounded
 denial trade-off cannot be eliminated by changing browsers without restoring the brute-force bypass.
@@ -216,9 +218,9 @@ remain separate. These protections do not claim resistance to every distributed 
 
 ### Signup transport binding
 
-APP/COM signup email retains the original Ticket public ID as `sign_up_flow_ref` and the issued
-HOTP counter as the canonical decimal string `sign_up_otp_counter`. Signup SMS retains the fixed
-tuple `[surface, "sign_up", flow_public_id, contact_public_id, counter_decimal]` inside a version 2
+APP/COM signup email retains the original Ticket public ID as `sign_up_flow_ref` and the issued HOTP
+counter as the canonical decimal string `sign_up_otp_counter`. Signup SMS retains the fixed tuple
+`[surface, "sign_up", flow_public_id, contact_public_id, counter_decimal]` inside a version 2
 encrypted envelope. Other-purpose SMS retains version 1; the existing authenticated encryption
 purpose is unchanged. Version, schema and tuple validation are explicit rather than an attempt to
 recover missing authority from a destination.
@@ -229,12 +231,12 @@ destination, candidate and owner eligibility under Ticket/Source locks. An overd
 Ticket commits its existing expiry and cleanup transition before delivery refusal. Transport runs
 inside those locks; this does not certify production contention or provider throughput.
 
-OTP mail delivery jobs disable argument logging because ActiveJob argument logs do not apply
-the request parameter filter. The new email references are also request-filtered. SMS binding
-and message remain entirely inside authenticated ciphertext.
+OTP mail delivery jobs disable argument logging because ActiveJob argument logs do not apply the
+request parameter filter. The new email references are also request-filtered. SMS binding and
+message remain entirely inside authenticated ciphertext.
 
-Legacy version 1 SMS does not identify purpose or original Ticket. Shared/production residual
-OTP jobs require inspection and safe operational handling before enabling this rollout. That
+Legacy version 1 SMS does not identify purpose or original Ticket. Shared/production residual OTP
+jobs require inspection and safe operational handling before enabling this rollout. That
 prerequisite is unverified; destination-based reconstruction and silent fallback are prohibited.
 Known old signup email lacking its binding fails explicitly rather than delivering unbound code.
 
@@ -268,19 +270,19 @@ telephone candidate (references and digests below are placeholders, not runtime 
 }
 ```
 
-The owning server supplies all fields; channel is derived from the concrete candidate model and
-is included in the keyed digest tuple. No raw code or OTP private key is persisted in this context.
-Verification consumes the candidate OTP and establishes `verified_at` and `result_expires_at` in
-the same Source transaction. The fixed result deadline is the earlier of Source verification plus
-60 seconds and the original Ticket deadline. Original references, destination, owner eligibility,
+The owning server supplies all fields; channel is derived from the concrete candidate model and is
+included in the keyed digest tuple. No raw code or OTP private key is persisted in this context.
+Verification consumes the candidate OTP and establishes `verified_at` and `result_expires_at` in the
+same Source transaction. The fixed result deadline is the earlier of Source verification plus 60
+seconds and the original Ticket deadline. Original references, destination, owner eligibility,
 release, parent terminal state and deadline are checked on every exact-input retry; shared and
 candidate failure limits still apply to comparisons. Success and refusal do not extend the proof.
 
 Forward shape/finite-time constraints and verified-proof immutability triggers protect direct SQL
-writes as well. An initially implemented timestamp order CHECK admitted PostgreSQL infinity;
-public direct-write regressions drove additional forward finite UTC timestamp checks rather than
-editing an already applied migration. Missing old proof is refused rather than inferred from a
-status or destination. Shared rollout remains unverified.
+writes as well. An initially implemented timestamp order CHECK admitted PostgreSQL infinity; public
+direct-write regressions drove additional forward finite UTC timestamp checks rather than editing an
+already applied migration. Missing old proof is refused rather than inferred from a status or
+destination. Shared rollout remains unverified.
 
 An OTP endpoint whose Source verification committed but whose first Ticket transition failed may
 retry that original result while the Ticket still serves its OTP step. The controller's preliminary
@@ -290,19 +292,19 @@ checkpoint progression and finalization remain separate effects; the proof is no
 
 ### Authenticated Contact confirmation
 
-The approved nullable Source `credential_registration_otp_context` belongs to each APP/COM email
-or telephone candidate. Its exact fifteen-key shape is:
+The approved nullable Source `credential_registration_otp_context` belongs to each APP/COM email or
+telephone candidate. Its exact fifteen-key shape is:
 
 ```text
 version, surface, purpose, flow_ref, browser_digest, session_ref, owner_ref, contact_ref,
 destination_digest, counter, code_digest, issued_at, expires_at, verified_at, result_expires_at
 ```
 
-Version is 1; purpose is `credential_registration`. The original Contact ceremony UUID, Base
-browser nonce digest, server-resolved root public ID, owner/candidate public IDs and existing
-destination digest bind issuance. The canonical unsigned decimal HOTP counter identifies the
-issued generation; its code digest is keyed over the channel and complete issuance binding.
-The context contains no plaintext code, private key, raw browser marker or root authority.
+Version is 1; purpose is `credential_registration`. The original Contact ceremony UUID, Base browser
+nonce digest, server-resolved root public ID, owner/candidate public IDs and existing destination
+digest bind issuance. The canonical unsigned decimal HOTP counter identifies the issued generation;
+its code digest is keyed over the channel and complete issuance binding. The context contains no
+plaintext code, private key, raw browser marker or root authority.
 
 `ContactRegistrationOtpIssuer` snapshots these facts under Source owner/Contact and Ticket
 device/root locks. `ContactRegistrationOtpVerificationCommitter` reacquires owning DB clocks under
@@ -314,10 +316,10 @@ extend the result. Auth and signup contexts are not reused for this purpose.
 
 Each concrete Contact Action Policy supplies the complete protected-operation requirement.
 `ContactRegistrationOtpFinalizer` checks that current policy and the still-live credential/root
-immediately before replacement, after acquiring previous-binding and credential locks. The
-named Source model writer finalizes the candidate; previous binding release and both audit intents
-share its Source transaction. Only after Source commits does the original Contact Ticket receive
-its server-issued receipt. Source failure preserves the verified proof and pending Ticket. Receipt
+immediately before replacement, after acquiring previous-binding and credential locks. The named
+Source model writer finalizes the candidate; previous binding release and both audit intents share
+its Source transaction. Only after Source commits does the original Contact Ticket receive its
+server-issued receipt. Source failure preserves the verified proof and pending Ticket. Receipt
 failure preserves committed Source binding/audit facts and the pending Ticket; original-operation
 reconciliation neither creates another candidate nor repeats release or audit. This is ordered
 cross-database recovery, not a claim of one cross-database atomic transaction.
@@ -335,34 +337,34 @@ existing encrypted OTP fields. SMS uses encrypted version 2 with the fixed tuple
 `[surface, "credential_registration", transaction_uuid, contact_public_id, counter_decimal]`.
 `ContactRegistrationOtpDeliveryIssuer` resolves only those original records and holds Source and
 Ticket locks through actual transport. Verified, reissued, expired, released or root-revoked
-evidence refuses delivery. The SMS worker validates the decrypted body against the existing
-default or localized message template and current HOTP; it does not guess a code or reconstruct
-missing legacy authority from a destination.
+evidence refuses delivery. The SMS worker validates the decrypted body against the existing default
+or localized message template and current HOTP; it does not guess a code or reconstruct missing
+legacy authority from a destination.
 
 `ContactRegistrationOtpResendIssuer` locks the original pending flow, root, owner and Contact,
-rechecks the existing thirty-second email cooldown, then replaces only the pending generation.
-The original challenge and Ticket deadlines, browser/root bindings and both failure budgets remain
+rechecks the existing thirty-second email cooldown, then replaces only the pending generation. The
+original challenge and Ticket deadlines, browser/root bindings and both failure budgets remain
 unchanged. APP email HTTP resend uses that issuer and bound delivery payload; verified proof refuses
 reissue while retaining the original verification retry. No COM email resend route is introduced.
 
 New forward migrations add nullable storage, exact shape and finite-time checks, and owner-approved
-verified-proof immutability triggers. They neither change historical migrations nor backfill old
-OTP authority. Direct SQL cannot clear or replace a verified proof. Root revocation clears the
-Step-Up Session's challenge secret while preserving its original reference, RP, Origin, deadline
-and existing burn timestamp; this preserves the challenge binding CHECK during early discard.
-Session revocation uses its own locked DB clock and never extends an existing deadline.
+verified-proof immutability triggers. They neither change historical migrations nor backfill old OTP
+authority. Direct SQL cannot clear or replace a verified proof. Root revocation clears the Step-Up
+Session's challenge secret while preserving its original reference, RP, Origin, deadline and
+existing burn timestamp; this preserves the challenge binding CHECK during early discard. Session
+revocation uses its own locked DB clock and never extends an existing deadline.
 
 All four real signed-Passkey HTTP Source-failure/retry journeys and independent-connection delivery
-lock tests, APP email HTTP resend and APP/COM first-email bootstrap passed locally.
-Bootstrap HTTP receipt-fault recovery and settings cancellation closure remain incomplete;
-this record does not certify rollout. Shared/production legacy OTP job inspection and safe handling
-remain required before enabling version-two delivery. Live-provider throughput remains unmeasured.
+lock tests, APP email HTTP resend and APP/COM first-email bootstrap passed locally. Bootstrap HTTP
+receipt-fault recovery and settings cancellation closure remain incomplete; this record does not
+certify rollout. Shared/production legacy OTP job inspection and safe handling remain required
+before enabling version-two delivery. Live-provider throughput remains unmeasured.
 
 ## Trade-offs
 
 - `with_lock` holds `SELECT ... FOR UPDATE` on the email row for the whole read-modify-write, which
-  serializes concurrent attempts on the same row. Production contention is not certified here; unlike a
-  raw `update_all`, model callbacks/validations and the windowed-reset / lockout logic are
+  serializes concurrent attempts on the same row. Production contention is not certified here;
+  unlike a raw `update_all`, model callbacks/validations and the windowed-reset / lockout logic are
   preserved.
 - `SELECT ... FOR UPDATE` on the email row serializes concurrent signup requests for the same
   address. Provider calls held inside delivery locks also affect contention; production impact must
@@ -380,3 +382,24 @@ remain required before enabling version-two delivery. Live-provider throughput r
   input handling
 - `app/models/concerns/otp_lockable.rb` — bounded attempt history and resend invalidation
 - `app/models/concerns/email.rb` / `app/models/concerns/telephone.rb` — encrypted OTP secret storage
+
+## P3d source-proof retirement
+
+The current nine.md contract replaces identifier-owned serialized proof with concrete ceremony-owned
+verifiers and original-operation receipts. The earlier source-context protections above describe the
+superseded storage generation, not current runtime authority. Forward retirement removes only the
+previously named source-proof functions/triggers and context CHECKs, while preserving current
+ceremony constraints and all failure budgets.
+
+The retirement migrations take transactional table locks through constraint DDL before checking for
+non-NULL contexts. Such rows cause explicit failure and transaction rollback; retirement does not
+silently discard, translate or authorize legacy proof. Writers must be quiescent before
+retained-data cutover. This local rehearsal uses approved owned disposable databases and grants no
+shared/production operation permission.
+
+Reverse rehearsal restores nullable source columns and their exact historical DDL from unchanged
+migration definitions. It restores schema shape only, with NULL contexts, not old proof values or
+authority. Restored nullable columns allow the original checks to be validated in the same
+transaction under the scoped safety explanation. This does not reactivate legacy writers or
+authorize live rollback; retained-data recovery remains an independent controlled operation. No new
+trigger or general raw-SQL permission is introduced.

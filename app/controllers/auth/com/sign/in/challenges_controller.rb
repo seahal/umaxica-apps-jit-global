@@ -8,9 +8,11 @@ module Auth
         class ChallengesController < ::Auth::Com::ApplicationController
           include ::AuthenticationModeSwitchGuard
           include ::SurfaceInertiaPage
+          include ::SignInPhaseBindingControllerSupport
 
           AUTHENTICATION_MODE = :guest
 
+          before_action -> { enforce_sign_in_phase_binding!(expected_phase: "MFA_PENDING") }
           before_action :ensure_pending_mfa!
 
           public
@@ -40,7 +42,9 @@ module Auth
               methods: mfa_challenge_methods,
               no_methods_notice: @can_use_passkey ? nil : t("sign.app.in.mfa.no_methods_available"),
               cancel: { label: t("actions.cancel"),
-                        action: auth_com_sign_in_challenge_path(ri: params[:ri]),
+                        action: auth_com_sign_in_challenge_path(
+                          ri: params[:ri], **sign_in_mfa_binding_params,
+                        ),
                         method: "delete", },
             }
           end
@@ -52,7 +56,7 @@ module Auth
               {
                 key: "passkey",
                 label: t("sign.app.in.mfa.methods.passkey"),
-                href: new_auth_com_sign_in_challenge_passkey_path,
+                href: new_auth_com_sign_in_challenge_passkey_path(**sign_in_mfa_binding_params),
               },
             ]
           end

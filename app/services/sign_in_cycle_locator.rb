@@ -37,7 +37,7 @@ class SignInCycleLocator
     @allow_principal_without_token = allow_principal_without_token
   end
 
-  def current
+  def current(include_terminal: false)
     payload = current_payload
     return nil unless payload
 
@@ -46,7 +46,7 @@ class SignInCycleLocator
     return nil unless cycle.nonce_matches?(payload.fetch("nonce"))
     return nil unless actor_binding_valid?(cycle)
     return nil unless token_binding_valid?(cycle)
-    return nil if terminal?(cycle)
+    return nil if terminal?(cycle) && !include_terminal
 
     cycle
   rescue KeyError
@@ -114,7 +114,8 @@ class SignInCycleLocator
   end
 
   def terminal?(cycle)
-    cycle.sign_in_completed? || cycle.sign_in_failed?
+    cycle.sign_in_completed? || cycle.sign_in_failed? || cycle.sign_in_expired? ||
+      cycle.sign_in_cancelled? || cycle.sign_in_halted?
   end
 
   def ensure_supported_cycle!(cycle)

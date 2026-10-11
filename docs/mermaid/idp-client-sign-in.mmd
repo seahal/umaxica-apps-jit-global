@@ -4,6 +4,10 @@ stateDiagram-v2
     %% The owning transaction returns an expiry refusal; callers unwrap only after commit.
     %% A refused locked operation rolls back its savepoint before persisting expiry.
     %% Current sign-in graph; routing and session-limit resolution are separate axes.
+    %% HTTP phase admission is an observation: contradictory GET/HEAD returns 409 and has no
+    %% lifecycle edge. A correctly bound unsafe phase mismatch enters HALTED with a phase reason;
+    %% an invalid binding is refused and never redirects or halts another flow.
+    %% Provider-owned ceremonies keep their concrete transaction authority.
     state "PRIMARY_PENDING id=10" as PRIMARY_PENDING
     state "MFA_PENDING id=20" as MFA_PENDING
     state "GUARDRAIL_PENDING id=40" as GUARDRAIL_PENDING

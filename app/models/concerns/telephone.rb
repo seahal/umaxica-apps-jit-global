@@ -9,8 +9,6 @@ module Telephone
   # Requires:
   # - number
   # - number_digest
-  # - otp_counter
-  # - otp_private_key
   # - otp_attempts_count
   #
   # Optional:

@@ -13,7 +13,7 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
 
   teardown { Flipper.disable(RetentionPurgeJob::FEATURE_NAME) }
 
-  test "set-based Avatar purge cascades through encrypted moniker history" do
+  test "Avatar purge deferral preserves encrypted moniker history" do
     handle = Handle.create!(
       handle: "purge-avatar-#{SecureRandom.hex(4)}",
       cooldown_until: Time.current,
@@ -32,15 +32,16 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
     current_moniker = avatar.current_avatar_moniker
     avatar.update_columns(purge_eligible_at: 1.hour.ago)
 
-    assert_difference -> { Avatar.count }, -1 do
-      assert_difference -> { AvatarMoniker.count }, -2 do
+    assert_no_difference -> { Avatar.count } do
+      assert_no_difference -> { AvatarMoniker.count } do
         RetentionPurgeJob.perform_now
       end
     end
 
-    assert_not Avatar.exists?(avatar.id)
-    assert_not AvatarMoniker.exists?(former_moniker.id)
-    assert_not AvatarMoniker.exists?(current_moniker.id)
+    assert Avatar.exists?(avatar.id)
+    assert AvatarMoniker.exists?(former_moniker.id)
+    assert AvatarMoniker.exists?(current_moniker.id)
+    assert AvatarPurgeDeferral.exists?(avatar_id: avatar.id, reason_code: "retention_policy_pending")
   end
 
   test "rejects a retention batch size outside the bounded execution range" do

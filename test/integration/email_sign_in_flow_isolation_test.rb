@@ -93,6 +93,12 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
           end
 
         assert_not_equal ceremonies.first.id, ceremonies.last.id
+        flow_bindings =
+          ceremonies.map do |ceremony|
+            flow_class = (surface == "app") ? ClientSignInFlow : VisitorSignInFlow
+            flow = flow_class.find_by!(public_id: ceremony.reload.local_sign_in_flow_ref)
+            SignInFlowBindingCodec.encode(flow:, surface:, phase: "PRIMARY_PENDING")
+          end
         host = (surface == "app") ? ENV.fetch("PUBLIC_AUTH_SERVICE_URL") : ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
         headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
         codes = []
@@ -101,7 +107,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
         original_time = Time.current
         browsers.each_with_index do |browser, index|
           travel_to(original_time + (index * (EmailOtpPolicy::SEND_COOLDOWN + 1.second)))
-          browser.get("/sign/in/email/new", params: { ri: "jp" })
+          browser.get("/sign/in/email/new", params: { ri: "jp", fb: flow_bindings.fetch(index) })
 
           assert_equal 200, browser.response.status
           csrf_meta = browser.response.parsed_body.at_css('meta[name="csrf-token"]')
@@ -117,6 +123,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
                 :authenticity_token => csrf,
                 "cf-turnstile-response" => "test",
                 :ri => "jp",
+                :fb => flow_bindings.fetch(index),
               }, headers:,
             )
           end
@@ -134,7 +141,10 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
           assert_withheld("sign-in issuance must leave Contact OTP generation unchanged") {
             source_generation == contact.reload.attributes.slice(*source_generation.keys)
           }
-          browser.get(URI.parse(browser.response.location).request_uri, params: { ri: "jp" })
+          browser.get(
+            URI.parse(browser.response.location).request_uri,
+            params: { ri: "jp", fb: flow_bindings.fetch(index) },
+          )
 
           assert_equal 200, browser.response.status
           edit_props << JSON.parse(browser.response.parsed_body.at_css('script[data-page="app"]').text).fetch("props")
@@ -148,7 +158,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
             assert_withheld("issuance must persist a Ticket challenge") { @first_context.present? }
             # B is genuinely throttled before the identifier window expires;
             # swapping the clock-aware store does not bypass the existing limit.
-            browsers.last.get("/sign/in/email/new", params: { ri: "jp" })
+            browsers.last.get("/sign/in/email/new", params: { ri: "jp", fb: flow_bindings.fetch(1) })
             cooldown_csrf = browsers.last.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
             browsers.last.post(
               "/sign/in/email", params: {
@@ -156,6 +166,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
                 :authenticity_token => cooldown_csrf,
                 "cf-turnstile-response" => "test",
                 :ri => "jp",
+                :fb => flow_bindings.fetch(1),
               }, headers:,
             )
 
@@ -177,7 +188,9 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
         second_before = ceremonies.last.reload.email_otp_context.deep_dup
         browsers.last.post(
           second_resend.fetch("endpoint"), params: {
-            state: first_resend.fetch("state"), authenticity_token: edit_csrf_tokens.last,
+            state: first_resend.fetch("state"),
+            authenticity_token: edit_csrf_tokens.last,
+            fb: flow_bindings.fetch(1),
           }, headers:, as: :json,
         )
 
@@ -194,7 +207,9 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
         perform_enqueued_jobs do
           browsers.last.post(
             second_resend.fetch("endpoint"), params: {
-              state: second_resend.fetch("state"), authenticity_token: edit_csrf_tokens.last,
+              state: second_resend.fetch("state"),
+              authenticity_token: edit_csrf_tokens.last,
+              fb: flow_bindings.fetch(1),
             }, headers:, as: :json,
           )
         end
@@ -219,6 +234,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
             :authenticity_token => edit_csrf_tokens.first,
             "cf-turnstile-response" => "test",
             :ri => "jp",
+            :fb => flow_bindings.fetch(0),
           }, headers:,
         )
 

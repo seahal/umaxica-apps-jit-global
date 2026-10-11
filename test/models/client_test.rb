@@ -200,13 +200,13 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "boundary values: public_id must be unique" do
-    @user.public_id = "duplicate-id"
-    @user.save!
+    existing_user = Client.create!(public_id: "duplicate-id", status_id: ClientStatus::NOTHING)
 
     duplicate_user = Client.new(public_id: "duplicate-id")
 
     assert_not duplicate_user.valid?
     assert_not_empty duplicate_user.errors[:public_id]
+    assert_equal "duplicate-id", existing_user.reload.public_id
   end
 
   test "boundary values: public_id length" do

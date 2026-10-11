@@ -117,6 +117,28 @@ module AvatarProvisioning
         avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE,
         valid_from: Time.current,
       )
+      create_concrete_ownership_period!(avatar)
+    end
+
+    def create_concrete_ownership_period!(avatar)
+      attributes = {
+        avatar: avatar,
+        valid_from: avatar.created_at,
+      }
+      case owner_surface
+      when "app"
+        AvatarEnterpriseOwnershipPeriod.create!(
+          **attributes,
+          enterprise_public_id: owner_collective_public_id,
+        )
+      when "org"
+        AvatarBureauOwnershipPeriod.create!(
+          **attributes,
+          bureau_public_id: owner_collective_public_id,
+        )
+      else
+        raise ArgumentError, "unsupported concrete owner surface: #{owner_surface.inspect}"
+      end
     end
 
     def create_binding!(avatar)

@@ -96,9 +96,12 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
 
           assert_equal 303, admission_browser.response.status
         end
+        phase_binding = SignInFlowBindingCodec.encode(
+          flow: admission_issuance.transaction, surface: surface, phase: "PRIMARY_PENDING",
+        )
         browser.post(
           "/sign/in/email", params: {
-            :user_email => { address: destination }, "cf-turnstile-response" => "test",
+            :user_email => { address: destination }, "cf-turnstile-response" => "test", :fb => phase_binding,
           },
         )
 
@@ -145,7 +148,10 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
       end
       real = open_session
       dummy = open_session
-      source_generation = contact.attributes.slice("otp_private_key", "otp_counter", "otp_expires_at")
+      source_generation = contact.attributes.slice(
+        "public_id", "address_digest", "number_digest", "user_id",
+        "visitor_id", "staff_id",
+      )
       begin
         admission_browser = real
         admission_surface = surface
@@ -191,6 +197,9 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
 
         assert_equal 303, admission_browser.response.status
       end
+      real_phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: surface, phase: "PRIMARY_PENDING",
+      )
       begin
         admission_browser = dummy
         admission_surface = surface
@@ -236,13 +245,18 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
 
         assert_equal 303, admission_browser.response.status
       end
+      dummy_phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: surface, phase: "PRIMARY_PENDING",
+      )
       paths = []
       # Equal-length input isolates binding-existence leakage from the caller-known address length.
       [[real, address], [dummy, "parity-fake-#{SecureRandom.hex(8)}@example.test"]].each do |browser, destination|
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         browser.post(
           "/sign/in/email", params: {
-            :user_email => { address: destination }, "cf-turnstile-response" => "test",
+            :user_email => { address: destination },
+            "cf-turnstile-response" => "test",
+            :fb => ((browser == real) ? real_phase_binding : dummy_phase_binding),
           },
         )
 
@@ -271,6 +285,19 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
           JSON.parse(fv5006.text).fetch("props")
         end
       resend_key = (surface == "app") ? "otp_resend" : "resend"
+
+      # Each admitted flow receives its own purpose-bound capability.  It is intentionally
+      # different between the real and dummy browser, so compare the rendered contract after
+      # removing only that opaque binding while retaining the rest of the page shape.
+      [real_props, dummy_props].each do |props|
+        container = props.fetch("form", props)
+        action = container.fetch("action")
+        query = Rack::Utils.parse_nested_query(URI.parse(action).query.to_s)
+        query.delete("fb")
+        uri = URI.parse(action)
+        uri.query = URI.encode_www_form(query)
+        container["action"] = uri.path + (uri.query.present? ? "?#{uri.query}" : "")
+      end
 
       assert_equal real_props.fetch(resend_key).fetch("state").bytesize,
                    dummy_props.fetch(resend_key).fetch("state").bytesize
@@ -302,7 +329,9 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         browser.patch(
           "/sign/in/email", params: {
-            :user_email => { pass_code: wrong }, "cf-turnstile-response" => "test",
+            :user_email => { pass_code: wrong },
+            "cf-turnstile-response" => "test",
+            :fb => ((browser == real) ? real_phase_binding : dummy_phase_binding),
           },
         )
 
@@ -326,6 +355,16 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
           JSON.parse(fv5000.text).fetch("props")
         end
 
+      [real_refusal, dummy_refusal].each do |props|
+        container = props.fetch("form", props)
+        action = container.fetch("action")
+        query = Rack::Utils.parse_nested_query(URI.parse(action).query.to_s)
+        query.delete("fb")
+        uri = URI.parse(action)
+        uri.query = URI.encode_www_form(query)
+        container["action"] = uri.path + (uri.query.present? ? "?#{uri.query}" : "")
+      end
+
       assert_equal real_refusal.except(resend_key, "authenticity_token"),
                    dummy_refusal.except(resend_key, "authenticity_token")
       assert_not_empty real_refusal.fetch("form_errors")
@@ -338,7 +377,10 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
 
       cancellation_paths = []
       [real, dummy].each do |browser|
-        browser.delete("/sign/in/email", params: { pt: nil })
+        browser.delete(
+          "/sign/in/email",
+          params: { pt: nil, fb: ((browser == real) ? real_phase_binding : dummy_phase_binding) },
+        )
 
         assert_equal 303, browser.response.status
         cancellation_paths << URI.parse(browser.response.location).path
@@ -349,7 +391,10 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
 
         assert_not cancelled.email_otp_challenge_current?(contact: expected_contact)
         assert_equal :missing_challenge, cancelled.verify_email_otp!(code: wrong).status
-        browser.get("/sign/in/email/edit", params: { ri: "jp" })
+        browser.get(
+          "/sign/in/email/edit",
+          params: { ri: "jp", fb: ((browser == real) ? real_phase_binding : dummy_phase_binding) },
+        )
 
         assert_equal 302, browser.response.status
       end

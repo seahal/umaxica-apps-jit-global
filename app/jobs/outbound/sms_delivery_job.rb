@@ -61,12 +61,7 @@ module Outbound
         else raise ArgumentError, "unsupported Telephone registration delivery realm"
         end
       transaction = transaction_model.find_by(transaction_id: binding.transaction_ref)
-      telephone =
-        if binding.surface == "org"
-          telephone_model.find_by(id: binding.candidate_ref)
-        else
-          telephone_model.find_by(public_id: binding.candidate_ref)
-        end
+      telephone = telephone_model.find_by(public_id: binding.candidate_ref)
       return false unless transaction && telephone
 
       TelephoneCredentialRegistrationOtpDeliveryGuard.call(

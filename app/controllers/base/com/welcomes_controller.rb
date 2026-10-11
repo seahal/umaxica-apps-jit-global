@@ -6,10 +6,14 @@ module Base
     class WelcomesController < Base::Com::ApplicationController
       include ::SurfaceInertiaPage
       include ::SignInWelcomeGate
+      include ::SignInPhaseBindingControllerSupport
 
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
+      before_action -> {
+        enforce_sign_in_phase_binding!(expected_phase: %w(SESSION_ISSUANCE_PENDING COMPLETED))
+      }
       before_action :continue_welcome_sequence_without_content!
 
       def show

@@ -69,6 +69,27 @@ class GroupAvatarMembershipPolicyTest < ActiveSupport::TestCase
     ).create?
   end
 
+  test "a concrete Avatar grant authorizes a member through the public policy" do
+    @bootstrap.account.persona_memberships
+      .find_by!(enterprise: @bootstrap.collective)
+      .update!(membership_kind_id: PersonaMembershipKind::MEMBER)
+    period = @bootstrap.avatar.reload.enterprise_ownership_periods.current.first
+    %w(avatar.group.attach avatar.group.manage avatar.group.detach).each do |capability|
+      AvatarAccessGrants::IssueOperation.call(
+        ownership_period: period,
+        subject: @bootstrap.account,
+        capability: capability,
+        granted_by_actor_public_id: @user.public_id,
+      )
+    end
+
+    policy = GroupAvatarMembershipPolicy.new(new_membership(avatar: @bootstrap.avatar), user: @user)
+
+    assert_predicate policy, :create?
+    assert_predicate policy, :update?
+    assert_predicate policy, :destroy?
+  end
+
   test "a stale cross-owner membership is denied for attach but remains detachable by group owner" do
     other = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
     other_avatar = BaseSelectorBootstrapAuthority.call(surface: :app, principal: other).avatar

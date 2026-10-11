@@ -75,11 +75,9 @@ module TelephoneContactBinding
         end
         discarded = [created_at, now].max
         deadline = [deadline, discarded].max unless deadline == Float::INFINITY
-        update!(
-          status_column => suspended, :otp_private_key => "withdrawn", :otp_counter => "0",
-          :otp_expires_at => -Float::INFINITY, :discard_at => discarded,
-          :purge_eligible_at => deadline,
-        )
+        update_attributes = { discard_at: discarded, purge_eligible_at: deadline }
+        update_attributes[status_column] = suspended
+        update!(update_attributes)
       end
     end
     self

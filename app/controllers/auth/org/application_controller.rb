@@ -96,6 +96,8 @@ module Auth
 
       private
 
+      def sign_in_phase_binding_surface = "org"
+
       def verification_setup_redirect_path(pt: nil, scope: nil)
         base_org_verification_setup_url(
           ri: params[:ri], pt: pt || encoded_step_up_pt, scope: scope,

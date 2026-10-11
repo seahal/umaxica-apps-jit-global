@@ -54,6 +54,9 @@ class ComSessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
       nonce_digest: VisitorSignInFlow.digest_nonce(nonce),
     )
     SignInCycleLocator.new(base.session, surface: "com").issue!(issuance.transaction, nonce: nonce)
+    primary_binding = SignInFlowBindingCodec.encode(
+      flow: issuance.transaction, surface: "com", phase: "PRIMARY_PENDING",
+    )
     session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
     jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
     jar.encrypted[session_key] = { value: base.session.to_hash.stringify_keys }
@@ -84,7 +87,7 @@ class ComSessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     clear_enqueued_jobs
     OtpEmailNotifierRollout.stub(:enabled?, true) do
-      post auth_com_sign_in_email_url(ri: "jp"),
+      post auth_com_sign_in_email_url(ri: "jp", fb: primary_binding),
            params: { :user_email => { address: email.address }, "cf-turnstile-response" => "t" }
     end
 
@@ -94,7 +97,7 @@ class ComSessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
     assert_not_nil job
     delivery = ActiveJob::Arguments.deserialize(job.fetch(:args)).last.fetch(:params).symbolize_keys
     code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
-    patch auth_com_sign_in_email_url(ri: "jp"),
+    patch auth_com_sign_in_email_url(ri: "jp", fb: primary_binding),
           params: { "visitor_email" => { "pass_code" => code }, "cf-turnstile-response" => "t" }
     follow_redirect! if response.redirect?
     follow_redirect! if response.redirect?

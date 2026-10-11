@@ -9,6 +9,7 @@ module Auth
           class TotpsController < ::Auth::App::ApplicationController
             include ::AuthenticationModeSwitchGuard
             include ::SurfaceInertiaPage
+            include ::SignInPhaseBindingControllerSupport
 
             include ::TurnstilePageProps
 
@@ -75,6 +76,7 @@ module Auth
               end
             end
 
+            before_action -> { enforce_sign_in_phase_binding!(expected_phase: "MFA_PENDING") }
             before_action :ensure_pending_mfa!
 
             def new
@@ -125,7 +127,7 @@ module Auth
                 title: page_t("#{scope}.title"),
                 description: page_t("#{scope}.description"),
                 form: {
-                  action: auth_app_sign_in_challenge_totp_path,
+                  action: auth_app_sign_in_challenge_totp_path(**sign_in_mfa_binding_params),
                   method: "post",
                   token_field: {
                     scope: "totp_challenge_form",
@@ -143,8 +145,15 @@ module Auth
                 error_heading: t("errors.messages.validation_failed"),
                 form_errors: @totp_form.errors.full_messages,
                 turnstile: turnstile_stealth_props,
-                back_link: { label: page_t("#{scope}.back"), href: auth_app_sign_in_challenge_path },
-                cancel: { label: t("actions.cancel"), action: auth_app_sign_in_challenge_path, method: "delete" },
+                back_link: {
+                  label: page_t("#{scope}.back"),
+                  href: auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
+                },
+                cancel: {
+                  label: t("actions.cancel"),
+                  action: auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
+                  method: "delete",
+                },
               }
             end
 

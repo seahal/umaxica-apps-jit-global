@@ -43,8 +43,6 @@ class IdentifierHmacEmergencyRotationTest < ActiveSupport::TestCase
       visitor: @visitor,
       raw_number: "+1 (555) #{rand(100..999)}-#{rand(1000..9999)}",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
     )
 
     records = [
@@ -193,8 +191,6 @@ class IdentifierHmacEmergencyRotationTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -208,8 +204,6 @@ class IdentifierHmacEmergencyRotationTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -447,8 +441,6 @@ class IdentifierHmacEmergencyRotationTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

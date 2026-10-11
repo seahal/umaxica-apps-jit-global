@@ -12,9 +12,6 @@
 #  number                            :string           default(""), not null
 #  number_digest                     :string
 #  otp_attempts_count                :integer          default(0), not null
-#  otp_counter                       :text             default(""), not null
-#  otp_expires_at                    :datetime         default(-Infinity), not null
-#  otp_private_key                   :string           default(""), not null
 #  purge_eligible_at                         :datetime         default(Infinity), not null
 #  created_at                        :datetime         not null
 #  updated_at                        :datetime         not null
@@ -38,6 +35,11 @@
 #
 
 class ClientTelephone < AppPrincipalRecord
+  # P3d removes identifier-owned proof; ceremony transactions own verification material.
+  self.ignored_columns += %w(
+    otp_private_key otp_counter otp_expires_at sign_up_otp_context credential_registration_otp_context
+  )
+
   include Retainable
   include Telephone
   include TelephoneDeadIdentifierHistory
@@ -47,9 +49,8 @@ class ClientTelephone < AppPrincipalRecord
 
   IDENTIFIER_REALM = "app"
   encrypts :number, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
-  encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
 
-  self.filter_attributes += %w(number sign_up_otp_context credential_registration_otp_context)
+  self.filter_attributes += %w(number)
 
   alias_attribute :user_telephone_status_id, :user_identity_telephone_status_id
 
@@ -66,12 +67,11 @@ class ClientTelephone < AppPrincipalRecord
   # Note: :number validation is now handled by Telephone concern (E.164 normalization)
   validates :number, presence: true
   validates :otp_attempts_count, presence: true, numericality: { only_integer: true }
-  validates :otp_counter, presence: true
-  validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :user_identity_telephone_status_id, numericality: { only_integer: true }
   validates :number_digest, presence: true, if: :binding_effective?
 
   after_initialize :initialize_telephone_otp_state
+
   before_destroy :archive_dead_telephone_identifier, prepend: true
 
   after_initialize do

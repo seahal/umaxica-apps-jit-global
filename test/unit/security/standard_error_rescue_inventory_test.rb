@@ -49,10 +49,10 @@ class StandardErrorRescueInventoryTest < ActiveSupport::TestCase
       classification: "preference refresh transport side effect; resolution errors are re-raised separately",
     },
     "app/controllers/concerns/authentication_base.rb" => {
-      count: 4,
-      # The refresh-path rescue was removed: issuer and database failures must propagate instead of
-      # becoming invalid_refresh_token (adr/invalid-browser-credential-recovery.md).
-      classification: "mixed legacy inventory; each site needs follow-up before changing behavior",
+      count: 3,
+      # The refresh-path and redirect-path broad fallbacks were removed: issuer, database, and
+      # redirect construction failures must propagate instead of becoming guessed destinations.
+      classification: "mixed legacy inventory; each remaining site needs follow-up before changing behavior",
     },
     "app/controllers/concerns/passkey_sign_in_flow.rb" => {
       count: 2,

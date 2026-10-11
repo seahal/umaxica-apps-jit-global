@@ -135,10 +135,11 @@ module AuthenticationRedirects
     redirect_to_pt_destination!(destination)
   end
 
-  def sign_in_checkpoint_path(pt: nil)
+  def sign_in_checkpoint_path(pt: nil, cycle: nil)
     attrs = { ri: current_region_identifier }
     safe_pt = signed_pt_token(pt)
     attrs[AuthIoKeys::Params::PT] = safe_pt if safe_pt.present?
+    attrs.merge!(sign_in_flow_binding_params(cycle)) if cycle
 
     if respond_to?(:auth_app_sign_in_check_path, true)
       auth_app_sign_in_check_path(**attrs)
@@ -151,11 +152,12 @@ module AuthenticationRedirects
     end
   end
 
-  def sign_in_welcome_path(pt: nil, id: nil)
+  def sign_in_welcome_path(pt: nil, id: nil, cycle: nil)
     surface = sign_in_surface
     attrs = { ri: current_region_identifier }
     safe_pt = signed_pt_token(pt)
     attrs[AuthIoKeys::Params::PT] = safe_pt if safe_pt.present?
+    attrs.merge!(sign_in_flow_binding_params(cycle)) if cycle
     _ = id
 
     case surface
@@ -179,6 +181,18 @@ module AuthenticationRedirects
       )
     end
   end
+
+  def sign_in_flow_binding_params(cycle, phase: nil)
+    return {} unless cycle
+
+    phase ||= cycle.class.state_name_for(cycle.state_id)
+    {
+      AuthIoKeys::Params::FLOW_BINDING => SignInFlowBindingCodec.encode(
+        flow: cycle, surface: sign_in_surface, phase: phase,
+      ),
+    }
+  end
+  private :sign_in_flow_binding_params
 
   def sign_in_dashboard_path(pt: nil)
     _ = pt

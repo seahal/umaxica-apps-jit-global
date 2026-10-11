@@ -13,10 +13,7 @@
 #  locked_at                 :datetime         default(Infinity), not null
 #  notifiable                :boolean          default(TRUE), not null
 #  otp_attempts_count        :integer          default(0), not null
-#  otp_counter               :text             default(""), not null
-#  otp_expires_at            :datetime         default(-Infinity), not null
 #  otp_last_sent_at          :datetime         default(-Infinity), not null
-#  otp_private_key           :string           default(""), not null
 #  promotional               :boolean          default(TRUE), not null
 #  purge_eligible_at                 :datetime         default(Infinity), not null
 #  subscribable              :boolean          default(TRUE), not null
@@ -44,6 +41,11 @@
 #  fk_rails_...  (visitor_id => visitors.id)
 #
 class VisitorEmail < ComPrincipalRecord
+  # P3d removes identifier-owned proof; ceremony transactions own verification material.
+  self.ignored_columns += %w(
+    otp_private_key otp_counter otp_expires_at sign_up_otp_context credential_registration_otp_context
+  )
+
   include PublicId
   include Retainable
   include Email
@@ -56,7 +58,6 @@ class VisitorEmail < ComPrincipalRecord
   IDENTIFIER_REALM = "com"
   encrypts :address, downcase: true,
                      key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
-  encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
 
   attribute :visitor_email_status_id, default: VisitorEmailStatus::UNVERIFIED
 
@@ -67,18 +68,17 @@ class VisitorEmail < ComPrincipalRecord
 
   validates :address, presence: true
   validates :otp_attempts_count, presence: true, numericality: { only_integer: true }
-  validates :otp_counter, presence: true
-  validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :visitor_email_status_id, numericality: { only_integer: true }
   validates :address_digest, presence: true, if: :binding_effective?
 
   after_initialize :initialize_email_otp_state
+
   before_destroy :archive_dead_email_identifier, prepend: true
   before_destroy :prevent_destroy_when_undeletable
 
   scope :effective_binding, -> { where.not(binding_finalized_at: nil).where(binding_released_at: nil) }
 
-  self.filter_attributes += %w(address sign_up_otp_context credential_registration_otp_context)
+  self.filter_attributes += %w(address)
   mfa_status_owner :visitor
 
   public

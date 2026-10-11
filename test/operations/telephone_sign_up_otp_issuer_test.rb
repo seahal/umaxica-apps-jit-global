@@ -358,7 +358,10 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
       )
-      original = telephone.attributes.slice("otp_private_key", "otp_counter", "otp_expires_at", "sign_up_otp_context")
+      original = telephone.attributes.slice(
+        "public_id", "address_digest", "number_digest", "user_id", "visitor_id",
+        "staff_id",
+      )
       denied = TelephoneSignUpOtpIssuer.call(flow: flow, telephone: telephone, session_nonce: flow.public_id)
 
       assert_equal :session_mismatch, denied.status
@@ -441,7 +444,10 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
       )
-      original = telephone.attributes.slice("otp_private_key", "otp_counter", "otp_expires_at", "sign_up_otp_context")
+      original = telephone.attributes.slice(
+        "public_id", "address_digest", "number_digest", "user_id", "visitor_id",
+        "staff_id",
+      )
       resend = TelephoneSignUpOtpIssuer.call(flow: flow, telephone: telephone, session_nonce: nonce)
       scope = { flow: flow, telephone: telephone, session_nonce: nonce }
       foreign = TelephoneSignUpOtpVerificationCommitter.call(

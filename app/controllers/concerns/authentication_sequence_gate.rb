@@ -12,9 +12,11 @@ module AuthenticationSequenceGate
 
     if cycle
       url_pt = signed_pt_token(pt || cycle.return_to)
-      return sign_in_checkpoint_path(pt: url_pt) if cycle.sign_in_checkpoint_pending?
-      return sign_in_selector_path(pt: url_pt) if cycle.sign_in_selector_pending?
-      return issue_welcome_gate_and_path(pt: url_pt, sequence_id: cycle.public_id) if cycle.sign_in_completed?
+      return sign_in_checkpoint_path(pt: url_pt, cycle: cycle) if cycle.sign_in_checkpoint_pending?
+      return sign_in_selector_path(pt: url_pt, cycle: cycle) if cycle.sign_in_selector_pending?
+      return issue_welcome_gate_and_path(
+        pt: url_pt, sequence_id: cycle.public_id, cycle: cycle,
+      ) if cycle.sign_in_completed?
       return reject_invalid_sign_in_sequence_path(default_path) unless cycle.sign_in_guardrail_pending?
 
       result =
@@ -24,7 +26,7 @@ module AuthenticationSequenceGate
       return reject_invalid_sign_in_sequence_path(default_path) if result.is_a?(FlowTransitionResult)
       return default_path if result.blocking?
 
-      return sign_in_checkpoint_path(pt: url_pt)
+      return sign_in_checkpoint_path(pt: url_pt, cycle: cycle.reload)
     end
 
     default_path
@@ -74,11 +76,14 @@ module AuthenticationSequenceGate
         end
       return reject_invalid_sign_in_sequence! if result.is_a?(FlowTransitionResult)
       if result.blocking?
-        return redirect_to(sign_in_checkpoint_path(pt: cycle.reload.return_to.presence || pt), **safe_redirect_options)
+        return redirect_to(
+          sign_in_checkpoint_path(pt: cycle.reload.return_to.presence || pt, cycle: cycle.reload),
+          **safe_redirect_options,
+        )
       end
 
       return redirect_to(
-        sign_in_selector_path(pt: cycle.reload.return_to.presence || pt),
+        sign_in_selector_path(pt: cycle.reload.return_to.presence || pt, cycle: cycle.reload),
         **safe_redirect_options,
       )
     end
@@ -114,7 +119,7 @@ module AuthenticationSequenceGate
         return
       end
       redirect_to_surface_url(
-        issue_welcome_gate_and_path(pt: cycle.return_to, sequence_id: cycle.public_id),
+        issue_welcome_gate_and_path(pt: cycle.return_to, sequence_id: cycle.public_id, cycle: cycle),
       )
       return
     end
@@ -204,8 +209,8 @@ module AuthenticationSequenceGate
       return redirect_to(decision.target)
     end
     return redirect_to(sign_in_session_limit_path) if session_limit_resolution
-    return redirect_to(sign_in_checkpoint_path(pt: cycle.return_to)) if cycle.sign_in_checkpoint_pending?
-    return redirect_to(sign_in_selector_path(pt: cycle.return_to)) if cycle.sign_in_selector_pending?
+    return redirect_to(sign_in_checkpoint_path(pt: cycle.return_to, cycle: cycle)) if cycle.sign_in_checkpoint_pending?
+    return redirect_to(sign_in_selector_path(pt: cycle.return_to, cycle: cycle)) if cycle.sign_in_selector_pending?
     return redirect_to(after_welcome_path) unless welcome_gate_available?
     return redirect_to(after_welcome_path) unless consume_welcome_gate!(sequence_id: cycle.public_id)
 
@@ -250,7 +255,7 @@ module AuthenticationSequenceGate
     return reject_invalid_sign_in_sequence! unless result[:status] == :success
 
     redirect_to_surface_url(
-      issue_welcome_gate_and_path(pt: cycle.reload.return_to, sequence_id: cycle.public_id),
+      issue_welcome_gate_and_path(pt: cycle.reload.return_to, sequence_id: cycle.public_id, cycle: cycle.reload),
     )
   rescue SignInSelectorParticipant::Error
     reject_invalid_sign_in_sequence!
@@ -268,7 +273,7 @@ module AuthenticationSequenceGate
       return
     end
 
-    redirect_to(sign_in_selector_path(pt: cycle.return_to))
+    redirect_to(sign_in_selector_path(pt: cycle.return_to, cycle: cycle))
   end
 
   def dashboard_sequence_step_required?
@@ -287,10 +292,11 @@ module AuthenticationSequenceGate
     Actor.tld
   end
 
-  def sign_in_selector_path(pt: nil)
+  def sign_in_selector_path(pt: nil, cycle: nil)
     attrs = { ri: current_region_identifier }
     safe_pt = signed_pt_token(pt)
     attrs[AuthIoKeys::Params::PT] = safe_pt if safe_pt.present?
+    attrs.merge!(sign_in_flow_binding_params(cycle)) if cycle
 
     if respond_to?(:sign_app_selector_path, true)
       sign_app_selector_path(**attrs)
@@ -318,7 +324,7 @@ module AuthenticationSequenceGate
     false
   end
 
-  def issue_welcome_gate_and_path(pt:, sequence_id: nil)
+  def issue_welcome_gate_and_path(pt:, sequence_id: nil, cycle: nil)
     clear_welcome_gate!
     session[welcome_gate_key] = {
       "remaining" => 5,
@@ -326,7 +332,7 @@ module AuthenticationSequenceGate
       "expires_at" => 10.minutes.from_now.to_i,
       "sequence_id" => sequence_id.presence,
     }
-    sign_in_welcome_path(pt: pt)
+    sign_in_welcome_path(pt: pt, cycle: cycle)
   end
 
   def require_sign_in_sequence_participant!(participant:, policy_rule:)

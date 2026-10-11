@@ -35,7 +35,7 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
       controller.show
     end
 
-    assert_equal "/sign/in/check?ri=jp", controller.redirected_to
+    assert_bound_redirect(controller.redirected_to, "/sign/in/check", cycle, "GUARDRAIL_PENDING")
     assert_equal before_attrs, guarded_cycle_attrs(cycle.reload)
   end
 
@@ -60,7 +60,7 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
 
     controller.show
 
-    assert_equal "/sign/in/check?ri=jp", controller.redirected_to
+    assert_bound_redirect(controller.redirected_to, "/sign/in/check", cycle, "CHECKPOINT_PENDING")
     assert_equal before_attrs, guarded_cycle_attrs(cycle.reload)
   end
 
@@ -70,7 +70,7 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
 
     controller.show
 
-    assert_equal "/sign/in/selector?pt=/dashboard", controller.redirected_to
+    assert_bound_redirect(controller.redirected_to, "/sign/in/selector", cycle, "SELECTOR_PENDING", pt: "/dashboard")
   end
 
   test "session issuance state redirects to welcome sequence path" do
@@ -79,7 +79,9 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
 
     controller.show
 
-    assert_equal "/sign/in/welcome?pt=/dashboard", controller.redirected_to
+    assert_bound_redirect(
+      controller.redirected_to, "/sign/in/welcome", cycle, "SESSION_ISSUANCE_PENDING", pt: "/dashboard",
+    )
   end
 
   test "unsafe path target redirects to sign in entry without flash" do
@@ -139,11 +141,25 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     controller.define_singleton_method(:current_db_sign_in_flow_for_sequence) { cycle }
     controller.define_singleton_method(:sign_in_flow_actor) { |_| actor }
     controller.define_singleton_method(:auth_app_sign_in_path) { |ri: nil| "/sign/in?ri=#{ri}" }
-    controller.define_singleton_method(:auth_app_sign_in_check_path) { |ri: nil, pt: nil|
-      "/sign/in/check?ri=#{ri}#{"&pt=#{pt}" if pt}"
+    controller.define_singleton_method(:auth_app_sign_in_check_path) { |ri: nil, pt: nil, fb: nil|
+      { ri: ri, pt: pt, fb: fb }.compact.then { |query| "/sign/in/check?#{query.to_query}" }
     }
-    controller.define_singleton_method(:sign_in_selector_path) { |pt: nil| "/sign/in/selector?pt=#{pt}" }
-    controller.define_singleton_method(:sign_in_welcome_path) { |pt: nil| "/sign/in/welcome?pt=#{pt}" }
+    controller.define_singleton_method(:sign_in_selector_path) { |pt: nil, **options|
+      {
+        pt: pt,
+        fb: SignInFlowBindingCodec.encode(
+          flow: options.fetch(:cycle), surface: "app", phase: "SELECTOR_PENDING",
+        ),
+      }.compact.then { |query| "/sign/in/selector?#{query.to_query}" }
+    }
+    controller.define_singleton_method(:sign_in_welcome_path) { |pt: nil, **options|
+      {
+        pt: pt,
+        fb: SignInFlowBindingCodec.encode(
+          flow: options.fetch(:cycle), surface: "app", phase: "SESSION_ISSUANCE_PENDING",
+        ),
+      }.compact.then { |query| "/sign/in/welcome?#{query.to_query}" }
+    }
     controller.define_singleton_method(:redirect_to) { |path, **_options| @redirected_to = path }
     controller.define_singleton_method(:render) { |**options| @rendered = options }
     controller.define_singleton_method(:redirected_to) { @redirected_to }
@@ -153,6 +169,19 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
 
   def guarded_cycle_attrs(cycle)
     cycle.attributes.slice("state_id", "token_id", "completed_at", "session_issued_at")
+  end
+
+  def assert_bound_redirect(location, path, cycle, phase, pt: nil)
+    uri = URI.parse(location)
+
+    assert_equal path, uri.path
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+    assert_equal "jp", query.fetch("ri") if path.end_with?("/check")
+    assert_equal pt, query["pt"] if pt
+    binding = SignInFlowBindingCodec.decode(query.fetch("fb"))
+
+    assert_equal cycle.public_id, binding.flow_public_id
+    assert_equal phase, binding.phase
   end
 
   def assert_no_sign_in_guard_durable_changes(&)

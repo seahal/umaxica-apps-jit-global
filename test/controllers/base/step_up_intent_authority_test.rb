@@ -895,7 +895,6 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     ClientEmail.create!(
       user: user, address: "step-up-intent-#{SecureRandom.hex(4)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: "otp_private_key", otp_counter: "0",
     )
     token = create_client_token!(user)
     pt = signed_step_up_pt_for(
@@ -1204,7 +1203,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     ClientEmail.create!(
       user: user, address: "step-up-completion-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     token = create_client_token!(user)
     return_to = base_app_identity_emails_path(ri: "jp")
@@ -1710,7 +1709,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     ClientEmail.create!(
       user: user, address: "step-up-unsafe-return-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     token = create_client_token!(user)
     return_to = base_app_identity_emails_path(ri: "jp")
@@ -2026,7 +2025,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     ClientEmail.create!(
       user: user, address: "step-up-retry-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     token = create_client_token!(user)
     return_to = base_app_identity_emails_path(ri: "jp")
@@ -2232,7 +2231,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     ClientEmail.create!(
       user: user, address: "step-up-fresh-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     token = create_client_token!(user)
     return_to = base_app_identity_emails_path(ri: "jp")
@@ -2584,7 +2583,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     ClientEmail.create!(
       user: user, address: "step-up-foreign-result-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     token = create_client_token!(user)
     return_to = base_app_identity_emails_path(ri: "jp")
@@ -2788,7 +2787,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     ClientEmail.create!(
       user: user, address: "step-up-cancel-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     token = create_client_token!(user)
     return_to = base_app_identity_emails_path(ri: "jp")
@@ -3055,7 +3054,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     ClientEmail.create!(
       user: user, address: "step-up-cancel-twice-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     token = create_client_token!(user)
     return_to = base_app_identity_emails_path(ri: "jp")
@@ -3403,7 +3402,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     ClientEmail.create!(
       user: user, address: "step-up-cancel-dest-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     token = create_client_token!(user)
     pt = signed_step_up_pt_for(
@@ -5628,8 +5627,6 @@ class BaseStepUpIntentAuthorityTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -5643,8 +5640,6 @@ class BaseStepUpIntentAuthorityTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -5912,8 +5907,6 @@ class BaseStepUpIntentAuthorityTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

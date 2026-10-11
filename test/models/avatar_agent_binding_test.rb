@@ -46,7 +46,7 @@ class AvatarAgentBindingTest < ActiveSupport::TestCase
     assert_not_predicate binding, :revoked?
   end
 
-  test "validates public id presence and uniqueness" do
+  test "rejects public id mutation and duplicate creation" do
     first_identity = OperatorIdentity.create!(
       issuer: "https://id.example.test",
       subject: "avatar-agent-public-id-#{SecureRandom.hex(4)}",
@@ -91,7 +91,7 @@ class AvatarAgentBindingTest < ActiveSupport::TestCase
     binding.public_id = nil
 
     assert_not binding.valid?
-    assert_equal :blank, binding.errors.details.fetch(:public_id).first.fetch(:error)
+    assert_equal "cannot be changed after creation", binding.errors[:public_id].first
 
     duplicate = AvatarAgentBinding.new(avatar: second_avatar, agent: second_agent, public_id: original_public_id)
 

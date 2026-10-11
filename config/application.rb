@@ -94,6 +94,11 @@ module Jit
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults(8.2)
 
+    # Raw email content is not application logging data. Keep the Rails delivery
+    # mechanism and its notifications intact while disabling ActionMailer's
+    # logger across every environment.
+    config.action_mailer.logger = nil
+
     # Please, add to the `ignore` list any other `lib` subdirectories that do
     # not contain `.rb` files, or that should not be reloaded or eager loaded.
     # CommonHelper ones are `templates`, `generators`, or `middleware`, for example.

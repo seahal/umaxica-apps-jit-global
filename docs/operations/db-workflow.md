@@ -85,6 +85,40 @@ bin/rails db:verify_no_schema_drift
 # the committed db/*_structure.sql files. Reports schema drift and exits 1 otherwise.
 ```
 
+For an existing manifest-verified disposable fleet that must be rebuilt under the same database
+names, run `bundle exec scripts/postgresql-rebuild-isolated-test-fleet` with `RAILS_ENV=test`,
+`PARALLEL_WORKERS=1`, `POSTGRESQL_ISOLATED_TEST_RUN_ID`, `POSTGRESQL_ISOLATED_TEST_MANIFEST`,
+`POSTGRESQL_TEST_PREPARE_DATABASES`, and the required PostgreSQL test connection variables set. This
+explicit destructive command validates all 20 database identities and refuses active sessions before
+dropping them. Identifier HMAC maintenance roles are cluster-wide and survive database drop; the
+command derives only this fleet's twelve realm/channel caller and definer names, rejects unexpected
+role authority, memberships and dependencies outside their owning database, and drops the orphaned
+roles only after the databases are gone. It then recreates and re-identifies the fleet, runs
+migration files with `db:test:prepare`'s `skip_initialize` path, and checks `db:migrate`. Missing
+roles from a migration that was never reached are expected; unrelated and shared roles are not
+selected. A failed role preflight stops before database drop. Do not use this command for shared,
+development or production databases.
+
+## Cluster role creation evidence
+
+Database ownership does not prove PostgreSQL role creation ownership. Before the isolated rebuild
+command deletes existing fleet HMAC roles, the manifest must contain `created_roles` entries with
+exact `name` and `oid` values, plus `role_creation_log_sha256` for the successful creation record.
+The actual role set and OIDs must match; missing metadata, duplicate entries or changed identities
+stop before database drop. Role attribute, membership and foreign-dependency checks still apply.
+This is not permission to adopt or delete an unknown cluster role.
+
+For a fresh run, first verify that its unique database and role names are absent, create its owned
+databases, and record their OIDs/owner/comment. Run normal migrations from source, retain the actual
+successful CREATE ROLE record, and record the resulting role OIDs. Never reconstruct creation
+ownership solely from current names or dependencies. A failed manifest write can be recovered by
+read-only identity checks on resources whose creation was observed; it does not justify recreation.
+
+Rebuilding creates new database and role identities. Before another cleanup/rebuild, record the new
+successful role creation evidence and OIDs; the previous role OIDs are not valid ownership metadata
+for replacement objects. An unavailable creation record keeps role deletion blocked. Only run-owned
+disposable resources are eligible; shared/production resources remain excluded.
+
 ## Stop the Server Before Resetting Databases
 
 The `app_setting` database initializes preference reference rows through `insert_missing_fixed_ids!`

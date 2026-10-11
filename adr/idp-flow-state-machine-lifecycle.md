@@ -4,7 +4,7 @@
 
 Accepted (2026-10-02) as a future implementation contract.
 
-**Accepted design does not mean current runtime has been migrated.** No model, controller,
+**Accepted design does not mean every runtime axis has been migrated.** No model, controller,
 service, operation, migration, schema, route, seed, constant, status id, or test was changed by
 this decision. Every "current" statement below was observed read-only at commit
 `7430ddea6da1e18da0b42418e5374379a52c8a4b`. Every "target" statement is a contract for future
@@ -346,13 +346,31 @@ Shared lifecycle vocabulary never merges authority:
 - The `NOTHING = 0` exception for flow state tables must be noted where
   `adr/reference-table-discipline.md` lists exceptions when the implementation lands.
 
-## Not Yet Implemented
+## Strict sign-in admission amendment (2026-10-10)
 
-Everything in the Decision section is target. As of the commit above: columns are still
-`status_id`; tables are still `*_flow_statuses`; FKs are `NOT VALID`; sign-in has no `EXPIRED`,
-`CANCELLED`, or `HALTED`; sign-out has no `EXPIRED`, `CANCELLED`, or `HALTED`; no flow has
-`HALTED`; `FAILED` is still written; rows are provisioned outside migrations; direct `status_id`
-writes exist outside the state machines.
+The state-id contract is now exercised by the implemented local sign-in phase-admission slice.
+The existing per-flow state tables retain immutable `HALTED = 930` rows. A state-changing request
+that is correctly bound to a local sign-in flow but presents an obsolete or contradictory phase
+uses the named halt transition and records `phase_regression` or `phase_violation`; it does not
+write a user cancellation or reuse the legacy `FAILED = 900` row. HALTED remains absorbing.
+
+An invalid or missing request binding is an admission refusal, not a state transition. GET and
+HEAD return the authentication-safe 409 plain-text response without changing the flow. The
+binding is signed and purpose-bound and carries no raw locator nonce or database primary key.
+The flow lock/reload, actor check, expiry check, and the existing session-issuance boundary are
+still required. Provider-owned ceremonies keep their concrete transaction/state authority.
+
+This is a runtime amendment for the covered sign-in paths, not a claim that all sign-up, sign-out,
+or provider ceremony axes have completed the broader lifecycle migration. Existing state ids are
+not renumbered or reinterpreted.
+
+## Remaining migration scope
+
+The broader storage cleanup remains incremental: legacy `status_id` names, historical direct
+writes, and the unmodified sign-up/sign-out/provider axes may still exist where their implementation
+slices have not landed. The local sign-in phase-admission slice has migration-owned `HALTED = 930`
+reference rows and named transition writers. Current acceptance must therefore be checked against
+the affected code, schema, and tests rather than inferred from this historical migration list.
 
 ## Related
 

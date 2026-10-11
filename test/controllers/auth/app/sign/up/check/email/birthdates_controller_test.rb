@@ -159,7 +159,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
           headers: @headers
 
     assert_response :redirect
-    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
     assert_equal ClientSignUpFlowStatus::COMPLETED, flow.reload.status_id
     source_before = [email.user.reload.attributes, email.reload.attributes]
     flow_before = flow.attributes
@@ -399,7 +399,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                       headers: @headers
 
                 assert_response :redirect
-                assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+                assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
                 assert_equal ClientSignUpFlowStatus::COMPLETED, flow.reload.status_id
               end
             end
@@ -478,7 +478,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                       headers: @headers
 
                 assert_response :redirect
-                assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+                assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
                 assert_equal ClientSignUpFlowStatus::COMPLETED, flow.reload.status_id
               end
             end
@@ -557,7 +557,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                       headers: @headers
 
                 assert_response :redirect
-                assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+                assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
                 assert_equal ClientSignUpFlowStatus::COMPLETED, flow.reload.status_id
               end
             end
@@ -1049,8 +1049,6 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -1064,8 +1062,6 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -1307,8 +1303,6 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

@@ -30,6 +30,7 @@ module GroupAvatarMemberships
         subject_public_id: subject_public_id,
         owner_collective_public_id: observed_group_owner.owner_collective_public_id,
         permission: "avatar.group.manage",
+        avatar: observed_membership.avatar,
       ) do
         Avatar.transaction do
           current_membership = GroupAvatarMembership.find(membership.id)
@@ -81,11 +82,26 @@ module GroupAvatarMemberships
           [observed_group_owner.owner_surface, observed_group_owner.owner_collective_public_id]
         raise AuthorizationDenied, "group owner changed while reordering"
       end
+
+      ensure_avatar_permission!(avatar, group_owner.owner_collective_public_id, "avatar.group.manage")
       unless group_owner.owner_surface == surface &&
           [group_owner.owner_surface, group_owner.owner_collective_public_id] ==
               [avatar_owner.owner_surface, avatar_owner.owner_collective_public_id]
         raise ArgumentError, "group and Avatar current owners differ"
       end
+    end
+
+    def ensure_avatar_permission!(avatar, collective_public_id, permission)
+      return if AvatarPermissionResolver.call(
+        actor: actor,
+        surface: surface,
+        subject_public_id: subject_public_id,
+        owner_collective_public_id: collective_public_id,
+        permission: permission,
+        avatar: avatar,
+      )
+
+      raise AuthorizationDenied, "#{permission} permission required"
     end
   end
 end

@@ -6,6 +6,21 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
   fixtures :clients, :client_statuses, :operators, :operator_statuses
 
   [ClientEmail, VisitorEmail, OperatorEmail, ClientTelephone, VisitorTelephone, OperatorTelephone].each do |model|
+    test "#{model.name} does not expose identifier-owned HOTP lifecycle methods or stored proof fields" do
+      record = model.new
+
+      %i(store_otp get_otp clear_otp otp_expired? otp_active?).each do |method_name|
+        assert_not_respond_to record, method_name
+      end
+
+      %w(otp_private_key otp_counter otp_expires_at sign_up_otp_context
+         credential_registration_otp_context).each do |attribute|
+        assert_not record.attributes.key?(attribute), "#{model.name} still stores #{attribute}"
+      end
+    end
+  end
+
+  [ClientEmail, VisitorEmail, OperatorEmail, ClientTelephone, VisitorTelephone, OperatorTelephone].each do |model|
     test "#{model.name} issuance and resend retain failure boundaries and deny MAX and MAX plus one" do
       owner_model, root_model, owner_key, active_status, policy, channel =
         case model.name

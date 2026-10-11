@@ -145,3 +145,22 @@ criterion.
 - Check: actual guard execution and current CI entry, not a sentence in a harness. Comprehensive
   identifier regression guard remains planned until Luna records actual paths and evidence; existing
   PublicId tests cover only their own public behavior.
+
+## ID-3a — ORG Telephone ceremony references
+
+- Basis: I04/I10 and ID-3; scope: OperatorTelephone registration, resend, form admission,
+  verification/finalization and queued SMS delivery across org_zenith and org_ticket.
+- Given a newly created candidate owned by an authorized Operator and a usable Root session, issuing
+  registration proof stores the candidate's NanoID public identity in the ticket ceremony and
+  encrypted delivery binding. Its database-local bigint is not the candidate reference.
+- Resend, delivery and verification resolve and compare that same public identity together with
+  actor, session, purpose, generation and expiry. A former numeric PK binding is refused rather than
+  falling back to lookup by id; wrong-owner and stale proof cannot send or finalize.
+- Check: public issuer test in
+  `test/operations/telephone_credential_registration_otp_issuer_test.rb`, ORG HTTP registration
+  tests in `test/controllers/base/org/identity/telephones/registrations_controller_test.rb`, binding
+  boundary tests in `test/values/contact_registration_otp_delivery_binding_value_test.rb`, and
+  actual queued transport guards. Code inspection alone does not prove asynchronous delivery.
+- Existing-row operational backfill, NOT NULL cutover and DB immutability remain separately required
+  by ID-4/MIG-1; an additive nullable column is not completion of those criteria. Local controller
+  PK-based URL/session consumers remain an inventory item under ID-3, not an approved exception.

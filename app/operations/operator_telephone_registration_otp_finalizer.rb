@@ -94,7 +94,7 @@ class OperatorTelephoneRegistrationOtpFinalizer
   def bound_evidence?(session_ref)
     transaction.surface == "org" && transaction.normalized_number_digest == telephone.number_digest &&
       transaction.telephone_registration_otp_evidence?(
-        code: code, actor_ref: actor.public_id, session_ref: session_ref, candidate_ref: telephone.id.to_s,
+        code: code, actor_ref: actor.public_id, session_ref: session_ref, candidate_ref: telephone.public_id,
       )
   end
 

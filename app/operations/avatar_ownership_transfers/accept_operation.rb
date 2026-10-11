@@ -58,26 +58,14 @@ module AvatarOwnershipTransfers
     attr_reader :actor, :surface, :subject_public_id, :transfer_public_id
 
     def accept_transfer!(avatar, transfer, accepted_at)
-      owner = current_owner!(avatar, lock: true)
-      unless [owner.owner_surface, owner.owner_collective_public_id] ==
-          [transfer.from_owner_surface, transfer.from_owner_collective_public_id]
-        raise InvalidTransfer, "Avatar owner changed after transfer request"
-      end
-      unless transfer.to_owner_surface == surface && transfer.to_owner_collective_public_id.present?
-        raise InvalidTransfer, "transfer target owner changed"
-      end
+      assert_transfer_owners!(avatar, transfer)
 
       active = AvatarOwnershipStatus.find_or_create_by!(id: AvatarOwnershipStatus::ACTIVE)
       inactive = AvatarOwnershipStatus.find_or_create_by!(id: AvatarOwnershipStatus::INACTIVE)
-      owner.update!(valid_to: accepted_at, avatar_ownership_status: inactive)
-      AvatarOwnershipPeriod.create!(
-        avatar: avatar,
-        owner_organization_id: transfer.to_owner_collective_public_id,
-        owner_surface: transfer.to_owner_surface,
-        owner_collective_public_id: transfer.to_owner_collective_public_id,
-        avatar_ownership_status: active,
-        valid_from: accepted_at,
-      )
+      close_legacy_period!(avatar, accepted_at, inactive)
+      open_legacy_period!(avatar, transfer, accepted_at, active)
+      close_concrete_period!(avatar, accepted_at)
+      open_concrete_period!(avatar, transfer, accepted_at)
 
       remove_group_memberships_with_different_owner!(
         avatar: avatar,
@@ -92,6 +80,56 @@ module AvatarOwnershipTransfers
         accept_actor_surface: surface,
         accept_actor_public_id: subject_public_id,
       )
+    end
+
+    def assert_transfer_owners!(avatar, transfer)
+      owner = current_owner!(avatar, lock: true)
+      unless [owner.owner_surface, owner.owner_collective_public_id] ==
+          [transfer.from_owner_surface, transfer.from_owner_collective_public_id]
+        raise InvalidTransfer, "Avatar owner changed after transfer request"
+      end
+
+      concrete_owner = concrete_current_owner!(avatar, lock: true)
+      expected_class = concrete_period_class_for(transfer.from_owner_surface)
+      expected_id = transfer.from_owner_collective_public_id
+      owner_prefix = (transfer.from_owner_surface == "app") ? "enterprise" : "bureau"
+      concrete_id = concrete_owner.public_send("#{owner_prefix}_public_id")
+      unless concrete_owner.class == expected_class && concrete_id == expected_id
+        raise InvalidTransfer, "Avatar concrete owner changed after transfer request"
+      end
+      return if transfer.to_owner_surface == surface && transfer.to_owner_collective_public_id.present?
+
+      raise InvalidTransfer, "transfer target owner changed"
+    end
+
+    def close_legacy_period!(avatar, accepted_at, inactive)
+      current_owner!(avatar, lock: true).update!(valid_to: accepted_at, avatar_ownership_status: inactive)
+    end
+
+    def open_legacy_period!(avatar, transfer, accepted_at, active)
+      AvatarOwnershipPeriod.create!(
+        avatar: avatar,
+        owner_organization_id: transfer.to_owner_collective_public_id,
+        owner_surface: transfer.to_owner_surface,
+        owner_collective_public_id: transfer.to_owner_collective_public_id,
+        avatar_ownership_status: active,
+        valid_from: accepted_at,
+      )
+    end
+
+    def close_concrete_period!(avatar, accepted_at)
+      concrete_current_owner!(avatar, lock: true).update!(valid_to: accepted_at)
+    end
+
+    def open_concrete_period!(avatar, transfer, accepted_at)
+      attributes = {
+        avatar: avatar,
+        valid_from: accepted_at,
+        transferred_by_actor_public_id: transfer.accept_actor_public_id || transfer.request_actor_public_id,
+      }
+      attributes[(transfer.to_owner_surface == "app") ? :enterprise_public_id : :bureau_public_id] =
+        transfer.to_owner_collective_public_id
+      concrete_period_class_for(transfer.to_owner_surface).create!(**attributes)
     end
 
     def assert_same_transfer!(locked, observed)

@@ -3,10 +3,10 @@
 require "test_helper"
 
 class ContactRegistrationOtpDeliveryBindingValueTest < ActiveSupport::TestCase
-  test "Telephone registration accepts exact five-field APP COM and numeric ORG bindings" do
+  test "Telephone registration accepts exact five-field APP COM and opaque ORG bindings" do
     %w(app com org).each do |surface|
       tuple = [surface, "credential_registration", "12345678-1234-4000-8000-123456789abc",
-               (surface == "org") ? "1" : "Contact_1-", "87654321-4321-4000-b000-cba987654321",]
+               (surface == "org") ? "OrgContact_1234567890" : "Contact_1-", "87654321-4321-4000-b000-cba987654321",]
       value = TelephoneCredentialRegistrationOtpDeliveryBindingValue.for_sms(otp_binding: tuple)
 
       assert_equal surface, value.surface
@@ -32,7 +32,7 @@ class ContactRegistrationOtpDeliveryBindingValueTest < ActiveSupport::TestCase
     assert_raises(ArgumentError) { TelephoneCredentialRegistrationOtpDeliveryBindingValue.for_sms }
   end
 
-  test "Telephone surface and purpose require canonical scalar strings and ORG requires numeric candidate ownership" do
+  test "Telephone surface and purpose require canonical scalar strings and ORG requires opaque candidate ownership" do
     { 0 => [nil, "", "dev", "APP", :app, [], {}, 0, false],
       1 => [nil, "", "sign_up", "sign_in", :credential_registration, [], {}, 0, false], }.each do |index, invalids|
       invalids.each do |invalid|
@@ -44,14 +44,14 @@ class ContactRegistrationOtpDeliveryBindingValueTest < ActiveSupport::TestCase
         }
       end
     end
-    ["1", "2", "9" * 18, "9" * 19].each do |candidate|
+    ["a" * 21, "A_-" + ("9" * 18)].each do |candidate|
       tuple = ["org", "credential_registration", "12345678-1234-4000-8000-123456789abc",
                candidate, "87654321-4321-4000-b000-cba987654321",]
 
       assert_equal candidate,
                    TelephoneCredentialRegistrationOtpDeliveryBindingValue.for_sms(otp_binding: tuple).candidate_ref
     end
-    ["", "0", "01", "-1", "+1", "contact", "9" * 20].each do |candidate|
+    [nil, "", "0", "1", "01", "-1", "+1", "contact", "a" * 20, "a" * 22, ("a" * 20) + "\0"].each do |candidate|
       assert_raises(ArgumentError) do
         TelephoneCredentialRegistrationOtpDeliveryBindingValue.for_sms(
           otp_binding: ["org", "credential_registration", "12345678-1234-4000-8000-123456789abc",

@@ -68,14 +68,76 @@ class AddVisitorIdentifierHmacMaintenance < ActiveRecord::Migration[8.2]
     connection.quote_column_name(role_name(channel, kind))
   end
 
+  def ensure_role!(channel, kind)
+    database = connection.select_value("SELECT current_database()")
+    name = role_name(channel, kind)
+    quoted_name = connection.quote(name)
+    role = connection.select_one(<<~SQL.squish)
+      SELECT oid, rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolinherit,
+             rolreplication, rolbypassrls, rolconnlimit, rolvaliduntil, rolconfig
+      FROM pg_roles WHERE rolname = #{quoted_name}
+    SQL
+    unless role
+      execute("CREATE ROLE #{quote_role(channel, kind)} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT")
+      return
+    end
+
+    authority = %w(rolcanlogin rolsuper rolcreatedb rolcreaterole rolinherit rolreplication rolbypassrls)
+    valid_authority = authority.all? { |field| role.fetch(field) == false }
+    role_oid = connection.quote(role.fetch("oid"))
+    memberships = connection.select_value(<<~SQL.squish).to_i
+      SELECT COUNT(*) FROM pg_auth_members
+      WHERE roleid = #{role_oid} OR member = #{role_oid} OR grantor = #{role_oid}
+    SQL
+    dependencies = connection.select_values(<<~SQL.squish)
+      SELECT DISTINCT database.datname
+      FROM pg_shdepend
+      LEFT JOIN pg_database AS database ON database.oid = pg_shdepend.dbid
+      WHERE pg_shdepend.refclassid = 'pg_authid'::regclass AND pg_shdepend.refobjid = #{role_oid}
+    SQL
+    foreign_dependencies =
+      dependencies.reject do |dependency_database|
+        role_dependency_database?(dependency_database, database)
+      end
+    return if valid_authority && role.fetch("rolconnlimit") == -1 &&
+      role.fetch("rolvaliduntil").nil? && role.fetch("rolconfig").nil? &&
+      memberships.zero? && foreign_dependencies.empty?
+
+    dependency_list = foreign_dependencies.map { |dependency| dependency || "<shared>" }
+    dependency_list.sort!
+    dependency_list = dependency_list.join(", ")
+    raise(
+      ActiveRecord::MigrationError,
+      "Existing identifier HMAC role is not isolated to #{database}: #{name} " \
+      "(dependencies: #{dependency_list.presence || "role attributes or membership"})",
+    )
+  end
+
+  def role_dependency_database?(dependency_database, current_database)
+    return false if dependency_database.nil?
+
+    # Test workers clone the writer and replica databases, preserving these cluster-wide roles.
+    # Keep that bounded family reusable while rejecting dependencies from every other database.
+    writer_database = current_database
+      .sub(/_replica_db(?:_\d+)?\z/, "_db")
+      .sub(/_db(?:_\d+)?\z/, "_db")
+      .sub(/_\d+\z/, "")
+    database_family = [writer_database]
+    if writer_database.end_with?("_db")
+      database_family << (writer_database.delete_suffix("_db") + "_replica_db")
+    end
+    family_pattern = /\A(?:#{database_family.map { |database| Regexp.escape(database) }.join("|")})(?:_\d+)?\z/
+    family_pattern.match?(dependency_database)
+  end
+
   def install_domain!(channel, facts)
     definer = quote_role(channel, :definer)
     caller = quote_role(channel, :caller)
     table = facts.fetch(:table)
     digest = facts.fetch(:digest)
     function = "public.rotate_#{table}_hmac(bigint, text, text, uuid)"
-    execute("CREATE ROLE #{definer} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT")
-    execute("CREATE ROLE #{caller} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT")
+    ensure_role!(channel, :definer)
+    ensure_role!(channel, :caller)
     execute("GRANT USAGE ON SCHEMA public TO #{definer}, #{caller}")
     execute("GRANT SELECT(id, #{digest}), UPDATE(#{digest}) ON public.#{table} TO #{definer}")
     execute("GRANT INSERT ON public.#{AUDIT_TABLE} TO #{definer}")

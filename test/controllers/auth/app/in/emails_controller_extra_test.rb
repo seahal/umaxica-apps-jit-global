@@ -12,6 +12,10 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
 
   include ActiveSupport::Testing::TimeHelpers
 
+  teardown do
+    TurnstileVerifierStub.reset!
+  end
+
   setup do
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
@@ -59,6 +63,12 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
       )
 
       assert_equal 303, admission_browser.response.status
+      @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+        flow: ClientSignInFlow.find_by!(
+          public_id: admission_binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+        ),
+        surface: "app", phase: "PRIMARY_PENDING",
+      )
     end
     ActionMailer::Base.deliveries.clear
     TurnstileVerifierStub.challenge_enabled = true
@@ -72,7 +82,7 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
   test "post create with Turnstile failure" do
     TurnstileVerifierStub.challenge_response = { "success" => false }
 
-    post auth_app_sign_in_email_url,
+    post auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
          params: {
            user_email: { address: "test@example.com" },
            "cf-turnstile-response": "fail",
@@ -93,7 +103,7 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.stub(:verify, verifier) do
       post(
-        auth_app_sign_in_email_url,
+        auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
         params: {
           user_email: { address: "turnstile-signin-#{SecureRandom.hex(4)}@example.com" },
           "cf-turnstile-response": "signin-token",
@@ -111,13 +121,13 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
   test "post create with email cooldown active" do
     address = "cooldown@example.com"
 
-    post auth_app_sign_in_email_url,
+    post auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
          params: { user_email: { address: address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
     assert_response :redirect
 
-    post auth_app_sign_in_email_url,
+    post auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
          params: { user_email: { address: address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
@@ -134,14 +144,14 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
     ).tap(&:finalize_binding!)
 
     perform_enqueued_jobs do
-      post auth_app_sign_in_email_url,
+      post auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
            params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
            headers: { "Host" => @host }
     end
     otp_code = ActionMailer::Base.deliveries
       .last.text_part.body.decoded.match(/Pass Code:\s*([0-9]{6})/).captures.fetch(0)
 
-    patch auth_app_sign_in_email_url(format: :json),
+    patch auth_app_sign_in_email_url(format: :json, fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: otp_code } },
           headers: { "Host" => @host }
 
@@ -149,7 +159,7 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
     json = response.parsed_body
 
     assert_equal "authentication_evidence_recorded", json.fetch("status")
-    assert_equal auth_app_sign_in_check_path(ri: "jp"), json.fetch("redirect_url")
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(json.fetch("redirect_url")).path
     assert_not json.key?("access_token")
     assert_not json.key?("tokens")
   end
@@ -163,11 +173,11 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
       confirm_policy: "1",
     ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url,
+    post auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
-    patch auth_app_sign_in_email_url(format: :json),
+    patch auth_app_sign_in_email_url(format: :json, fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: "000000" } },
           headers: { "Host" => @host }
 
@@ -179,12 +189,12 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
 
   test "patch update with dummy OTP" do
     # Unknown email
-    post auth_app_sign_in_email_url,
+    post auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
          params: { user_email: { address: "unknown@example.com" }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
     assert_no_difference ["Client.count", "ClientEmail.count", "ClientToken.count"] do
-      patch auth_app_sign_in_email_url,
+      patch auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
             params: { user_email: { pass_code: "123456" } },
             headers: { "Host" => @host }
     end
@@ -270,8 +280,6 @@ class Auth::App::Sign::In::EmailsControllerExtraTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -285,8 +293,6 @@ class Auth::App::Sign::In::EmailsControllerExtraTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -528,8 +534,6 @@ class Auth::App::Sign::In::EmailsControllerExtraTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

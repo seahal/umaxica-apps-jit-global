@@ -373,8 +373,8 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     assert_not pending.reload.binding_effective?
     operation_ref = session[:com_settings_email_registration_transaction_ref]
 
-    assert_nil pending.credential_registration_otp_context
-    assert_equal(-Float::INFINITY, pending.otp_expires_at)
+    assert_not pending.attributes.key?("credential_registration_otp_context")
+    assert_not pending.attributes.key?("otp_expires_at")
 
     assert_not VisitorContactAuditOutbox.exists?(operation_ref: operation_ref)
     patch base_com_identity_emails_registration_url(ri: "jp", host: @host),

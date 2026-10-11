@@ -8,9 +8,11 @@ module Auth
         class ChallengesController < ::Auth::App::ApplicationController
           include ::AuthenticationModeSwitchGuard
           include ::SurfaceInertiaPage
+          include ::SignInPhaseBindingControllerSupport
 
           AUTHENTICATION_MODE = :guest
 
+          before_action -> { enforce_sign_in_phase_binding!(expected_phase: "MFA_PENDING") }
           before_action :ensure_pending_mfa!
 
           public
@@ -50,21 +52,25 @@ module Auth
               methods << {
                 key: "totp",
                 label: page_t("#{scope}.methods.totp"),
-                href: new_auth_app_sign_in_challenge_totp_path,
+                href: new_auth_app_sign_in_challenge_totp_path(**sign_in_mfa_binding_params),
               }
             end
             if @can_use_passkey
               methods << {
                 key: "passkey",
                 label: page_t("#{scope}.methods.passkey"),
-                href: new_auth_app_sign_in_challenge_passkey_path,
+                href: new_auth_app_sign_in_challenge_passkey_path(**sign_in_mfa_binding_params),
               }
             end
             methods
           end
 
           def mfa_challenge_cancel
-            { label: t("actions.cancel"), action: auth_app_sign_in_challenge_path, method: "delete" }
+            {
+              label: t("actions.cancel"),
+              action: auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
+              method: "delete",
+            }
           end
 
           def ensure_pending_mfa!

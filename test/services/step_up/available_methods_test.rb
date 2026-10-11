@@ -145,8 +145,6 @@ class StepUpAvailableMethodsTest < ActiveSupport::TestCase
     @staff.operator_emails.create!(
       address: "staff-active-stepup@example.com",
       staff_identity_email_status_id: OperatorEmailStatus::ACTIVE,
-      otp_counter: "0",
-      otp_private_key: "private_key",
     )
 
     assert_not_includes StepUpAvailableMethods.call(@staff), :email_otp
@@ -186,8 +184,6 @@ class StepUpAvailableMethodsTest < ActiveSupport::TestCase
     @staff.operator_emails.create!(
       address: "staff-inactive-stepup@example.com",
       staff_identity_email_status_id: OperatorEmailStatus::INACTIVE,
-      otp_counter: "0",
-      otp_private_key: "private_key",
     )
 
     assert_not_includes StepUpAvailableMethods.call(@staff), :email_otp
@@ -277,8 +273,6 @@ class StepUpAvailableMethodsTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -292,8 +286,6 @@ class StepUpAvailableMethodsTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -531,8 +523,6 @@ class StepUpAvailableMethodsTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

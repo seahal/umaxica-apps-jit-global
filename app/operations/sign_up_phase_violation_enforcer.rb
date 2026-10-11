@@ -27,42 +27,30 @@ class SignUpPhaseViolationEnforcer
 
   # Returns true when this call halted the flow.
   def call
-    expected_step = nil
-    violating = false
-    subject_present = false
+    decision =
+      SignUpTermination.halt_if_phase_violation(cycle: @flow) do |flow|
+        next { halt: false } if flow.sign_up_terminal? || flow.expired?(flow.class.database_now)
 
-    @flow.class.connection_class_for_self.connected_to(role: :writing) do
-      @flow.with_cycle_lock do
-        @flow.reload
-        next if @flow.sign_up_terminal? || @flow.expired?(@flow.class.database_now)
-
-        expected_step = current_step
-        violating = @requested_step.nil? || expected_step != @requested_step
-        subject_present = @flow.principal_id.present?
+        expected_step = current_step(flow)
+        {
+          halt: @requested_step.nil? || expected_step != @requested_step,
+          expected_phase: expected_step,
+        }
       end
-    end
-    return false unless violating
-
-    # The pending actor is removed by the termination cleanup, so the audit subject is read first.
-    subject = subject_present ? audit_subject : nil
-    SignUpTermination.call(cycle: @flow, event: :halt)
-    return false unless @flow.reload.sign_up_halted?
+    return false unless decision.is_a?(Hash) && decision[:halted]
 
     SignFlowHaltRecorder.call(
-      flow: @flow, subject: subject, surface: @surface, flow_kind: "sign_up", reason_code: @reason_code,
-      request_id: @request_id, expected_phase: expected_step, requested_phase: @requested_step,
+      flow: @flow, subject: decision[:subject], surface: @surface, flow_kind: "sign_up",
+      reason_code: @reason_code, request_id: @request_id, expected_phase: decision[:expected_phase],
+      requested_phase: @requested_step,
     )
     true
   end
 
   private
 
-  def current_step
-    registry = SignUpRequirementRegistry.for_ticket(@flow, surface: @surface)
-    SignUpStepGate.current_step_for(@flow, registry)
-  end
-
-  def audit_subject
-    @flow.principal
+  def current_step(flow)
+    registry = SignUpRequirementRegistry.for_ticket(flow, surface: @surface)
+    SignUpStepGate.current_step_for(flow, registry)
   end
 end

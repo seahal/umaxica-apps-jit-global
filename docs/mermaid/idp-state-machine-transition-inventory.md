@@ -3,53 +3,54 @@
 ## Sign-flow expiry refusal transaction ownership
 
 `FlowBase` validates terminal absorption before TTL and requested source state. An overdue
-non-terminal row with `expires_at` becomes `EXPIRED` even when the requested edge is illegal.
-The sign-out graph retains its existing deadline fields; this change introduces no new sign-out TTL.
+non-terminal row with `expires_at` becomes `EXPIRED` even when the requested edge is illegal. The
+sign-out graph retains its existing deadline fields; this change introduces no new sign-out TTL.
 
-`with_cycle_lock` retains the row lock while a savepoint owns the operation's same-database writes. An expiry
-refusal unwinds that savepoint, reloads the row, and writes only the named `EXPIRED` transition.
-It returns `FlowTransitionResult(status: :expired)` instead of raising through an enclosing writer
-transaction. Named transition methods return that result whenever a transaction is already open, including a
-nonjoinable owner. Transaction ownership is read from the concrete writer connection even when
-the caller temporarily selected the reading role; standalone calls raise `FlowInvalidTransition` only after their own transaction commits. A transaction
-owner must stop on this result and may call `value!` only after its final commit. No callback commits
-an unrelated write or raises a deferred exception.
+`with_cycle_lock` retains the row lock while a savepoint owns the operation's same-database writes.
+An expiry refusal unwinds that savepoint, reloads the row, and writes only the named `EXPIRED`
+transition. It returns `FlowTransitionResult(status: :expired)` instead of raising through an
+enclosing writer transaction. Named transition methods return that result whenever a transaction is
+already open, including a nonjoinable owner. Transaction ownership is read from the concrete writer
+connection even when the caller temporarily selected the reading role; standalone calls raise
+`FlowInvalidTransition` only after their own transaction commits. A transaction owner must stop on
+this result and may call `value!` only after its final commit. No callback commits an unrelated
+write or raises a deferred exception.
 
-Sign-in participants, root issuance, local authentication completion, social signup completion,
-and signup state-machine/controller owners propagate refusal before success effects. The root
-issuer returns `invalid_request` with `reason: flow_expired`; local completion preserves the expired
-state instead of attempting a second terminal transition. Nested operations reuse the same locked
-flow instance so a refusal aborts remaining writes in the owning operation.
+Sign-in participants, root issuance, local authentication completion, social signup completion, and
+signup state-machine/controller owners propagate refusal before success effects. The root issuer
+returns `invalid_request` with `reason: flow_expired`; local completion preserves the expired state
+instead of attempting a second terminal transition. Nested operations reuse the same locked flow
+instance so a refusal aborts remaining writes in the owning operation.
 
 Regression coverage lives in `test/models/sign_flow_test.rb` and
 `test/services/sign_in/guardrail_participant_test.rb`, `test/models/flow_expiry_commit_test.rb`, and
-`test/controllers/concerns/auth/session_issuance_boundary_surfaces_test.rb`, including all three realms, invalid-source
-expiry, caller-owned transactions, rollback of earlier operation writes, terminal absorption, and
-the adjacent representable microsecond TTL values.
+`test/controllers/concerns/auth/session_issuance_boundary_surfaces_test.rb`, including all three
+realms, invalid-source expiry, caller-owned transactions, rollback of earlier operation writes,
+terminal absorption, and the adjacent representable microsecond TTL values.
 
 ### Sign-flow writer callers and refusal ownership
 
-| Caller | Refusal disposition |
-| --- | --- |
-| `FlowSignIn`, `FlowSignUp`, `FlowSignOut`, `SignUpFlowTicket#complete_sign_up!` | Return the canonical named writer outcome unchanged. |
-| `SignInGuardrailParticipant#advance_if_clear!`, `SignInCheckpointParticipant#advance_if_clear!`, `SignInSelectorParticipant#auto_commit_single!` | Own `with_cycle_lock`; return expiry without evaluating further participants or selection writes. |
-| `AuthenticationBase#commit_login_session!`, `#advance_sign_in_flow_to_issuance!`, `#complete_sign_in_flow_issuance!` | One locked flow instance encloses token/device/refresh/receipt writes. Expiry unwinds those writes; `log_in` returns `invalid_request` before browser success effects. |
-| `LocalAuthenticationSessionCommitter#commit` / `#commit_locked!` | Own the encompassing flow lock; return expiry after commit. Explicit expiry is never rewritten as `HALTED`. |
-| `AuthenticationSequenceGate` guardrail/checkpoint/selector redirects, `#advance_pending_sign_in_flow_after_primary!`, pending-session resume | Check participant refusal before issuing locators, gates or session continuation. AuthenticationBase preserves the returned failure. |
-| `AuthenticationBase` primary-to-MFA entry | Owns a locked transition and refuses before setting the pending MFA session. |
-| `AuthenticationBase#cancel_pending_mfa!`, `BaseSignInLimitations#cancel_pending_resolution!`, app limitations cancellation | Standalone named writers raise only after expiry commit. Any joined refusal permits only cancellation/locator clearing/Secret retirement, never issuance. |
-| `CredentialSecurityTransition#revoke_authentication_admissions!` | Explicitly expires overdue non-terminal flows; retains existing terminals. A deadline crossed while halting still commits expiry, and dependent authority revocation deliberately continues. |
-| `ClientSecretClaimFinalizer#expire_failed_flow_if_due!` | Calls explicit expiry while holding the Ticket owner transaction; no expiry refusal is needed for the requested expiry operation. Remaining effects only retire the claimed Secret. |
-| `AuthEmailOtpChallenge#expire_email_otp_local_parent!` | Calls explicit expiry, returns unavailable inside the parent transaction, and raises only after that owner returns. |
-| `SignUpStateMachine` dispatch/finalize/complete methods | Same locked instance; the outer state-machine call maps a returned expiry refusal to `SignUpResult(:expired)`. |
-| `SignUpTermination#call` | Commits state-machine refusal before returning; subsequent cleanup requires its actual terminal state. |
-| `SignUpContactOtpControllerSupport#advance_sign_up_after_contact_otp!` | Maps expiry to `SignUpResult(:expired)` before further OTP progression. |
-| `SignUpSequenceControllerSupport#finalize_sign_up_from_checkpoint!` | Checks liveness before side effects and maps expiry before handoff/session cleanup/success response. |
-| `IdentitySocialCeremonyFinalCommitter#commit_signup!` / `#complete_signup_flow!` | One flow lock encloses source/Ticket transactions; nested transitions share that instance. Base social completion handles the returned refusal before issuing a session. |
-| `SignAppUpTelephoneRegistrationFinalizer#call`, `SignComUpTelephoneRegistrationFinalizer#call`, `EmailContactBinding#finalize_sign_up_binding!` / `#mark_sign_up_verified!` | Lock-only callers; perform no named lifecycle transition and cannot produce an expiry result. Their existing source/binding guards remain in effect. |
-| `SignUpPhaseViolationEnforcer#call`, `SignUpTermination#ensure_cleanup_pending!`, `SignUpArtifactCleanup#call`, Base social `#record_social_signup_completion!` | Lock-only inspection/retention/auxiliary writes; no named lifecycle transition inside these blocks. |
-| `FlowBase#discard_cycle!`, `FlowWithdrawal#transition_withdrawal_to!` | Retention or legacy withdrawal writer; neither raises the sign-flow expiry signal. |
-| `ClientSecretPasskeyReservationIssuer#complete_sign_up!`, `ClientSecretLifecycleJob` | The similarly named method activates a reservation from an already completed signup; it is not a sign-flow transition writer. |
+| Caller                                                                                                                                                                      | Refusal disposition                                                                                                                                                                          |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FlowSignIn`, `FlowSignUp`, `FlowSignOut`, `SignUpFlowTicket#complete_sign_up!`                                                                                             | Return the canonical named writer outcome unchanged.                                                                                                                                         |
+| `SignInGuardrailParticipant#advance_if_clear!`, `SignInCheckpointParticipant#advance_if_clear!`, `SignInSelectorParticipant#auto_commit_single!`                            | Own `with_cycle_lock`; return expiry without evaluating further participants or selection writes.                                                                                            |
+| `AuthenticationBase#commit_login_session!`, `#advance_sign_in_flow_to_issuance!`, `#complete_sign_in_flow_issuance!`                                                        | One locked flow instance encloses token/device/refresh/receipt writes. Expiry unwinds those writes; `log_in` returns `invalid_request` before browser success effects.                       |
+| `LocalAuthenticationSessionCommitter#commit` / `#commit_locked!`                                                                                                            | Own the encompassing flow lock; return expiry after commit. Explicit expiry is never rewritten as `HALTED`.                                                                                  |
+| `AuthenticationSequenceGate` guardrail/checkpoint/selector redirects, `#advance_pending_sign_in_flow_after_primary!`, pending-session resume                                | Check participant refusal before issuing locators, gates or session continuation. AuthenticationBase preserves the returned failure.                                                         |
+| `AuthenticationBase` primary-to-MFA entry                                                                                                                                   | Owns a locked transition and refuses before setting the pending MFA session.                                                                                                                 |
+| `AuthenticationBase#cancel_pending_mfa!`, `BaseSignInLimitations#cancel_pending_resolution!`, app limitations cancellation                                                  | Standalone named writers raise only after expiry commit. Any joined refusal permits only cancellation/locator clearing/Secret retirement, never issuance.                                    |
+| `CredentialSecurityTransition#revoke_authentication_admissions!`                                                                                                            | Explicitly expires overdue non-terminal flows; retains existing terminals. A deadline crossed while halting still commits expiry, and dependent authority revocation deliberately continues. |
+| `ClientSecretClaimFinalizer#expire_failed_flow_if_due!`                                                                                                                     | Calls explicit expiry while holding the Ticket owner transaction; no expiry refusal is needed for the requested expiry operation. Remaining effects only retire the claimed Secret.          |
+| `AuthEmailOtpChallenge#expire_email_otp_local_parent!`                                                                                                                      | Calls explicit expiry, returns unavailable inside the parent transaction, and raises only after that owner returns.                                                                          |
+| `SignUpStateMachine` dispatch/finalize/complete methods                                                                                                                     | Same locked instance; the outer state-machine call maps a returned expiry refusal to `SignUpResult(:expired)`.                                                                               |
+| `SignUpTermination#call`                                                                                                                                                    | Commits state-machine refusal before returning; subsequent cleanup requires its actual terminal state.                                                                                       |
+| `SignUpContactOtpControllerSupport#advance_sign_up_after_contact_otp!`                                                                                                      | Maps expiry to `SignUpResult(:expired)` before further OTP progression.                                                                                                                      |
+| `SignUpSequenceControllerSupport#finalize_sign_up_from_checkpoint!`                                                                                                         | Checks liveness before side effects and maps expiry before handoff/session cleanup/success response.                                                                                         |
+| `IdentitySocialCeremonyFinalCommitter#commit_signup!` / `#complete_signup_flow!`                                                                                            | One flow lock encloses source/Ticket transactions; nested transitions share that instance. Base social completion handles the returned refusal before issuing a session.                     |
+| `SignAppUpTelephoneRegistrationFinalizer#call`, `SignComUpTelephoneRegistrationFinalizer#call`, `EmailContactBinding#finalize_sign_up_binding!` / `#mark_sign_up_verified!` | Lock-only callers; perform no named lifecycle transition and cannot produce an expiry result. Their existing source/binding guards remain in effect.                                         |
+| `SignUpPhaseViolationEnforcer#call`, `SignUpTermination#ensure_cleanup_pending!`, `SignUpArtifactCleanup#call`, Base social `#record_social_signup_completion!`             | Lock-only inspection/retention/auxiliary writes; no named lifecycle transition inside these blocks.                                                                                          |
+| `FlowBase#discard_cycle!`, `FlowWithdrawal#transition_withdrawal_to!`                                                                                                       | Retention or legacy withdrawal writer; neither raises the sign-flow expiry signal.                                                                                                           |
+| `ClientSecretPasskeyReservationIssuer#complete_sign_up!`, `ClientSecretLifecycleJob`                                                                                        | The similarly named method activates a reservation from an already completed signup; it is not a sign-flow transition writer.                                                                |
 
 ## Ceremony-owned channel OTP primitives (2026-10-07)
 
@@ -102,8 +103,8 @@ fixed receipt, implemented independently by channel. The settings Email HTTP cal
 `EmailCredentialRegistrationOtpResendIssuer` and `EmailCredentialRegistrationOtpFinalizer`; Source
 status changes use the named model writer. APP/COM Telephone settings use their independent
 `TelephoneCredentialRegistrationOtp*` series and encrypted version-four SMS generation binding. ORG
-Telephone binds its numeric candidate ID explicitly and uses its own passkey-only finalizer and
-named status writer. APP/COM/ORG management-create callers now enter their own registration
+Telephone binds its opaque public candidate ID explicitly and uses its own passkey-only finalizer
+and named status writer. APP/COM/ORG management-create callers now enter their own registration
 ceremonies; shared legacy retirement remains pending. This derived OTP axis does not introduce a
 lifecycle status. Diagram: `idp-credential-registration-otp-challenge.mmd`.
 
@@ -173,15 +174,15 @@ diagram: `idp-auth-email-otp-challenge.mmd`. App/com sign-in receipt, verificati
 connected. Final delivery uses the original ceremony reference and generation; stale evidence
 refuses transport without advancing this axis.
 
-| Transition ID                     | From                 | Event              | To                | Guard and effect                                                                                                                                                                           |
-| --------------------------------- | -------------------- | ------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| idp-auth-email-otp-challenge:T001 | absent or unverified | issue_email_otp!   | issued            | Active admitted continuity, pending locked parent, DB time; current effective Contact or dummy; replace only this ceremony generation                                                      |
-| idp-auth-email-otp-challenge:T002 | issued               | verify_email_otp!  | verified          | Current surface/purpose/SID/parent and Contact/owner/finalization facts, deadline, candidate cap, shared budget, bound code digest                                                         |
-| idp-auth-email-otp-challenge:T003 | issued               | wrong code         | issued            | Atomic shared failure count and real candidate failures; stale scope refuses before comparison                                                                                             |
-| idp-auth-email-otp-challenge:T004 | verified             | verification retry | verified          | Original result deadline remains live; original proof unchanged; already_verified receipt, not a second successful OTP consumption; controllers explicitly continue from verified evidence |
-| idp-auth-email-otp-challenge:T005 | issued or verified   | deadline elapsed   | expired predicate | No state write; parent and Auth expiry cap both deadlines                                                                                                                                  |
-| idp-auth-email-otp-challenge:T006 | issued               | cancel_email_otp_challenge! | cancelled | App/com DELETE under pending parent and ceremony locks; retained cancellation time refuses verification and delivery; the browser's temporary email state is removed |
-| idp-auth-email-otp-challenge:T007 | cancelled            | issue_email_otp!   | issued            | A new generation may start on the still-pending parent; the cancelled generation does not regain authority |
+| Transition ID                     | From                 | Event                       | To                | Guard and effect                                                                                                                                                                           |
+| --------------------------------- | -------------------- | --------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| idp-auth-email-otp-challenge:T001 | absent or unverified | issue_email_otp!            | issued            | Active admitted continuity, pending locked parent, DB time; current effective Contact or dummy; replace only this ceremony generation                                                      |
+| idp-auth-email-otp-challenge:T002 | issued               | verify_email_otp!           | verified          | Current surface/purpose/SID/parent and Contact/owner/finalization facts, deadline, candidate cap, shared budget, bound code digest                                                         |
+| idp-auth-email-otp-challenge:T003 | issued               | wrong code                  | issued            | Atomic shared failure count and real candidate failures; stale scope refuses before comparison                                                                                             |
+| idp-auth-email-otp-challenge:T004 | verified             | verification retry          | verified          | Original result deadline remains live; original proof unchanged; already_verified receipt, not a second successful OTP consumption; controllers explicitly continue from verified evidence |
+| idp-auth-email-otp-challenge:T005 | issued or verified   | deadline elapsed            | expired predicate | No state write; parent and Auth expiry cap both deadlines                                                                                                                                  |
+| idp-auth-email-otp-challenge:T006 | issued               | cancel_email_otp_challenge! | cancelled         | App/com DELETE under pending parent and ceremony locks; retained cancellation time refuses verification and delivery; the browser's temporary email state is removed                       |
+| idp-auth-email-otp-challenge:T007 | cancelled            | issue_email_otp!            | issued            | A new generation may start on the still-pending parent; the cancelled generation does not regain authority                                                                                 |
 
 Verified proof reissue is refused. Source Contact OTP generations and root/RP authority remain
 unchanged. Forward shape checks and verified-proof immutability triggers are installed. The final
@@ -262,8 +263,11 @@ Tests read: `test/services/sign_in/post_issuance_participants_test.rb`,
 | idp-client-sign-in:T027 | DOCUMENTED_TRANSITION | Any pending app status with FAILED in its model map | expire_sign_in! via Secret claim reconciliation      | FAILED                   | Writer DB deadline reached; no issued session or token; same Ticket row lock as issuance; completed login immutable                           | Synchronize status/state/step without extending admission; source retirement separately audits flow_expired | app/models/client_sign_in_flow.rb; app/operations/client_secret_claim_finalizer.rb | CONFIRMED  |
 | idp-client-sign-in:T028 | INITIALIZATION        | absent                                              | ClientSecretClaimCommitter.bind_oidc_flow!           | PRIMARY_PENDING          | Saved complete value; Client lock; locked pending app OIDC transaction; matching admitted active browser ceremony; all writer deadlines valid | Server-issued flow bound uniquely to OIDC transaction; retries reuse; no claim, proof or token              | app/operations/client_secret_claim_committer.rb                                    | CONFIRMED  |
 
-Terminal storage states are COMPLETED (100) and FAILED (900). Expiry is a predicate
-(`expires_at <= now`), not an EXPIRED status write; no cancel status/event exists. Expired flows
+Terminal storage states now include COMPLETED (100), legacy FAILED (900), and the migration-owned
+HALTED (930) row for the implemented sign-in phase-admission paths. The strict phase gate records
+HALTED only for an attributable state-changing mismatch; a contradictory GET or HEAD is a 409
+observation with no lifecycle edge. Expiry is a predicate (`expires_at <= now`) on the unchanged
+local sign-in paths, not an EXPIRED status write; no cancel status/event exists there. Expired flows
 disappear from `SignInCycleLocator.current`. Named methods use FlowBase locks, but `transition_to!`
 checks its model transition map before entering the locked write. `complete_sign_in!` permits
 SESSION_LIMIT_PENDING/DASHBOARD_PENDING → COMPLETED although the model TRANSITIONS map does not.
@@ -337,8 +341,11 @@ Tests read: `test/services/sign_in/post_issuance_participants_test.rb`,
 | idp-visitor-sign-in:T025 | OUT_OF_BAND           | SELECTOR_PENDING         | AuthenticationSequenceGate direct update legacy path | DASHBOARD_PENDING        | Legacy participant completed checkpoint/selector; direct update! no named transition guard | status/state/step dashboard                                                                      | app/controllers/concerns/authentication_sequence_gate.rb | CONFIRMED  |
 | idp-visitor-sign-in:T026 | DOCUMENTED_TRANSITION | MFA_PENDING              | cancel_pending_mfa                                   | HALTED                   | Matching pending principal/flow and live halt_sign_in! transition guard                    | Halt flow; clear pending MFA/browser locator; retain outer Auth/OIDC admission; no Root issuance | app/controllers/concerns/authentication_base.rb          | CONFIRMED  |
 
-Terminal storage states are COMPLETED (100) and FAILED (900). Expiry is a predicate
-(`expires_at <= now`), not an EXPIRED status write; no cancel status/event exists. Expired flows
+Terminal storage states now include COMPLETED (100), legacy FAILED (900), and the migration-owned
+HALTED (930) row for the implemented sign-in phase-admission paths. The strict phase gate records
+HALTED only for an attributable state-changing mismatch; a contradictory GET or HEAD is a 409
+observation with no lifecycle edge. Expiry is a predicate (`expires_at <= now`) on the unchanged
+local sign-in paths, not an EXPIRED status write; no cancel status/event exists there. Expired flows
 disappear from `SignInCycleLocator.current`. Named methods use FlowBase locks, but `transition_to!`
 checks its model transition map before entering the locked write. `complete_sign_in!` permits
 SESSION_LIMIT_PENDING/DASHBOARD_PENDING → COMPLETED although the model TRANSITIONS map does not.
@@ -412,8 +419,11 @@ Tests read: `test/services/sign_in/post_issuance_participants_test.rb`,
 | idp-operator-sign-in:T025 | OUT_OF_BAND           | SELECTOR_PENDING         | AuthenticationSequenceGate direct update legacy path | DASHBOARD_PENDING        | Legacy participant completed checkpoint/selector; direct update! no named transition guard | status/state/step dashboard                                                                      | app/controllers/concerns/authentication_sequence_gate.rb | CONFIRMED  |
 | idp-operator-sign-in:T026 | DOCUMENTED_TRANSITION | MFA_PENDING              | cancel_pending_mfa                                   | HALTED                   | Matching pending principal/flow and live halt_sign_in! transition guard                    | Halt flow; clear pending MFA/browser locator; retain outer Auth/OIDC admission; no Root issuance | app/controllers/concerns/authentication_base.rb          | CONFIRMED  |
 
-Terminal storage states are COMPLETED (100) and FAILED (900). Expiry is a predicate
-(`expires_at <= now`), not an EXPIRED status write; no cancel status/event exists. Expired flows
+Terminal storage states now include COMPLETED (100), legacy FAILED (900), and the migration-owned
+HALTED (930) row for the implemented sign-in phase-admission paths. The strict phase gate records
+HALTED only for an attributable state-changing mismatch; a contradictory GET or HEAD is a 409
+observation with no lifecycle edge. Expiry is a predicate (`expires_at <= now`) on the unchanged
+local sign-in paths, not an EXPIRED status write; no cancel status/event exists there. Expired flows
 disappear from `SignInCycleLocator.current`. Named methods use FlowBase locks, but `transition_to!`
 checks its model transition map before entering the locked write. `complete_sign_in!` permits
 SESSION_LIMIT_PENDING/DASHBOARD_PENDING → COMPLETED although the model TRANSITIONS map does not.
@@ -442,6 +452,26 @@ transitions. Storage duplicates status_id, state and step; model STEP_BY_STATUS_
 model validations align them, including COMPLETED step. See mutation index for exact locations.
 Tests read cover participant rejection, selector binding, legacy dashboard/return, admission refusal
 and finalization replay; no test execution is claimed.
+
+## idp-sign-in-phase-admission
+
+Implementation: `SignInFlowBindingCodec`, `SignInPhaseBindingControllerSupport`, and
+`SignInPhaseViolationEnforcer`. Scope: local sign-in routes whose authoritative phase is a
+realm-specific `ClientSignInFlow`, `VisitorSignInFlow`, or `OperatorSignInFlow`.
+
+| Transition ID                    | Request class                             | Binding condition                                                                                         | Result                                                           | Lifecycle effect                                               | Side-effect rule                                                           |
+| -------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| idp-sign-in-phase-admission:T001 | Same-phase GET/HEAD or mutation           | Signed binding names the current flow, surface, phase, and immutable generation                           | Request proceeds through the existing public controller boundary | Unchanged or the controller's ordinary advance                 | Existing OTP, challenge, and session rules apply                           |
+| idp-sign-in-phase-admission:T002 | Contradictory GET/HEAD                    | Missing, malformed, expired, cross-surface, cross-flow, or wrong-phase binding                            | HTTP 409 `text/plain` with `戻るはだめです`                      | None; this is not a lifecycle edge                             | No redirect, state write, OTP/challenge, session, or provider side effect  |
+| idp-sign-in-phase-admission:T003 | Attributable state-changing mismatch      | Binding identifies the original flow, but the locked/reloaded flow has moved away from the expected phase | Request refused and halt recorded                                | `HALTED = 930`, reason `phase_regression` or `phase_violation` | No revival, second terminal transition, session issuance, or new challenge |
+| idp-sign-in-phase-admission:T004 | Invalid or unbound state-changing request | Binding cannot identify an attributable flow                                                              | HTTP 409 refusal                                                 | No current-locator substitution and no unrelated flow halt     | No new side effect                                                         |
+
+The binding is a signed, purpose-bound application capability and never carries a raw locator nonce,
+database primary key, OAuth/OIDC state, PKCE, CSRF token, or return-target token. The flow row lock,
+actor check, expiry handling, concrete provider transaction, and existing `commit_login_session!` /
+`lock_sign_in_flow_for_issuance!` boundary remain authoritative. The inventory is evidence for this
+implementation slice; provider-owned social/Entra ceremonies and untouched lifecycle axes retain
+their concrete authority until their own slice is completed.
 
 ## idp-client-sign-up
 
@@ -1382,10 +1412,10 @@ Sources: `app/models/client_social_ceremony_transaction.rb`,
 Tests read: `test/models/concerns/social_ceremony_transactionable_test.rb`, UNKNOWN dedicated social
 final-committer test (path not present).
 
-| Transition ID                   | Mutation kind         | From    | Event / Trigger                        | To       | Guard                                        | Side effect                     | Source file                                            | Confidence |
-| ------------------------------- | --------------------- | ------- | -------------------------------------- | -------- | -------------------------------------------- | ------------------------------- | ------------------------------------------------------ | ---------- |
-| idp-client-social-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! / Base final committer | consumed | unconsumed; TTL; row lock; unique result_jti | consumed_at and result evidence | app/models/concerns/social_ceremony_transactionable.rb | CONFIRMED  |
-| idp-client-social-ceremony:T002 | DOCUMENTED_TRANSITION | pending | app link completion | pending with expired grant | pending; unconsumed; TTL; candidate and session match | expires_at set to current DB time after candidate consumption | app/controllers/auth/app/social/link_completions_controller.rb | CONFIRMED |
+| Transition ID                   | Mutation kind         | From    | Event / Trigger                        | To                         | Guard                                                 | Side effect                                                   | Source file                                                    | Confidence |
+| ------------------------------- | --------------------- | ------- | -------------------------------------- | -------------------------- | ----------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------- | ---------- |
+| idp-client-social-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! / Base final committer | consumed                   | unconsumed; TTL; row lock; unique result_jti          | consumed_at and result evidence                               | app/models/concerns/social_ceremony_transactionable.rb         | CONFIRMED  |
+| idp-client-social-ceremony:T002 | DOCUMENTED_TRANSITION | pending | app link completion                    | pending with expired grant | pending; unconsumed; TTL; candidate and session match | expires_at set to current DB time after candidate consumption | app/controllers/auth/app/social/link_completions_controller.rb | CONFIRMED  |
 
 These concrete machines exist only in app/client. pending default; consumed terminal; TTL 10 minutes
 is predicate-only and background purge retires rows after retention. No canceled/failed state or
@@ -3334,23 +3364,23 @@ Tests read: `test/models/client_external_identity_test.rb`,
 `test/services/external_authentication_apple_notification_processor_test.rb`,
 `test/adapters/external_authentication/client_external_identity_repository_adapter_test.rb`.
 
-| Transition ID                     | Mutation kind         | From            | Event / Trigger      | To              | Guard                                                                 | Side effect                                                | Source file                                                                         | Confidence |
-| --------------------------------- | --------------------- | --------------- | -------------------- | --------------- | --------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------- |
-| idp-client-external-identity:T001 | DOCUMENTED_TRANSITION | active          | consent-revoked      | consent_revoked | Not account_deleted; provider event newer than last_provider_event_at | Persist state/event time; revoke all sessions when applied | app/services/external_authentication_apple_notification_processor.rb                | CONFIRMED  |
-| idp-client-external-identity:T002 | DOCUMENTED_TRANSITION | active          | account-deleted      | account_deleted | Not account_deleted; provider event newer than last_provider_event_at | Persist state/event time; revoke all sessions when applied | app/services/external_authentication_apple_notification_processor.rb                | CONFIRMED  |
-| idp-client-external-identity:T003 | DOCUMENTED_TRANSITION | consent_revoked | consent-revoked      | consent_revoked | Not account_deleted; provider event newer than last_provider_event_at | Persist state/event time; revoke all sessions when applied | app/services/external_authentication_apple_notification_processor.rb                | CONFIRMED  |
-| idp-client-external-identity:T004 | DOCUMENTED_TRANSITION | consent_revoked | account-deleted      | account_deleted | Not account_deleted; provider event newer than last_provider_event_at | Persist state/event time; revoke all sessions when applied | app/services/external_authentication_apple_notification_processor.rb                | CONFIRMED  |
-| idp-client-external-identity:T005 | OUT_OF_BAND           | active          | repository.activate! | active          | Provider matches; account_deleted refused                             | state direct update                                        | app/adapters/external_authentication/client_external_identity_repository_adapter.rb | CONFIRMED  |
-| idp-client-external-identity:T006 | OUT_OF_BAND           | consent_revoked | repository.activate! | active          | Provider matches; account_deleted refused                             | state direct update                                        | app/adapters/external_authentication/client_external_identity_repository_adapter.rb | CONFIRMED  |
-| idp-client-external-identity:T007 | DOCUMENTED_TRANSITION | active or consent_revoked | app withdrawal termination | removed | Source owner transaction and subject lock | release proof commits before identity removal | app/operations/withdrawal_personal_data_anonymizer.rb | CONFIRMED |
+| Transition ID                     | Mutation kind         | From                      | Event / Trigger            | To              | Guard                                                                 | Side effect                                                | Source file                                                                         | Confidence |
+| --------------------------------- | --------------------- | ------------------------- | -------------------------- | --------------- | --------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------- |
+| idp-client-external-identity:T001 | DOCUMENTED_TRANSITION | active                    | consent-revoked            | consent_revoked | Not account_deleted; provider event newer than last_provider_event_at | Persist state/event time; revoke all sessions when applied | app/services/external_authentication_apple_notification_processor.rb                | CONFIRMED  |
+| idp-client-external-identity:T002 | DOCUMENTED_TRANSITION | active                    | account-deleted            | account_deleted | Not account_deleted; provider event newer than last_provider_event_at | Persist state/event time; revoke all sessions when applied | app/services/external_authentication_apple_notification_processor.rb                | CONFIRMED  |
+| idp-client-external-identity:T003 | DOCUMENTED_TRANSITION | consent_revoked           | consent-revoked            | consent_revoked | Not account_deleted; provider event newer than last_provider_event_at | Persist state/event time; revoke all sessions when applied | app/services/external_authentication_apple_notification_processor.rb                | CONFIRMED  |
+| idp-client-external-identity:T004 | DOCUMENTED_TRANSITION | consent_revoked           | account-deleted            | account_deleted | Not account_deleted; provider event newer than last_provider_event_at | Persist state/event time; revoke all sessions when applied | app/services/external_authentication_apple_notification_processor.rb                | CONFIRMED  |
+| idp-client-external-identity:T005 | OUT_OF_BAND           | active                    | repository.activate!       | active          | Provider matches; account_deleted refused                             | state direct update                                        | app/adapters/external_authentication/client_external_identity_repository_adapter.rb | CONFIRMED  |
+| idp-client-external-identity:T006 | OUT_OF_BAND           | consent_revoked           | repository.activate!       | active          | Provider matches; account_deleted refused                             | state direct update                                        | app/adapters/external_authentication/client_external_identity_repository_adapter.rb | CONFIRMED  |
+| idp-client-external-identity:T007 | DOCUMENTED_TRANSITION | active or consent_revoked | app withdrawal termination | removed         | Source owner transaction and subject lock                             | release proof commits before identity removal              | app/operations/withdrawal_personal_data_anonymizer.rb                               | CONFIRMED  |
 
 String CHECK/no state reference. Consent revocation can reactivate through repository; account
 deletion cannot. Provider-event ordering uses timestamp comparison without row lock in processor.
 Event result and identity state are separate. Public repository destroy physically removes identity,
 separate from account_deleted. App withdrawal termination records a keyed social release proof in
 the same Source transaction before removing the row; org Entra ID is unaffected. Authentication
-metadata refresh does not change lifecycle. No cancel
-or deadline: entitlement remains until provider/admin action.
+metadata refresh does not change lifecycle. No cancel or deadline: entitlement remains until
+provider/admin action.
 
 ## idp-client-totp-credential
 
@@ -4204,10 +4234,10 @@ Sources: `app/models/operator_telephone.rb`, `app/models/operator_telephone_stat
 Tests read: `test/models/operator_telephone_test.rb`,
 `test/operations/identity_telephone_ceremony_final_committer_test.rb`.
 
-| Transition ID                          | Mutation kind          | From       | Event / Trigger                          | To       | Guard                                                                                                                                                     | Side effect                                                                                                                    | Source file                                                       | Confidence |
-| -------------------------------------- | ---------------------- | ---------- | ---------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- | ---------- |
-| idp-operator-telephone-credential:T001 | DOCUMENTED_TRANSITION  | UNVERIFIED | Base ceremony final commit               | VERIFIED | Signed result bound to actor/session; pending contact under row lock                                                                                      | Consume ceremony on ticket DB before principal status commit                                                                   | app/operations/identity_telephone_ceremony_final_committer.rb     | CONFIRMED  |
-| idp-operator-telephone-credential:T002 | NAMED_MODEL_TRANSITION | UNVERIFIED | Authenticated Telephone OTP registration | VERIFIED | Typed ORG ceremony, numeric candidate/owner/Root/browser/destination binding, original bounded keyed evidence, current passkey-only policy and credential | Source model transition commits before Ticket receipt; exact retry preserves Source facts; no APP/COM audit outbox is invented | app/models/operator_telephone.rb:finalize_telephone_registration! | CONFIRMED  |
+| Transition ID                          | Mutation kind          | From       | Event / Trigger                          | To       | Guard                                                                                                                                                           | Side effect                                                                                                                    | Source file                                                       | Confidence |
+| -------------------------------------- | ---------------------- | ---------- | ---------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- | ---------- |
+| idp-operator-telephone-credential:T001 | DOCUMENTED_TRANSITION  | UNVERIFIED | Base ceremony final commit               | VERIFIED | Signed result bound to actor/session; pending contact under row lock                                                                                            | Consume ceremony on ticket DB before principal status commit                                                                   | app/operations/identity_telephone_ceremony_final_committer.rb     | CONFIRMED  |
+| idp-operator-telephone-credential:T002 | NAMED_MODEL_TRANSITION | UNVERIFIED | Authenticated Telephone OTP registration | VERIFIED | Typed ORG ceremony, opaque public candidate/owner/Root/browser/destination binding, original bounded keyed evidence, current passkey-only policy and credential | Source model transition commits before Ticket receipt; exact retry preserves Source facts; no APP/COM audit outbox is invented | app/models/operator_telephone.rb:finalize_telephone_registration! | CONFIRMED  |
 
 There is no general transition map. The named OTP writer restricts registration to UNVERIFIED to
 VERIFIED and permits an exact already-VERIFIED retry without a write. The signed-result committer

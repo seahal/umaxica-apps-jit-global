@@ -126,6 +126,12 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
           assert_equal 303, fv5001.response.status
         end
       end
+      cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+      ceremony = VisitorAuthCeremonySession.find_active_by_raw_sid(cookies[cookie_name])
+      flow = VisitorSignInFlow.find_by!(public_id: ceremony.local_sign_in_flow_ref)
+      @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+        flow: flow, surface: "com", phase: "PRIMARY_PENDING",
+      )
     end
   end
 
@@ -135,22 +141,31 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "should get new" do
-    get new_auth_com_sign_in_passkey_path(ri: "jp"), headers: @origin_headers
+    get new_auth_com_sign_in_passkey_path(ri: "jp", fb: @primary_sign_in_binding), headers: @origin_headers
 
     assert_response :success
     assert_equal "auth/com/sign/in/passkeys/new", inertia_component
 
     panel = inertia_props.fetch("panel")
 
-    assert_equal auth_com_sign_in_passkey_options_path(ri: "jp"), panel.fetch("options_url")
-    assert_equal auth_com_sign_in_passkey_verification_path(ri: "jp"), panel.fetch("verification_url")
+    options_uri = URI.parse(panel.fetch("options_url"))
+    verification_uri = URI.parse(panel.fetch("verification_url"))
+
+    assert_equal URI.parse(auth_com_sign_in_passkey_options_path(ri: "jp")).path, options_uri.path
+    assert_equal URI.parse(auth_com_sign_in_passkey_verification_path(ri: "jp")).path, verification_uri.path
+    assert_equal "com", SignInFlowBindingCodec.decode(
+      Rack::Utils.parse_nested_query(options_uri.query).fetch("fb"),
+    ).surface
+    assert_equal "com", SignInFlowBindingCodec.decode(
+      Rack::Utils.parse_nested_query(verification_uri.query).fetch("fb"),
+    ).surface
     assert_equal "jp", panel.fetch("region")
     assert_nil panel.fetch("identifier_param")
     assert_nil panel.fetch("field")
   end
 
   test "options is anonymous and does not disclose credential descriptors" do
-    post auth_com_sign_in_passkey_options_path(ri: "jp"),
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
          params: { "cf-turnstile-response": "test_token" },
          headers: @origin_headers
 
@@ -165,7 +180,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "options ignores a submitted identifier instead of using it for identity selection" do
-    post auth_com_sign_in_passkey_options_path(ri: "jp"),
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
          params: { identifier: @visitor.visitor_emails.first.address, "cf-turnstile-response": "test_token" },
          headers: @origin_headers
 
@@ -175,7 +190,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_empty Array(known.dig("options", "allowCredentials"))
     assert_nil session[:passkey_challenges].fetch(known.fetch("challenge_id"))["actor_global_key"]
 
-    post auth_com_sign_in_passkey_options_path(ri: "jp"),
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
          params: { identifier: "missing@example.com", "cf-turnstile-response": "test_token" },
          headers: @origin_headers
 
@@ -187,10 +202,10 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "verification logs visitor in on success" do
-    post auth_com_sign_in_passkey_options_path(ri: "jp"), headers: @origin_headers
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding), headers: @origin_headers
     challenge_id = response.parsed_body["challenge_id"]
 
-    post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            challenge_id: challenge_id,
            credential: @fake.get(
@@ -203,7 +218,8 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
 
     assert_response :ok
     assert_equal "ok", response.parsed_body["status"]
-    assert_equal auth_com_sign_in_check_path(ri: "jp"), response.parsed_body["redirect_url"]
+    assert_equal URI.parse(auth_com_sign_in_check_path(ri: "jp")).path,
+                 URI.parse(response.parsed_body.fetch("redirect_url")).path
   end
 end
 
@@ -215,7 +231,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
   TEST_VERIFICATION_COOKIE_PREFIX = "test_verified:"
 
   test "options accepts a verified telephone number as the identifier" do
-    post auth_com_sign_in_passkey_options_path(ri: "jp"),
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
          params: { identifier: @visitor.visitor_telephones.first.number, "cf-turnstile-response": "test_token" },
          headers: @origin_headers
 
@@ -231,12 +247,12 @@ class Auth::Com::Sign::In::PasskeysControllerTest
     @visitor.visitor_emails.update_all(visitor_email_status_id: VisitorEmailStatus::UNVERIFIED)
     @visitor.visitor_telephones.update_all(visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED)
 
-    post auth_com_sign_in_passkey_options_path(ri: "jp"),
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
          params: { identifier: @visitor.visitor_emails.first.address },
          headers: @origin_headers
     challenge_id = response.parsed_body["challenge_id"]
 
-    post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            challenge_id: challenge_id,
            credential: @fake.get(
@@ -263,12 +279,12 @@ class Auth::Com::Sign::In::PasskeysControllerTest
       description: "Other Login Key",
       status_id: VisitorPasskeyStatus::ACTIVE,
     )
-    post auth_com_sign_in_passkey_options_path(ri: "jp"),
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
          params: {},
          headers: @origin_headers
     challenge_id = response.parsed_body["challenge_id"]
 
-    post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            challenge_id: challenge_id,
            credential: other_fake.get(
@@ -289,12 +305,12 @@ class Auth::Com::Sign::In::PasskeysControllerTest
   test "verification rejects a disabled discoverable credential" do
     VisitorPasskeyStatus.ensure_defaults!
     @passkey.update!(status_id: VisitorPasskeyStatus::DISABLED)
-    post auth_com_sign_in_passkey_options_path(ri: "jp"),
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
          params: {},
          headers: @origin_headers
     challenge_id = response.parsed_body.fetch("challenge_id")
 
-    post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            challenge_id: challenge_id,
            credential: @fake.get(
@@ -311,12 +327,12 @@ class Auth::Com::Sign::In::PasskeysControllerTest
 
   test "verification rejects a discoverable credential owned by a suspended visitor" do
     @visitor.reload.update!(deactivated_at: Time.current)
-    post auth_com_sign_in_passkey_options_path(ri: "jp"),
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
          params: {},
          headers: @origin_headers
     challenge_id = response.parsed_body.fetch("challenge_id")
 
-    post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            challenge_id: challenge_id,
            credential: @fake.get(
@@ -343,12 +359,12 @@ class Auth::Com::Sign::In::PasskeysControllerTest
       status_id: ClientPasskeyStatus::ACTIVE,
     )
 
-    post auth_com_sign_in_passkey_options_path(ri: "jp"),
+    post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
          params: {},
          headers: @origin_headers
     challenge_id = response.parsed_body.fetch("challenge_id")
 
-    post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            challenge_id: challenge_id,
            credential: { id: app_only_id },
@@ -360,7 +376,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
   end
 
   test "verification rejects a challenge id that was never issued" do
-    post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+    post auth_com_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
          params: { challenge_id: "not-a-real-challenge", credential: { id: "x" } },
          headers: @origin_headers
 
@@ -443,8 +459,6 @@ class Auth::Com::Sign::In::PasskeysControllerTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -458,8 +472,6 @@ class Auth::Com::Sign::In::PasskeysControllerTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -697,8 +709,6 @@ class Auth::Com::Sign::In::PasskeysControllerTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

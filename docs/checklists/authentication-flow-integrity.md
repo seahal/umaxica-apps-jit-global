@@ -40,7 +40,11 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   existing contract. Check
   [app phase regression tests](../../test/integration/sign_up_phase_regression_app_test.rb) and
   [step refusal tests](../../test/policies/sign_up_step_gate_refusals_test.rb), measuring
-  before/after records and response. Other families/surfaces require explicit planned-to-actual test
+  before/after records and response. The local sign-in slice also has public-boundary coverage in
+  [app MFA admission tests](../../test/controllers/auth/app/in/challenges_controller_test.rb),
+  [com MFA admission tests](../../test/controllers/auth/com/in/challenges_controller_test.rb),
+  and the app/com passkey and MFA controller tests; these references establish only the scenarios
+  they actually exercise. Other families/surfaces require explicit planned-to-actual test
   references.
 
 ## FLOW-3 — Unsafe phase violation and terminal absorption
@@ -56,7 +60,10 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
 - Check public HTTP plus locked transitions and audit, existing
   [state-machine tests](../../test/services/sign_up/state_machine_test.rb) and phase tests. Race
   testing must demonstrate atomic lock/reload/check/transition; a released-lock precheck followed by
-  termination is not proof. Full terminal consumer coverage is planned.
+  termination is not proof. The signed-instance codec contract is covered by
+  [sign-in binding codec tests](../../test/services/sign_in_flow_binding_codec_test.rb). Full
+  terminal consumer and independent-connection race coverage remains a planned acceptance item
+  until actual evidence is recorded.
 
 ## FLOW-4 — Original A cannot mutate replacement B
 
@@ -72,8 +79,9 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   and before/at/after expiry. Expected phase/version/generation is server-verifiable; unsigned
   labels/raw PKs are not authority. No raw locator nonce exposure or OAuth state/PKCE/CSRF/pt reuse.
 - Check codec, Rails-generated URLs/bodies, session locator and HTTP tests. Existing app phase tests
-  are a starting reference, not complete cross-family coverage; planned gaps must be named. No JS
-  Back/History API state is needed to decide a server request.
+  are a starting reference, not complete cross-family coverage; planned gaps must be named. The
+  codec and app/com public controller references above must be checked against the current HEAD,
+  not merely found by path. No JS Back/History API state is needed to decide a server request.
 
 ## FLOW-5 — Concurrent progression and committed work
 

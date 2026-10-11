@@ -53,6 +53,7 @@ class AvatarPolicy < ApplicationPolicy
       subject_public_id: Actor.selection.account_public_id,
       owner_collective_public_id: ownership.owner_collective_public_id,
       permission: permission,
+      avatar: record,
     )
   end
 

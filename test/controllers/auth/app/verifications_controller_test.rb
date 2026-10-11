@@ -82,7 +82,7 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     email = ClientEmail.create!(
       user: actor, address: "verification-entry-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     email.finalize_binding!
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)

@@ -209,6 +209,7 @@ four.md
 five.md
 six.md
 seven.md
+eight.md
 nine.md
 # do not remove following lines.
 
@@ -217,3 +218,4 @@ nine.md
 
 # RuboCop result cache written when the cache root resolved under config/.
 /config/tmp/
+.vscode/extensions.json

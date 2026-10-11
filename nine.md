@@ -170,7 +170,7 @@ managed-environment status tool was unavailable. These limitations are not succe
 | Flow enforcement   | `SignFlowBindingCodec` supports only app/com sign-up and signs kind/surface/public ID, without phase/version/expiry. `SignUpPhaseViolationEnforcer` evaluates under a lock, releases it, then calls termination.                                  | Partial. Recheck endpoint phase binding and race behavior; code shape suggests an atomicity question, not a proven exploit.                |
 | Session issuance   | `AuthenticationBase#commit_login_session!` and `lock_sign_in_flow_for_issuance!` retain flow locking, actor/token/state checks. All three Ticket dumps contain unique non-null `token_id` indexes.                                                | Existing protection to retain and test. Index uniqueness is not alone proof of one-flow/one-session issuance.                              |
 | HALTED             | Concrete sign-in state and sign-up status classes already define 930 and terminal mappings; an app sign-up integration test exists.                                                                                                               | Implemented in some paths, unverified here. Older docs claiming HALTED is absent are stale candidates.                                     |
-| OTP separation     | Independent `EmailOtpPolicy` and `TelephoneOtpPolicy` exist; both still expose identifier HOTP storage/initialization methods. Telephone schemas contain `otp_last_sent_at`.                                                                      | Partial; remove remaining proof responsibility only after caller inventory. Do not recreate an already removed OtpLockable implementation. |
+| OTP separation     | Independent `EmailOtpPolicy` and `TelephoneOtpPolicy` remain responsible for lockout/failure policy only. Identifier-owned HOTP lifecycle methods and withdrawal proof writes were removed in the P3d runtime slice; legacy physical columns and structural empty-value initialization remain pending a complete forward schema-retirement inventory. | Partial; verify every remaining reader/fixture/constraint before dropping legacy columns. Do not recreate an identifier-owned proof path or silently fall back to it. |
 | Realm keys/history | Realm provider, fingerprint verifier, six history models and contract/purge/concurrency tests exist. ADR records six-key/keyring and extensive ceremony work.                                                                                     | Implemented portions, incomplete verification. Historical pass counts are not this execution's evidence.                                   |
 | Observability      | Filter initializer still has ambiguous short Symbols; OTel registers ActionMailer without transforms; common application config search found no mailer logger policy. Alloy redacts URL/auth/token attributes but lacks explicit mail attributes. | Required remediation remains in the inspected configuration.                                                                               |
 | Devcontainer       | Read-only `.github`, `bin`, `.devcontainer` mounts exist; no `podman/alloy` directory overlay was found.                                                                                                                                          | Required mount change remains; effective runtime mount unverified.                                                                         |
@@ -541,6 +541,20 @@ emergency rotation so a com Telephone incident does not rotate app/org or Email.
 restricted maintenance authorization; do not grant ordinary writers permission to modify finalized
 identity binding. Required ENV reads use one-argument fetch; optional reads have explicit nil paths.
 No secret values in errors/evidence and no code defaults to make tests boot.
+
+#### Post-decision addition — signal only, outside this implementation scope
+
+The user has identified Rails 8.2's combined credentials API (`Rails.app.creds`) as the
+intended configuration approach for the six HMAC keys listed above: environment values take
+precedence, with Rails encrypted credentials supplying the same keys when environment values
+are absent; development also includes Rails' supported `.env` lookup. Missing required keys must
+still fail closed, without legacy global-key fallback or default secrets.
+
+This note records a post-decision signal, not an additional implementation requirement. It is
+excluded from this plan's implementation slices, acceptance criteria and acceptance tests. Do not
+add credential-resolution work or tests to the current scope on the basis of this note, and do not
+change existing configuration merely to match it. Any later adoption or verification belongs to a
+separately scoped change; the current six-key isolation and fail-closed contracts remain in force.
 
 Use the existing accepted ARE decision: six identifier models use realm-specific current-write/
 previous-read keyrings, while other inventoried PII keeps its separately owned keyring. Read

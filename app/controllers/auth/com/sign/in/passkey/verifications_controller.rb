@@ -9,12 +9,14 @@ module Auth
           class VerificationsController < ::Auth::Com::ApplicationController
             include ::PasskeySignInFlow
             include ::AuthenticationModeSwitchGuard
+            include ::SignInPhaseBindingControllerSupport
 
             AUTHENTICATION_MODE = :guest
 
             prepend_before_action :require_sign_in_ceremony_admission!
             ensure_fqdn_gate_first!
             prepend_before_action :apply_default_no_store
+            before_action -> { enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") }
             declare_authentication_mode! :guest
             before_action :start_minimum_response_budget
             after_action :enforce_minimum_response_budget
@@ -89,6 +91,7 @@ module Auth
               auth_com_sign_in_check_path(
                 pt: retrieve_pt_for_checkpoint,
                 ri: current_region_identifier,
+                **sign_in_flow_binding_params(sign_in_phase_binding_current_flow),
               )
             end
 

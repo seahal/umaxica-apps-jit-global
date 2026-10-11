@@ -390,7 +390,11 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
       "X-TEST-CURRENT-USER" => @user.id.to_s,
       "X-TEST-SESSION-PUBLIC-ID" => @token.public_id,
     )
-    get base_app_selector_url(host: @host, ri: "jp"), headers: follow_headers
+
+    binding = SignInFlowBindingCodec.encode(
+      flow: cycle, surface: "app", phase: "SELECTOR_PENDING",
+    )
+    get base_app_selector_url(host: @host, ri: "jp", fb: binding), headers: follow_headers
 
     location = response.redirect? ? URI.parse(response.location).request_uri : nil
 
@@ -719,8 +723,6 @@ class Base::App::SelectorControllerTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -734,8 +736,6 @@ class Base::App::SelectorControllerTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -974,8 +974,6 @@ class Base::App::SelectorControllerTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

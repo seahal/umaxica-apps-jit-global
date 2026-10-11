@@ -309,7 +309,7 @@ class Base::Org::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     )
 
     assert_equal pending.public_id, transaction.email_candidate_ref
-    assert_nil pending.otp_expires_at
+    assert_not pending.attributes.key?("otp_expires_at")
 
     patch base_org_identity_emails_registration_url(ri: "jp", host: @host),
           params: { staff_email: { pass_code: code } }, headers: @headers

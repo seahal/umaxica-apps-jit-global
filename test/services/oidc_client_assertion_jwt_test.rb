@@ -10,6 +10,8 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
   end
 
   test "issue returns nil when local key refresh still cannot resolve the configured key" do
+    previous_issuers = JitSecurityJwtRegistry.instance_variable_get(:@issuers)
+
     with_env(
       "OIDC_CLIENT_CORE_APP_ACTIVE_KID" => nil,
       "OIDC_CLIENT_CORE_APP_PRIVATE_KEY" => nil,
@@ -27,6 +29,8 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
         end
       end
     end
+  ensure
+    JitSecurityJwtRegistry.instance_variable_set(:@issuers, previous_issuers)
   end
 
   test "issue refreshes local key material once when the registry is missing a client assertion key" do

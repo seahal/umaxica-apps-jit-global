@@ -3,6 +3,28 @@
 require "test_helper"
 
 class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
+  test "org registration references an opaque candidate rather than a source database primary key" do
+    actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    token = OperatorToken.create!(staff: actor, discard_at: 1.day.from_now)
+    telephone = actor.staff_telephones.create!(
+      raw_number: "+12025550149", confirm_policy: true, confirm_using_mfa: true,
+    )
+    token.rotate_refresh_token!
+
+    issued = TelephoneCredentialRegistrationOtpIssuer.call(
+      actor: actor, token: token, telephone: telephone, browser_nonce: SecureRandom.urlsafe_base64(32),
+    )
+
+    assert_predicate issued, :success?
+    reference = issued.transaction.reload.telephone_candidate_ref
+
+    assert_equal 21, reference.length
+    assert_not_equal telephone.id.to_s, reference
+    assert_equal telephone.reload.public_id, reference
+    assert_equal actor.public_id, issued.transaction.actor_ref
+    assert_equal telephone.number_digest, issued.transaction.normalized_number_digest
+  end
+
   %w(app com).each do |surface|
     test "#{surface} registration with default Root expiry retains finite ceremony and OTP deadlines" do
       actor, token, telephone =

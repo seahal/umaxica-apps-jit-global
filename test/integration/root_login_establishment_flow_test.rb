@@ -107,6 +107,9 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
     )
     flow = issuance.transaction
+    primary_binding = SignInFlowBindingCodec.encode(
+      flow: flow, surface: "app", phase: "PRIMARY_PENDING",
+    )
     SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
     session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
     session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
@@ -149,7 +152,7 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
     auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
     auth_browser = auth
     auth_browser.post(
-      auth_app_sign_in_email_path,
+      auth_app_sign_in_email_path(fb: primary_binding),
       params: { :user_email => { address: @email.address }, "cf-turnstile-response" => "t", :ri => "jp" },
       headers: auth_headers,
     )
@@ -179,7 +182,7 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
     audit_count = ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
     assert_no_difference(-> { ClientToken.where(user_id: @user.id).count }) do
       auth_browser.patch(
-        auth_app_sign_in_email_path,
+        auth_app_sign_in_email_path(fb: primary_binding),
         params: { :user_email => { pass_code: code },
                   "cf-turnstile-response" => "t",
                   :ri => "jp", },
@@ -374,6 +377,9 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
     )
     flow = issuance.transaction
+    primary_binding = SignInFlowBindingCodec.encode(
+      flow: flow, surface: "app", phase: "PRIMARY_PENDING",
+    )
     SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
     session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
     session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
@@ -416,7 +422,7 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
     auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
     auth_browser = auth
     auth_browser.post(
-      auth_app_sign_in_email_path,
+      auth_app_sign_in_email_path(fb: primary_binding),
       params: { :user_email => { address: @email.address }, "cf-turnstile-response" => "t", :ri => "jp" },
       headers: auth_headers,
     )
@@ -444,7 +450,7 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
     assert_nil context.fetch("verified_at")
     assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
     auth_browser.patch(
-      auth_app_sign_in_email_path,
+      auth_app_sign_in_email_path(fb: primary_binding),
       params: { :user_email => { pass_code: code },
                 "cf-turnstile-response" => "t",
                 :ri => "jp", },
@@ -532,6 +538,9 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
     )
     flow = issuance.transaction
+    primary_binding = SignInFlowBindingCodec.encode(
+      flow: flow, surface: "app", phase: "PRIMARY_PENDING",
+    )
     SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
     session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
     session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
@@ -574,7 +583,7 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
     auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
     auth_browser = auth
     auth_browser.post(
-      auth_app_sign_in_email_path,
+      auth_app_sign_in_email_path(fb: primary_binding),
       params: { :user_email => { address: @email.address }, "cf-turnstile-response" => "t", :ri => "jp" },
       headers: auth_headers,
     )
@@ -604,7 +613,7 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
     audit_count = ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
     assert_no_difference(-> { ClientToken.where(user_id: @user.id).count }) do
       auth_browser.patch(
-        auth_app_sign_in_email_path,
+        auth_app_sign_in_email_path(fb: primary_binding),
         params: { :user_email => { pass_code: code },
                   "cf-turnstile-response" => "t",
                   :ri => "jp", },
@@ -694,6 +703,9 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
     )
     flow = issuance.transaction
+    primary_binding = SignInFlowBindingCodec.encode(
+      flow: flow, surface: "app", phase: "PRIMARY_PENDING",
+    )
     SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
     session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
     session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
@@ -736,7 +748,7 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
     auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
     auth_browser = auth
     auth_browser.post(
-      auth_app_sign_in_email_path,
+      auth_app_sign_in_email_path(fb: primary_binding),
       params: { :user_email => { address: @email.address }, "cf-turnstile-response" => "t", :ri => "jp" },
       headers: auth_headers,
     )
@@ -766,7 +778,7 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
     audit_count = ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
     assert_no_difference(-> { ClientToken.where(user_id: @user.id).count }) do
       auth_browser.patch(
-        auth_app_sign_in_email_path,
+        auth_app_sign_in_email_path(fb: primary_binding),
         params: { :user_email => { pass_code: code },
                   "cf-turnstile-response" => "t",
                   :ri => "jp", },
@@ -873,6 +885,9 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
     )
     flow = issuance.transaction
+    primary_binding = SignInFlowBindingCodec.encode(
+      flow: flow, surface: "app", phase: "PRIMARY_PENDING",
+    )
     SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
     session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
     session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
@@ -915,7 +930,7 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
     auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
     auth_browser = auth
     auth_browser.post(
-      auth_app_sign_in_email_path,
+      auth_app_sign_in_email_path(fb: primary_binding),
       params: { :user_email => { address: @email.address }, "cf-turnstile-response" => "t", :ri => "jp" },
       headers: auth_headers,
     )
@@ -945,7 +960,7 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
     audit_count = ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
     assert_no_difference(-> { ClientToken.where(user_id: @user.id).count }) do
       auth_browser.patch(
-        auth_app_sign_in_email_path,
+        auth_app_sign_in_email_path(fb: primary_binding),
         params: { :user_email => { pass_code: code },
                   "cf-turnstile-response" => "t",
                   :ri => "jp", },
@@ -1089,6 +1104,9 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
                 base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
               )
               flow = issuance.transaction
+              primary_binding = SignInFlowBindingCodec.encode(
+                flow: flow, surface: "app", phase: "PRIMARY_PENDING",
+              )
               SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
               session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
               session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
@@ -1137,7 +1155,7 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
               auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
               auth_browser = auth
               auth_browser.post(
-                auth_app_sign_in_email_path,
+                auth_app_sign_in_email_path(fb: primary_binding),
                 params: { :user_email => { address: attempt_email.address },
                           "cf-turnstile-response" => "t",
                           :ri => "jp", },
@@ -1169,7 +1187,7 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
               audit_count = ClientChronicle.where(subject_id: @user.id, event_id: ClientChronicleEvent::LOGGED_IN).count
               assert_no_difference(-> { ClientToken.where(user_id: @user.id).count }) do
                 auth_browser.patch(
-                  auth_app_sign_in_email_path,
+                  auth_app_sign_in_email_path(fb: primary_binding),
                   params: { :user_email => { pass_code: code },
                             "cf-turnstile-response" => "t",
                             :ri => "jp", },

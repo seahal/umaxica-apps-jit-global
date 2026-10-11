@@ -50,7 +50,11 @@ class TurnstileFormsTest < ActionDispatch::IntegrationTest
       )
       binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
       cookies[JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"] = admitted_sid
-      get path, headers: form_config[:headers] || {}
+      phase_binding =
+        if intent == "sign_in"
+          SignInFlowBindingCodec.encode(flow: issuance.transaction, surface: "app", phase: "PRIMARY_PENDING")
+        end
+      get path, params: (phase_binding ? { fb: phase_binding } : {}), headers: form_config[:headers] || {}
 
       if response.redirect?
         follow_redirect!
@@ -102,7 +106,11 @@ class TurnstileFormsTest < ActionDispatch::IntegrationTest
       )
       binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
       cookies[JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"] = admitted_sid
-      get path, headers: form_config[:headers] || {}
+      phase_binding =
+        if intent == "sign_in"
+          SignInFlowBindingCodec.encode(flow: issuance.transaction, surface: "app", phase: "PRIMARY_PENDING")
+        end
+      get path, params: (phase_binding ? { fb: phase_binding } : {}), headers: form_config[:headers] || {}
 
       if response.redirect?
         follow_redirect!

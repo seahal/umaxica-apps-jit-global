@@ -187,10 +187,13 @@ class IdentifierEncryptionRotationDrillTest < ActionDispatch::IntegrationTest
           )
 
           assert_equal 303, entry0_browser.response.status
+          entry0_phase_binding = SignInFlowBindingCodec.encode(
+            flow: entry0_issuance.transaction, surface: "app", phase: "PRIMARY_PENDING",
+          )
         end
         fx0_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
         fx0_headers = { "Origin" => "https://#{fx0_host}", "Sec-Fetch-Site" => "same-origin" }
-        get("/sign/in/email/new", params: { ri: "jp" })
+        get("/sign/in/email/new", params: { ri: "jp", fb: entry0_phase_binding })
 
         assert_response :ok
         fx0_csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
@@ -202,6 +205,7 @@ class IdentifierEncryptionRotationDrillTest < ActionDispatch::IntegrationTest
               authenticity_token: fx0_csrf,
               "cf-turnstile-response": "test",
               ri: "jp",
+              fb: entry0_phase_binding,
             }, headers: fx0_headers,
           )
         end
@@ -223,11 +227,12 @@ class IdentifierEncryptionRotationDrillTest < ActionDispatch::IntegrationTest
             authenticity_token: fx0_csrf,
             "cf-turnstile-response": "test",
             ri: "jp",
+            fb: entry0_phase_binding,
           }, headers: fx0_headers,
         )
 
         assert_response :found
-        assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+        assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
       end
     end
   ensure
@@ -321,8 +326,6 @@ class IdentifierEncryptionRotationDrillTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -336,8 +339,6 @@ class IdentifierEncryptionRotationDrillTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -609,8 +610,6 @@ class IdentifierEncryptionRotationDrillTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

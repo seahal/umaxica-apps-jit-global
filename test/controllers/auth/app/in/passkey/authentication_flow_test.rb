@@ -25,9 +25,6 @@ module Auth::App::Sign::In::Passkey
         address: "one@example.com",
         user_email_status_id: ClientEmailStatus::VERIFIED,
         otp_attempts_count: 0,
-        otp_counter: "0",
-        otp_private_key: "secret_credential",
-        otp_expires_at: 10.minutes.from_now,
         otp_last_sent_at: 1.hour.ago,
       ).finalize_binding!
 
@@ -65,6 +62,9 @@ module Auth::App::Sign::In::Passkey
         local_sign_in_flow_ref: admission.transaction.public_id,
       )
       binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
+      @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+        flow: admission.transaction, surface: "app", phase: "PRIMARY_PENDING",
+      )
       cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
       cookies.merge(
         "#{cookie_name}=#{Rack::Utils.escape(admitted_sid)}", URI.parse(@fake.origin),
@@ -80,7 +80,8 @@ module Auth::App::Sign::In::Passkey
 
     test "should generate authentication options and store challenge in session" do
       email = @user.client_emails.first.address
-      post auth_app_sign_in_passkey_options_url(ri: "jp"), params: options_params(identifier: email), as: :json
+      post auth_app_sign_in_passkey_options_url(ri: "jp", fb: @primary_sign_in_binding),
+           params: options_params(identifier: email), as: :json
 
       assert_response :success
       json_response = response.parsed_body
@@ -97,7 +98,8 @@ module Auth::App::Sign::In::Passkey
     test "should verify valid credential and log in" do
       # 1. Get options to setup session
       email = @user.client_emails.first.address
-      post auth_app_sign_in_passkey_options_url(ri: "jp"), params: options_params(identifier: email), as: :json
+      post auth_app_sign_in_passkey_options_url(ri: "jp", fb: @primary_sign_in_binding),
+           params: options_params(identifier: email), as: :json
 
       json_response = response.parsed_body
       challenge_id = json_response["challenge_id"]
@@ -108,7 +110,7 @@ module Auth::App::Sign::In::Passkey
           challenge: response.parsed_body.fetch("options").fetch("challenge"),
           user_verified: true, sign_count: 11,
         )
-        post auth_app_sign_in_passkey_verification_url(ri: "jp"), params: {
+        post auth_app_sign_in_passkey_verification_url(ri: "jp", fb: @primary_sign_in_binding), params: {
           challenge_id: challenge_id, credential: assertion,
         }, as: :json
       end
@@ -139,7 +141,8 @@ module Auth::App::Sign::In::Passkey
       )
 
       email = @user.client_emails.first.address
-      post auth_app_sign_in_passkey_options_url(ri: "jp"), params: options_params(identifier: email), as: :json
+      post auth_app_sign_in_passkey_options_url(ri: "jp", fb: @primary_sign_in_binding),
+           params: options_params(identifier: email), as: :json
       challenge_id = response.parsed_body["challenge_id"]
 
       travel 31.seconds do
@@ -147,7 +150,7 @@ module Auth::App::Sign::In::Passkey
           challenge: response.parsed_body.fetch("options").fetch("challenge"),
           user_verified: true, sign_count: 11,
         )
-        post auth_app_sign_in_passkey_verification_url(ri: "jp"), params: {
+        post auth_app_sign_in_passkey_verification_url(ri: "jp", fb: @primary_sign_in_binding), params: {
           challenge_id: challenge_id, credential: assertion,
         }, as: :json
       end
@@ -160,7 +163,7 @@ module Auth::App::Sign::In::Passkey
     test "should fail verification with invalid challenge" do
       # 1. No options call (no session)
 
-      post auth_app_sign_in_passkey_verification_url(ri: "jp"), params: {
+      post auth_app_sign_in_passkey_verification_url(ri: "jp", fb: @primary_sign_in_binding), params: {
         challenge_id: "invalid-id",
         credential: @fake.get(challenge: SecureRandom.urlsafe_base64(32), user_verified: true, sign_count: 11),
       }, as: :json

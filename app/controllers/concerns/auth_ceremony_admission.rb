@@ -292,6 +292,10 @@ module AuthCeremonyAdmission
 
     query = { ri: params[:ri], lx: normalized_locale(params[:lx]) }.compact
     path = (expected_intent.to_s == "sign_up") ? "sign_up" : "sign_in"
+    if expected_intent.to_s == "sign_in"
+      cycle = auth_ceremony_local_sign_in_flow
+      query.merge!(sign_in_flow_binding_params(cycle, phase: "PRIMARY_PENDING")) if cycle
+    end
     case auth_ceremony_surface
     when "app"
       (path == "sign_up") ? auth_app_sign_up_path(**query) : auth_app_sign_in_path(**query)

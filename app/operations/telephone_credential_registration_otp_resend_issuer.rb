@@ -96,8 +96,7 @@ class TelephoneCredentialRegistrationOtpResendIssuer
   def ticket_current?(expected, now)
     candidate =
       case telephone
-      when ClientTelephone, VisitorTelephone then telephone.public_id
-      when OperatorTelephone then telephone.id.to_s
+      when ClientTelephone, VisitorTelephone, OperatorTelephone then telephone.public_id
       end
     transaction.surface == surface && transaction.actor_ref == actor.public_id && transaction.session_ref == expected &&
       transaction.operation == "registration" && transaction.purpose == "credential_registration" &&

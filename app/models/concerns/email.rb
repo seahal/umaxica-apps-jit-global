@@ -8,8 +8,6 @@ module Email
   # Requires:
   # - address
   # - address_digest
-  # - otp_counter
-  # - otp_private_key
   # - otp_attempts_count
   # - otp_last_sent_at
   #

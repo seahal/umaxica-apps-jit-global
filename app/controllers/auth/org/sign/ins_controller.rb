@@ -8,9 +8,14 @@ module Auth
         include ::SurfaceInertiaPage
         include ::AuthenticationModeSwitchGuard
         include ::AuthCeremonyAdmission
+        include ::SignInPhaseBindingControllerSupport
 
         AUTHENTICATION_MODE = :guest
         declare_authentication_mode! :guest, no_redirect: true
+
+        before_action -> {
+          enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") if params[:entry_ref].blank?
+        }
 
         def show
           admit_or_render_sign_ceremony!(expected_intent: auth_ceremony_entry_intent) { render_method_selection! }
@@ -41,6 +46,7 @@ module Auth
         def sign_in_entry_props
           pt = signed_pt_param
           region = params[:ri]
+          binding = sign_in_flow_binding_params(auth_ceremony_local_sign_in_flow, phase: "PRIMARY_PENDING")
 
           {
             title: t("sign.org.authentication.new.page_title"),
@@ -51,13 +57,13 @@ module Auth
                 key: "entra",
                 kind: "provider",
                 label: t("sign.org.authentication.new.links.entra"),
-                href: auth_org_social_entra_session_path(pt: pt, ri: region),
+                href: auth_org_social_entra_session_path(pt: pt, ri: region, **binding),
               },
               {
                 key: "emergency",
                 kind: "link",
                 label: t("sign.org.authentication.new.links.emergency"),
-                href: new_auth_org_sign_in_emergency_passkey_path(pt: pt, ri: region),
+                href: new_auth_org_sign_in_emergency_passkey_path(pt: pt, ri: region, **binding),
               },
             ],
             # Direct entry only. An RP-initiated ceremony asked for a sign-in, so the page must not

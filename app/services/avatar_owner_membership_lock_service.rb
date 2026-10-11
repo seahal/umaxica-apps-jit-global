@@ -11,7 +11,7 @@ class AvatarOwnerMembershipLockService < ApplicationService
   class << self
     public
 
-    def call(actor:, surface:, subject_public_id:, owner_collective_public_id:, permission:,
+    def call(actor:, surface:, subject_public_id:, owner_collective_public_id:, permission:, avatar: nil,
              &operation)
       new(
         actor: actor,
@@ -19,17 +19,19 @@ class AvatarOwnerMembershipLockService < ApplicationService
         subject_public_id: subject_public_id,
         owner_collective_public_id: owner_collective_public_id,
         permission: permission,
+        avatar: avatar,
       ).call(&operation)
     end
   end
 
-  def initialize(actor:, surface:, subject_public_id:, owner_collective_public_id:, permission:)
+  def initialize(actor:, surface:, subject_public_id:, owner_collective_public_id:, permission:, avatar: nil)
     super()
     @actor = actor
     @surface = surface.to_s
     @subject_public_id = subject_public_id.to_s
     @owner_collective_public_id = owner_collective_public_id.to_s
     @permission = permission.to_s
+    @avatar = avatar
   end
 
   public
@@ -65,6 +67,7 @@ class AvatarOwnerMembershipLockService < ApplicationService
           owner_collective_public_id: owner_collective_public_id,
           permission: permission,
           lock: true,
+          avatar: avatar,
         )
         raise AuthorizationDenied, "#{permission} permission required" unless allowed
 
@@ -75,5 +78,5 @@ class AvatarOwnerMembershipLockService < ApplicationService
 
   private
 
-  attr_reader :actor, :surface, :subject_public_id, :owner_collective_public_id, :permission
+  attr_reader :actor, :surface, :subject_public_id, :owner_collective_public_id, :permission, :avatar
 end

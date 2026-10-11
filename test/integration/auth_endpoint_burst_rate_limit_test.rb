@@ -85,10 +85,13 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
     end
 
     (BURST_ALLOWANCE + 1).times do
-      post auth_app_sign_in_passkey_options_url(ri: "jp", host: host),
+      post auth_app_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
            params: { identifier: "burst_app@example.com" }, as: :json
     end
 
@@ -143,10 +146,13 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
     end
 
     (BURST_ALLOWANCE + 1).times do
-      post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host),
+      post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
            params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
     end
 
@@ -200,10 +206,13 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
     end
 
     (BURST_ALLOWANCE + 1).times do
-      post auth_com_sign_in_passkey_options_url(ri: "jp", host: host),
+      post auth_com_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
            params: { identifier: "burst_com@example.com" }, as: :json
     end
 
@@ -257,10 +266,13 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
     end
 
     (BURST_ALLOWANCE + 1).times do
-      post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host),
+      post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
            params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
     end
 
@@ -599,10 +611,13 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
     end
 
     (BURST_ALLOWANCE + 1).times do
-      post auth_app_sign_in_email_url(ri: "jp", host: host),
+      post auth_app_sign_in_email_url(ri: "jp", host: host, fb: phase_binding),
            params: { user_email: { address: "burst_signin@example.com" } }
     end
 
@@ -656,10 +671,13 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
     end
 
     (BURST_ALLOWANCE + 1).times do
-      post auth_com_sign_in_email_url(ri: "jp", host: host),
+      post auth_com_sign_in_email_url(ri: "jp", host: host, fb: phase_binding),
            params: { visitor_email: { address: "burst_signin_com@example.com" } }
     end
 
@@ -725,16 +743,21 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         )
 
         assert_equal 303, admission_browser.response.status
+        phase_binding = SignInFlowBindingCodec.encode(
+          flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+        )
       end
 
       (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
         travel((burst * 61).seconds) do
-          BURST_ALLOWANCE.times { post public_send(helper, ri: "jp", host: host), params: request_params }
+          BURST_ALLOWANCE.times {
+            post public_send(helper, ri: "jp", host: host, fb: phase_binding), params: request_params
+          }
         end
       end
 
       travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-        post public_send(helper, ri: "jp", host: host), params: request_params
+        post public_send(helper, ri: "jp", host: host, fb: phase_binding), params: request_params
       end
 
       assert_response :too_many_requests
@@ -789,6 +812,9 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
     end
 
     # Four bursts of five, each after the one-minute burst window has rolled
@@ -796,7 +822,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
         BURST_ALLOWANCE.times do
-          post auth_app_sign_in_passkey_options_url(ri: "jp", host: host),
+          post auth_app_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
                params: { identifier: "sustained_app@example.com" }, as: :json
 
           assert_response :success
@@ -805,7 +831,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     end
 
     travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_app_sign_in_passkey_options_url(ri: "jp", host: host),
+      post auth_app_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
            params: { identifier: "sustained_app@example.com" }, as: :json
     end
 
@@ -860,19 +886,22 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
     end
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
         BURST_ALLOWANCE.times do
-          post auth_com_sign_in_passkey_options_url(ri: "jp", host: host),
+          post auth_com_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
                params: { identifier: "sustained_com@example.com" }, as: :json
         end
       end
     end
 
     travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_com_sign_in_passkey_options_url(ri: "jp", host: host),
+      post auth_com_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
            params: { identifier: "sustained_com@example.com" }, as: :json
     end
 
@@ -994,19 +1023,22 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
     end
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
         BURST_ALLOWANCE.times do
-          post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host),
+          post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
                params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
         end
       end
     end
 
     travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host),
+      post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
            params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
     end
 
@@ -1061,19 +1093,22 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
     end
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
         BURST_ALLOWANCE.times do
-          post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host),
+          post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
                params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
         end
       end
     end
 
     travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host),
+      post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
            params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
     end
 
@@ -1342,10 +1377,14 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
     end
 
     (BURST_ALLOWANCE + 1).times do
-      patch auth_app_sign_in_email_url(ri: "jp", host: host), params: { client_email: { pass_code: "000000" } }
+      patch auth_app_sign_in_email_url(ri: "jp", host: host, fb: phase_binding),
+            params: { client_email: { pass_code: "000000" } }
     end
 
     assert_response :too_many_requests
@@ -1399,17 +1438,22 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
     end
     params = { client_email: { pass_code: "000000" } }
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
-        BURST_ALLOWANCE.times { patch auth_app_sign_in_email_url(ri: "jp", host: host), params: params }
+        BURST_ALLOWANCE.times {
+          patch auth_app_sign_in_email_url(ri: "jp", host: host, fb: phase_binding), params: params
+        }
       end
     end
 
     travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      patch auth_app_sign_in_email_url(ri: "jp", host: host), params: params
+      patch auth_app_sign_in_email_url(ri: "jp", host: host, fb: phase_binding), params: params
     end
 
     assert_response :too_many_requests

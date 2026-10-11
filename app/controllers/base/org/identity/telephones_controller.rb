@@ -98,7 +98,7 @@ module Base
             .include?(telephone.staff_telephone_status_id)
 
           {
-            public_id: telephone.id.to_s,
+            public_id: telephone.public_id,
             value: telephone.number,
             status: verified ? t("views.sign.org.settings.telephones.index.verified") :
               t("views.sign.org.settings.telephones.index.unverified"),

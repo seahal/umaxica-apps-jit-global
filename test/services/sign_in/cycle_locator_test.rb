@@ -91,6 +91,9 @@ module SignIn
 
       assert_nil SignInCycleLocator.new(session, surface: :app).current
 
+      assert_equal completed,
+                   SignInCycleLocator.new(session, surface: :app).current(include_terminal: true)
+
       failed = create_client_cycle(
         nonce: "failed-nonce",
         state_id: ClientSignInFlowState::FAILED,

@@ -92,4 +92,32 @@ class AvatarPermissionResolverTest < ActiveSupport::TestCase
       )
     end
   end
+
+  test "an explicit generation-bound grant authorizes Avatar use without granting management authority" do
+    membership = @app.account.persona_memberships.find_by!(enterprise: @app.collective)
+    membership.update!(membership_kind_id: PersonaMembershipKind::MEMBER)
+    period = @app.avatar.reload.enterprise_ownership_periods.current.first
+    AvatarAccessGrants::IssueOperation.call(
+      ownership_period: period,
+      subject: @app.account,
+      capability: "avatar.view",
+      granted_by_actor_public_id: @client.public_id,
+    )
+
+    assert AvatarPermissionResolver.call(
+      actor: @client,
+      surface: :app,
+      subject_public_id: @app.account.public_id,
+      owner_collective_public_id: @app.collective.public_id,
+      permission: "avatar.view",
+      avatar: @app.avatar,
+    )
+    assert_not AvatarPermissionResolver.call(
+      actor: @client,
+      surface: :app,
+      subject_public_id: @app.account.public_id,
+      owner_collective_public_id: @app.collective.public_id,
+      permission: "avatar.group.manage",
+    )
+  end
 end

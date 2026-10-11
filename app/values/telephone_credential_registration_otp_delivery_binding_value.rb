@@ -16,8 +16,8 @@ TelephoneCredentialRegistrationOtpDeliveryBindingValue =
             candidate_ref.match?(/\A[A-Za-z0-9_-]{1,21}\z/)
           raise ArgumentError, "invalid Telephone registration delivery binding"
         end
-        if surface == "org" && !candidate_ref.match?(/\A[1-9][0-9]{0,18}\z/)
-          raise ArgumentError, "ORG Telephone registration requires a positive numeric candidate ID"
+        if surface == "org" && !candidate_ref.match?(/\A[A-Za-z0-9_-]{21}\z/)
+          raise ArgumentError, "ORG Telephone registration requires an opaque candidate ID"
         end
 
         [transaction_ref, generation].each do |reference|

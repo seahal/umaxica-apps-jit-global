@@ -496,7 +496,15 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_nil json["access_token"]
     assert_nil json["token_type"]
     assert_nil json["expires_in"]
-    assert_equal auth_org_sign_in_check_path(ri: "jp"), json["redirect_url"]
+    redirect_uri = URI.parse(json.fetch("redirect_url"))
+
+    assert_equal URI.parse(auth_org_sign_in_check_path).path, redirect_uri.path
+    binding = SignInFlowBindingCodec.decode(
+      Rack::Utils.parse_nested_query(redirect_uri.query.to_s).fetch("fb"),
+    )
+
+    assert_equal "org", binding.surface
+    assert_equal "CHECKPOINT_PENDING", binding.phase
 
     assert_equal 1, @staff_passkey.reload.sign_count
     assert_not_nil @staff_passkey.reload.last_used_at

@@ -129,6 +129,9 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
           base_token: nil, nonce_digest: ((surface == :app) ? ClientSignInFlow : VisitorSignInFlow).digest_nonce(nonce),
         )
         flow = issuance.transaction
+        primary_binding = SignInFlowBindingCodec.encode(
+          flow: flow, surface: surface.to_s, phase: "PRIMARY_PENDING",
+        )
         SignInCycleLocator.new(base.session, surface: surface.to_s).issue!(flow, nonce: nonce)
         session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
         session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
@@ -174,16 +177,22 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
         auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
 
         assert_response :see_other
-        post options_path, params: { "cf-turnstile-response" => "test-only", :ri => "jp" }, headers: auth_headers,
-                           as: :json
+        post options_path,
+             params: { "cf-turnstile-response" => "test-only", :ri => "jp", :fb => primary_binding },
+             headers: auth_headers,
+             as: :json
 
         assert_response :success
         options = response.parsed_body
         assertion = fake.get(challenge: options.fetch("options").fetch("challenge"), user_verified: true, sign_count: 3)
         passkey.class.stub(:database_now, unbounded ? deadline : deadline + Rational(microseconds, 1_000_000)) do
           post verification_path,
-               params: { challenge_id: options.fetch("challenge_id"), credential: assertion, ri: "jp" },
-               headers: auth_headers, as: :json
+               params: {
+                 challenge_id: options.fetch("challenge_id"),
+                 credential: assertion,
+                 ri: "jp",
+                 fb: primary_binding,
+               }, headers: auth_headers, as: :json
         end
 
         assert_response(eligible ? :success : :unauthorized)
@@ -282,6 +291,9 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
           base_token: nil, nonce_digest: ((surface == :app) ? ClientSignInFlow : VisitorSignInFlow).digest_nonce(nonce),
         )
         flow = issuance.transaction
+        primary_binding = SignInFlowBindingCodec.encode(
+          flow: flow, surface: surface.to_s, phase: "PRIMARY_PENDING",
+        )
         SignInCycleLocator.new(base.session, surface: surface.to_s).issue!(flow, nonce: nonce)
         session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
         session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
@@ -326,7 +338,10 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
         assert_predicate binding.reload, :redeemed?
         auth_headers = auth_headers.merge("X-CSRF-Token" => csrf)
         post email_path,
-             params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test-only", :ri => "jp" },
+             params: { :user_email => { address: email.address },
+                       "cf-turnstile-response" => "test-only",
+                       :ri => "jp",
+                       :fb => primary_binding, },
              headers: auth_headers
         delivery_job = enqueued_jobs.reverse.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
 
@@ -353,12 +368,16 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
         assert_nil context.fetch("verified_at")
         assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"
         patch email_path,
-              params: { :user_email => { pass_code: code }, "cf-turnstile-response" => "test-only", :ri => "jp" },
+              params: { :user_email => { pass_code: code },
+                        "cf-turnstile-response" => "test-only",
+                        :ri => "jp",
+                        :fb => primary_binding, },
               headers: auth_headers
 
         assert_response :redirect
         assert_predicate issuance.transaction.reload, :sign_in_mfa_pending?
-        get new_path, params: { ri: "jp" }
+        mfa_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+        get new_path, params: { ri: "jp", fb: mfa_binding }
 
         assert_response :success
         page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
@@ -377,6 +396,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
                                    credential_json: JSON.generate(assertion), },
             "cf-turnstile-response" => "test-only",
             :ri => "jp",
+            :fb => mfa_binding,
           }, headers: auth_headers
         end
 
@@ -656,6 +676,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
       base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
     )
     flow = issuance.transaction
+    primary_binding = SignInFlowBindingCodec.encode(flow: flow, surface: "app", phase: "PRIMARY_PENDING")
     SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
     session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
     session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
@@ -700,7 +721,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     assert_response :see_other
 
     post auth_app_sign_in_email_path,
-         params: { :user_email => { address: email.address }, "cf-turnstile-response" => "t" }, headers: auth_headers
+         params: { :user_email => { address: email.address }, "cf-turnstile-response" => "t", :fb => primary_binding },
+         headers: auth_headers
 
     assert_response :redirect
     delivery_job = enqueued_jobs.reverse.find { |job| job.fetch(:job) == OtpNotifierEmailDeliveryJob }
@@ -730,7 +752,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     before_count = ClientSignInFlow.count
     assert_no_difference("ClientToken.count") do
       patch auth_app_sign_in_email_path,
-            params: { :user_email => { pass_code: code }, "cf-turnstile-response" => "t" }, headers: auth_headers
+            params: { :user_email => { pass_code: code }, "cf-turnstile-response" => "t", :fb => primary_binding },
+            headers: auth_headers
     end
     assert_response :redirect
     assert_equal before_count, ClientSignInFlow.count
@@ -800,6 +823,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
       base_token: nil, nonce_digest: ClientSignInFlow.digest_nonce(nonce),
     )
     flow = issuance.transaction
+    primary_binding = SignInFlowBindingCodec.encode(flow: flow, surface: "app", phase: "PRIMARY_PENDING")
     SignInCycleLocator.new(base.session, surface: "app").issue!(flow, nonce: nonce)
     session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
     session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
@@ -843,7 +867,10 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     browser = auth
     browser.post(
       auth_app_sign_in_email_path,
-      params: { :ri => "jp", :user_email => { address: email.address }, "cf-turnstile-response" => "t" },
+      params: { :ri => "jp",
+                :user_email => { address: email.address },
+                "cf-turnstile-response" => "t",
+                :fb => primary_binding, },
       headers: auth_headers,
     )
 
@@ -876,7 +903,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
         auth_app_sign_in_email_path,
         params: { :ri => "jp",
                   :user_email => { pass_code: code },
-                  "cf-turnstile-response" => "t", },
+                  "cf-turnstile-response" => "t",
+                  :fb => primary_binding, },
         headers: auth_headers,
       )
       browser.follow_redirect!
@@ -1199,6 +1227,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
       base_token: nil, nonce_digest: VisitorSignInFlow.digest_nonce(nonce),
     )
     flow = issuance.transaction
+    primary_binding = SignInFlowBindingCodec.encode(flow: flow, surface: "com", phase: "PRIMARY_PENDING")
     SignInCycleLocator.new(base.session, surface: "com").issue!(flow, nonce: nonce)
     session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
     session_cookie_jar = ActionDispatch::Cookies::CookieJar.build(base.request, base.request.cookies)
@@ -1242,7 +1271,10 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     browser = auth
     browser.post(
       auth_com_sign_in_email_path,
-      params: { :ri => "jp", :user_email => { address: email.address }, "cf-turnstile-response" => "t" },
+      params: { :ri => "jp",
+                :user_email => { address: email.address },
+                "cf-turnstile-response" => "t",
+                :fb => primary_binding, },
       headers: auth_headers,
     )
 
@@ -1275,7 +1307,8 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
         auth_com_sign_in_email_path,
         params: { :ri => "jp",
                   :user_email => { pass_code: code },
-                  "cf-turnstile-response" => "t", },
+                  "cf-turnstile-response" => "t",
+                  :fb => primary_binding, },
         headers: auth_headers,
       )
 

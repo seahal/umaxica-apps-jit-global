@@ -28,6 +28,7 @@ module GroupAvatarMemberships
         subject_public_id: subject_public_id,
         owner_collective_public_id: observed_group_owner.owner_collective_public_id,
         permission: "avatar.group.attach",
+        avatar: avatar,
       ) do
         Avatar.transaction do
           locked_group = AvatarGroup.lock.find(group.id)
@@ -73,11 +74,26 @@ module GroupAvatarMemberships
           [observed_group_owner.owner_surface, observed_group_owner.owner_collective_public_id]
         raise AuthorizationDenied, "group owner changed while attaching Avatar"
       end
+
+      ensure_avatar_permission!(locked_avatar, group_owner.owner_collective_public_id, "avatar.group.attach")
       unless group_owner.owner_surface == surface &&
           [group_owner.owner_surface, group_owner.owner_collective_public_id] ==
               [avatar_owner.owner_surface, avatar_owner.owner_collective_public_id]
         raise ArgumentError, "group and Avatar current owners differ"
       end
+    end
+
+    def ensure_avatar_permission!(avatar, collective_public_id, permission)
+      return if AvatarPermissionResolver.call(
+        actor: actor,
+        surface: surface,
+        subject_public_id: subject_public_id,
+        owner_collective_public_id: collective_public_id,
+        permission: permission,
+        avatar: avatar,
+      )
+
+      raise AuthorizationDenied, "#{permission} permission required"
     end
 
     def next_position(locked_group)

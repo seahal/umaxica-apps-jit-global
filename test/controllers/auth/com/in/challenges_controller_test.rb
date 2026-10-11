@@ -35,6 +35,12 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     post auth_com_sign_in_path, params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
 
     assert_response :see_other
+    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+      flow: VisitorSignInFlow.find_by!(
+        public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+      ),
+      surface: "com", phase: "PRIMARY_PENDING",
+    )
   end
 
   teardown do
@@ -43,10 +49,10 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   end
 
   test "show requires pending_mfa" do
-    get auth_com_sign_in_challenge_path(ri: "jp")
+    get mfa_challenge_path
 
-    assert_response :see_other
-    assert_redirected_to auth_com_sign_in_path(ri: "jp")
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
   end
 end
 
@@ -69,7 +75,6 @@ class Auth::Com::Sign::In::ChallengesControllerTest
 
     establish_pending_mfa!
     follow_redirect!
-    follow_redirect!
 
     assert_response :success
     assert_equal "auth/com/sign/in/challenges/show", inertia_component
@@ -79,7 +84,6 @@ class Auth::Com::Sign::In::ChallengesControllerTest
 
   test "show tells an email-authenticated visitor with no passkey that no method is available" do
     establish_pending_mfa!
-    follow_redirect!
     follow_redirect!
 
     assert_response :success
@@ -96,7 +100,7 @@ class Auth::Com::Sign::In::ChallengesControllerTest
     assert_predicate cycle, :sign_in_mfa_pending?
 
     assert_no_difference -> { VisitorToken.where(visitor_id: @visitor.id).count } do
-      delete auth_com_sign_in_challenge_path(ri: "jp")
+      delete mfa_challenge_path
     end
 
     assert_response :see_other
@@ -109,24 +113,41 @@ class Auth::Com::Sign::In::ChallengesControllerTest
 
   test "a cancelled MFA challenge cannot be resumed" do
     establish_pending_mfa!
-    delete auth_com_sign_in_challenge_path(ri: "jp")
+    delete mfa_challenge_path
 
-    get new_auth_com_sign_in_challenge_passkey_path(ri: "jp")
+    get mfa_passkey_path
 
-    assert_response :see_other
-    assert_redirected_to auth_com_sign_in_path(ri: "jp")
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
   end
 
   test "destroy without a pending MFA ceremony changes nothing and returns to sign-in" do
     assert_no_difference -> { VisitorToken.count } do
-      delete auth_com_sign_in_challenge_path(ri: "jp")
+      delete mfa_challenge_path
     end
 
-    assert_response :see_other
-    assert_redirected_to auth_com_sign_in_path(ri: "jp")
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
   end
 
   private
+
+  def mfa_binding_params
+    locator = session[:com_sign_in_flow_locator]
+    cycle = VisitorSignInFlow.find_by(public_id: locator&.[]("public_id"))
+    cycle ||= VisitorSignInFlow.where(principal_id: @visitor.id).order(:id).last
+    return {} unless cycle
+
+    { fb: SignInFlowBindingCodec.encode(flow: cycle, surface: "com", phase: "MFA_PENDING") }
+  end
+
+  def mfa_challenge_path
+    auth_com_sign_in_challenge_path(ri: "jp", **mfa_binding_params)
+  end
+
+  def mfa_passkey_path
+    new_auth_com_sign_in_challenge_passkey_path(ri: "jp", **mfa_binding_params)
+  end
 
   def establish_pending_mfa!
     email_record = @visitor.visitor_emails.first
@@ -211,8 +232,6 @@ class Auth::Com::Sign::In::ChallengesControllerTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -226,8 +245,6 @@ class Auth::Com::Sign::In::ChallengesControllerTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -465,8 +482,6 @@ class Auth::Com::Sign::In::ChallengesControllerTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

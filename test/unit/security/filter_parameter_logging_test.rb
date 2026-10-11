@@ -37,6 +37,40 @@ class FilterParameterLoggingTest < ActiveSupport::TestCase
     assert_equal "[FILTERED]", filtered.fetch("entry_ref")
   end
 
+  test "does not let short sensitive names hide safe diagnostic fields" do
+    filter = ActiveSupport::ParameterFilter.new(Rails.application.config.filter_parameters)
+    filtered = filter.filter(
+      "code" => "oauth-code",
+      "rt" => "redirect-token",
+      "pt" => "path-target",
+      "der" => "certificate-der",
+      "state" => "oauth-state",
+      "uid" => "provider-user-id",
+      "provider_uid" => "provider-user-id",
+      "reason_code" => "phase_regression",
+      "status_code" => "409",
+      "http_status_code" => "409",
+      "guid" => "safe-guid",
+      "public_id" => "safe-public-id",
+      "provider" => "google",
+      "order" => "created_at",
+      "sort" => "asc",
+      "support" => "safe-support",
+      "attempt_count" => 2,
+      "event_uuid" => "safe-event-uuid",
+    )
+
+    %w(code rt pt der state uid provider_uid).each do |key|
+      assert_equal "[FILTERED]", filtered.fetch(key)
+    end
+
+    %w(
+      reason_code status_code http_status_code guid public_id provider order sort support attempt_count event_uuid
+    ).each do |key|
+      assert_not_equal "[FILTERED]", filtered.fetch(key)
+    end
+  end
+
   test "filters social identity tokens from Active Record inspection and SQL logs" do
     assert_not_includes ClientExternalIdentity.column_names, "token"
     assert_not_includes ClientExternalIdentity.column_names, "refresh_token"

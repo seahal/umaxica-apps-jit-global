@@ -3445,15 +3445,24 @@ module AuthenticationBase
   end
 
   def mfa_entry_path(ri: nil)
+    attrs = { ri: ri, **sign_in_mfa_binding_params }
     if respond_to?(:sign_app_sign_in_challenge_path, true)
-      sign_app_sign_in_challenge_path(ri: ri)
+      sign_app_sign_in_challenge_path(**attrs)
     elsif respond_to?(:sign_org_sign_in_challenge_path, true)
-      sign_org_sign_in_challenge_path(ri: ri)
+      sign_org_sign_in_challenge_path(**attrs)
+    elsif respond_to?(:auth_com_sign_in_challenge_path, true)
+      auth_com_sign_in_challenge_path(**attrs)
     else
-      "/sign/in/challenge"
+      query = attrs.compact.to_query
+      query.present? ? "/sign/in/challenge?#{query}" : "/sign/in/challenge"
     end
-  rescue StandardError
-    "/sign/in/challenge"
+  end
+
+  def sign_in_mfa_binding_params
+    cycle = current_db_sign_in_flow_for_sequence
+    return {} unless cycle
+
+    sign_in_flow_binding_params(cycle, phase: "MFA_PENDING")
   end
 
   def handle_auth_required_json(options)

@@ -152,6 +152,9 @@ gem "svix"
 # released gems once a version above 1.4.2 ships.
 gem "flipper", github: "flippercloud/flipper", branch: "main"
 gem "flipper-active_record", github: "flippercloud/flipper", branch: "main"
+# config/initializers/flipper.rb requires "flipper/ui" in every environment, so the test suite needs
+# it installed too; a development/production-only group hid that while CI installed every group.
+gem "flipper-ui", github: "flippercloud/flipper", branch: "main"
 
 # Schema verification is also an operational task in production deployments.
 gem "pg_query", require: false
@@ -265,8 +268,6 @@ group :development do
   # Committee against the same descriptions (test/support/openapi_contract.rb).
   gem "rswag-api", require: false
   gem "rswag-ui", require: false
-  # Package boundary enforcement.
-  gem "packwerk", require: false
   # Model and route annotation tool.
   gem "annotaterb", require: false
   # Ruby language server.
@@ -276,10 +277,6 @@ group :development do
   # Duplicate code detector.
   gem "flay", require: false
 end
-
-# config/initializers/flipper.rb requires "flipper/ui" in every environment, so the test suite needs
-# it installed too; a development/production-only group hid that while CI installed every group.
-gem "flipper-ui", github: "flippercloud/flipper", branch: "main"
 
 group :development, :production do
   # Solid Queue operations UI. Deliberately not loaded in test: config/routes/mission.rb mounts it

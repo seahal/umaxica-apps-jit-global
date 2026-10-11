@@ -165,7 +165,7 @@ class Base::Org::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     assert_nil session[:staff_telephone_registration_id]
   end
 
-  test "management create starts own numeric candidate ceremony and completes through registration" do
+  test "management create starts own opaque candidate ceremony and completes through registration" do
     post base_org_identity_telephones_url(ri: "jp", host: @host),
          params: { staff_telephone: { raw_number: "+15558675332" } }, headers: @headers
 
@@ -177,7 +177,7 @@ class Base::Org::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     job = enqueued_jobs.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
     payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
 
-    assert_equal ["org", "credential_registration", transaction.transaction_id, telephone.id.to_s,
+    assert_equal ["org", "credential_registration", transaction.transaction_id, telephone.public_id,
                   transaction.otp_generation,], payload.fetch(:otp_binding)
 
     patch base_org_identity_telephones_registration_url(ri: "jp", host: @host),
@@ -256,7 +256,7 @@ class Base::Org::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == Outbound::SmsDeliveryJob }
     payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
 
-    assert_equal ["org", "credential_registration", transaction.transaction_id, registered.id.to_s,
+    assert_equal ["org", "credential_registration", transaction.transaction_id, registered.public_id,
                   transaction.otp_generation,], payload.fetch(:otp_binding)
     assert_equal @operator.public_id, transaction.actor_ref
     assert_equal "registration", transaction.operation
@@ -419,7 +419,7 @@ class Base::Org::Identity::Telephones::RegistrationsControllerTest < ActionDispa
   end
 
   %w(current canceled expired reissued root_revoked owner_changed).each do |state|
-    test "HTTP created ORG registration SMS checks #{state} numeric candidate proof before transport" do
+    test "HTTP created ORG registration SMS checks #{state} opaque candidate proof before transport" do
       post base_org_identity_telephones_registration_url(ri: "jp", host: @host),
            params: { staff_telephone: { raw_number: "+15558675331" } }, headers: @headers
 
@@ -432,7 +432,7 @@ class Base::Org::Identity::Telephones::RegistrationsControllerTest < ActionDispa
       payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
 
       assert_equal 4, payload.fetch(:version)
-      assert_equal telephone.id.to_s, payload.fetch(:otp_binding).fetch(3)
+      assert_equal telephone.public_id, payload.fetch(:otp_binding).fetch(3)
       assert_not_includes JSON.generate(job.fetch(:args)), payload.fetch(:otp_code)
       assert_not_includes JSON.generate(job.fetch(:args)), telephone.number
       transaction.cancel_telephone_otp! if state == "canceled"

@@ -12,10 +12,7 @@
 #  locked_at                      :datetime
 #  notifiable                     :boolean          default(TRUE), not null
 #  otp_attempts_count             :integer          default(0), not null
-#  otp_counter                    :text             not null
-#  otp_expires_at                 :datetime
 #  otp_last_sent_at               :datetime
-#  otp_private_key                :string           not null
 #  promotional                    :boolean          default(TRUE), not null
 #  subscribable                   :boolean          default(TRUE), not null
 #  undeletable                    :boolean          default(FALSE), not null
@@ -39,6 +36,9 @@
 #
 
 class OperatorEmail < OrgPrincipalRecord
+  # P3d removes identifier-owned proof; ceremony transactions own verification material.
+  self.ignored_columns += %w(otp_private_key otp_counter otp_expires_at)
+
   include PublicId
   include Email
   include EmailDeadIdentifierHistory
@@ -51,7 +51,6 @@ class OperatorEmail < OrgPrincipalRecord
 
   encrypts :address, downcase: true,
                      key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
-  encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
 
   alias_attribute :staff_email_status_id, :staff_identity_email_status_id
   attribute :staff_identity_email_status_id, default: OperatorEmailStatus::UNVERIFIED
@@ -61,12 +60,11 @@ class OperatorEmail < OrgPrincipalRecord
   belongs_to :staff, class_name: "Operator"
   validates :address, presence: true, length: { maximum: 255 }
   validates :otp_attempts_count, presence: true, numericality: { only_integer: true }
-  validates :otp_counter, presence: true
-  validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :staff_identity_email_status_id, numericality: { only_integer: true }
   validates :address_digest, blind_index_uniqueness: { error_attribute: :address }, allow_blank: true
 
   after_initialize :initialize_email_otp_state
+
   before_destroy :archive_dead_email_identifier, prepend: true
 
   self.filter_attributes += %w(address)

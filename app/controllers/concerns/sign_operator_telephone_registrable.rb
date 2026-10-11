@@ -75,7 +75,7 @@ module SignOperatorTelephoneRegistrable
   def send_staff_telephone_verification_sms(staff_telephone, issued)
     OtpAdapter.for(surface: :org, channel: :telephone).deliver(
       record: staff_telephone,
-      otp_code: issued.code, purpose: "credential_registration", public_id: staff_telephone.id.to_s,
+      otp_code: issued.code, purpose: "credential_registration", public_id: staff_telephone.public_id,
       contact_ceremony_transaction_ref: issued.transaction.transaction_id,
       contact_otp_generation: issued.transaction.otp_generation,
       message_style: :localized_verification,

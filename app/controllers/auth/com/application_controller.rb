@@ -100,6 +100,8 @@ module Auth
 
       private
 
+      def sign_in_phase_binding_surface = "com"
+
       def auth_credential_ceremony? = true
 
       # Every HTML action on the Auth host is a sign-in/sign-up ceremony screen or step that never

@@ -66,7 +66,11 @@ class IdentitySocialCeremonyFinalCommitter
     validate_candidate!(@candidate_for_subject)
     validate_provider_subject!
     flow = ClientSignUpFlow.find_by!(public_id: result["actor_ref"])
-    identity = ClientExternalIdentity.find_by!(id: flow.pending_contact_id, client_id: flow.principal_id, provider:)
+    identity = ClientExternalIdentity.where(
+      id: flow.pending_contact_id,
+      client_id: flow.principal_id,
+      provider:,
+    ).sole
     user = identity.user
     unless flow.completed? && flow.pending_contact_type == "social_identity" && identity.released_at.nil? &&
         identity.state == "active" && identity.subject == provider_subject && user.login_allowed?

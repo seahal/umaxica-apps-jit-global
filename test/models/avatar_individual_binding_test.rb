@@ -94,7 +94,7 @@ class AvatarIndividualBindingTest < ActiveSupport::TestCase
     binding.public_id = nil
 
     assert_not binding.valid?
-    assert_equal :blank, binding.errors.details.fetch(:public_id).first.fetch(:error)
+    assert_equal "cannot be changed after creation", binding.errors[:public_id].first
 
     duplicate = AvatarIndividualBinding.new(
       avatar: second_avatar,

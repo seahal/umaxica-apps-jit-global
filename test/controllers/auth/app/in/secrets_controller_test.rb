@@ -73,9 +73,15 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
       }, headers: headers
 
       assert_response :see_other
-      get new_auth_app_sign_in_secret_path(ri: "jp"), headers: headers
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: ClientSignInFlow.find_by!(
+          public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+        ),
+        surface: "app", phase: "PRIMARY_PENDING",
+      )
+      get new_auth_app_sign_in_secret_path(ri: "jp", fb: phase_binding), headers: headers
       page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
-      payload = { "identifier" => @identifier, "cf-turnstile-response" => "synthetic" }
+      payload = { "identifier" => @identifier, "cf-turnstile-response" => "synthetic", "fb" => phase_binding }
       payload[:secret] = value unless value == :missing
       before = ClientSecretCredential.order(:id).pluck(:id, :claimed_at, :consumed_at, :revoked_at, :discard_at)
       token_count = ClientToken.count

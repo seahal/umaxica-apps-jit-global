@@ -103,16 +103,14 @@ class TelephoneCredentialRegistrationOtpIssuer
 
     def candidate_ref(telephone)
       case telephone
-      when ClientTelephone, VisitorTelephone then telephone.public_id
-      when OperatorTelephone then telephone.id.to_s
+      when ClientTelephone, VisitorTelephone, OperatorTelephone then telephone.public_id
       end
     end
 
     def source_pending?(telephone, now)
       case telephone
       when ClientTelephone, VisitorTelephone
-        telephone.accessible?(now) && !telephone.binding_finalized_at && !telephone.binding_released? &&
-          !telephone.credential_registration_otp_context
+        telephone.accessible?(now) && !telephone.binding_finalized_at && !telephone.binding_released?
       when OperatorTelephone then telephone.staff_telephone_status_id == OperatorTelephoneStatus::UNVERIFIED
       end
     end

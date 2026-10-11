@@ -6,12 +6,14 @@ class Auth::App::Sign::In::SecretsController < Auth::App::ApplicationController
   include CloudflareTurnstile
   include TurnstilePageProps
   include MinimumResponseBudget
+  include SignInPhaseBindingControllerSupport
 
   AUTHENTICATION_MODE = :guest
   declare_authentication_mode! :guest
   prepend_before_action :require_sign_in_ceremony_admission!
   ensure_fqdn_gate_first!
   prepend_before_action :apply_default_no_store
+  before_action -> { enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") }
   before_action :start_minimum_response_budget
   after_action :enforce_minimum_response_budget
 
@@ -94,13 +96,14 @@ class Auth::App::Sign::In::SecretsController < Auth::App::ApplicationController
   end
 
   def render_form(status: :ok, error: nil)
+    binding = sign_in_flow_binding_params(sign_in_phase_binding_current_flow, phase: "PRIMARY_PENDING")
     render inertia: "auth/app/sign/in/secrets/new", status: status, props: {
       title: t("sign.app.authentication.secret.title"),
       label: t("sign.app.authentication.secret.label"),
       identifier_label: t("sign.app.authentication.secret.identifier_label"),
       submit: t("sign.app.authentication.secret.submit"),
       error: error,
-      action: auth_app_sign_in_secret_path(ri: current_region_identifier, pt: signed_pt_param),
+      action: auth_app_sign_in_secret_path(ri: current_region_identifier, pt: signed_pt_param, **binding),
       authenticity_token: form_authenticity_token,
       turnstile: turnstile_visible_props,
     }

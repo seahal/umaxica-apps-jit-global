@@ -11,6 +11,20 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Name: btree_gist; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION btree_gist; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION btree_gist IS 'support for indexing common datatypes in GiST';
+
+
+--
 -- Name: citext; Type: EXTENSION; Schema: -; Owner: -
 --
 
@@ -22,6 +36,51 @@ CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA public;
 --
 
 COMMENT ON EXTENSION citext IS 'data type for case-insensitive character strings';
+
+
+--
+-- Name: enforce_avatar_transfer_detail_cardinality(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_avatar_transfer_detail_cardinality() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ DECLARE reservation_id bigint; reservation_kind text; detail_count integer; BEGIN IF TG_TABLE_NAME = 'avatar_transfer_reservations' THEN reservation_id := COALESCE(NEW.id, OLD.id); ELSE reservation_id := COALESCE(NEW.transfer_reservation_id, OLD.transfer_reservation_id); END IF; SELECT operation_kind INTO reservation_kind FROM avatar_transfer_reservations WHERE id = reservation_id; IF NOT FOUND THEN RETURN NULL; END IF; WITH details AS ( SELECT transfer_reservation_id FROM avatar_enterprise_to_enterprise_transfer_details UNION ALL SELECT transfer_reservation_id FROM avatar_enterprise_to_bureau_transfer_details UNION ALL SELECT transfer_reservation_id FROM avatar_bureau_to_enterprise_transfer_details UNION ALL SELECT transfer_reservation_id FROM avatar_bureau_to_bureau_transfer_details ) SELECT count(*) INTO detail_count FROM details WHERE transfer_reservation_id = reservation_id; IF detail_count <> 1 THEN RAISE EXCEPTION 'transfer reservation % must have exactly one concrete detail', reservation_id USING ERRCODE = '23514'; END IF; IF reservation_kind = 'enterprise_to_enterprise' AND NOT EXISTS ( SELECT 1 FROM avatar_enterprise_to_enterprise_transfer_details WHERE transfer_reservation_id = reservation_id ) THEN RAISE EXCEPTION 'transfer reservation % has the wrong concrete detail family', reservation_id USING ERRCODE = '23514'; END IF; IF reservation_kind = 'enterprise_to_bureau' AND NOT EXISTS ( SELECT 1 FROM avatar_enterprise_to_bureau_transfer_details WHERE transfer_reservation_id = reservation_id ) THEN RAISE EXCEPTION 'transfer reservation % has the wrong concrete detail family', reservation_id USING ERRCODE = '23514'; END IF; IF reservation_kind = 'bureau_to_enterprise' AND NOT EXISTS ( SELECT 1 FROM avatar_bureau_to_enterprise_transfer_details WHERE transfer_reservation_id = reservation_id ) THEN RAISE EXCEPTION 'transfer reservation % has the wrong concrete detail family', reservation_id USING ERRCODE = '23514'; END IF; IF reservation_kind = 'bureau_to_bureau' AND NOT EXISTS ( SELECT 1 FROM avatar_bureau_to_bureau_transfer_details WHERE transfer_reservation_id = reservation_id ) THEN RAISE EXCEPTION 'transfer reservation % has the wrong concrete detail family', reservation_id USING ERRCODE = '23514'; END IF; RETURN NULL; END; $$;
+
+
+--
+-- Name: enforce_avatar_transfer_source_period_avatar(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_avatar_transfer_source_period_avatar() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ DECLARE reservation_id bigint; reservation_avatar_id bigint; BEGIN IF TG_TABLE_NAME = 'avatar_transfer_reservations' THEN reservation_id := COALESCE(NEW.id, OLD.id); ELSE reservation_id := COALESCE(NEW.transfer_reservation_id, OLD.transfer_reservation_id); END IF; SELECT avatar_id INTO reservation_avatar_id FROM avatar_transfer_reservations WHERE id = reservation_id; IF NOT FOUND THEN RETURN NULL; END IF; IF EXISTS ( SELECT 1 FROM avatar_enterprise_to_enterprise_transfer_details detail JOIN avatar_enterprise_ownership_periods period ON period.id = detail.source_ownership_period_id WHERE detail.transfer_reservation_id = reservation_id AND period.avatar_id IS DISTINCT FROM reservation_avatar_id ) OR EXISTS ( SELECT 1 FROM avatar_enterprise_to_bureau_transfer_details detail JOIN avatar_enterprise_ownership_periods period ON period.id = detail.source_ownership_period_id WHERE detail.transfer_reservation_id = reservation_id AND period.avatar_id IS DISTINCT FROM reservation_avatar_id ) OR EXISTS ( SELECT 1 FROM avatar_bureau_to_enterprise_transfer_details detail JOIN avatar_bureau_ownership_periods period ON period.id = detail.source_ownership_period_id WHERE detail.transfer_reservation_id = reservation_id AND period.avatar_id IS DISTINCT FROM reservation_avatar_id ) OR EXISTS ( SELECT 1 FROM avatar_bureau_to_bureau_transfer_details detail JOIN avatar_bureau_ownership_periods period ON period.id = detail.source_ownership_period_id WHERE detail.transfer_reservation_id = reservation_id AND period.avatar_id IS DISTINCT FROM reservation_avatar_id ) THEN RAISE EXCEPTION 'transfer reservation % source ownership period belongs to another avatar', reservation_id USING ERRCODE = '23514'; END IF; RETURN NULL; END; $$;
+
+
+--
+-- Name: enforce_concrete_avatar_ownership_period_integrity(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_concrete_avatar_ownership_period_integrity() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ DECLARE target_avatar_id bigint := COALESCE(NEW.avatar_id, OLD.avatar_id); avatar_created_at timestamptz; period_count integer; current_count integer; first_valid_from timestamptz; has_gap boolean; has_cross_family_overlap boolean; BEGIN UPDATE avatars SET ownership_integrity_version = ownership_integrity_version + 1 WHERE id = target_avatar_id; IF NOT FOUND THEN RAISE EXCEPTION 'avatar % does not exist for ownership period integrity', target_avatar_id USING ERRCODE = '23503'; END IF; SELECT created_at INTO avatar_created_at FROM avatars WHERE id = target_avatar_id; WITH periods AS ( SELECT valid_from, valid_to FROM avatar_enterprise_ownership_periods WHERE avatar_id = target_avatar_id UNION ALL SELECT valid_from, valid_to FROM avatar_bureau_ownership_periods WHERE avatar_id = target_avatar_id ), ordered AS ( SELECT valid_from, valid_to, lag(valid_to) OVER (ORDER BY valid_from, valid_to) AS previous_to FROM periods ) SELECT count(*), count(*) FILTER (WHERE valid_to = 'infinity'::timestamptz), min(valid_from), bool_or(previous_to IS NOT NULL AND valid_from <> previous_to) INTO period_count, current_count, first_valid_from, has_gap FROM ordered; IF period_count = 0 OR current_count <> 1 THEN RAISE EXCEPTION 'avatar % must have exactly one current ownership period', target_avatar_id USING ERRCODE = '23514'; END IF; IF first_valid_from <> avatar_created_at OR COALESCE(has_gap, false) THEN RAISE EXCEPTION 'avatar % ownership periods must form one uninterrupted chain', target_avatar_id USING ERRCODE = '23514'; END IF; SELECT EXISTS ( SELECT 1 FROM avatar_enterprise_ownership_periods enterprise_period JOIN avatar_bureau_ownership_periods bureau_period ON bureau_period.avatar_id = enterprise_period.avatar_id WHERE enterprise_period.avatar_id = target_avatar_id AND tstzrange(enterprise_period.valid_from, enterprise_period.valid_to, '[)') && tstzrange(bureau_period.valid_from, bureau_period.valid_to, '[)') ) INTO has_cross_family_overlap; IF has_cross_family_overlap THEN RAISE EXCEPTION 'avatar % has overlapping concrete ownership periods', target_avatar_id USING ERRCODE = '23P01'; END IF; RETURN NULL; END; $$;
+
+
+--
+-- Name: guard_concrete_avatar_ownership_period_history(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.guard_concrete_avatar_ownership_period_history() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'closed Avatar ownership history is immutable' USING ERRCODE = '45000'; END IF; IF (to_jsonb(OLD) - 'valid_to' - 'updated_at') IS DISTINCT FROM (to_jsonb(NEW) - 'valid_to' - 'updated_at') OR OLD.valid_to <> 'infinity'::timestamptz OR NEW.valid_to <= NEW.valid_from OR NEW.valid_to = 'infinity'::timestamptz THEN RAISE EXCEPTION 'Avatar ownership history may only close its current period once' USING ERRCODE = '45000'; END IF; RETURN NEW; END; $$;
+
+
+--
+-- Name: reject_concrete_avatar_ownership_period_truncate(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reject_concrete_avatar_ownership_period_truncate() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN RAISE EXCEPTION 'Avatar ownership history cannot be truncated' USING ERRCODE = '45000'; END; $$;
 
 
 SET default_tablespace = '';
@@ -146,6 +205,163 @@ ALTER SEQUENCE public.avatar_blocks_id_seq OWNED BY public.avatar_blocks.id;
 
 
 --
+-- Name: avatar_bureau_agent_grants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.avatar_bureau_agent_grants (
+    id bigint NOT NULL,
+    avatar_bureau_ownership_period_id bigint NOT NULL,
+    public_id character varying(21) NOT NULL,
+    agent_public_id character varying(25) NOT NULL,
+    capability character varying(50) NOT NULL,
+    granted_by_actor_public_id character varying(25) NOT NULL,
+    granted_at timestamp(6) with time zone NOT NULL,
+    revoked_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    granted_by_surface character varying(3) DEFAULT 'org'::character varying NOT NULL,
+    CONSTRAINT chk_avatar_bureau_agent_grants_authority_surface CHECK (((granted_by_surface)::text = 'org'::text)),
+    CONSTRAINT chk_avatar_bureau_agent_grants_capability CHECK (((capability)::text = ANY ((ARRAY['avatar.view'::character varying, 'avatar.update'::character varying, 'avatar.group.manage'::character varying, 'avatar.group.attach'::character varying, 'avatar.group.detach'::character varying])::text[]))),
+    CONSTRAINT chk_avatar_bureau_agent_grants_nonblank CHECK (((char_length(btrim((agent_public_id)::text)) > 0) AND (char_length(btrim((public_id)::text)) > 0) AND (char_length(btrim((capability)::text)) > 0) AND (char_length(btrim((granted_by_actor_public_id)::text)) > 0))),
+    CONSTRAINT chk_avatar_bureau_agent_grants_revocation_order CHECK (((revoked_at IS NULL) OR (revoked_at >= granted_at)))
+);
+
+
+--
+-- Name: avatar_bureau_agent_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.avatar_bureau_agent_grants_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: avatar_bureau_agent_grants_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.avatar_bureau_agent_grants_id_seq OWNED BY public.avatar_bureau_agent_grants.id;
+
+
+--
+-- Name: avatar_bureau_ownership_periods; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.avatar_bureau_ownership_periods (
+    id bigint NOT NULL,
+    avatar_id bigint NOT NULL,
+    bureau_public_id character varying(255) NOT NULL,
+    transferred_by_actor_public_id character varying(255),
+    valid_from timestamp(6) with time zone NOT NULL,
+    valid_to timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_avatar_bureau_ownership_periods_owner_nonblank CHECK ((((bureau_public_id)::text <> ''::text) AND ((bureau_public_id)::text ~ '[^[:space:]]'::text))),
+    CONSTRAINT chk_avatar_bureau_ownership_periods_strict_interval CHECK ((valid_from < valid_to))
+);
+
+
+--
+-- Name: avatar_bureau_ownership_periods_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.avatar_bureau_ownership_periods_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: avatar_bureau_ownership_periods_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.avatar_bureau_ownership_periods_id_seq OWNED BY public.avatar_bureau_ownership_periods.id;
+
+
+--
+-- Name: avatar_bureau_to_bureau_transfer_details; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.avatar_bureau_to_bureau_transfer_details (
+    id bigint NOT NULL,
+    transfer_reservation_id bigint NOT NULL,
+    source_bureau_public_id character varying(255) NOT NULL,
+    destination_bureau_public_id character varying(255) NOT NULL,
+    request_actor_public_id character varying(255) NOT NULL,
+    accept_actor_public_id character varying(255),
+    requested_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    accepted_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    source_ownership_period_id bigint NOT NULL,
+    CONSTRAINT chk_avatar_bureau_to_bureau_transfer_details_nonblank CHECK (((char_length(btrim((source_bureau_public_id)::text)) > 0) AND (char_length(btrim((destination_bureau_public_id)::text)) > 0) AND (char_length(btrim((request_actor_public_id)::text)) > 0)))
+);
+
+
+--
+-- Name: avatar_bureau_to_bureau_transfer_details_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.avatar_bureau_to_bureau_transfer_details_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: avatar_bureau_to_bureau_transfer_details_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.avatar_bureau_to_bureau_transfer_details_id_seq OWNED BY public.avatar_bureau_to_bureau_transfer_details.id;
+
+
+--
+-- Name: avatar_bureau_to_enterprise_transfer_details; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.avatar_bureau_to_enterprise_transfer_details (
+    id bigint NOT NULL,
+    transfer_reservation_id bigint NOT NULL,
+    source_bureau_public_id character varying(255) NOT NULL,
+    destination_enterprise_public_id character varying(255) NOT NULL,
+    request_actor_public_id character varying(255) NOT NULL,
+    accept_actor_public_id character varying(255),
+    requested_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    accepted_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    source_ownership_period_id bigint NOT NULL,
+    CONSTRAINT chk_avatar_bureau_to_enterprise_transfer_details_nonblank CHECK (((char_length(btrim((source_bureau_public_id)::text)) > 0) AND (char_length(btrim((destination_enterprise_public_id)::text)) > 0) AND (char_length(btrim((request_actor_public_id)::text)) > 0)))
+);
+
+
+--
+-- Name: avatar_bureau_to_enterprise_transfer_details_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.avatar_bureau_to_enterprise_transfer_details_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: avatar_bureau_to_enterprise_transfer_details_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.avatar_bureau_to_enterprise_transfer_details_id_seq OWNED BY public.avatar_bureau_to_enterprise_transfer_details.id;
+
+
+--
 -- Name: avatar_capabilities; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -171,6 +387,163 @@ CREATE SEQUENCE public.avatar_capabilities_id_seq
 --
 
 ALTER SEQUENCE public.avatar_capabilities_id_seq OWNED BY public.avatar_capabilities.id;
+
+
+--
+-- Name: avatar_enterprise_ownership_periods; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.avatar_enterprise_ownership_periods (
+    id bigint NOT NULL,
+    avatar_id bigint NOT NULL,
+    enterprise_public_id character varying(255) NOT NULL,
+    transferred_by_actor_public_id character varying(255),
+    valid_from timestamp(6) with time zone NOT NULL,
+    valid_to timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_avatar_enterprise_ownership_periods_owner_nonblank CHECK ((((enterprise_public_id)::text <> ''::text) AND ((enterprise_public_id)::text ~ '[^[:space:]]'::text))),
+    CONSTRAINT chk_avatar_enterprise_ownership_periods_strict_interval CHECK ((valid_from < valid_to))
+);
+
+
+--
+-- Name: avatar_enterprise_ownership_periods_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.avatar_enterprise_ownership_periods_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: avatar_enterprise_ownership_periods_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.avatar_enterprise_ownership_periods_id_seq OWNED BY public.avatar_enterprise_ownership_periods.id;
+
+
+--
+-- Name: avatar_enterprise_persona_grants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.avatar_enterprise_persona_grants (
+    id bigint NOT NULL,
+    avatar_enterprise_ownership_period_id bigint NOT NULL,
+    public_id character varying(21) NOT NULL,
+    persona_public_id character varying(25) NOT NULL,
+    capability character varying(50) NOT NULL,
+    granted_by_actor_public_id character varying(25) NOT NULL,
+    granted_at timestamp(6) with time zone NOT NULL,
+    revoked_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    granted_by_surface character varying(3) DEFAULT 'app'::character varying NOT NULL,
+    CONSTRAINT chk_avatar_enterprise_persona_grants_authority_surface CHECK (((granted_by_surface)::text = 'app'::text)),
+    CONSTRAINT chk_avatar_enterprise_persona_grants_capability CHECK (((capability)::text = ANY ((ARRAY['avatar.view'::character varying, 'avatar.update'::character varying, 'avatar.group.manage'::character varying, 'avatar.group.attach'::character varying, 'avatar.group.detach'::character varying])::text[]))),
+    CONSTRAINT chk_avatar_enterprise_persona_grants_nonblank CHECK (((char_length(btrim((persona_public_id)::text)) > 0) AND (char_length(btrim((public_id)::text)) > 0) AND (char_length(btrim((capability)::text)) > 0) AND (char_length(btrim((granted_by_actor_public_id)::text)) > 0))),
+    CONSTRAINT chk_avatar_enterprise_persona_grants_revocation_order CHECK (((revoked_at IS NULL) OR (revoked_at >= granted_at)))
+);
+
+
+--
+-- Name: avatar_enterprise_persona_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.avatar_enterprise_persona_grants_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: avatar_enterprise_persona_grants_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.avatar_enterprise_persona_grants_id_seq OWNED BY public.avatar_enterprise_persona_grants.id;
+
+
+--
+-- Name: avatar_enterprise_to_bureau_transfer_details; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.avatar_enterprise_to_bureau_transfer_details (
+    id bigint NOT NULL,
+    transfer_reservation_id bigint NOT NULL,
+    source_enterprise_public_id character varying(255) NOT NULL,
+    destination_bureau_public_id character varying(255) NOT NULL,
+    request_actor_public_id character varying(255) NOT NULL,
+    accept_actor_public_id character varying(255),
+    requested_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    accepted_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    source_ownership_period_id bigint NOT NULL,
+    CONSTRAINT chk_avatar_enterprise_to_bureau_transfer_details_nonblank CHECK (((char_length(btrim((source_enterprise_public_id)::text)) > 0) AND (char_length(btrim((destination_bureau_public_id)::text)) > 0) AND (char_length(btrim((request_actor_public_id)::text)) > 0)))
+);
+
+
+--
+-- Name: avatar_enterprise_to_bureau_transfer_details_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.avatar_enterprise_to_bureau_transfer_details_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: avatar_enterprise_to_bureau_transfer_details_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.avatar_enterprise_to_bureau_transfer_details_id_seq OWNED BY public.avatar_enterprise_to_bureau_transfer_details.id;
+
+
+--
+-- Name: avatar_enterprise_to_enterprise_transfer_details; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.avatar_enterprise_to_enterprise_transfer_details (
+    id bigint NOT NULL,
+    transfer_reservation_id bigint NOT NULL,
+    source_enterprise_public_id character varying(255) NOT NULL,
+    destination_enterprise_public_id character varying(255) NOT NULL,
+    request_actor_public_id character varying(255) NOT NULL,
+    accept_actor_public_id character varying(255),
+    requested_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    accepted_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    source_ownership_period_id bigint NOT NULL,
+    CONSTRAINT chk_avatar_enterprise_to_enterprise_transfer_details_nonblank CHECK (((char_length(btrim((source_enterprise_public_id)::text)) > 0) AND (char_length(btrim((destination_enterprise_public_id)::text)) > 0) AND (char_length(btrim((request_actor_public_id)::text)) > 0)))
+);
+
+
+--
+-- Name: avatar_enterprise_to_enterprise_transfer_details_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.avatar_enterprise_to_enterprise_transfer_details_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: avatar_enterprise_to_enterprise_transfer_details_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.avatar_enterprise_to_enterprise_transfer_details_id_seq OWNED BY public.avatar_enterprise_to_enterprise_transfer_details.id;
 
 
 --
@@ -554,7 +927,8 @@ CREATE TABLE public.avatar_ownership_periods (
     owner_surface character varying,
     owner_collective_public_id character varying,
     CONSTRAINT chk_avatar_ownership_periods_avatar_ownership_status_id_positiv CHECK (((avatar_ownership_status_id IS NULL) OR (avatar_ownership_status_id >= 0))),
-    CONSTRAINT chk_avatar_ownership_periods_owner_reference CHECK ((((owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND (owner_collective_public_id IS NOT NULL) AND ((owner_collective_public_id)::text <> ''::text)))
+    CONSTRAINT chk_avatar_ownership_periods_owner_reference CHECK ((((owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND (owner_collective_public_id IS NOT NULL) AND ((owner_collective_public_id)::text <> ''::text))),
+    CONSTRAINT chk_avatar_ownership_periods_strict_interval CHECK ((valid_from < valid_to))
 );
 
 
@@ -724,6 +1098,43 @@ ALTER SEQUENCE public.avatar_persona_bindings_id_seq OWNED BY public.avatar_pers
 
 
 --
+-- Name: avatar_purge_deferrals; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.avatar_purge_deferrals (
+    id bigint NOT NULL,
+    avatar_id bigint NOT NULL,
+    reason_code character varying(100) NOT NULL,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    first_observed_at timestamp(6) with time zone NOT NULL,
+    last_observed_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_avatar_purge_deferrals_attempt_positive CHECK ((attempt_count > 0)),
+    CONSTRAINT chk_avatar_purge_deferrals_reason_nonblank CHECK ((char_length(btrim((reason_code)::text)) > 0))
+);
+
+
+--
+-- Name: avatar_purge_deferrals_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.avatar_purge_deferrals_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: avatar_purge_deferrals_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.avatar_purge_deferrals_id_seq OWNED BY public.avatar_purge_deferrals.id;
+
+
+--
 -- Name: avatar_role_permissions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -784,6 +1195,51 @@ ALTER SEQUENCE public.avatar_roles_id_seq OWNED BY public.avatar_roles.id;
 
 
 --
+-- Name: avatar_transfer_reservations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.avatar_transfer_reservations (
+    id bigint NOT NULL,
+    avatar_id bigint NOT NULL,
+    public_id character varying(21) NOT NULL,
+    operation_kind character varying(40) NOT NULL,
+    idempotency_key character varying(36) NOT NULL,
+    request_fingerprint character varying(64) NOT NULL,
+    state character varying(20) DEFAULT 'pending'::character varying NOT NULL,
+    completed_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    requested_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    expires_at timestamp(6) with time zone DEFAULT (CURRENT_TIMESTAMP + '5 days'::interval) NOT NULL,
+    CONSTRAINT chk_avatar_transfer_reservations_expiry_after_request CHECK ((expires_at > requested_at)),
+    CONSTRAINT chk_avatar_transfer_reservations_idempotency_uuid CHECK (((idempotency_key)::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)),
+    CONSTRAINT chk_avatar_transfer_reservations_nonblank CHECK (((char_length(btrim((public_id)::text)) > 0) AND (char_length(btrim((request_fingerprint)::text)) > 0))),
+    CONSTRAINT chk_avatar_transfer_reservations_operation_kind CHECK (((operation_kind)::text = ANY ((ARRAY['enterprise_to_enterprise'::character varying, 'enterprise_to_bureau'::character varying, 'bureau_to_enterprise'::character varying, 'bureau_to_bureau'::character varying])::text[]))),
+    CONSTRAINT chk_avatar_transfer_reservations_state CHECK (((state)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'cancelled'::character varying, 'expired'::character varying])::text[]))),
+    CONSTRAINT chk_avatar_transfer_reservations_within_five_days CHECK (((expires_at - requested_at) <= '5 days'::interval))
+);
+
+
+--
+-- Name: avatar_transfer_reservations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.avatar_transfer_reservations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: avatar_transfer_reservations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.avatar_transfer_reservations_id_seq OWNED BY public.avatar_transfer_reservations.id;
+
+
+--
 -- Name: avatars; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -803,6 +1259,7 @@ CREATE TABLE public.avatars (
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
     lifecycle_state_id bigint NOT NULL,
+    ownership_integrity_version bigint DEFAULT 0 NOT NULL,
     CONSTRAINT chk_avatars_capability_id_positive CHECK ((capability_id >= 0))
 );
 
@@ -1648,10 +2105,66 @@ ALTER TABLE ONLY public.avatar_blocks ALTER COLUMN id SET DEFAULT nextval('publi
 
 
 --
+-- Name: avatar_bureau_agent_grants id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_agent_grants ALTER COLUMN id SET DEFAULT nextval('public.avatar_bureau_agent_grants_id_seq'::regclass);
+
+
+--
+-- Name: avatar_bureau_ownership_periods id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_ownership_periods ALTER COLUMN id SET DEFAULT nextval('public.avatar_bureau_ownership_periods_id_seq'::regclass);
+
+
+--
+-- Name: avatar_bureau_to_bureau_transfer_details id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_to_bureau_transfer_details ALTER COLUMN id SET DEFAULT nextval('public.avatar_bureau_to_bureau_transfer_details_id_seq'::regclass);
+
+
+--
+-- Name: avatar_bureau_to_enterprise_transfer_details id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_to_enterprise_transfer_details ALTER COLUMN id SET DEFAULT nextval('public.avatar_bureau_to_enterprise_transfer_details_id_seq'::regclass);
+
+
+--
 -- Name: avatar_capabilities id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.avatar_capabilities ALTER COLUMN id SET DEFAULT nextval('public.avatar_capabilities_id_seq'::regclass);
+
+
+--
+-- Name: avatar_enterprise_ownership_periods id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_ownership_periods ALTER COLUMN id SET DEFAULT nextval('public.avatar_enterprise_ownership_periods_id_seq'::regclass);
+
+
+--
+-- Name: avatar_enterprise_persona_grants id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_persona_grants ALTER COLUMN id SET DEFAULT nextval('public.avatar_enterprise_persona_grants_id_seq'::regclass);
+
+
+--
+-- Name: avatar_enterprise_to_bureau_transfer_details id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_to_bureau_transfer_details ALTER COLUMN id SET DEFAULT nextval('public.avatar_enterprise_to_bureau_transfer_details_id_seq'::regclass);
+
+
+--
+-- Name: avatar_enterprise_to_enterprise_transfer_details id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details ALTER COLUMN id SET DEFAULT nextval('public.avatar_enterprise_to_enterprise_transfer_details_id_seq'::regclass);
 
 
 --
@@ -1760,6 +2273,13 @@ ALTER TABLE ONLY public.avatar_persona_bindings ALTER COLUMN id SET DEFAULT next
 
 
 --
+-- Name: avatar_purge_deferrals id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_purge_deferrals ALTER COLUMN id SET DEFAULT nextval('public.avatar_purge_deferrals_id_seq'::regclass);
+
+
+--
 -- Name: avatar_role_permissions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1771,6 +2291,13 @@ ALTER TABLE ONLY public.avatar_role_permissions ALTER COLUMN id SET DEFAULT next
 --
 
 ALTER TABLE ONLY public.avatar_roles ALTER COLUMN id SET DEFAULT nextval('public.avatar_roles_id_seq'::regclass);
+
+
+--
+-- Name: avatar_transfer_reservations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_transfer_reservations ALTER COLUMN id SET DEFAULT nextval('public.avatar_transfer_reservations_id_seq'::regclass);
 
 
 --
@@ -1981,11 +2508,75 @@ ALTER TABLE ONLY public.avatar_blocks
 
 
 --
+-- Name: avatar_bureau_agent_grants avatar_bureau_agent_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_agent_grants
+    ADD CONSTRAINT avatar_bureau_agent_grants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: avatar_bureau_ownership_periods avatar_bureau_ownership_periods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_ownership_periods
+    ADD CONSTRAINT avatar_bureau_ownership_periods_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: avatar_bureau_to_bureau_transfer_details avatar_bureau_to_bureau_transfer_details_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_to_bureau_transfer_details
+    ADD CONSTRAINT avatar_bureau_to_bureau_transfer_details_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: avatar_bureau_to_enterprise_transfer_details avatar_bureau_to_enterprise_transfer_details_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_to_enterprise_transfer_details
+    ADD CONSTRAINT avatar_bureau_to_enterprise_transfer_details_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: avatar_capabilities avatar_capabilities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.avatar_capabilities
     ADD CONSTRAINT avatar_capabilities_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: avatar_enterprise_ownership_periods avatar_enterprise_ownership_periods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_ownership_periods
+    ADD CONSTRAINT avatar_enterprise_ownership_periods_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: avatar_enterprise_persona_grants avatar_enterprise_persona_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_persona_grants
+    ADD CONSTRAINT avatar_enterprise_persona_grants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: avatar_enterprise_to_bureau_transfer_details avatar_enterprise_to_bureau_transfer_details_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_to_bureau_transfer_details
+    ADD CONSTRAINT avatar_enterprise_to_bureau_transfer_details_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: avatar_enterprise_to_enterprise_transfer_details avatar_enterprise_to_enterprise_transfer_details_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details
+    ADD CONSTRAINT avatar_enterprise_to_enterprise_transfer_details_pkey PRIMARY KEY (id);
 
 
 --
@@ -2109,6 +2700,14 @@ ALTER TABLE ONLY public.avatar_persona_bindings
 
 
 --
+-- Name: avatar_purge_deferrals avatar_purge_deferrals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_purge_deferrals
+    ADD CONSTRAINT avatar_purge_deferrals_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: avatar_role_permissions avatar_role_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2122,6 +2721,14 @@ ALTER TABLE ONLY public.avatar_role_permissions
 
 ALTER TABLE ONLY public.avatar_roles
     ADD CONSTRAINT avatar_roles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: avatar_transfer_reservations avatar_transfer_reservations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_transfer_reservations
+    ADD CONSTRAINT avatar_transfer_reservations_pkey PRIMARY KEY (id);
 
 
 --
@@ -2186,6 +2793,30 @@ ALTER TABLE ONLY public.client_avatar_suspensions
 
 ALTER TABLE ONLY public.client_avatar_visibilities
     ADD CONSTRAINT client_avatar_visibilities_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: avatar_bureau_ownership_periods excl_avatar_bureau_ownership_periods_non_overlapping; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_ownership_periods
+    ADD CONSTRAINT excl_avatar_bureau_ownership_periods_non_overlapping EXCLUDE USING gist (avatar_id WITH =, tstzrange(valid_from, valid_to, '[)'::text) WITH &&);
+
+
+--
+-- Name: avatar_enterprise_ownership_periods excl_avatar_enterprise_ownership_periods_non_overlapping; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_ownership_periods
+    ADD CONSTRAINT excl_avatar_enterprise_ownership_periods_non_overlapping EXCLUDE USING gist (avatar_id WITH =, tstzrange(valid_from, valid_to, '[)'::text) WITH &&);
+
+
+--
+-- Name: avatar_ownership_periods excl_avatar_ownership_periods_non_overlapping; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_ownership_periods
+    ADD CONSTRAINT excl_avatar_ownership_periods_non_overlapping EXCLUDE USING gist (avatar_id WITH =, tstzrange(valid_from, valid_to, '[)'::text) WITH &&);
 
 
 --
@@ -2333,6 +2964,34 @@ ALTER TABLE ONLY public.schema_migrations
 
 
 --
+-- Name: idx_av_tr_bb_reservation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_av_tr_bb_reservation ON public.avatar_bureau_to_bureau_transfer_details USING btree (transfer_reservation_id);
+
+
+--
+-- Name: idx_av_tr_be_reservation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_av_tr_be_reservation ON public.avatar_bureau_to_enterprise_transfer_details USING btree (transfer_reservation_id);
+
+
+--
+-- Name: idx_av_tr_eb_reservation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_av_tr_eb_reservation ON public.avatar_enterprise_to_bureau_transfer_details USING btree (transfer_reservation_id);
+
+
+--
+-- Name: idx_av_tr_ee_reservation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_av_tr_ee_reservation ON public.avatar_enterprise_to_enterprise_transfer_details USING btree (transfer_reservation_id);
+
+
+--
 -- Name: idx_avatar_agent_bindings_active_agent; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2351,6 +3010,90 @@ CREATE UNIQUE INDEX idx_avatar_agent_bindings_active_avatar ON public.avatar_age
 --
 
 CREATE UNIQUE INDEX idx_avatar_agent_bindings_active_pair ON public.avatar_agent_bindings USING btree (avatar_id, agent_id) WHERE (revoked_at IS NULL);
+
+
+--
+-- Name: idx_avatar_bureau_agent_grants_active_subject_capability; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_avatar_bureau_agent_grants_active_subject_capability ON public.avatar_bureau_agent_grants USING btree (avatar_bureau_ownership_period_id, agent_public_id, capability) WHERE (revoked_at IS NULL);
+
+
+--
+-- Name: idx_avatar_bureau_agent_grants_period; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_avatar_bureau_agent_grants_period ON public.avatar_bureau_agent_grants USING btree (avatar_bureau_ownership_period_id);
+
+
+--
+-- Name: idx_avatar_bureau_agent_grants_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_avatar_bureau_agent_grants_public_id ON public.avatar_bureau_agent_grants USING btree (public_id);
+
+
+--
+-- Name: idx_avatar_bureau_ownership_periods_avatar_all; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_avatar_bureau_ownership_periods_avatar_all ON public.avatar_bureau_ownership_periods USING btree (avatar_id);
+
+
+--
+-- Name: idx_avatar_bureau_ownership_periods_current_avatar; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_avatar_bureau_ownership_periods_current_avatar ON public.avatar_bureau_ownership_periods USING btree (avatar_id) WHERE (valid_to = 'infinity'::timestamp with time zone);
+
+
+--
+-- Name: idx_avatar_bureau_ownership_periods_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_avatar_bureau_ownership_periods_owner ON public.avatar_bureau_ownership_periods USING btree (bureau_public_id);
+
+
+--
+-- Name: idx_avatar_enterprise_ownership_periods_avatar_all; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_avatar_enterprise_ownership_periods_avatar_all ON public.avatar_enterprise_ownership_periods USING btree (avatar_id);
+
+
+--
+-- Name: idx_avatar_enterprise_ownership_periods_current_avatar; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_avatar_enterprise_ownership_periods_current_avatar ON public.avatar_enterprise_ownership_periods USING btree (avatar_id) WHERE (valid_to = 'infinity'::timestamp with time zone);
+
+
+--
+-- Name: idx_avatar_enterprise_ownership_periods_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_avatar_enterprise_ownership_periods_owner ON public.avatar_enterprise_ownership_periods USING btree (enterprise_public_id);
+
+
+--
+-- Name: idx_avatar_enterprise_persona_grants_active_subject_capability; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_avatar_enterprise_persona_grants_active_subject_capability ON public.avatar_enterprise_persona_grants USING btree (avatar_enterprise_ownership_period_id, persona_public_id, capability) WHERE (revoked_at IS NULL);
+
+
+--
+-- Name: idx_avatar_enterprise_persona_grants_period; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_avatar_enterprise_persona_grants_period ON public.avatar_enterprise_persona_grants USING btree (avatar_enterprise_ownership_period_id);
+
+
+--
+-- Name: idx_avatar_enterprise_persona_grants_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_avatar_enterprise_persona_grants_public_id ON public.avatar_enterprise_persona_grants USING btree (public_id);
 
 
 --
@@ -2438,10 +3181,66 @@ CREATE UNIQUE INDEX idx_avatar_persona_bindings_active_persona ON public.avatar_
 
 
 --
+-- Name: idx_avatar_purge_deferrals_avatar_reason; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_avatar_purge_deferrals_avatar_reason ON public.avatar_purge_deferrals USING btree (avatar_id, reason_code);
+
+
+--
+-- Name: idx_avatar_transfer_reservations_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_avatar_transfer_reservations_idempotency ON public.avatar_transfer_reservations USING btree (idempotency_key);
+
+
+--
+-- Name: idx_avatar_transfer_reservations_one_pending_avatar; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_avatar_transfer_reservations_one_pending_avatar ON public.avatar_transfer_reservations USING btree (avatar_id) WHERE ((state)::text = 'pending'::text);
+
+
+--
+-- Name: idx_avatar_transfer_reservations_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_avatar_transfer_reservations_public_id ON public.avatar_transfer_reservations USING btree (public_id);
+
+
+--
 -- Name: idx_group_avatar_memberships_active_pair; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_group_avatar_memberships_active_pair ON public.group_avatar_memberships USING btree (avatar_group_id, avatar_id) WHERE (removed_at IS NULL);
+
+
+--
+-- Name: idx_on_source_ownership_period_id_29fc00628c; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_source_ownership_period_id_29fc00628c ON public.avatar_enterprise_to_bureau_transfer_details USING btree (source_ownership_period_id);
+
+
+--
+-- Name: idx_on_source_ownership_period_id_5195fdc054; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_source_ownership_period_id_5195fdc054 ON public.avatar_enterprise_to_enterprise_transfer_details USING btree (source_ownership_period_id);
+
+
+--
+-- Name: idx_on_source_ownership_period_id_5330051084; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_source_ownership_period_id_5330051084 ON public.avatar_bureau_to_enterprise_transfer_details USING btree (source_ownership_period_id);
+
+
+--
+-- Name: idx_on_source_ownership_period_id_5704a58bdd; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_source_ownership_period_id_5704a58bdd ON public.avatar_bureau_to_bureau_transfer_details USING btree (source_ownership_period_id);
 
 
 --
@@ -3194,6 +3993,118 @@ CREATE UNIQUE INDEX uniq_handles_handle_non_system ON public.handles USING btree
 
 
 --
+-- Name: avatar_bureau_ownership_periods avatar_bureau_ownership_periods_immutability; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_bureau_ownership_periods_immutability BEFORE DELETE OR UPDATE ON public.avatar_bureau_ownership_periods FOR EACH ROW EXECUTE FUNCTION public.guard_concrete_avatar_ownership_period_history();
+
+
+--
+-- Name: avatar_bureau_ownership_periods avatar_bureau_ownership_periods_integrity; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_bureau_ownership_periods_integrity AFTER INSERT OR DELETE OR UPDATE ON public.avatar_bureau_ownership_periods DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_concrete_avatar_ownership_period_integrity();
+
+
+--
+-- Name: avatar_bureau_ownership_periods avatar_bureau_ownership_periods_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_bureau_ownership_periods_no_truncate BEFORE TRUNCATE ON public.avatar_bureau_ownership_periods FOR EACH STATEMENT EXECUTE FUNCTION public.reject_concrete_avatar_ownership_period_truncate();
+
+
+--
+-- Name: avatar_enterprise_ownership_periods avatar_enterprise_ownership_periods_immutability; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_enterprise_ownership_periods_immutability BEFORE DELETE OR UPDATE ON public.avatar_enterprise_ownership_periods FOR EACH ROW EXECUTE FUNCTION public.guard_concrete_avatar_ownership_period_history();
+
+
+--
+-- Name: avatar_enterprise_ownership_periods avatar_enterprise_ownership_periods_integrity; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_enterprise_ownership_periods_integrity AFTER INSERT OR DELETE OR UPDATE ON public.avatar_enterprise_ownership_periods DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_concrete_avatar_ownership_period_integrity();
+
+
+--
+-- Name: avatar_enterprise_ownership_periods avatar_enterprise_ownership_periods_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_enterprise_ownership_periods_no_truncate BEFORE TRUNCATE ON public.avatar_enterprise_ownership_periods FOR EACH STATEMENT EXECUTE FUNCTION public.reject_concrete_avatar_ownership_period_truncate();
+
+
+--
+-- Name: avatar_bureau_to_bureau_transfer_details avatar_transfer_detail_bb_cardinality; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_transfer_detail_bb_cardinality AFTER INSERT OR DELETE OR UPDATE ON public.avatar_bureau_to_bureau_transfer_details DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_avatar_transfer_detail_cardinality();
+
+
+--
+-- Name: avatar_bureau_to_bureau_transfer_details avatar_transfer_detail_bb_source_period_avatar_integrity; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_transfer_detail_bb_source_period_avatar_integrity AFTER INSERT OR DELETE OR UPDATE ON public.avatar_bureau_to_bureau_transfer_details DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_avatar_transfer_source_period_avatar();
+
+
+--
+-- Name: avatar_bureau_to_enterprise_transfer_details avatar_transfer_detail_be_cardinality; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_transfer_detail_be_cardinality AFTER INSERT OR DELETE OR UPDATE ON public.avatar_bureau_to_enterprise_transfer_details DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_avatar_transfer_detail_cardinality();
+
+
+--
+-- Name: avatar_bureau_to_enterprise_transfer_details avatar_transfer_detail_be_source_period_avatar_integrity; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_transfer_detail_be_source_period_avatar_integrity AFTER INSERT OR DELETE OR UPDATE ON public.avatar_bureau_to_enterprise_transfer_details DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_avatar_transfer_source_period_avatar();
+
+
+--
+-- Name: avatar_enterprise_to_bureau_transfer_details avatar_transfer_detail_eb_cardinality; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_transfer_detail_eb_cardinality AFTER INSERT OR DELETE OR UPDATE ON public.avatar_enterprise_to_bureau_transfer_details DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_avatar_transfer_detail_cardinality();
+
+
+--
+-- Name: avatar_enterprise_to_bureau_transfer_details avatar_transfer_detail_eb_source_period_avatar_integrity; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_transfer_detail_eb_source_period_avatar_integrity AFTER INSERT OR DELETE OR UPDATE ON public.avatar_enterprise_to_bureau_transfer_details DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_avatar_transfer_source_period_avatar();
+
+
+--
+-- Name: avatar_enterprise_to_enterprise_transfer_details avatar_transfer_detail_ee_cardinality; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_transfer_detail_ee_cardinality AFTER INSERT OR DELETE OR UPDATE ON public.avatar_enterprise_to_enterprise_transfer_details DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_avatar_transfer_detail_cardinality();
+
+
+--
+-- Name: avatar_enterprise_to_enterprise_transfer_details avatar_transfer_detail_ee_source_period_avatar_integrity; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_transfer_detail_ee_source_period_avatar_integrity AFTER INSERT OR DELETE OR UPDATE ON public.avatar_enterprise_to_enterprise_transfer_details DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_avatar_transfer_source_period_avatar();
+
+
+--
+-- Name: avatar_transfer_reservations avatar_transfer_reservations_cardinality; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_transfer_reservations_cardinality AFTER INSERT OR DELETE OR UPDATE ON public.avatar_transfer_reservations DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_avatar_transfer_detail_cardinality();
+
+
+--
+-- Name: avatar_transfer_reservations avatar_transfer_reservations_source_period_avatar_integrity; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_transfer_reservations_source_period_avatar_integrity AFTER INSERT OR DELETE OR UPDATE ON public.avatar_transfer_reservations DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_avatar_transfer_source_period_avatar();
+
+
+--
 -- Name: avatar_lifecycle_events fk_avatar_lifecycle_events_from_state_key; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3250,6 +4161,14 @@ ALTER TABLE ONLY public.avatars
 
 
 --
+-- Name: avatar_enterprise_to_bureau_transfer_details fk_rails_1452263e0a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_to_bureau_transfer_details
+    ADD CONSTRAINT fk_rails_1452263e0a FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
+
+
+--
 -- Name: client_avatar_extractions fk_rails_16e7d13f5a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3263,6 +4182,14 @@ ALTER TABLE ONLY public.client_avatar_extractions
 
 ALTER TABLE ONLY public.handles
     ADD CONSTRAINT fk_rails_17aa34449d FOREIGN KEY (handle_status_id) REFERENCES public.handle_statuses(id);
+
+
+--
+-- Name: avatar_enterprise_to_enterprise_transfer_details fk_rails_225fc7696d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details
+    ADD CONSTRAINT fk_rails_225fc7696d FOREIGN KEY (transfer_reservation_id) REFERENCES public.avatar_transfer_reservations(id) ON DELETE RESTRICT;
 
 
 --
@@ -3298,6 +4225,14 @@ ALTER TABLE ONLY public.avatar_assignments
 
 
 --
+-- Name: avatar_purge_deferrals fk_rails_3f0df715be; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_purge_deferrals
+    ADD CONSTRAINT fk_rails_3f0df715be FOREIGN KEY (avatar_id) REFERENCES public.avatars(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: handle_assignments fk_rails_4ba426ebd3; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3311,6 +4246,22 @@ ALTER TABLE ONLY public.handle_assignments
 
 ALTER TABLE ONLY public.client_avatar_visibilities
     ADD CONSTRAINT fk_rails_4bc5709a56 FOREIGN KEY (avatar_id) REFERENCES public.avatars(id);
+
+
+--
+-- Name: avatar_bureau_agent_grants fk_rails_4c1f55e732; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_agent_grants
+    ADD CONSTRAINT fk_rails_4c1f55e732 FOREIGN KEY (avatar_bureau_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: avatar_bureau_to_enterprise_transfer_details fk_rails_4dfe4d6053; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_to_enterprise_transfer_details
+    ADD CONSTRAINT fk_rails_4dfe4d6053 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -3346,6 +4297,14 @@ ALTER TABLE ONLY public.group_avatar_memberships
 
 
 --
+-- Name: avatar_enterprise_ownership_periods fk_rails_616798b099; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_ownership_periods
+    ADD CONSTRAINT fk_rails_616798b099 FOREIGN KEY (avatar_id) REFERENCES public.avatars(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: member_avatar_extractions fk_rails_61c586e4e8; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3362,6 +4321,14 @@ ALTER TABLE ONLY public.client_avatar_impersonations
 
 
 --
+-- Name: avatar_transfer_reservations fk_rails_6739f53d83; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_transfer_reservations
+    ADD CONSTRAINT fk_rails_6739f53d83 FOREIGN KEY (avatar_id) REFERENCES public.avatars(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: avatar_ownership_periods fk_rails_6c57478126; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3375,6 +4342,14 @@ ALTER TABLE ONLY public.avatar_ownership_periods
 
 ALTER TABLE ONLY public.avatar_lifecycle_events
     ADD CONSTRAINT fk_rails_6fde42eb1b FOREIGN KEY (avatar_id) REFERENCES public.avatars(id);
+
+
+--
+-- Name: avatar_bureau_to_bureau_transfer_details fk_rails_71685bc7cf; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_to_bureau_transfer_details
+    ADD CONSTRAINT fk_rails_71685bc7cf FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -3423,6 +4398,14 @@ ALTER TABLE ONLY public.avatar_blocks
 
 ALTER TABLE ONLY public.avatar_ownership_periods
     ADD CONSTRAINT fk_rails_84bbb0d37f FOREIGN KEY (avatar_id) REFERENCES public.avatars(id);
+
+
+--
+-- Name: avatar_bureau_to_enterprise_transfer_details fk_rails_894073d1cd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_to_enterprise_transfer_details
+    ADD CONSTRAINT fk_rails_894073d1cd FOREIGN KEY (transfer_reservation_id) REFERENCES public.avatar_transfer_reservations(id) ON DELETE RESTRICT;
 
 
 --
@@ -3482,11 +4465,27 @@ ALTER TABLE ONLY public.member_avatar_oversights
 
 
 --
+-- Name: avatar_enterprise_to_enterprise_transfer_details fk_rails_bf9c472635; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details
+    ADD CONSTRAINT fk_rails_bf9c472635 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
+
+
+--
 -- Name: avatar_mutes fk_rails_c0a7894e9b; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.avatar_mutes
     ADD CONSTRAINT fk_rails_c0a7894e9b FOREIGN KEY (muted_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
+
+
+--
+-- Name: avatar_bureau_to_bureau_transfer_details fk_rails_c0b9b57e29; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_to_bureau_transfer_details
+    ADD CONSTRAINT fk_rails_c0b9b57e29 FOREIGN KEY (transfer_reservation_id) REFERENCES public.avatar_transfer_reservations(id) ON DELETE RESTRICT;
 
 
 --
@@ -3514,6 +4513,14 @@ ALTER TABLE ONLY public.post_reviews
 
 
 --
+-- Name: avatar_enterprise_persona_grants fk_rails_cf9f5fc6bd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_persona_grants
+    ADD CONSTRAINT fk_rails_cf9f5fc6bd FOREIGN KEY (avatar_enterprise_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: avatar_follows fk_rails_d256033bc4; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3527,6 +4534,14 @@ ALTER TABLE ONLY public.avatar_follows
 
 ALTER TABLE ONLY public.avatar_role_permissions
     ADD CONSTRAINT fk_rails_d42028fbe6 FOREIGN KEY (avatar_permission_id) REFERENCES public.avatar_permissions(id);
+
+
+--
+-- Name: avatar_enterprise_to_bureau_transfer_details fk_rails_d508841b66; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_enterprise_to_bureau_transfer_details
+    ADD CONSTRAINT fk_rails_d508841b66 FOREIGN KEY (transfer_reservation_id) REFERENCES public.avatar_transfer_reservations(id) ON DELETE RESTRICT;
 
 
 --
@@ -3551,6 +4566,14 @@ ALTER TABLE ONLY public.avatar_memberships
 
 ALTER TABLE ONLY public.avatars
     ADD CONSTRAINT fk_rails_e0e994d36f FOREIGN KEY (capability_id) REFERENCES public.avatar_capabilities(id);
+
+
+--
+-- Name: avatar_bureau_ownership_periods fk_rails_f706ba6fd5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_bureau_ownership_periods
+    ADD CONSTRAINT fk_rails_f706ba6fd5 FOREIGN KEY (avatar_id) REFERENCES public.avatars(id) ON DELETE RESTRICT;
 
 
 --
@@ -3584,6 +4607,24 @@ ALTER TABLE ONLY public.client_avatar_deletions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261010180000'),
+('20261010170006'),
+('20261010170005'),
+('20261010170004'),
+('20261010170003'),
+('20261010170002'),
+('20261010170001'),
+('20261010170000'),
+('20261010160002'),
+('20261010160001'),
+('20261010160000'),
+('20261010150000'),
+('20261010140000'),
+('20261010130002'),
+('20261010130001'),
+('20261010130000'),
+('20261010120001'),
+('20261010120000'),
 ('20260924179000'),
 ('20260924178000'),
 ('20260924177000'),

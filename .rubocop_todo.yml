@@ -1301,7 +1301,6 @@ Umaxica/ExplicitMethodVisibility:
     - "app/services/sign_up_session_state.rb"
     - "app/services/sign_up_state_machine.rb"
     - "app/services/sign_up_suspension.rb"
-    - "app/services/sign_up_termination.rb"
     - "app/services/social_auth_callback_state_store.rb"
     - "app/services/social_auth_link_handler.rb"
     - "app/services/social_auth_login_handler.rb"

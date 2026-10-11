@@ -19,22 +19,17 @@ Rails.application.config.filter_parameters += %i(
   jwk
   jwks
   pem
-  der
   certificate
   crypt
   salt
   ssn
   cvv
   cvc
-  rt
-  pt
-  code
   oauth_code
   authorization_code
+  code_verifier
   cf-turnstile-response
   turnstile_response
-  uid
-  state
   nonce
   assertion
   entry_ref
@@ -59,3 +54,12 @@ Rails.application.config.filter_parameters += %i(
   smtp_password
   aws_ses_smtp_password
 )
+
+Rails.application.config.filter_parameters += [
+  /\Ader\z/i,
+  /\Art\z/i,
+  /\Apt\z/i,
+  /\Acode\z/i,
+  /(?:\A|_)uid\z/i,
+  /\Astate\z/i,
+]

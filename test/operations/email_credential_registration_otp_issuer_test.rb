@@ -84,11 +84,7 @@ class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
       assert_equal 0, email.reload.otp_attempts_count
       assert issued.transaction.reload.otp_consumed_at
       assert_nil issued.transaction.otp_verifier
-      if surface == "org"
-        assert_not email.attributes.key?("credential_registration_otp_context")
-      else
-        assert_nil email.credential_registration_otp_context
-      end
+      assert_not email.attributes.key?("credential_registration_otp_context")
       email.update!(otp_attempts_count: 1)
       resumed = EmailCredentialRegistrationOtpVerificationCommitter.call(**scope, code: issued.code)
 
@@ -128,8 +124,7 @@ class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
         end
       token.rotate_refresh_token!
       original = email.attributes.slice(
-        "otp_private_key", "otp_counter", "otp_expires_at",
-        "credential_registration_otp_context",
+        "public_id", "address_digest", "number_digest", "user_id", "visitor_id", "staff_id",
       )
       nonce = SecureRandom.urlsafe_base64(32)
       issued = EmailCredentialRegistrationOtpIssuer.call(actor: actor, token: token, email: email, browser_nonce: nonce)

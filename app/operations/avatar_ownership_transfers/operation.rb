@@ -41,6 +41,25 @@ module AvatarOwnershipTransfers
       relation.first || raise(InvalidTransfer, "Avatar has no current active owner")
     end
 
+    def concrete_current_owner!(avatar, lock: false)
+      relations = [
+        AvatarEnterpriseOwnershipPeriod.current.where(avatar_id: avatar.id),
+        AvatarBureauOwnershipPeriod.current.where(avatar_id: avatar.id),
+      ]
+      periods = relations.flat_map { |relation| (lock ? relation.lock : relation).to_a }
+      return periods.first if periods.one?
+
+      raise InvalidTransfer, "Avatar has an invalid concrete ownership state"
+    end
+
+    def concrete_period_class_for(surface)
+      case surface.to_s
+      when "app" then AvatarEnterpriseOwnershipPeriod
+      when "org" then AvatarBureauOwnershipPeriod
+      else raise InvalidTransfer, "unsupported concrete ownership surface"
+      end
+    end
+
     def assert_eligible_avatar!(avatar)
       return if avatar.lifecycle_state&.key == "active" && avatar.accessible?
 

@@ -101,6 +101,12 @@ Rails.event.record(...)
 Those methods were custom application logging shims and are not part of the current logging
 contract.
 
+ActionMailer raw message content is not application logging data. The shared Rails configuration
+sets `config.action_mailer.logger = nil`, which leaves delivery, delivery jobs, interceptors and
+Noticed orchestration intact while preventing ActionMailer DEBUG logging from writing raw MIME
+through its logger. The framework notification payload may still exist internally; it must not be
+treated as an application log or forwarded by a new subscriber.
+
 ## Non-Log Observability Events
 
 `Rails.event.notify` is reserved for non-log observability events. It is not a replacement
@@ -211,6 +217,14 @@ OTEL should remain focused on technical observability.
 Technical OpenTelemetry correlation is independent of product analytics consent. The optional
 `performant` preference may govern a separately defined analytics layer, but it must not replace,
 remove, or fabricate a `trace_id` or `span_id` supplied by a valid OpenTelemetry context.
+
+ActionMailer telemetry is an explicit pre-export allowlist. With the installed ActionMailer
+instrumentation, delivery spans retain only the non-secret mailer attribute and process spans
+retain only the mailer and action. Addresses, subject, arguments, body, MIME, OTPs, tokens and
+unknown future payload keys are excluded before the exporter. The Rails span scrubber remains a
+secondary in-process control, and the development Alloy processor remains a second downstream
+deletion boundary. This local policy does not assert that a production collector or retention
+topology exists.
 
 ## Layer 2: Audit And Security Events
 

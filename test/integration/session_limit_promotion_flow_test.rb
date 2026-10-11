@@ -129,7 +129,11 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
         clear_enqueued_jobs
         OtpEmailNotifierRollout.stub(:enabled?, true) do
           fv5064.post(
-            auth_app_sign_in_email_path(ri: "jp"),
+            auth_app_sign_in_email_path(
+              ri: "jp", fb: SignInFlowBindingCodec.encode(
+                flow: fv5076.transaction, surface: "app", phase: "PRIMARY_PENDING",
+              ),
+            ),
             params: { :user_email => { address: fv5072.address },
                       "cf-turnstile-response" => "t", },
             headers: fv5065,
@@ -146,7 +150,11 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
         fv5069 = ActiveJob::Arguments.deserialize(fv5070.fetch(:args)).last.fetch(:params).symbolize_keys
         fv5068 = OutboundSensitivePayload.decrypt_email_otp(fv5069.fetch(:encrypted_hotp_token))
         fv5064.patch(
-          auth_app_sign_in_email_path(ri: "jp"),
+          auth_app_sign_in_email_path(
+            ri: "jp", fb: SignInFlowBindingCodec.encode(
+              flow: fv5076.transaction, surface: "app", phase: "PRIMARY_PENDING",
+            ),
+          ),
           params: { :user_email => { pass_code: fv5068 },
                     "cf-turnstile-response" => "t", },
           headers: fv5065,
@@ -312,7 +320,11 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
         clear_enqueued_jobs
         OtpEmailNotifierRollout.stub(:enabled?, true) do
           fv5035.post(
-            auth_app_sign_in_email_path(ri: "jp"),
+            auth_app_sign_in_email_path(
+              ri: "jp", fb: SignInFlowBindingCodec.encode(
+                flow: fv5047.transaction, surface: "app", phase: "PRIMARY_PENDING",
+              ),
+            ),
             params: { :user_email => { address: fv5043.address },
                       "cf-turnstile-response" => "t", },
             headers: fv5036,
@@ -329,7 +341,11 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
         fv5040 = ActiveJob::Arguments.deserialize(fv5041.fetch(:args)).last.fetch(:params).symbolize_keys
         fv5039 = OutboundSensitivePayload.decrypt_email_otp(fv5040.fetch(:encrypted_hotp_token))
         fv5035.patch(
-          auth_app_sign_in_email_path(ri: "jp"),
+          auth_app_sign_in_email_path(
+            ri: "jp", fb: SignInFlowBindingCodec.encode(
+              flow: fv5047.transaction, surface: "app", phase: "PRIMARY_PENDING",
+            ),
+          ),
           params: { :user_email => { pass_code: fv5039 },
                     "cf-turnstile-response" => "t", },
           headers: fv5036,
@@ -479,7 +495,11 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
         clear_enqueued_jobs
         OtpEmailNotifierRollout.stub(:enabled?, true) do
           fv5006.post(
-            auth_app_sign_in_email_path(ri: "jp"),
+            auth_app_sign_in_email_path(
+              ri: "jp", fb: SignInFlowBindingCodec.encode(
+                flow: fv5018.transaction, surface: "app", phase: "PRIMARY_PENDING",
+              ),
+            ),
             params: { :user_email => { address: fv5014.address },
                       "cf-turnstile-response" => "t", },
             headers: fv5007,
@@ -496,7 +516,11 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
         fv5011 = ActiveJob::Arguments.deserialize(fv5012.fetch(:args)).last.fetch(:params).symbolize_keys
         fv5010 = OutboundSensitivePayload.decrypt_email_otp(fv5011.fetch(:encrypted_hotp_token))
         fv5006.patch(
-          auth_app_sign_in_email_path(ri: "jp"),
+          auth_app_sign_in_email_path(
+            ri: "jp", fb: SignInFlowBindingCodec.encode(
+              flow: fv5018.transaction, surface: "app", phase: "PRIMARY_PENDING",
+            ),
+          ),
           params: { :user_email => { pass_code: fv5010 },
                     "cf-turnstile-response" => "t", },
           headers: fv5007,

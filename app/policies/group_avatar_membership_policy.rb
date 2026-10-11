@@ -45,6 +45,7 @@ class GroupAvatarMembershipPolicy < ApplicationPolicy
       subject_public_id: account_public_id,
       owner_collective_public_id: group_owner.owner_collective_public_id,
       permission: permission,
+      avatar: avatar,
     )
   end
 

@@ -107,6 +107,8 @@ module Base
 
       private
 
+      def sign_in_phase_binding_surface = "app"
+
       def current_verification_actor
         current_client
       end

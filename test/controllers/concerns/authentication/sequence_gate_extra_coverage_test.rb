@@ -197,11 +197,20 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
       end.new(false, false)
     end
 
-    def sign_in_selector_path(pt: nil) = super
+    def sign_in_selector_path(pt: nil, cycle: nil)
+      _ = cycle
+      super(pt: pt)
+    end
 
-    def sign_in_checkpoint_path(pt: nil) = "/checkpoint?pt=#{pt}"
+    def sign_in_checkpoint_path(pt: nil, cycle: nil)
+      _ = cycle
+      "/checkpoint?pt=#{pt}"
+    end
 
-    def sign_in_welcome_path(pt: nil) = "/welcome?pt=#{pt}"
+    def sign_in_welcome_path(pt: nil, cycle: nil)
+      _ = cycle
+      "/welcome?pt=#{pt}"
+    end
 
     def sign_app_selector_path(**attrs) = "/app/selector?#{attrs.compact.to_query}"
 
@@ -585,7 +594,8 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     @harness.checkpoint_result = Result.new(false)
 
     issued = []
-    @harness.define_singleton_method(:issue_welcome_gate_and_path) do |pt:, sequence_id:|
+    @harness.define_singleton_method(:issue_welcome_gate_and_path) do |pt:, sequence_id:, cycle: nil|
+      _ = cycle
       issued << [pt, sequence_id]
       "/welcome?pt=#{pt}"
     end

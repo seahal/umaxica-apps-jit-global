@@ -19,14 +19,42 @@ class EnforcementTriggersTest < ActiveSupport::TestCase
 
     assert_equal(
       %w(
-        client_emails_binding_facts_trigger client_emails_credential_registration_otp_proof_trigger
-        client_emails_sign_up_otp_proof_trigger client_external_identities_binding_facts_trigger
+        client_emails_binding_facts_trigger client_external_identities_binding_facts_trigger
         client_rotation_audit_guard client_telephones_binding_facts_trigger
-        client_telephones_credential_registration_otp_proof_trigger client_telephones_sign_up_otp_proof_trigger
         enforcement_protect_client_emails_delete enforcement_protect_clients_delete
       ),
       triggers.uniq.sort,
       "Adding or removing a trigger requires updating this inventory test " \
+      "(adr/database-trigger-usage-boundary.md: triggers are named, enumerated, and asserted).",
+    )
+  end
+
+  test "trigger inventory in avatar matches the expected ownership and transfer set exactly" do
+    triggers =
+      AvatarRecord.connected_to(role: :writing) do
+        AvatarRecord.lease_connection.select_values(
+          "SELECT trigger.tgname FROM pg_trigger trigger " \
+          "JOIN pg_class relation ON relation.oid = trigger.tgrelid " \
+          "JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace " \
+          "WHERE namespace.nspname = 'public' AND NOT trigger.tgisinternal " \
+          "ORDER BY trigger.tgname",
+        )
+      end
+
+    assert_equal(
+      %w(
+        avatar_bureau_ownership_periods_immutability avatar_bureau_ownership_periods_integrity
+        avatar_bureau_ownership_periods_no_truncate avatar_enterprise_ownership_periods_immutability
+        avatar_enterprise_ownership_periods_integrity avatar_enterprise_ownership_periods_no_truncate
+        avatar_transfer_detail_bb_cardinality avatar_transfer_detail_bb_source_period_avatar_integrity
+        avatar_transfer_detail_be_cardinality avatar_transfer_detail_be_source_period_avatar_integrity
+        avatar_transfer_detail_eb_cardinality avatar_transfer_detail_eb_source_period_avatar_integrity
+        avatar_transfer_detail_ee_cardinality avatar_transfer_detail_ee_source_period_avatar_integrity
+        avatar_transfer_reservations_cardinality
+        avatar_transfer_reservations_source_period_avatar_integrity
+      ),
+      triggers.uniq.sort,
+      "Adding or removing an Avatar trigger requires updating this inventory test " \
       "(adr/database-trigger-usage-boundary.md: triggers are named, enumerated, and asserted).",
     )
   end

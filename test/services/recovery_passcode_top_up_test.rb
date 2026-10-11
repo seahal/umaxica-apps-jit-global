@@ -25,7 +25,7 @@ class RecoveryPasscodeTopUpTest < ActiveSupport::TestCase
     actor.visitor_emails.create!(
       address: address, address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24), otp_counter: "", otp_attempts_count: 0,
+      otp_attempts_count: 0,
     ).tap(&:finalize_binding!)
     now = VisitorSecretCredential.database_now
     before = SignRecoveryPasscodeRequirement.usable_unused_count(

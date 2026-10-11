@@ -132,7 +132,10 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     email = create_verified_client_email(client, address: "recovery-client@example.test")
     activate_recovery_case(AppEnforcementCase, client)
 
-    original_proof = email.attributes.slice("otp_private_key", "otp_counter", "otp_expires_at")
+    original_proof = email.attributes.slice(
+      "public_id", "address_digest", "number_digest", "user_id", "visitor_id",
+      "staff_id",
+    )
 
     assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post "http://base.app.localhost/identity/recovery/session?ri=jp",

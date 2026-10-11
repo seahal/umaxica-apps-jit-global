@@ -272,7 +272,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     submit_email_otp!
 
     assert_response :redirect
-    assert_equal auth_app_sign_in_check_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
     assert_equal token_count, ClientToken.where(user_id: @user.id).count
 
     ceremony = ClientAuthCeremonySession.order(created_at: :desc).first

@@ -12,9 +12,6 @@
 #  number                      :string           default(""), not null
 #  number_digest               :string
 #  otp_attempts_count          :integer          default(0), not null
-#  otp_counter                 :text             default(""), not null
-#  otp_expires_at              :datetime         default(-Infinity), not null
-#  otp_private_key             :string           default(""), not null
 #  purge_eligible_at                   :datetime         default(Infinity), not null
 #  created_at                  :datetime         not null
 #  updated_at                  :datetime         not null
@@ -37,6 +34,11 @@
 #  fk_rails_...  (visitor_telephone_status_id => visitor_telephone_statuses.id)
 #
 class VisitorTelephone < ComPrincipalRecord
+  # P3d removes identifier-owned proof; ceremony transactions own verification material.
+  self.ignored_columns += %w(
+    otp_private_key otp_counter otp_expires_at sign_up_otp_context credential_registration_otp_context
+  )
+
   include Retainable
   include Telephone
   include TelephoneDeadIdentifierHistory
@@ -46,7 +48,6 @@ class VisitorTelephone < ComPrincipalRecord
 
   IDENTIFIER_REALM = "com"
   encrypts :number, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
-  encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
 
   attribute :visitor_telephone_status_id, default: VisitorTelephoneStatus::UNVERIFIED
 
@@ -56,17 +57,16 @@ class VisitorTelephone < ComPrincipalRecord
   validate :effective_binding_has_digest
 
   validates :otp_attempts_count, presence: true, numericality: { only_integer: true }
-  validates :otp_counter, presence: true
-  validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :visitor_telephone_status_id, numericality: { only_integer: true }
   validates :number_digest, presence: true, if: :binding_effective?
 
   after_initialize :initialize_telephone_otp_state
+
   before_destroy :archive_dead_telephone_identifier, prepend: true
 
   scope :effective_binding, -> { where.not(binding_finalized_at: nil).where(binding_released_at: nil) }
 
-  self.filter_attributes += %w(number sign_up_otp_context credential_registration_otp_context)
+  self.filter_attributes += %w(number)
 
   public
 

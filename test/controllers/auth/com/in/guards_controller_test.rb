@@ -26,7 +26,7 @@ class Auth::Com::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
       controller.show
     end
 
-    assert_equal "/sign/in/check?ri=jp", controller.redirected_to
+    assert_bound_redirect(controller.redirected_to, "/sign/in/check", cycle, "GUARDRAIL_PENDING")
     assert_equal before_attrs, guarded_cycle_attrs(cycle.reload)
   end
 
@@ -37,7 +37,7 @@ class Auth::Com::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
 
     controller.show
 
-    assert_equal "/sign/in/check?ri=jp", controller.redirected_to
+    assert_bound_redirect(controller.redirected_to, "/sign/in/check", cycle, "CHECKPOINT_PENDING")
     assert_equal before_attrs, guarded_cycle_attrs(cycle.reload)
   end
 
@@ -47,7 +47,7 @@ class Auth::Com::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
 
     controller.show
 
-    assert_equal "/sign/in/selector?pt=/dashboard", controller.redirected_to
+    assert_bound_redirect(controller.redirected_to, "/sign/in/selector", cycle, "SELECTOR_PENDING", pt: "/dashboard")
   end
 
   test "session issuance state redirects to welcome sequence path" do
@@ -56,7 +56,9 @@ class Auth::Com::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
 
     controller.show
 
-    assert_equal "/sign/in/welcome?pt=/dashboard", controller.redirected_to
+    assert_bound_redirect(
+      controller.redirected_to, "/sign/in/welcome", cycle, "SESSION_ISSUANCE_PENDING", pt: "/dashboard",
+    )
   end
 
   test "unsafe path target redirects to sign in entry without flash" do
@@ -109,11 +111,25 @@ class Auth::Com::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     controller.define_singleton_method(:current_db_sign_in_flow_for_sequence) { cycle }
     controller.define_singleton_method(:sign_in_flow_actor) { |_| @visitor }
     controller.define_singleton_method(:auth_com_sign_in_path) { |ri: nil| "/sign/in?ri=#{ri}" }
-    controller.define_singleton_method(:auth_com_sign_in_check_path) { |ri: nil, pt: nil|
-      "/sign/in/check?ri=#{ri}#{"&pt=#{pt}" if pt}"
+    controller.define_singleton_method(:auth_com_sign_in_check_path) { |ri: nil, pt: nil, fb: nil|
+      { ri: ri, pt: pt, fb: fb }.compact.then { |query| "/sign/in/check?#{query.to_query}" }
     }
-    controller.define_singleton_method(:sign_in_selector_path) { |pt: nil| "/sign/in/selector?pt=#{pt}" }
-    controller.define_singleton_method(:sign_in_welcome_path) { |pt: nil| "/sign/in/welcome?pt=#{pt}" }
+    controller.define_singleton_method(:sign_in_selector_path) { |pt: nil, **options|
+      {
+        pt: pt,
+        fb: SignInFlowBindingCodec.encode(
+          flow: options.fetch(:cycle), surface: "com", phase: "SELECTOR_PENDING",
+        ),
+      }.compact.then { |query| "/sign/in/selector?#{query.to_query}" }
+    }
+    controller.define_singleton_method(:sign_in_welcome_path) { |pt: nil, **options|
+      {
+        pt: pt,
+        fb: SignInFlowBindingCodec.encode(
+          flow: options.fetch(:cycle), surface: "com", phase: "SESSION_ISSUANCE_PENDING",
+        ),
+      }.compact.then { |query| "/sign/in/welcome?#{query.to_query}" }
+    }
     controller.define_singleton_method(:redirect_to) { |path, **_options| @redirected_to = path }
     controller.define_singleton_method(:redirected_to) { @redirected_to }
     controller
@@ -121,6 +137,19 @@ class Auth::Com::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
 
   def guarded_cycle_attrs(cycle)
     cycle.attributes.slice("state_id", "token_id", "completed_at", "session_issued_at")
+  end
+
+  def assert_bound_redirect(location, path, cycle, phase, pt: nil)
+    uri = URI.parse(location)
+
+    assert_equal path, uri.path
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+    assert_equal "jp", query.fetch("ri") if path.end_with?("/check")
+    assert_equal pt, query["pt"] if pt
+    binding = SignInFlowBindingCodec.decode(query.fetch("fb"))
+
+    assert_equal cycle.public_id, binding.flow_public_id
+    assert_equal phase, binding.phase
   end
 
   def assert_no_sign_in_guard_durable_changes(&)
@@ -227,8 +256,6 @@ class Auth::Com::Sign::In::GuardsControllerTest
       address: address,
       address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -242,8 +269,6 @@ class Auth::Com::Sign::In::GuardsControllerTest
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -481,8 +506,6 @@ class Auth::Com::Sign::In::GuardsControllerTest
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )

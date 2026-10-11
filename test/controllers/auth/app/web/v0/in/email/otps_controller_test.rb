@@ -32,6 +32,12 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
                      headers: { "Host" => @host }
 
     assert_response :see_other
+    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+      flow: ClientSignInFlow.find_by!(
+        public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+      ),
+      surface: "app", phase: "PRIMARY_PENDING",
+    )
     ActionMailer::Base.deliveries.clear
   end
 
@@ -46,7 +52,9 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
       address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
     ).tap(&:finalize_binding!)
     post(
-      "/sign/in/email", params: { :user_email => { address: address }, "cf-turnstile-response" => "test" },
+      "/sign/in/email", params: { :user_email => { address: address },
+                                  "cf-turnstile-response" => "test",
+                                  :fb => @primary_sign_in_binding, },
                         headers: { "Host" => @host },
     )
 
@@ -105,7 +113,9 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     address = "bound-resend-#{SecureRandom.hex(8)}@example.test"
     post(
       "/sign/in/email", params: {
-        :user_email => { address: address }, "cf-turnstile-response" => "test",
+        :user_email => { address: address },
+        "cf-turnstile-response" => "test",
+        :fb => @primary_sign_in_binding,
       }, headers: { "Host" => @host },
     )
 
@@ -186,7 +196,9 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
       address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
     ).tap(&:finalize_binding!)
     post(
-      "/sign/in/email", params: { :user_email => { address: address }, "cf-turnstile-response" => "test" },
+      "/sign/in/email", params: { :user_email => { address: address },
+                                  "cf-turnstile-response" => "test",
+                                  :fb => @primary_sign_in_binding, },
                         headers: { "Host" => @host },
     )
 

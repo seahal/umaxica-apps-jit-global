@@ -7,12 +7,17 @@
 module PublicId
   extend ActiveSupport::Concern
 
+  GENERATION_SIZE = 21
+  MAX_COLLISION_RETRIES = 3
+
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_create :generate_public_id
     before_validation :generate_public_id, on: :create
+    around_create :retry_public_id_collision
+    validate :public_id_immutable_after_create, on: :update
 
-    validates :public_id, presence: true, length: { maximum: 21 }, uniqueness: true
+    validates :public_id, presence: true, length: { maximum: GENERATION_SIZE }, uniqueness: true
   end
 
   def to_param
@@ -22,6 +27,52 @@ module PublicId
   private
 
   def generate_public_id
-    self.public_id = Nanoid.generate(size: 21) if public_id.blank?
+    return if public_id.present?
+
+    self.public_id = Nanoid.generate(size: GENERATION_SIZE)
+    @public_id_generated_value = public_id
+  end
+
+  def retry_public_id_collision
+    return yield unless method(:generate_public_id).owner == PublicId
+    return yield unless @public_id_generated_value == public_id
+
+    public_id_constraints = public_id_unique_constraint_names
+    return yield if public_id_constraints.empty?
+
+    retries = 0
+
+    begin
+      self.class.transaction(requires_new: true) { yield }
+    rescue ActiveRecord::RecordNotUnique => e
+      raise unless public_id_constraints.include?(postgres_constraint_name(e))
+
+      retries += 1
+      raise if retries > MAX_COLLISION_RETRIES
+
+      self.public_id = nil
+      generate_public_id
+      retry
+    end
+  end
+
+  def public_id_immutable_after_create
+    return unless persisted? && will_save_change_to_public_id?
+
+    errors.add(:public_id, "cannot be changed after creation")
+  end
+  private :public_id_immutable_after_create
+
+  def public_id_unique_constraint_names
+    self.class.lease_connection.schema_cache.indexes(self.class.table_name).filter_map do |index|
+      index.name if index.unique && index.where.nil? && index.columns == ["public_id"]
+    end
+  end
+
+  def postgres_constraint_name(error)
+    result = error.cause&.result
+    return unless result
+
+    result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
   end
 end

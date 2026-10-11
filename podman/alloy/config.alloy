@@ -109,6 +109,20 @@ otelcol.processor.attributes "redact" {
     action  = "delete"
   }
 
+  // ActionMailer is allowlisted before export in Rails. These rules are a
+  // second boundary for a future instrumentation or exporter regression:
+  // recipient, subject, MIME/body material and mailer arguments must not reach
+  // a development sink even if they arrive at Alloy.
+  action {
+    pattern = "^email\\.(subject|to\\.address|from\\.address|cc\\.address|bcc\\.address|body|raw|mime)$"
+    action  = "delete"
+  }
+
+  action {
+    pattern = "^(email\\.)?(args|otp|otp_code|verification_token|authorization_code|access_token|refresh_token|id_token)$"
+    action  = "delete"
+  }
+
   output {
     traces  = [otelcol.processor.batch.default.input]
     metrics = [otelcol.processor.batch.default.input]

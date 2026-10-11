@@ -94,6 +94,8 @@ class RetentionPurgeJob < ApplicationJob
       purge_email_identifiers(klass, now: now, batch_size: batch_size)
     elsif [ClientTelephone, VisitorTelephone].include?(klass)
       purge_telephone_identifiers(klass, now: now, batch_size: batch_size)
+    elsif klass == Avatar
+      purge_avatars(now: now, batch_size: batch_size)
     elsif [Client, Visitor].include?(klass)
       anonymize_accounts(klass, now: now, batch_size: batch_size)
     elsif klass == Operator
@@ -124,6 +126,25 @@ class RetentionPurgeJob < ApplicationJob
   def purge_telephone_identifiers(klass, now:, batch_size:)
     klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
       batch.each { |telephone| TelephoneIdentifierPurger.call(record: telephone) }
+    end
+  end
+
+  def purge_avatars(now:, batch_size:)
+    Avatar.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
+      batch.each do |candidate|
+        AvatarRecord.transaction do
+          avatar = Avatar.lock.find_by(id: candidate.id)
+          next unless avatar
+
+          reason =
+            if avatar.enterprise_ownership_periods.exists? || avatar.bureau_ownership_periods.exists?
+              "ownership_history"
+            else
+              "retention_policy_pending"
+            end
+          AvatarPurgeDeferral.record!(avatar: avatar, reason_code: reason)
+        end
+      end
     end
   end
 

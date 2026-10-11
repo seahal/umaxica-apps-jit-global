@@ -8,6 +8,7 @@ module Auth
         class EmailsController < ::Auth::App::ApplicationController
           include ::SurfaceInertiaPage
           include ::AuthenticationModeSwitchGuard
+          include ::SignInPhaseBindingControllerSupport
 
           include ::TurnstilePageProps
 
@@ -26,6 +27,7 @@ module Auth
           prepend_before_action :require_sign_in_ceremony_admission!
           ensure_fqdn_gate_first!
           prepend_before_action :apply_default_no_store
+          before_action -> { enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") }
 
           before_action :cache_sign_in_turnstile_validation, only: :create
 
@@ -134,7 +136,7 @@ module Auth
             # Preserve pt parameter if provided
             preserve_pt
 
-            redirect_to(edit_auth_app_sign_in_email_path(pt: peek_pt))
+            redirect_to(edit_auth_app_sign_in_email_path(pt: peek_pt, **sign_in_primary_binding_params))
           end
 
           def update
@@ -191,7 +193,10 @@ module Auth
           def destroy
             admitted_auth_ceremony_session.cancel_email_otp_challenge!
             SignAppInEmailAuthenticationState.clear!(session)
-            redirect_to(new_auth_app_sign_in_email_path(pt: peek_pt), status: :see_other)
+            redirect_to(
+              new_auth_app_sign_in_email_path(pt: peek_pt, **sign_in_primary_binding_params),
+              status: :see_other,
+            )
           end
 
           private
@@ -227,12 +232,13 @@ module Auth
           def email_new_props
             scope = "sign.app.authentication.email.new"
             pt = signed_pt_param
+            binding = sign_in_flow_binding_params(sign_in_phase_binding_current_flow, phase: "PRIMARY_PENDING")
 
             {
               title: page_t("#{scope}.page_title"),
               description: t("sign.app.registration.new.social.disclaimer", product: "UMAXICA"),
               form: {
-                action: auth_app_sign_in_email_path,
+                action: auth_app_sign_in_email_path(**binding),
                 method: "post",
                 pt: pt,
                 address_field: {
@@ -261,7 +267,7 @@ module Auth
               title: page_t("#{scope}.page_title"),
               description: page_t("#{scope}.description"),
               form: {
-                action: auth_app_sign_in_email_path,
+                action: auth_app_sign_in_email_path(**sign_in_primary_binding_params),
                 method: "patch",
                 pt: pt,
                 pass_code_field: {
@@ -340,7 +346,9 @@ module Auth
           end
 
           def redirect_to_email_session_expired
-            redirect_to(new_auth_app_sign_in_email_path(pt: peek_pt))
+            redirect_to(
+              new_auth_app_sign_in_email_path(pt: peek_pt, **sign_in_primary_binding_params),
+            )
           end
 
           def process_email_authentication(normalized_address)

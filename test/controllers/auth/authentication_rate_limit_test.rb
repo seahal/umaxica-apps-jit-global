@@ -242,14 +242,23 @@ class AuthAuthenticationRateLimitTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :see_other
+    phase_binding = SignInFlowBindingCodec.encode(
+      flow: admission.transaction, surface: "app", phase: "PRIMARY_PENDING",
+    )
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
 
     5.times do
-      post(auth_app_sign_in_passkey_options_url(ri: "jp"), params: { identifier: "" }, as: :json)
+      post(
+        auth_app_sign_in_passkey_options_url(ri: "jp", fb: phase_binding),
+        params: { identifier: "" }, as: :json,
+      )
     end
 
-    post(auth_app_sign_in_passkey_options_url(ri: "jp"), params: { identifier: "" }, as: :json)
+    post(
+      auth_app_sign_in_passkey_options_url(ri: "jp", fb: phase_binding),
+      params: { identifier: "" }, as: :json,
+    )
 
     assert_sign_rate_limited
   ensure

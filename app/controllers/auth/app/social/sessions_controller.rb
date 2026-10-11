@@ -16,12 +16,14 @@ module Auth
         include AppSocialCeremonyEntry
         include AppSignUpEntryPage
         include ::AuthenticationModeSwitchGuard
+        include ::SignInPhaseBindingControllerSupport
 
         AUTHENTICATION_MODE = :open
 
         # Login intent doesn't require auth; link/step-up intents are checked
         # in require_social_link_step_up! and prepare_social_auth_intent!.
         declare_authentication_mode! :open, only: :create
+        before_action -> { enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") }, only: :create
         before_action :reject_sign_in_intent_while_authenticated!, only: :create
         before_action :require_social_link_step_up!, only: :create
 

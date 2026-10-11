@@ -67,8 +67,30 @@ class Avatar < AvatarRecord
           inverse_of: :avatar
   has_many :avatar_memberships, dependent: :restrict_with_error
   has_many :avatar_ownership_periods, dependent: :restrict_with_error
+  has_many :enterprise_ownership_periods,
+           class_name: "AvatarEnterpriseOwnershipPeriod",
+           dependent: :restrict_with_error,
+           inverse_of: :avatar
+  has_many :bureau_ownership_periods,
+           class_name: "AvatarBureauOwnershipPeriod",
+           dependent: :restrict_with_error,
+           inverse_of: :avatar
+  has_many :enterprise_persona_grants,
+           through: :enterprise_ownership_periods,
+           source: :persona_grants
+  has_many :bureau_agent_grants,
+           through: :bureau_ownership_periods,
+           source: :agent_grants
+  has_many :purge_deferrals,
+           class_name: "AvatarPurgeDeferral",
+           dependent: :restrict_with_error,
+           inverse_of: :avatar
   has_many :ownership_transfers,
            class_name: "AvatarOwnershipTransfer",
+           dependent: :restrict_with_error,
+           inverse_of: :avatar
+  has_many :transfer_reservations,
+           class_name: "AvatarTransferReservation",
            dependent: :restrict_with_error,
            inverse_of: :avatar
   # The full avatar_ownership_periods association owns retention; this view adds no deletion callback.

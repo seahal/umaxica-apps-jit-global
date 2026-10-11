@@ -11,9 +11,6 @@
 #  number                             :string           not null
 #  number_digest                      :string
 #  otp_attempts_count                 :integer          default(0), not null
-#  otp_counter                        :text             not null
-#  otp_expires_at                     :datetime
-#  otp_private_key                    :string           not null
 #  created_at                         :datetime         not null
 #  updated_at                         :datetime         not null
 #  staff_id                           :bigint           not null
@@ -32,6 +29,10 @@
 #
 
 class OperatorTelephone < OrgPrincipalRecord
+  # P3d removes identifier-owned proof; ceremony transactions own verification material.
+  self.ignored_columns += %w(otp_private_key otp_counter otp_expires_at)
+
+  include PublicId
   include Telephone
   include TelephoneDeadIdentifierHistory
 
@@ -40,7 +41,6 @@ class OperatorTelephone < OrgPrincipalRecord
   MAX_TELEPHONES_PER_STAFF = 4
 
   encrypts :number, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
-  encrypts :otp_private_key, key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
 
   alias_attribute :staff_telephone_status_id, :staff_identity_telephone_status_id
   attribute :staff_identity_telephone_status_id, default: OperatorTelephoneStatus::UNVERIFIED
@@ -53,8 +53,6 @@ class OperatorTelephone < OrgPrincipalRecord
   # Note: :number validation is now handled by Telephone concern (E.164 normalization)
   validates :number, presence: true
   validates :otp_attempts_count, presence: true, numericality: { only_integer: true }
-  validates :otp_counter, presence: true
-  validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :staff_identity_telephone_status_id, numericality: { only_integer: true }
   validates :number_digest, blind_index_uniqueness: { error_attribute: :number }, allow_blank: true
 
@@ -86,7 +84,7 @@ class OperatorTelephone < OrgPrincipalRecord
       unless transaction.is_a?(OperatorTelephoneCeremonyTransaction) &&
           transaction.surface == "org" && transaction.normalized_number_digest == number_digest &&
           transaction.telephone_registration_otp_evidence?(
-            code: code, actor_ref: staff.public_id, session_ref: session_ref, candidate_ref: id.to_s,
+            code: code, actor_ref: staff.public_id, session_ref: session_ref, candidate_ref: public_id,
           )
         raise ArgumentError, "ORG Telephone registration evidence is unavailable"
       end

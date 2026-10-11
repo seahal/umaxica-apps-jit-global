@@ -107,4 +107,62 @@ class AvatarOwnershipPeriodTest < ActiveSupport::TestCase
     assert_not period.valid?
     assert period.errors.of_kind?(:owner_collective_public_id, :blank)
   end
+
+  test "database rejects overlapping historical ownership periods for one avatar" do
+    AvatarOwnershipStatus.find_or_create_by!(id: AvatarOwnershipStatus::ACTIVE)
+    avatar = AvatarTestFactory.create!(
+      moniker: "Temporal overlap",
+      capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
+      active_handle: Handle.create!(handle: "temporal-overlap-#{SecureRandom.hex(4)}", cooldown_until: Time.current),
+    )
+    first = AvatarOwnershipPeriod.create!(
+      avatar: avatar,
+      owner_organization_id: "owner-one",
+      owner_surface: "app",
+      owner_collective_public_id: "owner-one",
+      avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE,
+      valid_from: Time.utc(2026, 1, 1),
+      valid_to: Time.utc(2026, 2, 1),
+    )
+
+    error =
+      assert_raises(ActiveRecord::StatementInvalid) do
+        AvatarOwnershipPeriod.create!(
+          avatar: avatar,
+          owner_organization_id: "owner-two",
+          owner_surface: "org",
+          owner_collective_public_id: "owner-two",
+          avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE,
+          valid_from: Time.utc(2026, 1, 15),
+          valid_to: Time.utc(2026, 3, 1),
+        )
+      end
+
+    assert_instance_of PG::ExclusionViolation, error.cause
+    assert_equal 1, AvatarOwnershipPeriod.where(id: first.id).count
+  end
+
+  test "database rejects an empty ownership period" do
+    AvatarOwnershipStatus.find_or_create_by!(id: AvatarOwnershipStatus::ACTIVE)
+    avatar = AvatarTestFactory.create!(
+      moniker: "Temporal empty",
+      capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
+      active_handle: Handle.create!(handle: "temporal-empty-#{SecureRandom.hex(4)}", cooldown_until: Time.current),
+    )
+
+    error =
+      assert_raises(ActiveRecord::StatementInvalid) do
+        AvatarOwnershipPeriod.create!(
+          avatar: avatar,
+          owner_organization_id: "owner-empty",
+          owner_surface: "app",
+          owner_collective_public_id: "owner-empty",
+          avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE,
+          valid_from: Time.utc(2026, 4, 1),
+          valid_to: Time.utc(2026, 4, 1),
+        )
+      end
+
+    assert_instance_of PG::CheckViolation, error.cause
+  end
 end

@@ -213,6 +213,32 @@ Protocol endpoints or route namespaces may remain in compatibility locations dur
 does not make sign/id the token authority. Acme owns OIDC authorization, token issuance, ID tokens,
 access tokens, refresh tokens, JWKS authority, and downstream token issuance.
 
+## Local sign-in phase admission
+
+Local app and com sign-in requests that use a DB-backed `SignInFlow` carry a server-generated,
+purpose-bound signed binding for the expected surface, flow public identifier, phase, and immutable
+flow generation. This binding is an admission check; it is not a replacement for the locked flow
+row, actor binding, expiry, provider correlation, or the existing session-issuance boundary.
+
+Same-phase reload is allowed. A GET or HEAD with a missing, malformed, expired, cross-surface,
+cross-flow, or contradictory phase binding returns HTTP `409 Conflict` as plain text with the exact
+body `戻るはだめです`. It does not redirect, mutate the flow, issue an OTP or WebAuthn challenge,
+create a session, or perform another side effect. The authentication no-store response policy is
+preserved. This refusal is not a lifecycle edge.
+
+A state-changing request that is bound to the original local flow but uses an obsolete or
+otherwise contradictory phase is handled under the flow row lock after a fresh reload. The
+original flow is halted with `HALTED = 930` and an auditable reason code
+(`phase_regression` or `phase_violation`). HALTED is terminal and absorbing. It cannot be revived,
+changed to another terminal, or used to issue a session, OTP, challenge, or provider transaction.
+An invalid binding is refused without treating the current session locator as an alternate flow
+authority, so an old request from flow A cannot halt a newly started flow B.
+
+The binding applies only where the local `SignInFlow` is the authoritative phase object. Social,
+OIDC/Entra, and other provider-owned ceremonies continue to validate their own concrete state,
+nonce, PKCE, transaction, and one-shot contracts; they are not forced into a generic sign-in row.
+No client-side History API or browser Back detector participates in this security decision.
+
 ## Related
 
 - `docs/identity/authority-boundary.md`

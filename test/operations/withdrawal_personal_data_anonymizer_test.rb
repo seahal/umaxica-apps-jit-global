@@ -150,12 +150,11 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
     client = Client.create!(status_id: ClientStatus::ACTIVE)
     email = ClientEmail.create!(
       user: client, address: "withdrawal-#{SecureRandom.hex(8)}@example.com",
-      otp_counter: "0", otp_private_key: "withdrawal-test",
     )
     original_address = email.address
     original_address_digest = email.address_digest
     telephone = ClientTelephone.create!(
-      user: client, number: "+14155552671", otp_counter: "0", otp_private_key: "withdrawal-test",
+      user: client, number: "+14155552671",
     )
     original_number = telephone.number
     original_number_digest = telephone.number_digest
@@ -189,8 +188,8 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
       email.reload.address == original_address
     }
     assert_withheld("Immutable identifier digest must be preserved") { original_address_digest == email.address_digest }
-    assert_equal "withdrawn", email.otp_private_key
-    assert_equal "0", email.otp_counter
+    assert_not email.attributes.key?("otp_private_key")
+    assert_not email.attributes.key?("otp_counter")
     assert_equal ClientEmailStatus::SUSPENDED, email.user_email_status_id
     assert_withheld("Original identifier must survive the retention boundary") {
       telephone.reload.number == original_number
@@ -198,8 +197,8 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
     assert_withheld("Immutable identifier digest must be preserved") {
       original_number_digest == telephone.number_digest
     }
-    assert_equal "withdrawn", telephone.otp_private_key
-    assert_equal "0", telephone.otp_counter
+    assert_not telephone.attributes.key?("otp_private_key")
+    assert_not telephone.attributes.key?("otp_counter")
     assert_equal ClientTelephoneStatus::SUSPENDED, telephone.user_identity_telephone_status_id
     assert_not ClientExternalIdentity.exists?(external_identity.id)
     assert_equal ClientPasskeyStatus::REVOKED, passkey.reload.status_id
@@ -235,11 +234,11 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
     visitor.update!(withdrawn_at: now, terminated_at: now, discard_at: now, purge_eligible_at: now + 1.day)
 
     assert_same visitor, WithdrawalPersonalDataAnonymizer.call(actor: visitor)
-    assert_equal "withdrawn", email.reload.otp_private_key
-    assert_equal "0", email.otp_counter
+    assert_not email.reload.attributes.key?("otp_private_key")
+    assert_not email.attributes.key?("otp_counter")
     assert_equal VisitorEmailStatus::SUSPENDED, email.visitor_email_status_id
-    assert_equal "withdrawn", telephone.reload.otp_private_key
-    assert_equal "0", telephone.otp_counter
+    assert_not telephone.reload.attributes.key?("otp_private_key")
+    assert_not telephone.attributes.key?("otp_counter")
     assert_equal VisitorTelephoneStatus::SUSPENDED, telephone.visitor_telephone_status_id
     assert_equal VisitorPasskeyStatus::REVOKED, passkey.reload.status_id
     assert_kind_of Time, passkey.discard_at

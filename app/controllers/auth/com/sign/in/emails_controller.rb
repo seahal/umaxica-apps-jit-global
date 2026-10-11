@@ -18,12 +18,14 @@ module Auth
           include ::SurfaceInertiaPage
           include ::TurnstilePageProps
           include ::AuthenticationModeSwitchGuard
+          include ::SignInPhaseBindingControllerSupport
 
           AUTHENTICATION_MODE = :guest
 
           prepend_before_action :require_sign_in_ceremony_admission!
           ensure_fqdn_gate_first!
           prepend_before_action :apply_default_no_store
+          before_action -> { enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") }
 
           before_action :cache_sign_in_turnstile_validation, only: :create
 
@@ -118,7 +120,11 @@ module Auth
             record_sign_in_email_cooldown!(normalized_address)
             preserve_pt
 
-            redirect_to(edit_auth_com_sign_in_email_path(pt: peek_pt, ri: current_region_identifier))
+            redirect_to(
+              edit_auth_com_sign_in_email_path(
+                pt: peek_pt, ri: current_region_identifier, **sign_in_primary_binding_params,
+              ),
+            )
           end
 
           def update
@@ -176,7 +182,9 @@ module Auth
             session.delete(:user_email_authentication_id)
             session.delete(:user_email_authentication_address)
             redirect_to(
-              new_auth_com_sign_in_email_path(pt: peek_pt, ri: current_region_identifier),
+              new_auth_com_sign_in_email_path(
+                pt: peek_pt, ri: current_region_identifier, **sign_in_primary_binding_params,
+              ),
               status: :see_other,
             )
           end
@@ -227,11 +235,12 @@ module Auth
 
           def sign_in_email_new_props
             pt = signed_pt_param
+            binding = sign_in_flow_binding_params(sign_in_phase_binding_current_flow, phase: "PRIMARY_PENDING")
 
             {
               title: t("sign.app.authentication.email.new.page_title"),
               description: t("sign.app.registration.new.social.disclaimer", product: "UMAXICA"),
-              action: auth_com_sign_in_email_path,
+              action: auth_com_sign_in_email_path(**binding),
               pt: pt,
               field_label: VisitorEmail.human_attribute_name(:address),
               submit_label: t("actions.submit"),
@@ -246,7 +255,7 @@ module Auth
             {
               title: t("sign.app.authentication.email.edit.page_title"),
               description: t("sign.app.authentication.email.edit.description"),
-              action: auth_com_sign_in_email_path,
+              action: auth_com_sign_in_email_path(**sign_in_primary_binding_params),
               pt: pt,
               field_label: t("sign.app.authentication.email.edit.code_label"),
               field_placeholder: t("sign.app.authentication.email.edit.code_placeholder"),
@@ -283,7 +292,11 @@ module Auth
               )
 
               unless @user_email
-                redirect_to(new_auth_com_sign_in_email_path(pt: peek_pt, ri: current_region_identifier))
+                redirect_to(
+                  new_auth_com_sign_in_email_path(
+                    pt: peek_pt, ri: current_region_identifier, **sign_in_primary_binding_params,
+                  ),
+                )
                 return
               end
               @otp_resend_state = SignInOtpResendState.issue(
@@ -293,7 +306,11 @@ module Auth
               )
             elsif session[:user_email_authentication_address].present?
               unless admitted_auth_ceremony_session.email_otp_challenge_current?(contact: nil)
-                redirect_to(new_auth_com_sign_in_email_path(pt: peek_pt, ri: current_region_identifier))
+                redirect_to(
+                  new_auth_com_sign_in_email_path(
+                    pt: peek_pt, ri: current_region_identifier, **sign_in_primary_binding_params,
+                  ),
+                )
                 return
               end
 
@@ -306,7 +323,11 @@ module Auth
                 browser_binding: admitted_auth_ceremony_session.sid_digest,
               )
             else
-              redirect_to(new_auth_com_sign_in_email_path(pt: peek_pt, ri: current_region_identifier))
+              redirect_to(
+                new_auth_com_sign_in_email_path(
+                  pt: peek_pt, ri: current_region_identifier, **sign_in_primary_binding_params,
+                ),
+              )
             end
           end
 

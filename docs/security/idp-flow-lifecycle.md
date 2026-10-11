@@ -5,10 +5,10 @@ vocabulary decision is `adr/idp-flow-lifecycle-vocabulary.md`, the state storage
 `adr/idp-flow-state-machine-lifecycle.md`, and the migration is planned in
 `plans/backlog/idp-flow-state-machine-unification.md`.
 
-> **Reading rule:** The "Current runtime" sections describe code as of commit `91974b8b0`. The
-> "Target" sections describe accepted vocabulary that runtime does **not** yet implement. Never
-> read a target term (`ACTIVE`, `HALTED`, `external_result`, and so on) as an existing status,
-> event, or column.
+> **Reading rule:** The historical inventory below records the pre-unification vocabulary and is
+> retained for traceability. The delivered amendments at the end of this document describe the
+> current runtime for the implemented slices. A target term is not evidence of implementation
+> unless the current amendment, code, schema, and tests all show it.
 
 ## Term Categories
 
@@ -411,6 +411,47 @@ Mappings marked "case by case" depend on the call site. No runtime rename is imp
 - `docs/security/sign-in-compensation.md`
 - `docs/security/sign-up-compensation.md`
 - `adr/sign-up-cycle-cancellation-retention.md`
+
+## Strict sign-in phase admission (implemented slice, 2026-10-10)
+
+The sign-in phase-regression protection is a narrow runtime amendment to the lifecycle vocabulary.
+It does not replace the credential-family authority objects or make browser history a lifecycle
+event.
+
+For local sign-in flows that use the shared sign-in flow row, the server-generated phase binding
+contains the flow public identifier, the expected phase, an immutable flow-generation value, and
+the surface. It is purpose-bound and signed by the application. The binding does not expose the
+locator nonce, a raw database id, or a client-chosen phase. The flow row, actor binding, expiry,
+and session-issuance boundary remain authoritative; the binding is an additional admission check.
+
+Same-phase reload and re-entry are allowed. A GET or HEAD request whose binding is missing,
+malformed, expired, for another surface or flow, or for a different phase is refused with HTTP
+`409 Conflict`, `text/plain`, and the exact body `戻るはだめです`. The refusal does not redirect,
+change lifecycle state, issue an OTP or challenge, create a session, or perform another workflow
+side effect. The authentication no-store response policy remains in force. A GET refusal is an
+observation and is not a lifecycle transition.
+
+For a state-changing request that was bound to an attributable flow instance but assumes a phase
+that is no longer authoritative, the server locks and reloads that original flow and applies the
+system-only `halt` transition with reason `phase_regression` or `phase_violation`. The flow enters
+`HALTED = 930`; the terminal state is absorbing, cannot be revived or moved to another terminal,
+and cannot issue a session, OTP, challenge, or provider transaction. A request from old flow A
+must never halt the current flow B. A missing or invalid binding is refused without using the
+current session locator as a substitute authority.
+
+The existing Auth ceremony/Base session-issuance boundary is unchanged. Email OTP, passkey,
+MFA, and the local app/com sign-in routes use this binding where a local `SignInFlow` is the
+authoritative phase object. Social callbacks, org Entra, and other credential families retain
+their existing provider state or concrete ceremony transaction as the primary authority when no
+local sign-in flow is present; they are not forced into a universal flow object. The existing
+`commit_login_session!` and `lock_sign_in_flow_for_issuance!` checks remain the final session
+issuance boundary.
+
+This amendment covers the runtime paths and tests changed in the current implementation slice.
+Untouched ceremony axes remain governed by their existing concrete authority until their own
+implementation slice is completed. The acceptance criteria in
+`docs/checklists/authentication-flow-integrity.md` define the observable contract; a test result
+or implementation report is evidence for a particular revision, not a permanent pass.
 
 ## Delivered reconciliation (2026-10-06)
 

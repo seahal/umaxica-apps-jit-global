@@ -1,8 +1,73 @@
-# Avatar Organization Ownership — Findings Requiring Approval
+# Avatar Organization Ownership
 
-Status: implementing (paused at the start of Phase C, pending the decisions below)
+Status: implementing; approved decisions govern the staged implementation below.
 
-## Purpose
+## Current approved contract
+
+Authority: the user's Strategic Review Final / Implementation Authorization (D-1–D-11),
+subsequent Blocker Resolution and Execution Directive, and `nine.md` Sections 5–9.
+Independent acceptance is defined in `docs/checklists/avatar-ownership.md` (AV-1–AV-9),
+with execution results recorded separately in `evidence/`. Implementation is incomplete;
+past audit observations and passing tests do not certify the remaining cutover.
+
+- **D-1:** use the actual local working tree. Recheck repository, branch, HEAD, differences and
+  migration state; preserve unrelated work. The historical baseline below is not current state.
+- **D-2:** establish Group account meaning from actual consumers. Account selection and owning
+  organization are distinct unless authoritative evidence proves identity. Preserve meaningful
+  account context through concrete relationships; legacy columns are transitional and cannot
+  authorize ownership independently. Only the affected conversion is held when evidence is absent.
+  Grants proceed independently. Removal remains Phase G after consumer/data migration.
+- **D-3/D-4:** narrowly necessary PostgreSQL ownership-integrity DDL and concurrency guards are
+  approved, including a dedicated integrity counter only when real concurrent transactions prove
+  it necessary. Prefer declarative constraints. No required trigger count, business side effects,
+  silent correction or broad raw SQL authority. Every function is attached in the same reversible
+  migration and documented/tested for invariant, events, locks, SQLSTATE and isolation behavior.
+- **D-5:** explicit lifecycle-aware concrete N:M access Grants are required. Exclusive Bindings
+  retain their separate meaning; adding period IDs to Bindings alone is rejected. Grants bind the
+  issuing ownership generation and cannot reactivate after O1→O2→O1. Organization management
+  authority remains separate from Avatar-use authorization. Persistence polymorphism is forbidden.
+- **D-6:** use observable, idempotent purge deferrals. No physical Avatar or ownership-history
+  deletion is authorized in this implementation, including an Avatar without concrete history.
+  Personal-data deletion/anonymization/retention policy remains a separate unresolved decision;
+  history preservation does not authorize indefinite PII retention.
+- **D-7:** the residual cross-table idempotency gap is rejected. A concrete type-neutral registry
+  in the Avatar DB reserves global operation keys and one pending transfer per Avatar across four
+  concrete detail families. It stores no polymorphic owner/actor/detail pair. Direct SQL and
+  concurrency must preserve detail cardinality. Separate Zenith DB work is not atomically committed
+  with Avatar; retries/reconciliation use immutable request inputs and identity.
+- **D-8:** canonical lowercase 36-character UUID v4/v7 client keys use a staged additive API.
+  Same key and authorized immutable request returns the recorded operation/result; changed inputs
+  or initiator are refused. Legacy keyless callers stay compatible during the documented transition
+  without the full retry guarantee. Random server keys per retry are not client idempotency.
+- **D-9:** inventory, dry-run, resumable idempotent operational backfill, reconciliation and cutover
+  are separate from schema migrations. Preserve identities, reliable dates, actors and valid states;
+  ambiguous rows are reported unchanged. Quiesce writers before cutover; no legacy authority
+  fallback afterward. Prepare forward-only recovery. Production operations need separate approval.
+- **D-10:** verified cutover requires a DB write barrier on legacy owner tables, including INSERT,
+  UPDATE, DELETE and TRUNCATE. Prefer effective ordinary-role permissions; the named narrow
+  rejection-trigger fallback is authorized when role architecture is insufficient. Activate only
+  after writer/backfill verification. No automatic table removal.
+- **D-11:** real COMMIT tests use run-owned disposable PostgreSQL databases and independent
+  connections, with normal migrations and actual constraints/triggers. Test relevant READ COMMITTED,
+  REPEATABLE READ and SERIALIZABLE conflict/retry behavior. No shared DB cleanup through disabled
+  triggers, DROP or TRUNCATE; inability to provision isolation is BLOCKED, not mocked PASS.
+
+Ownership is organization-only, concrete Enterprise/app or Bureau/org, temporal and immutable.
+Each Avatar has one uninterrupted `[valid_from, valid_to)` chain, finite immutable starts, strictly
+later ends, infinity for the final period, no overlap/gap and exactly one current owner at COMMIT.
+Creation and first period share one Avatar transaction. Transfers preserve all identities and all
+four directions; revalidate authorities, expiry and source generation under locks and use one
+database-derived instant. Keep the five-day Request/Accept/Cancel contract and com boundary.
+Do not invent historic dates, fraction/individual ownership, generic owner pairs or cross-DB atomicity.
+
+## Historical audit (superseded proposals)
+
+The following findings/options preserve the original audit record. They are not pending approvals
+or current implementation instructions where they conflict with the adopted decisions above.
+In particular the D-5 Binding-only proposal, D-7 accepted gap, D-8 arbitrary key format and D-11
+shared-database trigger suppression are rejected. Historical table/data counts must be rechecked.
+
+### Original audit purpose
 
 The approved change unifies Avatar ownership on concrete, period-based ownership tables for
 Enterprise and Bureau (approved requirements R1–R10 of the implementation instruction). This
@@ -13,7 +78,7 @@ approved or redirected without re-reading the code.
 Audit baseline: branch `feature`, commit `809ed57629f03052ba311c8c953f4aa682c93ebf`, PostgreSQL
 17.7, development Avatar database.
 
-## Items requiring a decision
+### Original items requiring a decision
 
 ### D-1. The audit baseline differs from the instruction
 
@@ -159,7 +224,7 @@ Audit baseline: branch `feature`, commit `809ed57629f03052ba311c8c953f4aa682c93e
   `session_replication_role = replica` in test code, or the rows are left in the test database.
 - Decision needed: which of the two cleanup approaches is acceptable.
 
-## Current state of the work
+### Historical draft disposition
 
 Six migration drafts are preserved under
 `specs/avatar-organization-ownership/migration-drafts/`, outside Rails migration discovery. Four
@@ -176,7 +241,7 @@ feature despite the pause recorded above.
 | `20261009180037_validate_avatar_binding_ownership_period_foreign_keys.rb` | empty generator stub |
 | `20261009180042_create_avatar_purge_deferrals.rb` | empty generator stub |
 
-Restore these drafts to `db/avatars_migrate/` only after the outstanding Avatar decisions are
+The historical audit required restoring these drafts to `db/avatars_migrate/` only after decisions were
 approved, all six migrations are complete, and their production safety has been reviewed. In
 particular, indexes on existing binding tables need concurrent creation, and trigger DDL needs
 the explicit approval described in D-3. Empty stubs must never be recorded as applied migrations.

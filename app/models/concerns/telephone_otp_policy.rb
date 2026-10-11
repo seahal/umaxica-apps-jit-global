@@ -15,58 +15,6 @@ module TelephoneOtpPolicy
 
   public
 
-  def store_otp(otp_private_key, otp_counter, expires_at, now: nil)
-    decision_time = now || self.class.database_now
-    attrs = {
-      otp_private_key: otp_private_key,
-      otp_counter: otp_counter,
-      otp_expires_at: Time.zone.at(expires_at),
-    }
-    attrs[:otp_last_sent_at] = decision_time
-
-    update!(attrs)
-  end
-
-  def get_otp
-    return nil if otp_private_key.blank?
-
-    decision_time = self.class.database_now
-    return nil if otp_expired?(now: decision_time) || locked?(now: decision_time)
-
-    {
-      otp_private_key: otp_private_key,
-      otp_counter: Integer(otp_counter.to_s, 10),
-      otp_expires_at: otp_expires_at.to_i,
-    }
-  end
-
-  def clear_otp(reset_attempts: false)
-    attrs = {
-      otp_counter: "0",
-      otp_expires_at: -Float::INFINITY,
-    }
-    attrs[:otp_attempts_count] = 0 if reset_attempts
-    attrs[:locked_at] = OTP_UNLOCKED_SENTINEL if reset_attempts
-    attrs[:otp_last_sent_at] = -Float::INFINITY
-
-    update!(attrs)
-  end
-
-  def otp_expired?(now: nil)
-    expiry = otp_expires_at
-    return true if expiry.blank?
-    return true if expiry == Float::INFINITY || expiry == -Float::INFINITY
-
-    expiry <= (now || self.class.database_now)
-  rescue ArgumentError, TypeError
-    true
-  end
-
-  def otp_active?(now: nil)
-    decision_time = now || self.class.database_now
-    !otp_expired?(now: decision_time) && !locked?(now: decision_time)
-  end
-
   def locked?(now: nil)
     decision_time = now || self.class.database_now
     lockout_active?(now: decision_time) || attempts_locked_without_expiry?(now: decision_time)
@@ -112,8 +60,6 @@ module TelephoneOtpPolicy
   private
 
   def initialize_telephone_otp_state
-    self.otp_counter = "0" if otp_counter.blank?
-    self.otp_private_key = ROTP::Base32.random_base32 if otp_private_key.blank?
     self.otp_attempts_count ||= 0
   end
 

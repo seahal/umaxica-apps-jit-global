@@ -108,7 +108,7 @@ documentation, longevity and observability are coequal. Category order is not pr
 **MUST**, **SHOULD**, and **MAY** follow BCP 14; express requirements positively.
 
 - **MUST:** preserve surface trust, ownership, session and state boundaries, and applicable
-  authentication, authorization, CSRF, verification, rate limits and security-relevant control order.
+  authentication, authorization, web application security controls (including protections against CSRF, XSS, SSRF, and SQL injection), verification, rate limits and security-relevant control order.
 - **MUST:** prevent SQL injection and XSS through parameterized access, contextual escaping and
   appropriate sanitization; keep untrusted data separate from executable content.
 - **MUST:** protect people from foreseeable harm and protect credentials, tokens, cookies,

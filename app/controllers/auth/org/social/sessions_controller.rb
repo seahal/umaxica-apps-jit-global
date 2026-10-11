@@ -23,12 +23,15 @@ module Auth
         include SocialCeremonyEntry
         include ::SurfaceInertiaPage
         include ::AuthenticationModeSwitchGuard
-
-        AUTHENTICATION_MODE = :guest
+        include ::SignInPhaseBindingControllerSupport
 
         PT_SESSION_KEY = :auth_org_entra_omniauth_pt
 
         PROVIDERS = %w(entra).freeze
+
+        AUTHENTICATION_MODE = :guest
+
+        before_action -> { enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") }, only: %i(new create)
 
         rate_limit(
           to: 20,
@@ -71,6 +74,9 @@ module Auth
         # Google and Apple buttons. The tenant is fixed in configuration, so there is nothing for
         # the operator to choose and the page carries no input.
         def entra_entry_props
+          binding = sign_in_primary_binding_params
+          action = "/social/entra"
+          action = "#{action}?#{binding.to_query}" if binding.present?
           {
             title: t("sign.org.authentication.entra.new.page_title"),
             unavailable_notice: if @provider_available
@@ -78,7 +84,7 @@ module Auth
                                 else
                                   t("sign.org.authentication.entra.errors.provider_unavailable")
                                 end,
-            form: (@provider_available ? { action: "/social/entra",
+            form: (@provider_available ? { action: action,
                                            submit_label: t("sign.org.authentication.entra.new.submit"), } : nil),
           }
         end

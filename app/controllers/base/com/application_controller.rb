@@ -103,6 +103,8 @@ module Base
 
       private
 
+      def sign_in_phase_binding_surface = "com"
+
       def browser_rp_client_id
         "base-com-ww"
       end
