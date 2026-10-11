@@ -209,3 +209,19 @@ every criterion.
 - This procedure assigns missing identity only. It does not certify writer quiescence, migrate
   numeric proof bindings, activate NOT NULL, enforce DB immutability or authorize production data
   mutation. ID-3a's independent proof-drain and ID-4/MIG-1 remain required.
+
+## ID-3d — Legacy ORG Telephone proof-drain observations
+
+- Basis: I07/I11, ID-3a and MIG-1. Scope: ORG registration ceremonies bound to the old canonical
+  positive-decimal PK reference, distinct from current 21-character public candidates.
+- Given that explicit ceremony scope, inventory reports aggregate pending-parent, deliverable-proof
+  and unexpired-receipt counts without changing rows, returning raw identifiers, code or verifier
+  values, or initiating delivery. Other realm/channel scopes are refused.
+- A consumed proof with a still-valid original receipt remains counted after its challenge expires.
+  Parent and receipt deadlines are exclusive: immediately before the relevant deadline the item
+  counts; at the deadline and immediately after it does not. Current public candidates, including
+  all-digit 21-character values, are not classified as old PK references.
+- Check: `test/queries/operator_telephone_legacy_reference_inventory_test.rb` and the read-only
+  `org_telephone_public_ids:legacy_references` Rake task. The observations are not a cutover permit,
+  a distributed snapshot, proof of source reconciliation, writer quiescence or queue drain. Those
+  independent prerequisites remain mandatory even when every count is zero.

@@ -214,8 +214,13 @@ Before consumer deployment, complete the following controlled sequence:
 3. Control all old numeric-reference writers, web workers and queued delivery producers. Let their
    valid proof and bounded original-operation receipts finish through the old authorized consumer
    before switching consumers. Confirm aggregate legacy-reference admission and queued work are
-   drained. Do not rewrite telephone_candidate_ref: it is part of the keyed verifier input. No
-   weaker proof fallback or forced session invalidation is part of this transition.
+   drained. `bundle exec rake org_telephone_public_ids:legacy_references` reports pending legacy
+   registrations, deliverable proof and unexpired receipts using database time without writing or
+   revealing proof values. Consumed receipts still count through their exclusive result deadline,
+   even after the OTP challenge deadline. Zero counts do not prove worker/queue quiescence or a
+   distributed cutover snapshot; check those prerequisites separately. Do not rewrite
+   telephone_candidate_ref: it is part of the keyed verifier input. No weaker proof fallback or
+   forced session invalidation is part of this transition.
 4. Reconcile zero missing source identities and preservation of source/candidate relationships. Only
    after writer/drain verification deploy consumers generating public-ID links and bindings.
    Existing numeric management URLs have the bounded owner-scoped ID-3b contract; new links do not
