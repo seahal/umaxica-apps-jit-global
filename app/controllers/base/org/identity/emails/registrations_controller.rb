@@ -103,7 +103,7 @@ module Base
             submitted_code = params.dig(:staff_email, :pass_code)
             return fail_code_required if submitted_code.blank?
 
-            result = verify_otp_code(@staff_email, submitted_code)
+            result = verify_otp_code_and_consume(@staff_email, submitted_code)
             return fail_otp_invalid unless result[:success]
 
             complete_registration!
@@ -206,7 +206,6 @@ module Base
           end
 
           def fail_otp_invalid
-            increment_otp_attempts!(@staff_email)
             if @staff_email.locked?
               @staff_email.destroy!
               reset_registration_session!
@@ -220,8 +219,6 @@ module Base
           end
 
           def complete_registration!
-            clear_otp(@staff_email)
-            @staff_email.save! if @staff_email.changed?
             finish_email_ceremony!(
               surface: "org",
               actor: current_operator,

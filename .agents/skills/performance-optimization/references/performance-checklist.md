@@ -60,12 +60,12 @@ treating the numbers above as real.
 
 ## Anti-pattern reference
 
-| Anti-pattern                          | Cost                                                 | Fix                                                    |
-| ------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------ |
-| Optimizing without profiling          | Complexity with no measured gain                     | Profile first; optimize only what the data implicates  |
-| N+1 queries                           | Latency grows linearly with result count             | Eager-load or batch the related records                |
-| Unpaginated list endpoints            | Response size unbounded by user data growth          | Paginate from the start                                |
-| Images without dimensions             | Layout shift, poor CLS                               | Set width and height, use responsive `srcset`          |
-| Unreviewed bundle growth              | Load time degrades a little at a time                | Budget in CI so growth is visible in the diff          |
-| Memoizing everything                  | Overhead and stale-closure bugs with no gain         | Memoize measured hot paths only                        |
-| No production performance monitoring  | Regressions are found by users                       | Report field metrics from real sessions                |
+| Anti-pattern                         | Cost                                         | Fix                                                   |
+| ------------------------------------ | -------------------------------------------- | ----------------------------------------------------- |
+| Optimizing without profiling         | Complexity with no measured gain             | Profile first; optimize only what the data implicates |
+| N+1 queries                          | Latency grows linearly with result count     | Eager-load or batch the related records               |
+| Unpaginated list endpoints           | Response size unbounded by user data growth  | Paginate from the start                               |
+| Images without dimensions            | Layout shift, poor CLS                       | Set width and height, use responsive `srcset`         |
+| Unreviewed bundle growth             | Load time degrades a little at a time        | Budget in CI so growth is visible in the diff         |
+| Memoizing everything                 | Overhead and stale-closure bugs with no gain | Memoize measured hot paths only                       |
+| No production performance monitoring | Regressions are found by users               | Report field metrics from real sessions               |

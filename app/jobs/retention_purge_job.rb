@@ -38,7 +38,6 @@ class RetentionPurgeJob < ApplicationJob
     ClientPasskey VisitorPasskey
     ClientToken OperatorToken VisitorToken
     ClientVerification OperatorVerification VisitorVerification
-    ClientAuthorizationCode OperatorAuthorizationCode VisitorAuthorizationCode
     ClientStepUpSession OperatorStepUpSession VisitorStepUpSession
     AreaOccurrence ClientOccurrence VisitorOccurrence OperatorOccurrence ZipOccurrence
     DomainOccurrence IpOccurrence EmailOccurrence JwtOccurrence TelephoneOccurrence

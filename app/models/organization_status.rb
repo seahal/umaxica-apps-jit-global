@@ -15,7 +15,7 @@ class OrganizationStatus < OrgPrincipalRecord
   NOTHING = 1
   DEFAULTS = [NOTHING].freeze
   has_many :organizations,
-           class_name: "Organization",
+           class_name: "OperatorOrganization",
            foreign_key: :workspace_status_id,
            dependent: :restrict_with_error,
            inverse_of: :organization_status

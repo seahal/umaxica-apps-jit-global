@@ -6,16 +6,19 @@ class JumpRtReturnVerifier
   TOKEN_TYPE = SecurityJwtJumpRtTokenCodec::TOKEN_TYPE
   TOKEN_SUBJECT = SecurityJwtJumpRtTokenCodec::TOKEN_SUBJECT
   DEFAULT_MAX_TTL = SecurityTokenLifetimes::JUMP_RT_TTL
-  LEEWAY = 60
+  LEEWAY = 5
   MAX_TOKEN_LENGTH = 8_192
-  CACHE_TTL = 5.minutes
-  STALE_CACHE_TTL = 1.hour
-  NEGATIVE_CACHE_TTL = 30.seconds
+  CACHE_TTL = 30.seconds
+  NEGATIVE_CACHE_TTL = 5.seconds
   HTTP_OPEN_TIMEOUT = 1
   HTTP_READ_TIMEOUT = 2
   MAX_JWKS_BYTES = 64.kilobytes
   REQUIRED_JWK_FIELDS = SecurityJwtJumpRtTokenCodec::REQUIRED_JWK_FIELDS
   PRIVATE_JWK_FIELDS = SecurityJwtJumpRtTokenCodec::PRIVATE_JWK_FIELDS
+
+  class JwksUnavailable < StandardError; end
+
+  class UnknownKid < StandardError; end
 
   Result =
     Data.define(:success, :payload, :error) do
@@ -45,14 +48,24 @@ class JumpRtReturnVerifier
 
     payload = decode_with_jwks(header.fetch("kid"))
     return failure("invalid_claim") unless valid_payload?(payload)
+    return failure("invalid_url") unless same_request_without_rt?(payload["url"])
     return failure("invalid_claim") unless JumpRtReturnPolicy.allowed_source?(
       destination_origin: request_base_url,
       source: payload["src"],
     )
-    return failure("invalid_url") unless same_request_without_rt?(payload["url"])
     return failure("replayed") if one_time_return?(payload) && !consume_jti!(payload)
 
     Result.new(success: true, payload: payload, error: nil)
+  rescue JwksUnavailable
+    failure("jwks_unavailable")
+  rescue UnknownKid
+    failure("unknown_kid")
+  rescue JWT::InvalidIssuerError
+    failure("issuer_mismatch")
+  rescue JWT::InvalidAudError
+    failure("audience_mismatch")
+  rescue JWT::ExpiredSignature, JWT::ImmatureSignature, JWT::InvalidIatError, JWT::MissingRequiredClaim
+    failure("invalid_claim")
   rescue JWT::DecodeError, JWT::VerificationError, OpenSSL::PKey::PKeyError, ArgumentError, TypeError
     failure("invalid_signature")
   end
@@ -77,7 +90,6 @@ class JumpRtReturnVerifier
 
   def decode_with_jwks(kid)
     key = public_key_for(kid)
-    raise JWT::DecodeError, "unknown kid" unless key
 
     SecurityJwtJumpRtTokenCodec.decode_with_key(
       token: token,
@@ -89,12 +101,14 @@ class JumpRtReturnVerifier
   end
 
   def public_key_for(kid)
-    raise JWT::DecodeError, "kid negative cached" if negative_kid_cached?(kid)
+    raise UnknownKid, "kid negative cached" if negative_kid_cached?(kid)
 
     jwk = jwks_keys(force: false).find { |entry| entry["kid"] == kid && entry["alg"] == ALGORITHM }
     jwk ||= jwks_keys(force: true).find { |entry| entry["kid"] == kid && entry["alg"] == ALGORITHM }
-    Rails.cache.write(negative_cache_key(kid), true, expires_in: NEGATIVE_CACHE_TTL) unless jwk
-    return nil unless jwk
+    unless jwk
+      Rails.cache.write(negative_cache_key(kid), true, expires_in: NEGATIVE_CACHE_TTL)
+      raise UnknownKid, "unknown kid"
+    end
 
     JWT::JWK.import(jwk).public_key
   end
@@ -109,22 +123,18 @@ class JumpRtReturnVerifier
     return cached if cached && !force
 
     fresh = fetcher.call
-    Rails.cache.write(cache_key, fresh, expires_in: CACHE_TTL)
-    Rails.cache.write(stale_cache_key, fresh, expires_in: STALE_CACHE_TTL)
-    fresh
-  rescue JWT::DecodeError, JSON::ParserError, SocketError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout
-    stale = Rails.cache.read(stale_cache_key)
-    raise JWT::DecodeError, "jwks fetch failed" unless stale
+    raise JwksUnavailable, "jwks fetch failed" unless fresh.is_a?(Hash)
 
-    stale
+    Rails.cache.write(cache_key, fresh, expires_in: CACHE_TTL)
+    fresh
+  rescue JwksUnavailable
+    raise
+  rescue JWT::DecodeError, JSON::ParserError, SocketError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout
+    raise JwksUnavailable, "jwks fetch failed"
   end
 
   def cache_key
     "jump_rt:return_jwks:#{Digest::SHA256.hexdigest(jwks_url)}"
-  end
-
-  def stale_cache_key
-    "jump_rt:return_jwks:stale:#{Digest::SHA256.hexdigest(jwks_url)}"
   end
 
   def negative_cache_key(kid)
@@ -213,6 +223,7 @@ class JumpRtReturnVerifier
   def normalize_url_without_rt(value)
     uri = URI.parse(value.to_s)
     return nil unless uri.is_a?(URI::HTTP)
+    return nil unless https_url_allowed?(uri)
     return nil if uri.userinfo.present?
     return nil if uri.fragment.present?
 
@@ -227,6 +238,13 @@ class JumpRtReturnVerifier
     ]
   rescue URI::InvalidURIError
     nil
+  end
+
+  def https_url_allowed?(uri)
+    return true if uri.scheme == "https"
+    return false unless Rails.env.local?
+
+    uri.scheme == "http"
   end
 
   def jump_origin

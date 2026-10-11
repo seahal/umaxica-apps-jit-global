@@ -4,6 +4,7 @@
 module OutboundSensitivePayload
   SMS_BODY_PURPOSE = "outbound.sms.body"
   EMAIL_OTP_PURPOSE = "outbound.email.otp"
+  EMAIL_VERIFICATION_TOKEN_PURPOSE = "outbound.email.verification_token"
   SMS_DELIVERY_PURPOSE = "outbound.sms.delivery.v1"
   OIDC_BACKCHANNEL_LOGOUT_PURPOSE = "outbound.oidc.backchannel_logout.v1"
   ENVELOPE_VERSION = 1
@@ -60,6 +61,14 @@ module OutboundSensitivePayload
 
   def decrypt_email_otp(token)
     decrypt(token, purpose: EMAIL_OTP_PURPOSE)
+  end
+
+  def encrypt_email_verification_token(token)
+    encrypt(token, purpose: EMAIL_VERIFICATION_TOKEN_PURPOSE)
+  end
+
+  def decrypt_email_verification_token(token)
+    decrypt(token, purpose: EMAIL_VERIFICATION_TOKEN_PURPOSE)
   end
 
   def encrypt_envelope(payload, purpose:, required_keys:)

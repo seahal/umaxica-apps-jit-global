@@ -69,8 +69,7 @@ module CurrentBannerQuery
   end
 
   def connection_owner_for(banner_model)
-    banner_model.ancestors.find do |ancestor|
-      ancestor.is_a?(Class) && ancestor < ActiveRecord::Base && ancestor.abstract_class?
-    end
+    banner_model.connection_class_for_self
   end
+  private_class_method :validate!, :banner_model_for, :read_current, :connection_owner_for
 end

@@ -181,22 +181,22 @@ module AuthenticationRedirects
 
     case sign_in_surface
     when :app
-      base_app_dashboard_url(
+      base_app_root_url(
         ri: params[:ri],
         host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
       )
     when :com
-      base_com_dashboard_url(
+      base_com_root_url(
         ri: params[:ri],
         host: ENV.fetch("PRIVATE_BASE_CORPORATE_URL"),
       )
     when :org
-      base_org_dashboard_url(
+      base_org_root_url(
         ri: params[:ri],
         host: ENV.fetch("PRIVATE_BASE_STAFF_URL"),
       )
     else
-      "/dashboard"
+      "/"
     end
   end
 

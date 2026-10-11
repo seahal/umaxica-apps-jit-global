@@ -25,7 +25,7 @@ class LegacyApiNamespaceGuardTest < ActiveSupport::TestCase
   # each of these on many hosts, and the vocabulary decision is about the path, not the host.
   #
   # Classification per `adr/api-route-vocabulary-consolidation.md` section "Classification rule",
-  # recorded in plans/rails-nextjs-openapi-contract-audit.md. `api` marks an actual API endpoint and
+  # recorded in plans/analysis/rails-nextjs-openapi-contract-audit.md. `api` marks an actual API endpoint and
   # therefore a migration candidate; `ceremony` marks an endpoint whose classification the ADR does
   # not settle.
   LEGACY_OPERATIONS = {

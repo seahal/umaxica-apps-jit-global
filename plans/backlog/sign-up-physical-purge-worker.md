@@ -2,13 +2,13 @@
 
 ## Status
 
-Backlog. Do not implement as part of the current cancellation hardening pass.
+Backlog. The current expiry sweep is not this physical-purge worker and does not change this scope.
 
 ## Problem
 
-`SignUp::Cancellation` and `SignUp::ArtifactCleanup` currently schedule logical deletion by writing
-`discarded_at`, `purged_at`, deleted status ids, and cleanup state. They do not physically delete
-rows whose `purged_at <= now`.
+`SignUpTermination` and `SignUpArtifactCleanup` schedule logical deletion by writing `discarded_at`,
+`purged_at`, deleted status ids, and cleanup state. They do not physically delete rows whose
+`purged_at <= now`.
 
 Without a dedicated purge worker, cancelled sign-up artifacts can remain in the database
 indefinitely and continue to carry personal data after the intended retention window.

@@ -6,6 +6,7 @@ module Auth
     module Sign
       module In
         class SecretsController < ::Auth::Com::ApplicationController
+          include ::AuthenticationModeSwitchGuard
           include ::CloudflareTurnstile
 
           include EmailValidation

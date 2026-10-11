@@ -13,8 +13,18 @@ class Auth::Org::HealthsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "text/plain", response.media_type
     assert_not_equal "text/html", response.media_type
-    assert_match(
-      /\Atitle: Health status\nnamespace: \w+\/\w+\nstatus: \w+\nstartup: \w+\nliveness: \w+\nreadiness: \w+\ntimestamp: [^\n]+Z\n\z/, response.body,
-    )
+    expected = %r{
+      \A
+      title:\ Health\ status\n
+      namespace:\ \w+/\w+\n
+      status:\ \w+\n
+      startup:\ \w+\n
+      liveness:\ \w+\n
+      readiness:\ \w+\n
+      timestamp:\ [^\n]+Z\n
+      \z
+    }x
+
+    assert_match(expected, response.body.to_s.force_encoding(Encoding::UTF_8))
   end
 end

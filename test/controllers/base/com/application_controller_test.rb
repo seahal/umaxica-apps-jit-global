@@ -67,27 +67,6 @@ module Base
 
         assert_includes around_filters, :with_actor_lifecycle
       end
-
-      test "has oidc_client_id method" do
-        controller = ApplicationController.new
-
-        assert_respond_to controller, :oidc_client_id
-        assert_equal "base-rails-rp", controller.send(:oidc_client_id)
-      end
-
-      test "has oidc_sign_host method" do
-        controller = ApplicationController.new
-
-        assert_respond_to controller, :oidc_sign_host
-        assert_equal ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"), controller.send(:oidc_sign_host)
-      end
-
-      test "has oidc_base_host method" do
-        controller = ApplicationController.new
-
-        assert_respond_to controller, :oidc_base_host
-        assert_equal ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"), controller.send(:oidc_base_host)
-      end
     end
   end
 end

@@ -285,8 +285,7 @@ Top structural risks:
 - [adr/app-actor-client-naming.md](adr/app-actor-client-naming.md),
   [adr/org-actor-operator-naming.md](adr/org-actor-operator-naming.md),
   [adr/com-actor-visitor-naming.md](adr/com-actor-visitor-naming.md): surface actor naming.
-- [plans/active/acme-account-organization-bootstrap-implementation-plan.md](plans/active/acme-account-organization-bootstrap-implementation-plan.md):
-  current implementation plan for the account/organization/bootstrap layer.
+- GH issue #828: current implementation plan for the account/organization/bootstrap layer.
 
 ### Frontend / Switcher Code
 
@@ -2526,9 +2525,8 @@ choosing wrong: Orphaned resources and broken recovery paths. Implementation aff
 
 Decision 15: Question: Should account titles stay ASCII alphanumeric length 1-10? Choose one: A.
 Yes. B. Loosen later. C. Different per surface. Recommended default: A for the initial cut. Why:
-That is already the active bootstrap plan direction. Repository evidence:
-[plans/active/acme-account-organization-bootstrap-implementation-plan.md](plans/active/acme-account-organization-bootstrap-implementation-plan.md)
-Risk of choosing wrong: UI and validation drift. Implementation affected:
+That is already the active bootstrap plan direction. Repository evidence: GH issue #828 Risk of
+choosing wrong: UI and validation drift. Implementation affected:
 
 - models:
 - migrations:
@@ -2650,8 +2648,7 @@ The following checks were attempted or performed during repository inspection:
 Results:
 
 - `pwd` succeeded and confirmed the repository root.
-- `git status --short` showed one unrelated untracked plan file:
-  `plans/you-are-working-in-binary-puppy.md`.
+- `git status --short` showed one unrelated untracked plan file.
 - `find`/`rg` file inspection succeeded.
 - `bin/rails routes` and `bin/rails zeitwerk:check` were blocked by the repository debugger hook,
   which tries to bind a UNIX debug socket in this sandbox and raises `Errno::EPERM`.

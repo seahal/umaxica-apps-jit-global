@@ -6,11 +6,11 @@ require "test_helper"
 class TargetedModelLineCoverageTest < ActiveSupport::TestCase
   class AbstractOidcUsage < AppTicketRecord
     self.abstract_class = true
-    include OidcTokenUsage
+    include RpSession
   end
 
   class ConcreteOidcUsage < AbstractOidcUsage
-    self.table_name = "client_token_usages"
+    self.table_name = "client_rp_sessions"
   end
 
   class AbstractSignUpFlow
@@ -106,7 +106,7 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "oidc usage exposes revoke logout expiry and abstract association behavior" do
-    usage = ClientTokenUsage.new(revoked_at: Time.current)
+    usage = ClientRpSession.new(revoked_at: Time.current)
 
     assert_predicate usage, :revoked?
 

@@ -10,18 +10,10 @@ class Core::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     host! @host
   end
 
-  test "complete sign out consumes the state and renders completion" do
-    visitor = create_verified_visitor_with_email(email_address: "core-com-#{SecureRandom.hex(4)}@example.com")
-    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    satisfy_visitor_verification(token)
+  test "get sign out without a one-shot notice is not found" do
+    get core_com_sign_out_url(ri: "jp")
 
-    post core_com_sign_out_url(ri: "jp"),
-         headers: as_visitor_headers(visitor, host: @host, session_public_id: token.public_id)
-
-    get core_com_sign_out_completion_url(ri: "jp")
-
-    assert_response :success
-    assert_select "h1", text: I18n.t("sign.shared.sign_out.completed_title")
+    assert_response :not_found
   end
 end
 

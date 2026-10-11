@@ -39,7 +39,7 @@ class EnforcementCaseApplyOperation
 
     perform_principal_access_effect!
     enforcement_case.revoke_method_sessions!
-    enforcement_case.write_audit_event!("applied")
+    enforcement_case.write_audit_event_once!("applied")
 
     true
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e

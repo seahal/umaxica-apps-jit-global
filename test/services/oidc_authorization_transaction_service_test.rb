@@ -46,6 +46,7 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
         actor: @client,
         session_ref: "session-1",
         auth_method: "passkey",
+        authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
       )
 
     assert_predicate result.transaction, :authenticated?
@@ -72,6 +73,24 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
+  test "register_result refuses to invent an authentication event time" do
+    issuance = OidcAuthorizationTransactionCoordinator.issue!(surface: "app", intent: "sign_in", params: @params)
+
+    error =
+      assert_raises(ArgumentError) do
+        OidcAuthorizationTransactionCoordinator.register_result!(
+          surface: "app",
+          login_challenge: issuance.transaction.login_challenge,
+          actor: @client,
+          session_ref: "session-1",
+          auth_method: "passkey",
+        )
+      end
+
+    assert_equal "authentication event time is required", error.message
+    assert_nil issuance.transaction.reload.authenticated_at
+  end
+
   test "expired login challenge is rejected when registering ceremony result" do
     issuance =
       OidcAuthorizationTransactionCoordinator.issue!(
@@ -91,6 +110,7 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
             actor: @client,
             session_ref: "session-1",
             auth_method: "passkey",
+            authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
           )
         end
 

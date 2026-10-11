@@ -18,6 +18,8 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
   ].freeze
 
   ENTRY_PATHS = %w(/sign/in /sign/up).freeze
+  INTENT_BY_PATH = { "/sign/in" => "sign_in", "/sign/up" => "sign_up" }.freeze
+  REALM_BY_SURFACE = { "app" => "client", "com" => "visitor", "org" => "operator" }.freeze
 
   test "a missing region is normalized on every credential gateway entry page" do
     SURFACES.each do |surface, host|
@@ -43,29 +45,34 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
     end
   end
 
-  # The authorization endpoint skips region normalization, so the region has to travel on the
-  # authorize URL itself. It used to be absent, which sent the whole ceremony -- and every URL
-  # built from it inside the credential gateway -- into the default region.
-  test "the base authorization handoff carries the region into the credential gateway" do
+  test "the Base-owned local admission form carries the region" do
     %w(jp us).each do |region|
       host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-      get "/dashboard", params: { ri: region }
+      get base_app_root_path, params: { ri: region }
 
-      assert_response :found
+      assert_response :success
 
-      query = Rack::Utils.parse_nested_query(URI.parse(response.location).query)
+      sign_in_action = inertia_props.dig("sign_in", "action")
+      query = Rack::Utils.parse_nested_query(URI.parse(sign_in_action).query)
 
       assert_equal region, query["ri"],
-                   "the authorization handoff dropped the #{region} region: #{response.location}"
+                   "the local admission form dropped the #{region} region: #{sign_in_action}"
     end
   end
 
+  # A bare, un-bridged hit on an entry page now bounces to Base (`AuthCeremonyAdmission
+  # #bridge_to_base_admission!`) instead of rendering -- Auth is ceremony-only and requires a
+  # Base-issued admission code. Redeeming a real one is the only way to reach the rendered page
+  # this test needs to scan.
   test "every generated link on an entry page carries the requested region" do
     SURFACES.each do |surface, host|
       ENTRY_PATHS.each do |path|
         %w(jp us).each do |region|
           host! host
-          get path, params: { ri: region }
+          get path, params: { ri: region, admission: admission_code_for(surface, path) }
+
+          assert_response :see_other, "#{surface} #{path}?ri=#{region} admission redemption must succeed"
+          follow_redirect!
 
           assert_response :success, "#{surface} #{path}?ri=#{region} must render"
 
@@ -87,5 +94,29 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
   # must not travel on them.
   def asset_target?(target)
     target.start_with?("/#{ViteRuby.config.public_output_dir}/")
+  end
+
+  # Issues a real transaction and redeems it through `BaseAuthAdmissionCoordinator`, the same
+  # path `AuthOidcEntrancesTest` and `AuthenticationFlowTest` use, so the code carries a genuine
+  # signature rather than a stub -- `AuthCeremonyAdmission#admit_or_render_sign_ceremony!` verifies
+  # it for real.
+  def admission_code_for(surface, path)
+    client = OidcClientRegistry.find!("core-next-rp")
+    transaction =
+      OidcAuthorizationTransactionCoordinator.issue!(
+        surface: surface,
+        intent: INTENT_BY_PATH.fetch(path),
+        params: {
+          response_type: "code",
+          client_id: "core-next-rp",
+          redirect_uri: client.redirect_uris_by_realm.fetch(REALM_BY_SURFACE.fetch(surface)).first,
+          code_challenge: SecureRandom.urlsafe_base64(32),
+          code_challenge_method: "S256",
+          state: SecureRandom.urlsafe_base64(16),
+          nonce: SecureRandom.urlsafe_base64(16),
+          scope: "openid profile",
+        },
+      ).transaction
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
   end
 end

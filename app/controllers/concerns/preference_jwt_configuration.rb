@@ -19,25 +19,40 @@ module PreferenceJwtConfiguration
   end
 
   def self.leeway_seconds
-    Integer(ENV["PREFERENCE_JWT_LEEWAY_SECONDS"].presence || "30", 10)
+    SecurityJwtRfc9068AccessTokenProfile::CLOCK_SKEW_LEEWAY_SECONDS
   end
 
   def self.issuer
     ENV.fetch("PREFERENCE_JWT_ISSUER")
   end
 
+  def self.client_id
+    ENV.fetch("PREFERENCE_JWT_CLIENT_ID")
+  end
+
+  # Audiences are the base surface hosts from boot config. Local environments
+  # additionally accept the `*.localhost` development hosts; no environment
+  # falls back to a default list when the boot hosts are missing.
   def self.audiences
     configured = audiences_from_boot_config
-    configured = fallback_localhost_audiences(configured) if Rails.env.local?
-    return configured if configured.present?
+    if configured.empty?
+      raise MissingAudienceError,
+            "preference JWT audiences are not configured: boot hosts " \
+            "base_service, base_corporate and base_staff are blank"
+    end
 
-    fallback_localhost_audiences(
-      [
-        env_host("PUBLIC_BASE_SERVICE_URL"),
-        env_host("PUBLIC_BASE_CORPORATE_URL"),
-        env_host("PUBLIC_BASE_STAFF_URL"),
-      ].compact,
-    )
+    configured = with_local_development_audiences(configured) if Rails.env.local?
+    SecurityJwtRfc9068AccessTokenProfile.assert_production_identifiers!(configured, label: "preference JWT audiences")
+    configured
+  end
+
+  # Boot-time check so a production process with an incomplete or
+  # non-production preference token configuration refuses to start.
+  def self.validate!
+    SecurityJwtRfc9068AccessTokenProfile.assert_production_identifiers!([issuer], label: "PREFERENCE_JWT_ISSUER")
+    audiences
+    client_id
+    true
   end
 
   # Returns the audiences that may legitimately accept a token issued for
@@ -103,6 +118,10 @@ module PreferenceJwtConfiguration
     JitSecurityJwtRegistry.parse_header(token)
   end
 
+  public_class_method :active_kid, :leeway_seconds, :issuer, :client_id, :audiences, :validate!,
+                      :audience_for, :host_scope_for, :private_key_for_active, :private_key_for,
+                      :public_key_for, :private_key, :public_key, :parse_header
+
   def self.parse_keyset(raw)
     return {} if raw.blank?
 
@@ -135,15 +154,10 @@ module PreferenceJwtConfiguration
   end
   private_class_method :audiences_from_boot_config
 
-  def self.env_host(public_key)
-    ENV.fetch(public_key).to_s
-  end
-  private_class_method :env_host
-
-  def self.fallback_localhost_audiences(values)
+  def self.with_local_development_audiences(values)
     audiences = values.dup
     audiences.concat(%w(app.localhost org.localhost com.localhost localhost))
     audiences.uniq.freeze
   end
-  private_class_method :fallback_localhost_audiences
+  private_class_method :with_local_development_audiences
 end

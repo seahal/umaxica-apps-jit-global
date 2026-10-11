@@ -30,6 +30,23 @@ module TokenStatusManagement
     token_status_id == self.class.token_status_model::RESTRICTED
   end
 
+  # Which sign-in ceremony established this session. Emergency Access is an org
+  # concept, so `authentication_context` exists on operator_tokens only; a
+  # surface with no Emergency ceremony has no way to produce a non-Normal
+  # session, so the absent column states Normal rather than guessing at one.
+  #
+  # Deliberately not `restricted?`: that marks a session-limit remediation
+  # state, and the two axes are independent.
+  def authentication_context_value
+    return AuthenticationContextValue.normal unless has_attribute?(:authentication_context)
+
+    AuthenticationContextValue.from_claim(authentication_context)
+  end
+
+  def emergency_authentication_context?
+    authentication_context_value.emergency?
+  end
+
   def revoked?
     token_status_id == self.class.token_status_model::REVOKED
   end

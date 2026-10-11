@@ -12,6 +12,7 @@ import OrgEntraSettingsShow from "@/pages/auth/org/settings/entras/show";
 import OrgPasskeySettingsEdit from "@/pages/auth/org/settings/passkeys/edit";
 import OrgPasskeySettingsNew from "@/pages/auth/org/settings/passkeys/new";
 import OrgMfaPasskeyPage from "@/pages/auth/org/sign/in/challenge/passkeys/new";
+import OrgEmergencyPasskeySignInPage from "@/pages/auth/org/sign/in/emergency/passkeys/new";
 import OrgPasskeySignInPage from "@/pages/auth/org/sign/in/passkeys/new";
 import OrgSecretSignInPage from "@/pages/auth/org/sign/in/secrets/new";
 import OrgSignInEntry from "@/pages/auth/org/sign/ins/show";
@@ -316,7 +317,7 @@ const turnstile = {
 };
 
 describe("OrgSecretSignInPage", () => {
-  it("posts identifier and secret with the CSRF token", () => {
+  it("posts the secret with the CSRF token, and asks for no identifier", () => {
     const screen = mount(
       <OrgSecretSignInPage
         title="パスワードでログイン"
@@ -324,14 +325,6 @@ describe("OrgSecretSignInPage", () => {
         hidden_fields={{ pt: "pending", ri: "jp" }}
         errors_title="入力を確認してください"
         errors={["認証に失敗しました"]}
-        identifier={{
-          name: "staff_secret_credential_login_form[identifier]",
-          label: "ID",
-          placeholder: "OP-1",
-          min_length: 3,
-          max_length: 32,
-          pattern: "[A-Z0-9-]+",
-        }}
         secret={{
           name: "staff_secret_credential_login_form[secret_credential_value]",
           label: "パスワード",
@@ -353,6 +346,10 @@ describe("OrgSecretSignInPage", () => {
       "pending",
     );
     expect(screen.container.textContent).toContain("認証に失敗しました");
+    // Entra ID already selected the operator; a submitted identifier could only
+    // be an attempt to substitute a different one.
+    expect(screen.container.querySelector('input[type="text"]')).toBeNull();
+    expect(screen.container.textContent).not.toContain("ID");
   });
 
   it("omits the pending-token field when the server sent none", () => {
@@ -363,14 +360,6 @@ describe("OrgSecretSignInPage", () => {
         hidden_fields={{ pt: null, ri: "jp" }}
         errors_title="入力を確認してください"
         errors={[]}
-        identifier={{
-          name: "staff_secret_credential_login_form[identifier]",
-          label: "ID",
-          placeholder: "OP-1",
-          min_length: 3,
-          max_length: 32,
-          pattern: "[A-Z0-9-]+",
-        }}
         secret={{
           name: "staff_secret_credential_login_form[secret_credential_value]",
           label: "パスワード",
@@ -430,33 +419,60 @@ describe("OrgInvitationPage", () => {
 });
 
 describe("Org passkey ceremony pages", () => {
+  const identifierField = {
+    label: "ID",
+    placeholder: "OP-1",
+    min_length: 3,
+    max_length: 32,
+    pattern: "[A-Z0-9-]+",
+  };
+
+  // The normal ceremony is the second stage of Entra sign-in, so the panel has
+  // no identifier: the server reads the operator from its pending transaction.
   const panel = {
     options_url: "/org/in/passkeys/options",
     verification_url: "/org/in/passkeys/verification",
     region: "jp",
-    identifier_param: "public_id",
+    identifier_param: null,
     turnstile_site_key: "site-key",
     turnstile_error_message: "検証に失敗しました",
-    field: {
-      label: "ID",
-      placeholder: "OP-1",
-      min_length: 3,
-      max_length: 32,
-      pattern: "[A-Z0-9-]+",
-    },
+    field: null,
     submit_label: "パスキーでログイン",
   };
 
-  it("renders operator passkey sign-in", () => {
+  // The panel itself is mocked here; that it renders no identifier field for a
+  // null one is covered in spec/features/auth/passkeys/passkey_panels.test.tsx.
+  it("renders operator passkey sign-in with an identifier-less panel and the secret fallback", () => {
     const screen = mount(
       <OrgPasskeySignInPage
         title="パスキー"
         description="登録済みのパスキー"
         panel={panel}
+        secret_link={{ label: "シークレットを使う", href: "/org/sign/in/secret/new" }}
         back_link={BACK}
       />,
     );
 
+    expect(screen.container.textContent).toContain("パスキーでログイン");
+    expect(screen.container.querySelector('a[href="/org/sign/in/secret/new"]')?.textContent).toBe(
+      "シークレットを使う",
+    );
+  });
+
+  // Emergency Access has no earlier stage to name the operator, so it is
+  // identifier-first, and it says up front what the resulting session cannot do.
+  it("renders emergency access sign-in with an identifier field and a restricted-mode notice", () => {
+    const screen = mount(
+      <OrgEmergencyPasskeySignInPage
+        title="緊急アクセス"
+        description="登録済みのパスキー"
+        restricted_mode_notice="制限モードのセッションになります"
+        panel={{ ...panel, identifier_param: "identifier", field: identifierField }}
+        back_link={BACK}
+      />,
+    );
+
+    expect(screen.container.textContent).toContain("制限モードのセッションになります");
     expect(screen.container.textContent).toContain("パスキーでログイン");
   });
 

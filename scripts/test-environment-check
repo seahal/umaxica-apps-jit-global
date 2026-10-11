@@ -1,0 +1,78 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "pg"
+require "redis"
+require "hiredis-client"
+require "active_support/core_ext/object/blank"
+require "active_support/core_ext/object/inclusion"
+require "active_support/core_ext/string/filters"
+
+required = %w(
+  POSTGRESQL_TEST_HOST
+  POSTGRESQL_PORT
+  POSTGRESQL_USER
+  POSTGRESQL_PASSWORD
+  POSTGRESQL_DATABASE
+  CACHE_REDIS_URL
+  RATE_LIMIT_REDIS_URL
+  AUTH_STATE_REDIS_URL
+  VALKEY_TEST_HOST
+  VALKEY_TEST_PORT
+)
+missing = required.reject { |name| ENV[name].to_s != "" }
+abort "test environment is missing required variables: #{missing.join(", ")}" unless missing.empty?
+
+admin_database = ENV.fetch("POSTGRESQL_DATABASE")
+if admin_database.match?(/\A(?:development|production)(?:_|\z)/)
+  abort "POSTGRESQL_DATABASE must be a non-production administration database"
+end
+
+pg_connection = PG.connect(
+  host: ENV.fetch("POSTGRESQL_TEST_HOST"),
+  port: Integer(ENV.fetch("POSTGRESQL_PORT"), 10),
+  user: ENV.fetch("POSTGRESQL_USER"),
+  password: ENV.fetch("POSTGRESQL_PASSWORD"),
+  dbname: admin_database,
+)
+identity = pg_connection.exec(<<~SQL.squish).first
+  select current_database() as database,
+         coalesce(inet_server_addr()::text, 'local') as server_address,
+         inet_server_port() as server_port,
+         current_setting('server_version') as server_version
+SQL
+test_databases =
+  pg_connection.exec("select datname from pg_database where datname like 'test\\_%' order by datname")
+    .map { |row| row.fetch("datname") }
+# An empty catalog is a fresh server, not a misdirected one: `bin/rails db:create` only adds
+# databases, so it must be able to run here. The destructive step is migration, and
+# db:test:prepare (lib/tasks/test_db_prepare.rake) refuses to migrate until every effective test
+# database exists on this server (DatabaseSafety.verify_catalog!).
+if test_databases.empty?
+  puts "PostgreSQL has no test_* databases yet; create them with `bin/rails db:create` before " \
+       "db:test:prepare"
+end
+
+puts "PostgreSQL test target: #{identity.fetch("server_address")}:#{identity.fetch("server_port")} " \
+     "admin=#{identity.fetch("database")} version=#{identity.fetch("server_version")} " \
+     "test_databases=#{test_databases.length}"
+pg_connection.close
+
+begin
+  require_relative "../lib/umaxica/valkey/error"
+  require_relative "../lib/umaxica/valkey/configuration_error"
+  require_relative "../lib/umaxica/valkey/responsibility_urls"
+  require_relative "../lib/umaxica/valkey/test_target"
+
+  parsed_urls = Umaxica::Valkey::TestTarget.parse!
+  parsed_urls.each do |responsibility, parsed|
+    client = Redis.new(url: parsed.url, driver: :hiredis)
+    ping = client.call("PING")
+    info = client.call("INFO", "server")
+    version = info.to_s[/redis_version:([^\r\n]+)/, 1] || "unknown"
+    puts "Valkey #{responsibility}: #{parsed.host}:#{parsed.port} db=#{parsed.db} ping=#{ping} version=#{version}"
+    client.close
+  end
+rescue Redis::BaseError, IOError, SystemCallError => e
+  abort("Valkey test target is unavailable: #{e.class}: #{e.message}")
+end

@@ -41,7 +41,7 @@ class Auth::SimpleSurfaceDelegationsTest < ActiveSupport::TestCase
 
   test "the staff passkey identifier is normalised and validated against the operator format" do
     harness = harness_for(
-      Auth::Org::Sign::In::Passkey::VerificationsController,
+      Auth::Org::Sign::In::Emergency::Passkey::VerificationsController,
       params: { identifier: " ABCDEFGHIJKLMNOPQRSTU " },
     )
 

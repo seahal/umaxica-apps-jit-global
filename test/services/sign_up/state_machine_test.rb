@@ -63,6 +63,21 @@ class SignUpStateMachineTest < ActiveSupport::TestCase
     assert_equal :clear_requirement, complete.next_event
   end
 
+  test "contact-verified tickets cannot enter the checkpoint without the guardrail" do
+    ticket = create_cycle(
+      ClientSignUpFlow,
+      entry_method: "email",
+      status_id: ClientSignUpFlowStatus::CONTACT_VERIFIED,
+      step: "contact_verified",
+    )
+
+    result = SignUpStateMachine.call(ticket: ticket, event: :enter_checkpoint, actor_context: nil)
+
+    assert_equal :invalid_transition, result.status
+    assert_equal ClientSignUpFlowStatus::CONTACT_VERIFIED, ticket.reload.status_id
+    assert_equal "contact_verified", ticket.step
+  end
+
   test "checkpoint requirement clearing persists safe requirement state" do
     ticket = create_cycle(
       ClientSignUpFlow,

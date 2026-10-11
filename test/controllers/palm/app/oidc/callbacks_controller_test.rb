@@ -46,7 +46,6 @@ module Palm
         def assert_no_oauth_mutation(&)
           assert_no_difference(
             [
-              "ClientAuthorizationCode.count",
               "ClientOidcAuthorizationTransaction.count",
               "ClientOidcConnection.count",
               "ClientToken.count",

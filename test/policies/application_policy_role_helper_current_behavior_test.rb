@@ -23,7 +23,7 @@ class ApplicationPolicyRoleHelperCurrentBehaviorTest < ActiveSupport::TestCase
   test "role helpers currently delegate to user role methods and do not read JWT role claims" do
     Actor.reset
     Actor.authz = Actor::Authz.new(
-      policy_user: nil, token_claims: { "scp" => ["write:org"], "roles" => ["operator"] },
+      policy_user: nil, token_claims: { "scope" => "write:org", "roles" => ["operator"] },
       surface: "org",
     )
     policy = ApplicationPolicy.new(RecordWithOrganization.new(Object.new), user: RolelessActor.new(1))

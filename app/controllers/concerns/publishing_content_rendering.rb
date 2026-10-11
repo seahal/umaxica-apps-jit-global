@@ -15,11 +15,15 @@
 # below, registers before_action filters because content negotiation must run
 # before every JSON action on these endpoints; duplicating those filters on
 # twelve controllers would hide the same contract.
+#
+# Pagination uses Pagy's offset paginator (Pagy 43 `pagy(:offset, ...)`).
+# Source: https://ddnexus.github.io/pagy/toolbox/paginators/offset/
 module PublishingContentRendering
   extend ActiveSupport::Concern
 
   include ProblemDetailsRendering
   include ApiContentNegotiation
+  include Pagy::Method
 
   class_methods do
     def publishing_audience
@@ -58,19 +62,18 @@ module PublishingContentRendering
   # cannot drift from what is actually sent -- a taxonomy rename or a vocabulary change alters the
   # payload and the validator together. This saves transfer, not query work; the rows are still read.
   def render_publishing_entries_index
-    cursor = publishing_page_cursor
+    page_number = publishing_page_number
     return if performed?
 
-    limit = publishing_page_limit
+    paginator, records = paginate_published_entries(page_number)
     return if performed?
 
-    page = publishing_entries_query.page(limit:, cursor:)
-    entries = page.entries.filter_map { |entry| publishing_entry_json(entry) }
-    payload = { data: entries, page: { next_cursor: page.next_cursor, has_more: page.has_more } }
+    entries = records.filter_map { |entry| publishing_entry_json(entry) }
+    payload = { data: entries, page: PublishingCollectionPageSerializer.call(paginator) }
 
     expires_in(PUBLISHING_CACHE_MAX_AGE.seconds, public: true)
     # The validator covers the whole envelope, so it is page-specific: two pages of the same
-    # collection never share an ETag, and a cursor change invalidates the cached representation.
+    # collection never share an ETag.
     return unless stale?(etag: payload, last_modified: publishing_entries_last_modified(entries), public: true)
 
     render json: payload
@@ -89,31 +92,34 @@ module PublishingContentRendering
     render json: payload
   end
 
-  # A `limit` outside the bounds is clamped, per the ADR: a tuning mistake must not become an error.
-  # A `limit` that is not a whole number is a different thing -- a malformed request -- and is
-  # refused rather than quietly treated as the default.
-  def publishing_page_limit
-    raw = params[:limit]
-    return PublishingPublishedEntriesQuery::DEFAULT_LIMIT if raw.blank?
+  # Pagy 43 reads `page` from the request when it is not passed, and `Request#resolve_page` coerces
+  # non-numeric values to page 1 (`[page.to_s.to_i, 1].max`). That would answer with the first page
+  # for invalid input. The application therefore parses `page` itself and passes the integer in.
+  # Out-of-range pages use Pagy's `raise_range_error` rather than the default empty-page rescue.
+  # Source: https://ddnexus.github.io/pagy/toolbox/paginators/offset/ (`raise_range_error`, `page`)
+  def publishing_page_number
+    raw = params[:page]
+    return 1 if raw.blank?
 
-    Integer(raw.to_s, 10)
+    Integer(raw.to_s, 10).tap { |value| raise ArgumentError if value < 1 }
   rescue ArgumentError, TypeError
     # rubocop:disable I18n/RailsI18n/DecorateString
-    render_problem(:bad_request, detail: "limit must be a whole number.")
+    render_problem(:bad_request, detail: "page must be a whole number greater than or equal to 1.")
     # rubocop:enable I18n/RailsI18n/DecorateString
     nil
   end
 
-  # Returns nil when no cursor was sent. A cursor that does not verify is refused: serving page one
-  # instead would return the wrong rows while looking successful.
-  def publishing_page_cursor
-    raw = params[:cursor]
-    return nil if raw.blank?
-
-    PublishingEntriesCursor.decode(raw)
-  rescue PublishingEntriesCursor::InvalidCursor
+  def paginate_published_entries(page_number)
+    pagy(
+      :offset,
+      publishing_entries_query.call,
+      limit: PublishingPublishedEntriesQuery::PAGE_SIZE,
+      page: page_number,
+      raise_range_error: true,
+    )
+  rescue Pagy::RangeError
     # rubocop:disable I18n/RailsI18n/DecorateString
-    render_problem(:bad_request, detail: "cursor is not valid.")
+    render_problem(:bad_request, detail: "page is outside the available range.")
     # rubocop:enable I18n/RailsI18n/DecorateString
     nil
   end

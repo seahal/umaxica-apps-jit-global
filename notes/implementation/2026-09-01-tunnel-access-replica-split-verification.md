@@ -1,9 +1,8 @@
 # Development Cloudflare Tunnel + Access Verification, Replica Split
 
-Verification date: 2026-09-01 (UTC). Scope: development only, one hostname
-(`auth.umaxica.app`). Production Tunnel, Access, DNS, and deployment were not touched. Environment:
-`core` container, Rails development on `0.0.0.0:3000`, connector
-`umaxica-apps-global-dc_cloudflare-tunnel_1`.
+Verification date: 2026-09-01 (UTC). Scope: development only, one hostname (`auth.umaxica.app`).
+Production Tunnel, Access, DNS, and deployment were not touched. Environment: `core` container,
+Rails development on `0.0.0.0:3000`, connector `umaxica-apps-global-dc_cloudflare-tunnel_1`.
 
 This note records a one-time verification run. It is evidence of what was observed on the date
 above, not a standing contract. The repeatable contract is
@@ -21,10 +20,10 @@ supersede it and does not repeat its coverage.
 
 Tunnel `1d501e9a` carried two connector replicas with different origin reachability:
 
-| Replica    | Container                               | Networks               | Reaches Rails |
-| :--------- | :-------------------------------------- | :--------------------- | :------------ |
-| `e691fec9` | `umaxica-apps-global-dc_cloudflare-tunnel_1` | this project's `frontend` | yes       |
-| `f4762c38` | `umaxica-apps-edge-cloudflare-tunnel-1` | Edge project's networks | no            |
+| Replica    | Container                                    | Networks                  | Reaches Rails |
+| :--------- | :------------------------------------------- | :------------------------ | :------------ |
+| `e691fec9` | `umaxica-apps-global-dc_cloudflare-tunnel_1` | this project's `frontend` | yes           |
+| `f4762c38` | `umaxica-apps-edge-cloudflare-tunnel-1`      | Edge project's networks   | no            |
 
 Cloudflare routes a request to any replica of a tunnel, so the same hostname succeeded or returned
 `502` depending on which replica received it. This is the exact condition the "External Checks"
@@ -49,10 +48,10 @@ arrived" from "the request arrived and failed".
 
 Browser reported `502`, `Host: Error`, Tokyo, 2026-09-01 15:20:12 UTC.
 
-| Signal                             | Baseline 15:14:21 | After the 502 |
-| :--------------------------------- | :---------------- | :------------ |
-| `cloudflared_tunnel_total_requests` | 688              | 689           |
-| `cloudflared_tunnel_request_errors` | 101              | 101           |
+| Signal                              | Baseline 15:14:21 | After the 502 |
+| :---------------------------------- | :---------------- | :------------ |
+| `cloudflared_tunnel_total_requests` | 688               | 689           |
+| `cloudflared_tunnel_request_errors` | 101               | 101           |
 | Rails controller actions logged     | —                 | 0             |
 
 The healthy connector answered `/ready` with `200` and four ready connections throughout, on edge
@@ -88,16 +87,16 @@ resume.
 
 Rails answered fourteen controller actions, all `2xx` or `3xx`:
 
-| # | Action                                       | Result                  |
-| -: | :------------------------------------------ | :---------------------- |
-| 1 | `Auth::App::RootsController#index`            | 302 Found, 9 ms         |
-| 2 | `Auth::App::RootsController#index`            | 301 Moved Permanently   |
-| 3 | `Auth::App::Sign::InsController#show`         | 200 OK, 1285 ms         |
-| 4–7 | `Auth::App::Web::V0::{Cookies,Themes}Controller#show` | 200 OK, 3–4 ms |
-| 8 | `Rails::PwaController#service_worker`          | 200 OK                  |
-| 9 | `Auth::App::Sign::InsController#show`         | 200 OK, 22 ms           |
-| 10–13 | `Auth::App::Web::V0::{Themes,Cookies}Controller#show` | 200 OK, 3–4 ms |
-| 14 | `Rails::PwaController#service_worker`         | 200 OK                  |
+|     # | Action                                                | Result                |
+| ----: | :---------------------------------------------------- | :-------------------- |
+|     1 | `Auth::App::RootsController#index`                    | 302 Found, 9 ms       |
+|     2 | `Auth::App::RootsController#index`                    | 301 Moved Permanently |
+|     3 | `Auth::App::Sign::InsController#show`                 | 200 OK, 1285 ms       |
+|   4–7 | `Auth::App::Web::V0::{Cookies,Themes}Controller#show` | 200 OK, 3–4 ms        |
+|     8 | `Rails::PwaController#service_worker`                 | 200 OK                |
+|     9 | `Auth::App::Sign::InsController#show`                 | 200 OK, 22 ms         |
+| 10–13 | `Auth::App::Web::V0::{Themes,Cookies}Controller#show` | 200 OK, 3–4 ms        |
+|    14 | `Rails::PwaController#service_worker`                 | 200 OK                |
 
 The first render took 1285 ms against 22 ms for the second, which is development-mode first-render
 cost, not a tunnel measurement.
@@ -111,9 +110,9 @@ Redirected to https://auth.umaxica.app/sign/in?ri=jp
 
 These are the strongest evidence in the run. Rails built absolute URLs on the browser-facing
 hostname over `https`, which means the request reached `ActionDispatch` carrying
-`Host: auth.umaxica.app` and was treated as secure — the tunnel path, not the private
-`*.localhost` path. `Auth::App::Sign::InsController#show` rendering `200` means Access admitted the
-session and Rails served its own sign-in surface behind it.
+`Host: auth.umaxica.app` and was treated as secure — the tunnel path, not the private `*.localhost`
+path. `Auth::App::Sign::InsController#show` rendering `200` means Access admitted the session and
+Rails served its own sign-in surface behind it.
 
 ## Defects Found While Preparing The Run
 
@@ -121,8 +120,8 @@ session and Rails served its own sign-in surface behind it.
 
 > Superseded by the 2026-09-03 text+JSON health contract: `/health` and the probes now return
 > `text/plain` `200` without content negotiation, so the `406` behaviour recorded below no longer
-> exists. See `docs/reference/health-endpoints.md`. The rest of this section is kept as the
-> record of what was observed on 2026-09-01.
+> exists. See `docs/reference/health-endpoints.md`. The rest of this section is kept as the record
+> of what was observed on 2026-09-01.
 
 `app/controllers/concerns/health_check_rendering.rb:22` answers `head :not_acceptable` unless the
 request negotiates HTML. Measured against the running server:
@@ -165,10 +164,10 @@ stream.
 no request path, no client address, and no timestamp.
 
 Per `adr/application-logging-boundary.md`, Lograge owns request-completion logging.
-`config/initializers/lograge.rb:10` sends it to `ActiveSupport::Logger.new($stdout)`, and the running
-server's stdout is a terminal (`/proc/<puma>/fd/1 -> /dev/pts/2`). The JSON access log — which is
-where `host`, `request_id`, path, and status live — is therefore written to whichever terminal
-started the server and is stored nowhere.
+`config/initializers/lograge.rb:10` sends it to `ActiveSupport::Logger.new($stdout)`, and the
+running server's stdout is a terminal (`/proc/<puma>/fd/1 -> /dev/pts/2`). The JSON access log —
+which is where `host`, `request_id`, path, and status live — is therefore written to whichever
+terminal started the server and is stored nowhere.
 
 The consequence for verification: the 2026-08-10 style of evidence, "authenticated browser traffic
 was observed arriving at Rails from a public client address", **cannot be reproduced from files**.

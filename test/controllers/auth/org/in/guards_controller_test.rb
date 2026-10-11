@@ -150,7 +150,7 @@ class Auth::Org::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     assert_no_difference("Operator.count") do
       assert_no_difference("OperatorAccount.count") do
         assert_no_difference("OperatorWorkspaceAccount.count") do
-          assert_no_difference("Organization.count") do
+          assert_no_difference("OperatorOrganization.count") do
             assert_no_difference("Avatar.count") do
               assert_no_difference("OperatorToken.count", &)
             end

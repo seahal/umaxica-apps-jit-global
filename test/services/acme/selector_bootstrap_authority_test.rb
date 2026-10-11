@@ -15,7 +15,7 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
 
     assert_difference -> { ClientAccount.count }, 1 do
       assert_difference -> { ClientIdentity.count }, 1 do
-        assert_difference -> { Persona.count }, 1 do
+        assert_difference -> { ClientPersona.count }, 1 do
           assert_difference -> { PersonaAssignment.count }, 1 do
             assert_difference -> { Enterprise.count }, 1 do
               assert_difference -> { Avatar.count }, 1 do
@@ -28,7 +28,7 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
     end
 
     assert_no_difference -> {
-      ClientAccount.count + Persona.count + PersonaAssignment.count +
+      ClientAccount.count + ClientPersona.count + PersonaAssignment.count +
         Enterprise.count + Avatar.count
     } do
       BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)

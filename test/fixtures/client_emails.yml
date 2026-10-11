@@ -42,4 +42,4 @@
 #
 
 # Empty fixture — ensures the table is truncated during fixture loading
-  # so that leftover seed data does not cause foreign key violations.
+# so that leftover seed data does not cause foreign key violations.

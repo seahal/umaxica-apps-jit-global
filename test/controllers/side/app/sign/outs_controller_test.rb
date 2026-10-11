@@ -8,7 +8,7 @@ class Side::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_token_kinds
 
   setup do
-    host! ENV["PUBLIC_SIDE_SERVICE_URL"] || "side.app.localhost"
+    host! ENV["PUBLIC_SIDE_SERVICE_URL"] || "wide.app.localhost"
   end
 
   test "get sign out renders confirmation without mutation" do
@@ -113,7 +113,7 @@ class Side::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       logout_challenge: challenge,
     ), headers: {
       "Host" => ENV["PRIVATE_BASE_SERVICE_URL"] || ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost"),
-      "Origin" => "https://#{ENV["PUBLIC_SIDE_SERVICE_URL"] || "side.app.localhost"}",
+      "Origin" => "https://#{ENV["PUBLIC_SIDE_SERVICE_URL"] || "wide.app.localhost"}",
       "Sec-Fetch-Site" => "same-site",
     }
 

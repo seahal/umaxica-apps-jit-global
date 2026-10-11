@@ -20,7 +20,7 @@ module Side
         private
 
         def oidc_client_id
-          "base-rails-rp"
+          "side-org"
         end
       end
     end

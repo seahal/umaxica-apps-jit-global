@@ -50,6 +50,9 @@ module Publishing
     def validate_scope!
       return unless new_parent
 
+      unless new_parent.class == term.class
+        raise(ScopeMismatchError, "cannot move term #{term.id} into a different taxonomy scope")
+      end
       unless new_parent.vocabulary_id == term.vocabulary_id
         raise(ScopeMismatchError, "cannot move term #{term.id} into a different vocabulary")
       end

@@ -28,19 +28,4 @@ class CurrentBannerQueryTest < ActiveSupport::TestCase
                    CurrentBannerQuery.call(tld: :app, region: :global, domain: :acme)
     end
   end
-
-  test "reads the banner directly when the model has no abstract base to route the connection through" do
-    travel_to Time.zone.parse("2026-03-18 00:00:00 UTC") do
-      CurrentBannerQuery.stub(:connection_owner_for, nil) do
-        assert_equal client_banners(:newer_current_user_banner),
-                     CurrentBannerQuery.call(tld: :app, region: :jp, domain: :news)
-      end
-    end
-  end
-
-  test "answers nil rather than failing the page when the banner store is unreachable" do
-    CurrentBannerQuery.stub(:read_current, ->(*) { raise ActiveRecord::ConnectionNotEstablished }) do
-      assert_nil CurrentBannerQuery.call(tld: :app, region: :jp, domain: :news)
-    end
-  end
 end

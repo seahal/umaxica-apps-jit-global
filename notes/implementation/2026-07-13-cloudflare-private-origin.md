@@ -2,7 +2,6 @@
 
 ## Context
 
-- Original plan: `plans/you-are-working-in-enchanted-sunbeam.md`
 - Related decisions: `adr/public-private-url-boundaries.md`,
   `adr/internal-health-endpoint-edge-isolation.md`, and
   `adr/org-cloudflare-access-authentication-layer.md`
@@ -43,8 +42,8 @@
 - Route contracts: the Rails test files were blocked before execution because
   `test_com_principal_db` is missing; an isolated development Rails process recognized all 11 new
   non-health contracts with the expected controllers and actions.
-- Full-suite baseline and final run: blocked before test execution because
-  `test_com_principal_db` is missing.
+- Full-suite baseline and final run: blocked before test execution because `test_com_principal_db`
+  is missing.
 - Coverage: the database boot error stopped the run; the emitted partial report is not valid Gate 6
   coverage evidence.
 - Runtime Podman checks: unavailable because the implementation environment has no `podman` binary.

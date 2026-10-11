@@ -44,7 +44,7 @@ class SocialCallbackAndLogoutCompletionTest < ActiveSupport::TestCase
     include ::FqdnAvailabilityGate
     include ::OidcRpLogoutLauncher
 
-    attr_accessor :params, :session, :consumed, :completions
+    attr_accessor :params, :session, :consumed, :completions, :heads
 
     def initialize
       super
@@ -52,13 +52,26 @@ class SocialCallbackAndLogoutCompletionTest < ActiveSupport::TestCase
       @session = {}
       @consumed = 0
       @completions = 0
+      @heads = []
     end
 
     def invoke(name, ...) = send(name, ...)
 
-    def consume_sign_out_notice = self.consumed += 1
+    def consume_sign_out_notice
+      self.consumed += 1
+      { "state" => "consumed" }
+    end
 
     def render_oidc_rp_logout_completion = self.completions += 1
+
+    def sign_out_active_context_present? = false
+
+    def logout_surface_name = "app"
+
+    def head(status, **)
+      heads << status
+      status
+    end
   end
 
   test "an unexpected callback failure clears the stored intent before propagating" do
@@ -118,13 +131,22 @@ class SocialCallbackAndLogoutCompletionTest < ActiveSupport::TestCase
 
   test "the logout completion is only consumed when the returned state matches the issued one" do
     matching = LogoutHarness.new
-    matching.session[SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY] = { "state" => "issued-state" }
+    matching.session[SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY] = "notice-id"
     matching.params = ActionController::Parameters.new(state: "issued-state")
+    store = Object.new
+    store.define_singleton_method(:read) do |raw_id:|
+      raise ArgumentError, "unexpected notice id" unless raw_id == "notice-id"
 
-    matching.invoke(:complete_oidc_rp_logout!)
+      { "face" => "app", "state" => "issued-state" }
+    end
+
+    Valkey::AuthState::SignOutNoticeStore.stub(:new, store) do
+      matching.invoke(:complete_oidc_rp_logout!)
+    end
 
     assert_equal 1, matching.consumed
     assert_equal 1, matching.completions
+    assert_empty matching.heads
   end
 
   test "a state of the wrong length or the wrong value completes without consuming" do
@@ -133,30 +155,39 @@ class SocialCallbackAndLogoutCompletionTest < ActiveSupport::TestCase
     # mismatched pair.
     ["issued-state-but-longer", "issued-statX"].each do |provided|
       harness = LogoutHarness.new
-      harness.session[SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY] = { "state" => "issued-state" }
+      harness.session[SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY] = "notice-id"
       harness.params = ActionController::Parameters.new(state: provided)
+      store = Object.new
+      store.define_singleton_method(:read) { |**| { "face" => "app", "state" => "issued-state" } }
 
-      harness.invoke(:complete_oidc_rp_logout!)
+      Valkey::AuthState::SignOutNoticeStore.stub(:new, store) do
+        harness.invoke(:complete_oidc_rp_logout!)
+      end
 
       assert_equal 0, harness.consumed, provided
-      assert_equal 1, harness.completions, provided
+      assert_equal 0, harness.completions, provided
+      assert_equal [:not_found], harness.heads, provided
     end
   end
 
   test "a missing state on either side completes without consuming" do
     [
-      [{ "state" => "issued-state" }, nil],
-      [{ "state" => "" }, "issued-state"],
-      ["not-a-hash", "issued-state"],
-    ].each do |stored, provided|
+      ["issued-state", nil],
+      ["", "issued-state"],
+    ].each do |expected, provided|
       harness = LogoutHarness.new
-      harness.session[SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY] = stored
+      harness.session[SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY] = "notice-id"
       harness.params = ActionController::Parameters.new(state: provided)
+      store = Object.new
+      store.define_singleton_method(:read) { |**| { "face" => "app", "state" => expected } }
 
-      harness.invoke(:complete_oidc_rp_logout!)
+      Valkey::AuthState::SignOutNoticeStore.stub(:new, store) do
+        harness.invoke(:complete_oidc_rp_logout!)
+      end
 
-      assert_equal 0, harness.consumed, stored.inspect
-      assert_equal 1, harness.completions, stored.inspect
+      assert_equal 0, harness.consumed, [expected, provided].inspect
+      assert_equal 0, harness.completions, [expected, provided].inspect
+      assert_equal [:not_found], harness.heads, [expected, provided].inspect
     end
   end
 end

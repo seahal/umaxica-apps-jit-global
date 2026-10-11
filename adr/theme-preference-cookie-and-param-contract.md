@@ -61,5 +61,4 @@ not trust JS-readable preference cookies as preference input.
 
 ## Related
 
-- Former plan: `plans/backlog/gh632-color-theme-ui-cookie-contract.md`
 - Related contract: `adr/localization-preference-flow.md`

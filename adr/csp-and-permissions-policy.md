@@ -47,5 +47,5 @@ The implemented configuration is:
 
 ## Related
 
-- Former plan: `plans/backlog/gh231-configure-csp.md`
-- Former plan: `plans/backlog/gh266-permissions-policy.md`
+- Former plan: GH issue #231
+- Former plan: GH issue #266

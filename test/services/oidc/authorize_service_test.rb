@@ -10,6 +10,7 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
   setup do
     @user = clients(:one)
     @user_session_token = ClientToken.create!(user: @user)
+    @authentication_event_at = Time.utc(2026, 1, 2, 3, 4, 5)
     @code_verifier = SecureRandom.urlsafe_base64(32)
     @code_challenge = Base64.urlsafe_encode64(
       Digest::SHA256.digest(@code_verifier),
@@ -158,58 +159,56 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
   test "fails when non-Palm client requests disallowed scopes" do
     %w(palm.read admin all write write:org).each do |scope|
-      assert_no_difference "ClientAuthorizationCode.count" do
-        result = authorize_service_call(
-          params: valid_params.merge(scope: "openid #{scope}"),
-          resource: @user,
-        )
+      result = authorize_service_call(
+        params: valid_params.merge(scope: "openid #{scope}"),
+        resource: @user,
+      )
 
-        assert_not result.success?, scope
-        assert_equal "invalid_scope", result.error
-      end
+      assert_not result.success?, scope
+      assert_equal "invalid_scope", result.error
     end
   end
 
   test "palm iOS client can request palm.read" do
     client = OidcClientRegistry.find!("app-ios-rp")
-    assert_difference "ClientAuthorizationCode.count", 1 do
-      result = authorize_service_call(
-        params: valid_params(
-          client_id: client.client_id,
-          redirect_uri: client.redirect_uris.first,
-          scope: "openid palm.read",
-        ),
-        resource: @user,
-      )
+    result = authorize_service_call(
+      params: valid_params(
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        scope: "openid palm.read",
+      ),
+      resource: @user,
+    )
 
-      assert_predicate result, :success?
-    end
+    assert_predicate result, :success?
 
-    code = ClientAuthorizationCode.last
+    store = Valkey::AuthState::AuthorizationCodeStore.new
+    raw = URI.decode_www_form(URI.parse(result.redirect_url).query).to_h.fetch("code")
+    payload = store.read(raw)
 
-    assert_equal "openid palm.read", code.scope
-    assert_equal client.client_id, code.client_id
+    assert_equal "openid palm.read", payload.fetch("scope")
+    assert_equal client.client_id, payload.fetch("client_id")
   end
 
   test "palm Android client can request palm.read" do
     client = OidcClientRegistry.find!("app-android-rp")
-    assert_difference "ClientAuthorizationCode.count", 1 do
-      result = authorize_service_call(
-        params: valid_params(
-          client_id: client.client_id,
-          redirect_uri: client.redirect_uris.first,
-          scope: "openid palm.read",
-        ),
-        resource: @user,
-      )
+    result = authorize_service_call(
+      params: valid_params(
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        scope: "openid palm.read",
+      ),
+      resource: @user,
+    )
 
-      assert_predicate result, :success?
-    end
+    assert_predicate result, :success?
 
-    code = ClientAuthorizationCode.last
+    store = Valkey::AuthState::AuthorizationCodeStore.new
+    raw = URI.decode_www_form(URI.parse(result.redirect_url).query).to_h.fetch("code")
+    payload = store.read(raw)
 
-    assert_equal "openid palm.read", code.scope
-    assert_equal client.client_id, code.client_id
+    assert_equal "openid palm.read", payload.fetch("scope")
+    assert_equal client.client_id, payload.fetch("client_id")
   end
 
   test "state is included in redirect URL when provided" do
@@ -243,33 +242,44 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
       purged_at: 1.day.from_now,
     )
 
-    assert_no_difference "ClientAuthorizationCode.count" do
-      result = authorize_service_call(
-        params: valid_params,
-        resource: @user,
-      )
+    result = authorize_service_call(
+      params: valid_params,
+      resource: @user,
+    )
 
-      assert_not result.success?
-      assert_equal "invalid_request", result.error
-      assert_equal "resource is not active", result.error_description
-    end
+    assert_not result.success?
+    assert_equal "invalid_request", result.error
+    assert_equal "resource is not active", result.error_description
   end
 
-  test "authorization code is stored in database" do
-    assert_difference "ClientAuthorizationCode.count", 1 do
-      authorize_service_call(
-        params: valid_params,
-        resource: @user,
-      )
-    end
+  test "authorization code is stored in Valkey auth-state" do
+    result = authorize_service_call(
+      params: valid_params,
+      resource: @user,
+    )
 
-    code = ClientAuthorizationCode.last
+    assert_predicate result, :success?
+    raw = URI.decode_www_form(URI.parse(result.redirect_url).query).to_h.fetch("code")
+    payload = Valkey::AuthState::AuthorizationCodeStore.new.read(raw)
 
-    assert_equal @user.id, code.user_id
-    assert_equal "core-next-rp", code.client_id
-    assert_equal @redirect_uri, code.redirect_uri
-    assert_equal @code_challenge, code.code_challenge
-    assert_equal "S256", code.code_challenge_method
+    assert_equal OidcSubject.for(@user, resource_type: "client"), payload.fetch("subject")
+    assert_equal "core-next-rp", payload.fetch("client_id")
+    assert_equal @redirect_uri, payload.fetch("redirect_uri")
+    assert_equal @code_challenge, payload.fetch("code_challenge")
+    assert_equal "S256", payload.fetch("code_challenge_method")
+    assert_equal "issued", payload.fetch("state")
+  end
+
+  test "refuses authorization-code issuance when the authentication event time is absent" do
+    result = authorize_service_call(
+      params: valid_params,
+      resource: @user,
+      authentication_event_at: nil,
+    )
+
+    assert_not result.success?
+    assert_equal "invalid_request", result.error
+    assert_equal "authentication event time is required", result.error_description
   end
 
   # --- Operator OIDC tests ---
@@ -307,26 +317,25 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     org_client = OidcClientRegistry.find("core-next-rp")
     org_redirect_uri = org_client.redirect_uris_by_realm.fetch("operator").first
 
-    assert_difference "OperatorAuthorizationCode.count", 1 do
-      authorize_service_call(
-        params: {
-          response_type: "code",
-          client_id: "core-next-rp",
-          redirect_uri: org_redirect_uri,
-          code_challenge: @code_challenge,
-          code_challenge_method: "S256",
-          state: "staff_state",
-          nonce: "staff_nonce",
-          scope: "openid profile email",
-        },
-        resource: staff,
-      )
-    end
+    result = authorize_service_call(
+      params: {
+        response_type: "code",
+        client_id: "core-next-rp",
+        redirect_uri: org_redirect_uri,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        state: "staff_state",
+        nonce: "staff_nonce",
+        scope: "openid profile email",
+      },
+      resource: staff,
+    )
 
-    code = OperatorAuthorizationCode.last
+    raw = URI.decode_www_form(URI.parse(result.redirect_url).query).to_h.fetch("code")
+    payload = Valkey::AuthState::AuthorizationCodeStore.new.read(raw)
 
-    assert_equal staff.id, code.staff_id
-    assert_equal "core-next-rp", code.client_id
+    assert_equal OidcSubject.for(staff, resource_type: "operator"), payload.fetch("subject")
+    assert_equal "core-next-rp", payload.fetch("client_id")
   end
 
   test "issues authorization code for visitor with com client" do
@@ -361,26 +370,25 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     com_client = OidcClientRegistry.find("core-next-rp")
     com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
 
-    assert_difference "VisitorAuthorizationCode.count", 1 do
-      authorize_service_call(
-        params: {
-          response_type: "code",
-          client_id: "core-next-rp",
-          redirect_uri: com_redirect_uri,
-          code_challenge: @code_challenge,
-          code_challenge_method: "S256",
-          state: "visitor_state",
-          nonce: "visitor_nonce",
-          scope: "openid profile email",
-        },
-        resource: visitor,
-      )
-    end
+    result = authorize_service_call(
+      params: {
+        response_type: "code",
+        client_id: "core-next-rp",
+        redirect_uri: com_redirect_uri,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        state: "visitor_state",
+        nonce: "visitor_nonce",
+        scope: "openid profile email",
+      },
+      resource: visitor,
+    )
 
-    code = VisitorAuthorizationCode.last
+    raw = URI.decode_www_form(URI.parse(result.redirect_url).query).to_h.fetch("code")
+    payload = Valkey::AuthState::AuthorizationCodeStore.new.read(raw)
 
-    assert_equal visitor.id, code.visitor_id
-    assert_equal "core-next-rp", code.client_id
+    assert_equal OidcSubject.for(visitor, resource_type: "visitor"), payload.fetch("subject")
+    assert_equal "core-next-rp", payload.fetch("client_id")
   end
 
   # --- realm/redirect_uri binding (issuer/realm must match the registered redirect_uri's realm) ---
@@ -395,7 +403,6 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, ClientAuthorizationCode.count
   end
 
   test "BASE_ORG authorize rejects an app core-next-rp redirect_uri before code issuance" do
@@ -418,7 +425,6 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, OperatorAuthorizationCode.count
   end
 
   test "BASE_COM authorize rejects an org core-next-rp redirect_uri before code issuance" do
@@ -441,7 +447,6 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, VisitorAuthorizationCode.count
   end
 
   test "BASE_APP authorize rejects a sign-rp org realm redirect_uri before code issuance" do
@@ -455,7 +460,6 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, ClientAuthorizationCode.count
   end
 
   test "BASE_APP authorize rejects a sign-rp com realm redirect_uri before code issuance" do
@@ -469,7 +473,6 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, ClientAuthorizationCode.count
   end
 
   test "BASE_ORG authorize rejects a side-rails-rp app realm redirect_uri before code issuance" do
@@ -493,7 +496,6 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, OperatorAuthorizationCode.count
   end
 
   test "BASE_ORG authorize rejects a side-rails-rp com realm redirect_uri before code issuance" do
@@ -517,7 +519,6 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, OperatorAuthorizationCode.count
   end
 
   private
@@ -542,13 +543,16 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     Visitor.create!
   end
 
-  def authorize_service_call(params:, resource:, session_token: nil, **)
+  def authorize_service_call(
+    params:, resource:, session_token: nil, authentication_event_at: @authentication_event_at, **
+  )
     session_token ||= default_session_token_for(resource)
 
     OidcAuthorizeCoordinator.call(
       params: params,
       resource: resource,
       session_token: session_token,
+      authentication_event_at: authentication_event_at,
       **,
     )
   end

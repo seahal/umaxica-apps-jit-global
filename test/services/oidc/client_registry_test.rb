@@ -141,12 +141,12 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     assert_equal original_client.redirect_uris, restored_client.redirect_uris
   end
 
-  test "post logout redirect uris end at sign out completion" do
-    %w(sign-rp base-rails-rp core-next-rp).each do |client_id|
+  test "shared browser clients post logout at canonical /sign/out" do
+    %w(sign-rp core-next-rp base-rails-rp side-rails-rp).each do |client_id|
       client = OidcClientRegistry.find!(client_id)
 
-      assert client.post_logout_redirect_uris.all? { |uri| URI.parse(uri).path == "/sign/out/complete" },
-             "#{client_id} should complete at /sign/out/complete"
+      assert client.post_logout_redirect_uris.all? { |uri| URI.parse(uri).path == "/sign/out" },
+             "#{client_id} should complete at /sign/out"
     end
   end
 
@@ -297,7 +297,8 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     assert_includes ids, "base-rails-rp"
     assert_includes ids, "app-ios-rp"
     assert_includes ids, "app-android-rp"
-    assert_equal 15, ids.size
+    AuthBoundaryAuthorityMap.first_party_rp_client_ids.each { |client_id| assert_includes ids, client_id }
+    assert_equal OidcClientStoresStaticClientStore.clients.keys.sort, ids.sort
   end
 
   test "visitor account does not expose ambiguous token endpoint auth method" do
@@ -404,7 +405,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
 
     [
       ENV.fetch("PUBLIC_BASE_SERVICE_URL", ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")),
-      ENV.fetch("PUBLIC_SIDE_SERVICE_URL", ENV.fetch("SIDE_SERVICE_URL", "side.app.localhost")),
+      ENV.fetch("PUBLIC_SIDE_SERVICE_URL", ENV.fetch("SIDE_SERVICE_URL", "wide.app.localhost")),
     ].each do |host|
       assert_includes redirect_hosts, host
       assert_includes client.domains, host

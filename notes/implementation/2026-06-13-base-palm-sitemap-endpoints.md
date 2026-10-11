@@ -3,9 +3,7 @@
 ## Context
 
 - Original plan/spec: add `sitemap.xml` wherever Base and Palm already expose `robots.txt`.
-- Related decisions/docs/plans:
-  `plans/archive/surface-routing-controller-pass-base-palm-help-docs-news.md`,
-  `docs/architecture/controller-lifecycle.md`.
+- Related decisions/docs/plans: `docs/architecture/controller-lifecycle.md`.
 - Implementation date: 2026-06-13.
 
 ## Decisions Made During Implementation

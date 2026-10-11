@@ -43,4 +43,4 @@ such as `csp_report`, and keep the public path as `/csp-violation-report`.
 ## Related
 
 - `adr/csp-and-permissions-policy.md`
-- `plans/backlog/gh645-csp-violation-reporting.md`
+- GH issue #645

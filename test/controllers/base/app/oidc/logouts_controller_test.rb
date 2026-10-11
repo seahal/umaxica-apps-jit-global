@@ -196,7 +196,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     location = URI.parse(jump_rt_url_from_location(response.location))
 
-    assert_equal "/sign/out/complete", location.path
+    assert_equal "/sign/out", location.path
     assert_predicate transaction.reload, :finalized?
   end
 

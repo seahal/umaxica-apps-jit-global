@@ -46,6 +46,6 @@ changed each field and could silently preserve stale values.
 
 ## Related
 
-- `plans/backlog/gh629-preference-reconciliation-strategy.md`
+- GH issue #629
 - `docs/architecture/preference.md`
 - `app/controllers/concerns/preference/adoption.rb`

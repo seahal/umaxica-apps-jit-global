@@ -11,7 +11,10 @@ vi.mock("@inertiajs/react", () => ({
     processing: false,
     patch,
     delete: deleteRequest,
-    transform: () => ({ patch, delete: deleteRequest, processing: false }),
+    transform: (fn: () => unknown) => {
+      fn();
+      return { patch, delete: deleteRequest, processing: false };
+    },
   }),
 }));
 

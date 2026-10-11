@@ -72,7 +72,7 @@ module Side
       prepend_around_action :with_actor_lifecycle
 
       def oidc_client_id
-        "base-rails-rp"
+        "side-app"
       end
 
       def oidc_sign_host

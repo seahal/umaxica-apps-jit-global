@@ -11,7 +11,7 @@ owner: internal-architecture-owner
 last-reviewed: 2026-06-24
 source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
-related-audit-ledger: plans/umaxica-immutable-pinwheel.md
+related-audit-ledger: docs/vendor/identity/11_decision-register.md
 ---
 
 # Purpose
@@ -62,7 +62,7 @@ This matrix covers:
 - `docs/architecture/dpop.md`
 - `adr/acme-sign-core-base-port-boundary.md`
 - `adr/security-audit-findings-2026-06-13.md`
-- `plans/umaxica-immutable-pinwheel.md` (audit ledger, DECISION DEC-001~013)
+- `docs/vendor/identity/11_decision-register.md` (audit ledger, DECISION DEC-001~013)
 
 # Non-negotiable Authority Boundaries
 
@@ -369,7 +369,7 @@ The following evidence is required for SIer-implemented capability to be accepte
 | `docs/vendor/identity/09_acceptance-criteria.md`         | Detailed acceptance criteria. Section above summarizes.                         |
 | `docs/vendor/identity/11_decision-register.md`           | Internal vendor decision register (pre-Round 4). Update pending.                |
 | `docs/vendor/identity/12_gap-risk-register.md`           | Internal gap register (pre-Round 4). Update pending.                            |
-| `plans/umaxica-immutable-pinwheel.md`                    | Audit ledger. DEC-001~013 and NR-001~004 originate here.                        |
+| `docs/vendor/identity/11_decision-register.md`           | Audit ledger. DEC-001~~013 and NR-001~~004 originate here.                      |
 
 ---
 

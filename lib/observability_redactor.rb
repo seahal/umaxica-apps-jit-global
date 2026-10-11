@@ -24,6 +24,11 @@ module ObservabilityRedactor
     dpop dpop-proof
   ).freeze
   NON_SENSITIVE_KEYS = %w(event_uuid reason_code).freeze
+  SENSITIVE_STRING_PATTERNS = [
+    /\bBearer\s+[a-z0-9._~+\-\/=]+/i,
+    /\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/,
+    /\b(?:access_token|refresh_token|id_token|token|secret|password|otp|totp|recovery_code)\s*[:=]\s*[^\s,;]+/i,
+  ].freeze
   SAFE_OBSERVABILITY_KEY_PATTERN = /
     \A
     (?:.*_)?
@@ -86,8 +91,10 @@ module ObservabilityRedactor
   end
 
   def scrub_string(value)
-    return value unless value.match?(/\Ahttps?:\/\//i)
+    return scrub_url(value) if value.match?(/\Ahttps?:\/\//i)
 
-    scrub_url(value)
+    SENSITIVE_STRING_PATTERNS.reduce(value) do |scrubbed, pattern|
+      scrubbed.gsub(pattern, REDACTED)
+    end
   end
 end

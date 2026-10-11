@@ -103,6 +103,8 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
 
     def logged_in? = current_resource.present?
 
+    def current_authentication_event_at = nil
+
     def current_session
       @current_session_value
     end
@@ -205,7 +207,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   class ExternalDashboardHarness < Harness
-    def after_dashboard_path = "https://www.umaxica.app/dashboard?ri=jp"
+    def after_dashboard_path = "https://www.umaxica.app/?ri=jp"
   end
 
   class FallbackHarness < Harness
@@ -295,12 +297,12 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     harness.define_singleton_method(:sign_in_sequence_redirect_path) do |pt: nil, default_path: after_dashboard_path|
       _ = pt
       _ = default_path
-      "https://www.umaxica.app/dashboard?ri=jp"
+      "https://www.umaxica.app/?ri=jp"
     end
 
     harness.redirect_to_sign_in_sequence!
 
-    assert_equal ["jump:https://www.umaxica.app/dashboard?ri=jp", {}], harness.redirected
+    assert_equal ["jump:https://www.umaxica.app/?ri=jp", {}], harness.redirected
   end
 
   test "redirect_to_sign_in_sequence! keeps internal paths local" do
@@ -1474,10 +1476,19 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     cycle.advance_sign_in_to_guardrail!
     issued_session = ClientToken.create!(user: actor)
     @harness.session[:oidc_authorization_login_challenge] = "challenge-123"
-    issuance = Struct.new(:resume_url).new("https://resume.example/finish")
+    # `bind_session_and_register_oidc!` calls `BaseAuthAdmissionCoordinator.register_result_and_issue_resume!`
+    # directly (not `OidcAuthorizationTransactionCoordinator.register_result!`, which that method calls
+    # internally and then feeds through the real `issue_result!`/`resume_url` computation) -- so the double
+    # has to match `BaseAuthAdmissionCoordinator::Issuance`'s three fields at that same layer, or the real
+    # downstream `resume_url` computation runs against a fake transaction and the literal URL below can
+    # never come back out.
+    issuance = BaseAuthAdmissionCoordinator::Issuance.new(
+      transaction: nil, code: nil,
+      resume_url: "https://resume.example/finish",
+    )
 
     resume_url =
-      OidcAuthorizationTransactionCoordinator.stub(:register_result!, issuance) do
+      BaseAuthAdmissionCoordinator.stub(:register_result_and_issue_resume!, issuance) do
         @harness.send(:bind_session_and_register_oidc!, cycle, actor, "challenge-123", "email", issued_session)
       end
 
@@ -1501,10 +1512,15 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
       end.new
     actor = Client.new(id: 42)
     issued_session = Struct.new(:public_id).new("session-public-2")
-    issuance = Struct.new(:resume_url).new("https://resume.example/finish-2")
+    # Same layer correction as the test above: stub the method `bind_session_and_register_oidc!` actually
+    # calls, with a double matching `BaseAuthAdmissionCoordinator::Issuance`'s real fields.
+    issuance = BaseAuthAdmissionCoordinator::Issuance.new(
+      transaction: nil, code: nil,
+      resume_url: "https://resume.example/finish-2",
+    )
 
     resume_url =
-      OidcAuthorizationTransactionCoordinator.stub(:register_result!, issuance) do
+      BaseAuthAdmissionCoordinator.stub(:register_result_and_issue_resume!, issuance) do
         @harness.send(:bind_session_and_register_oidc!, cycle, actor, "challenge-456", "email", issued_session)
       end
 

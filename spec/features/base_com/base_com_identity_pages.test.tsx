@@ -49,12 +49,11 @@ const turnstile = { site_key: "site-key", mode: "execute" as const, action: null
 
 describe("ActivityIndex", () => {
   const columns = {
-    occurred_at: "Occurred",
-    event: "Event",
-    ip_address: "IP",
+    occurred_at: "Occurred at",
+    activity: "Activity",
     device: "Device",
-    login_method: "Login method",
-    context: "Context",
+    source: "Source",
+    risk: "Risk",
   };
 
   it("renders one row per activity", () => {
@@ -67,22 +66,24 @@ describe("ActivityIndex", () => {
         columns={columns}
         activities={[
           {
-            id: "1",
             occurred_at: "2026-01-01",
-            event_label: "Signed in",
-            event_id: "my-login-event",
-            ip_address: "203.0.113.1",
-            device: "Chrome",
-            login_method: "passkey",
-            context: "{}",
+            activity: "Google sign-in",
+            device: "Chrome / Linux",
+            source: "Location unavailable",
+            risk: "Low",
+            risk_rank: 1,
           },
         ]}
       />,
     );
 
-    expect(html).toContain("Signed in");
-    expect(html).toContain("my-login-event");
-    expect(html).toContain("203.0.113.1");
+    expect(html).toContain("Google sign-in");
+    expect(html).toContain("Chrome / Linux");
+    expect(html).toContain("Location unavailable");
+    expect(html).toContain("Low");
+    expect(html).not.toContain("my-login-event");
+    expect(html).not.toContain("203.0.113.1");
+    expect(html).not.toContain("{}");
     expect(html).not.toContain("No activity.");
   });
 
@@ -510,20 +511,24 @@ describe("SessionsIndex", () => {
   const base = {
     title: "Sessions",
     back_link: backLink,
-    columns: ["Session", "Kind", "Binding", "Last activity", "Created", "Refresh expires", ""],
+    columns: {
+      device: "Device",
+      last_activity: "Last activity",
+      created: "Created",
+      expires_at: "Expires at",
+      status: "Status",
+      action: "Action",
+    },
     empty_message: "No active sessions were found.",
-    current_label: "current",
+    expires_at_description: "This session ends at this time and cannot be extended.",
   };
 
   const row = {
-    public_id: "sess-1",
-    current: true,
-    status: "1",
-    kind: "2",
-    binding: "DBSC",
+    device: "Firefox / Linux",
     last_activity: "2026-01-01",
     created: "2026-01-01",
-    refresh_expires: "2026-02-01",
+    expires_at: "2026-02-01",
+    status: "Current session",
     revoke: null,
   };
 
@@ -531,13 +536,17 @@ describe("SessionsIndex", () => {
     const html = renderToStaticMarkup(
       <SessionsIndex
         {...base}
-        bulk_actions={null}
+        bulk_revocations={null}
         sessions={[row]}
       />,
     );
 
-    expect(html).toContain("sess-1");
-    expect(html).toContain("current");
+    expect(html).toContain("Firefox / Linux");
+    expect(html).toContain("Current session");
+    expect(html).toContain("This session ends at this time and cannot be extended.");
+    expect(html).not.toContain("DBSC");
+    expect(html).not.toContain("sess-1");
+    expect(html).not.toContain("Refresh expires");
     expect(html).not.toContain("Revoke other sessions");
   });
 
@@ -545,15 +554,10 @@ describe("SessionsIndex", () => {
     const html = renderToStaticMarkup(
       <SessionsIndex
         {...base}
-        bulk_actions={{
-          revoke_others: {
+        bulk_revocations={{
+          others: {
             label: "Revoke other sessions",
-            url: "/identity/other_sessions",
-            confirm: "Sure?",
-          },
-          revoke_all: {
-            label: "Revoke all sessions",
-            url: "/identity/sessions",
+            href: "/identity/other_sessions",
             confirm: "Sure?",
           },
         }}
@@ -561,24 +565,24 @@ describe("SessionsIndex", () => {
           row,
           {
             ...row,
-            public_id: "sess-2",
-            current: false,
-            revoke: { label: "Revoke", url: "/identity/sessions/sess-2", confirm: "Sure?" },
+            status: "Active",
+            revoke: { label: "Revoke", href: "/identity/sessions/sess-2", confirm: "Sure?" },
           },
         ]}
       />,
     );
 
     expect(html).toContain("Revoke other sessions");
-    expect(html).toContain("Revoke all sessions");
-    expect(html).toContain("sess-2");
+    expect(html).not.toContain("Revoke all sessions");
+    expect(html).toContain("Active");
+    expect(html).not.toContain(">sess-2<");
   });
 
   it("reports an empty inventory", () => {
     const html = renderToStaticMarkup(
       <SessionsIndex
         {...base}
-        bulk_actions={null}
+        bulk_revocations={null}
         sessions={[]}
       />,
     );
@@ -593,15 +597,28 @@ describe("SessionShow", () => {
       <SessionShow
         title="Session"
         back_link={{ label: "Back", href: "/identity/sessions" }}
-        items={[
-          { term: "Session", description: "sess-1" },
-          { term: "Binding", description: "NORMAL" },
-        ]}
+        columns={{
+          device: "Device",
+          last_activity: "Last activity",
+          created: "Created",
+          expires_at: "Expires at",
+          status: "Status",
+        }}
+        session={{
+          device: "Unknown device",
+          last_activity: "2026-01-01",
+          created: "2026-01-01",
+          expires_at: "2026-02-01",
+          status: "Active",
+        }}
+        expires_at_description="This session ends at this time and cannot be extended."
       />,
     );
 
-    expect(html).toContain("sess-1");
-    expect(html).toContain("NORMAL");
+    expect(html).toContain("Unknown device");
+    expect(html).toContain("Expires at");
+    expect(html).toContain("This session ends at this time and cannot be extended.");
+    expect(html).not.toContain("NORMAL");
   });
 });
 

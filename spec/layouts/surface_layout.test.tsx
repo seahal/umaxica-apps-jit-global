@@ -29,6 +29,7 @@ vi.mock("@/components/chrome/ThemeControls", () => ({
 const { default: SurfaceLayout } = await import("@/layouts/SurfaceLayout");
 
 const cookieControls = {
+  hidden: false,
   scope: "cookie",
   settings_url: "/preference/cookie/edit",
   title: "cookie-controls-title",
@@ -51,7 +52,7 @@ const minimalChrome: SurfaceChrome = {
   surface: "app",
   brand: { name: "Umaxica", href: "https://umaxica.app/" },
   banner: null,
-  primary_navigation: null,
+  restricted_mode: null,
   footer_navigation: null,
   cookie_controls: cookieControls,
   theme_controls: themeControls,
@@ -118,12 +119,42 @@ describe("SurfaceLayout", () => {
     expect(screen.getByRole("complementary", { name: "Preferences" })).toBeTruthy();
   });
 
-  test("omits the banner, primary navigation and footer navigation when absent", () => {
+  test("omits the banner and footer navigation when absent", () => {
     render(minimalChrome);
 
     expect(screen.queryByRole("region", { name: "banner" })).toBeNull();
-    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
     expect(screen.queryByRole("navigation", { name: "Footer" })).toBeNull();
+    // The surface layout carries no primary/header navigation at all.
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+  });
+
+  // Restricted Mode is session state, published once by the server and rendered here for the whole
+  // life of the session. A page cannot supply it and therefore cannot drop it.
+  test("renders no restricted mode indicator for an ordinary session", () => {
+    render(minimalChrome);
+
+    expect(screen.queryByRole("region", { name: "制限モード — Emergency Access" })).toBeNull();
+  });
+
+  test("renders the restricted mode indicator above everything else in the header", () => {
+    render({
+      ...minimalChrome,
+      restricted_mode: {
+        label: "制限モード — Emergency Access",
+        description: "段階的認証は利用できません。",
+        sign_out: { label: "サインアウトして通常モードでサインインし直す", href: "/sign/out/new" },
+      },
+    });
+
+    const indicator = screen.getByRole("region", { name: "制限モード — Emergency Access" });
+    expect(within(indicator).getByText("段階的認証は利用できません。")).toBeTruthy();
+
+    // The only way back to a normal session is to end this one; there is no in-place switch.
+    const signOut = within(indicator).getByRole("link", {
+      name: "サインアウトして通常モードでサインインし直す",
+    });
+    expect(signOut.getAttribute("href")).toBe("/sign/out/new");
+    expect(indicator.textContent).not.toContain("解除");
   });
 
   test("renders the banner with its title", () => {
@@ -145,36 +176,31 @@ describe("SurfaceLayout", () => {
     expect(within(banner).queryByRole("heading")).toBeNull();
   });
 
-  // Navigation targets cross hosts, so they stay document visits rather than Inertia visits.
-  test("renders navigation links as plain anchors", () => {
+  // Footer navigation targets cross hosts, so the links stay document visits rather than Inertia
+  // visits.
+  test("renders footer navigation links as plain anchors", () => {
     render({
       ...minimalChrome,
-      primary_navigation: [{ label: "ホーム", href: "https://umaxica.app/" }],
       footer_navigation: [{ label: "会社概要", href: "https://umaxica.com/about" }],
     });
 
-    const primary = screen.getByRole("navigation", { name: "Primary" });
-    const home = within(primary).getByRole("link", { name: "ホーム" });
-    expect(home.getAttribute("href")).toBe("https://umaxica.app/");
-    // A document visit, so no Inertia interception marker.
-    expect(Object.hasOwn(home.dataset, "inertia")).toBe(false);
-
     const footer = screen.getByRole("navigation", { name: "Footer" });
-    expect(within(footer).getByRole("link", { name: "会社概要" }).getAttribute("href")).toBe(
-      "https://umaxica.com/about",
-    );
+    const about = within(footer).getByRole("link", { name: "会社概要" });
+    expect(about.getAttribute("href")).toBe("https://umaxica.com/about");
+    // A document visit, so no Inertia interception marker.
+    expect(Object.hasOwn(about.dataset, "inertia")).toBe(false);
   });
 
-  test("keeps the navigation links inside lists so they can be counted", () => {
+  test("keeps the footer navigation links inside lists so they can be counted", () => {
     render({
       ...minimalChrome,
-      primary_navigation: [
+      footer_navigation: [
         { label: "ホーム", href: "https://umaxica.app/" },
         { label: "設定", href: "https://umaxica.app/settings" },
       ],
     });
 
-    const primary = screen.getByRole("navigation", { name: "Primary" });
-    expect(within(primary).getAllByRole("listitem")).toHaveLength(2);
+    const footer = screen.getByRole("navigation", { name: "Footer" });
+    expect(within(footer).getAllByRole("listitem")).toHaveLength(2);
   });
 });

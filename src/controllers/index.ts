@@ -18,13 +18,14 @@ for (const [path, module] of Object.entries(controllers)) {
     .replaceAll("_", "-")
     .replaceAll("/", "--");
 
-  /* v8 ignore next 6 -- the glob only matches controller files that default-export a subclass */
+  /* v8 ignore start -- the glob only matches controller files that default-export a subclass */
   const constructor =
     typeof module === "object" && module !== null && "default" in module ? module.default : null;
 
   if (!isControllerConstructor(constructor)) {
     throw new Error(`Stimulus controller ${path} does not default-export a Controller subclass.`);
   }
+  /* v8 ignore stop */
 
   application.register(controllerName, constructor);
 }

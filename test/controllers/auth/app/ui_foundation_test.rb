@@ -46,7 +46,7 @@ class Auth::App::UiFoundationTest < ActionDispatch::IntegrationTest
   end
 
   test "session management route exists on base identity" do
-    route = Rails.application.routes.recognize_path("https://#{@base_host}/identity/sessions", method: :get)
+    route = Rails.application.routes.recognize_path("https://#{@base_host}/sessions", method: :get)
 
     assert_equal "base/app/identity/sessions", route.fetch(:controller)
     assert_equal "index", route.fetch(:action)

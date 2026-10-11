@@ -165,7 +165,7 @@ class AvatarPersonaBindingTest < ActiveSupport::TestCase
       source_record_id: SecureRandom.random_number(1_000_000) + 4000,
       status_id: ClientIdentityState::ACTIVE,
     )
-    Persona.create!(client_identity: identity, moniker: "Default Persona", title: "Persona01")
+    ClientPersona.create!(client_identity: identity, moniker: "Default ClientPersona", title: "Persona01")
   end
 
   def build_avatar

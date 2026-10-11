@@ -26,6 +26,7 @@ module Auth
         include SessionLimitGate
 
         include SocialOmniauthCallbackFlow
+        include ::AuthenticationModeSwitchGuard
 
         AUTHENTICATION_MODE = :deny_all
 
@@ -48,6 +49,7 @@ module Auth
 
         rescue_from SocialAuth::BaseError, with: :handle_social_auth_error
         rescue_from ActiveRecord::RecordNotUnique, with: :handle_record_not_unique
+        before_action :reject_social_sign_in_callback_while_authenticated!, only: :omniauth
         before_action :verify_social_callback_request!, only: [:omniauth], raise: false
 
         # Allow unauthenticated access for login intent
@@ -150,6 +152,12 @@ module Auth
         end
 
         private
+
+        def reject_social_sign_in_callback_while_authenticated!
+          return if current_social_auth_intent.to_s == "link"
+
+          reject_new_sign_in_if_authenticated!
+        end
 
         def verified_external_authentication_callback(auth)
           provider = SocialIdentifiable.normalize_provider(params[:provider])
@@ -562,6 +570,7 @@ module Auth
         def sign_in(user, pt: nil, provider_name: nil)
           result = AuthenticationSessionCommitter.call(
             controller: self, resource: user, pt: pt, ri: params[:ri], auth_method: "social",
+            authentication_event_at: social_authentication_event_at,
             audit_context: social_login_audit_context,
             # "social" cannot distinguish google from apple; the provider is
             # known to the caller (adr/unified-enforcement.md, Session attribution).
@@ -575,6 +584,13 @@ module Auth
             ),
           )
           result
+        end
+
+        def social_authentication_event_at
+          callback_result = @external_authentication_callback_result
+          return unless callback_result.is_a?(ExternalAuthentication::CallbackResult) && callback_result.verified?
+
+          callback_result.principal.verified_at
         end
 
         def social_login_result_log_payload(result)

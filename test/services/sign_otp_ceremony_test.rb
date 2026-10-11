@@ -90,6 +90,31 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
                    "#{email.address}: mismatched destination must not consume the bound OTP"
   end
 
+  test "verify! treats malformed code lengths as invalid input" do
+    email = create_verified_client_email("sign-otp-malformed@example.test")
+    flow = create_email_flow(pending_contact_id: email.id)
+    adapter = Object.new
+    adapter.define_singleton_method(:deliver) { |**| nil }
+
+    issued =
+      OtpAdapter.stub(:for, adapter) do
+        SignOtpCeremony.issue!(
+          purpose: :sign_up, surface: :app, channel: :email, subject: flow, destination: email.address,
+        )
+      end
+
+    assert_predicate issued, :success?
+
+    result = SignOtpCeremony.verify!(
+      purpose: :sign_up, surface: :app, channel: :email, subject: flow,
+      destination: email.address, code: "12345",
+    )
+
+    assert_not result.success?
+    assert_equal :invalid_code, result.status
+    assert_not_nil email.reload.get_otp
+  end
+
   test "issue! refuses a channel the sign-up ticket is not waiting on" do
     flow = create_email_flow
 
@@ -99,6 +124,45 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
       end
 
     assert_equal "OTP channel does not match sign-up ticket", error.message
+  end
+
+  test "issue! rechecks the resend cooldown after acquiring the record lock" do
+    cooldown_checks = 0
+    delivery_attempted = false
+    record = Object.new
+    record.define_singleton_method(:locked?) { false }
+    record.define_singleton_method(:otp_cooldown_active?) do
+      cooldown_checks += 1
+      cooldown_checks > 1
+    end
+    record.define_singleton_method(:with_lock) { |&block| block.call }
+    record.define_singleton_method(:store_otp) do |*_arguments|
+      raise RuntimeError, "the locked cooldown must refuse issuance before storing an OTP"
+    end
+
+    adapter = Object.new
+    adapter.define_singleton_method(:deliver) { |**| delivery_attempted = true }
+
+    ceremony = SignOtpCeremony.new(
+      purpose: :sign_up,
+      surface: :app,
+      channel: :email,
+      subject: Object.new,
+      destination: "sign-otp@example.test",
+    )
+    ceremony.define_singleton_method(:validate_scope!) { nil }
+    ceremony.define_singleton_method(:bound_record) { record }
+    ceremony.define_singleton_method(:destination_matches?) { |_| true }
+
+    OtpAdapter.stub(:for, adapter) do
+      result = ceremony.issue!
+
+      assert_not result.success?
+      assert_equal :rate_limited, result.status
+    end
+
+    assert_equal 2, cooldown_checks
+    assert_not delivery_attempted
   end
 
   private

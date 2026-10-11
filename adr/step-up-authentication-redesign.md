@@ -303,8 +303,7 @@ so the destination page owns the inline messaging — see
 
 ## Consequences
 
-- The implementation plan is captured in `plans/active/step_up-step-up-rebuild.md`. Implementation
-  will be carried out by a separate AI agent in phases.
+- Implementation will be carried out by a separate AI agent in phases.
 - Schema migrations keep the step-up tables on the three token databases (`mark`, `symbol`, `token`)
   and key them by token id.
 - Controllers in `settings/` namespaces gain a new `before_action` helper and now honor
@@ -326,4 +325,3 @@ so the destination page owns the inline messaging — see
   `AuthMethodGuard.last_method?` (the unlink-side guard complementary to step-up).
 - `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md` — refresh-path AAL guarantees that this
   ADR's `step_up_satisfied?` depends on.
-- `plans/active/step_up-step-up-rebuild.md` — the implementation plan that operationalizes this ADR.

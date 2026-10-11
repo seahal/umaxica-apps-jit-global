@@ -153,6 +153,15 @@ describe("StepUpPasskeyController", () => {
 
       expect(errorText(element)).toBe("認証中にエラーが発生しました");
     });
+
+    it("falls back to its own copy when the failure is not an Error", async () => {
+      credentials.get.mockRejectedValue("not-an-error");
+      const { controller, element } = await mount();
+
+      await controller.authenticate(new Event("click"));
+
+      expect(errorText(element)).toBe("認証中にエラーが発生しました");
+    });
   });
 
   describe("messages", () => {

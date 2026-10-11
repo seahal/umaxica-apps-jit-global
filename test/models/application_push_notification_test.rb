@@ -4,6 +4,8 @@
 require "test_helper"
 
 class ApplicationPushNotificationTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+
   self.fixture_table_names = []
 
   test "ApplicationPushNotification inherits from ActionPushNative::Notification" do
@@ -88,7 +90,15 @@ class ApplicationPushNotificationTest < ActiveSupport::TestCase
     assert_not ApplicationPushNotification.enabled
   end
 
-  test "queue_name defaults to default" do
-    assert_equal "default", ApplicationPushNotification.queue_name
+  test "delivery queue is explicitly the default worker queue" do
+    assert_equal "default", ApplicationPushNotification.queue_name.to_s
+  end
+
+  test "delivery is enqueued on the explicit default queue" do
+    notification = ApplicationPushNotification.new(title: "Title", body: "Body")
+
+    assert_enqueued_with(job: ApplicationPushNotificationJob, queue: "default") do
+      notification.deliver_later_to("device-1")
+    end
   end
 end

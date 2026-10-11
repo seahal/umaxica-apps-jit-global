@@ -31,6 +31,8 @@ class Base::Org::AvatarsControllerTest < ActionDispatch::IntegrationTest
         headers: as_staff_headers(@operator, host: @host)
 
     assert_response :success
+    assert_equal "base/org/avatars/show", inertia_component
+    assert_equal edit_base_org_avatar_path(ri: "jp"), inertia_props.dig("action_link", "href")
 
     get edit_base_org_avatar_url(ri: "jp", host: @host),
         headers: as_staff_headers(@operator, host: @host)

@@ -11,9 +11,9 @@ class IndividualCompanyModelLayerTest < ActiveSupport::TestCase
     IndividualMembershipRevokeReason.ensure_defaults!
   end
 
-  test "account and collective concerns are included" do
-    assert_includes Individual.included_modules, Account
-    assert_includes Company.included_modules, Collective
+  test "persona and organization concerns are included" do
+    assert_includes Individual.included_modules, Persona
+    assert_includes Company.included_modules, Organization
   end
 
   test "root and child unit closure rows are maintained" do
@@ -82,7 +82,7 @@ class IndividualCompanyModelLayerTest < ActiveSupport::TestCase
     assert mismatch.errors.of_kind?(:company_unit, :invalid)
   end
 
-  test "account exposes current membership and collective interface" do
+  test "persona exposes current membership and organization protocol" do
     individual = Individual.create!(visitor_identity: visitor_identity("individual-interface"), title: "Indiv2")
     company = Company.create!(name: "Example Co", title: "ExampleCo")
     unit = CompanyUnit.create!(company:, name: "Root")

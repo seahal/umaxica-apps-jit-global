@@ -28,7 +28,7 @@ module SignUp
     end
 
     def enter_checkpoint?
-      mutable_ticket? && at_step?("contact_verified", "guardrail")
+      mutable_ticket? && at_step?("guardrail")
     end
 
     def clear_requirement?

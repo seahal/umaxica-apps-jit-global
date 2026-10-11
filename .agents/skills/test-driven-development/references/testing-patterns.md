@@ -119,11 +119,11 @@ describe('TaskService', () => {
 
 ## Anti-patterns
 
-| Anti-pattern                          | Problem                                                    | Fix                                                                     |
-| ------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Testing implementation details        | Tests break on refactor even when behavior is unchanged    | Test inputs and outputs, not internal structure                         |
-| Flaky tests (timing, order-dependent) | Erode trust in the whole suite                             | Deterministic assertions, isolated test state                           |
-| Testing framework code                | Spends effort on third-party behavior                      | Test only project code                                                  |
-| Snapshot abuse                        | Large snapshots nobody reviews, break on any change        | Use sparingly and review every change                                   |
-| No test isolation                     | Tests pass individually but fail together                  | Each test sets up and tears down its own state                          |
-| Mocking everything                    | Tests pass while production breaks                         | Real > fake > stub > mock; mock only at slow or non-deterministic edges |
+| Anti-pattern                          | Problem                                                 | Fix                                                                     |
+| ------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Testing implementation details        | Tests break on refactor even when behavior is unchanged | Test inputs and outputs, not internal structure                         |
+| Flaky tests (timing, order-dependent) | Erode trust in the whole suite                          | Deterministic assertions, isolated test state                           |
+| Testing framework code                | Spends effort on third-party behavior                   | Test only project code                                                  |
+| Snapshot abuse                        | Large snapshots nobody reviews, break on any change     | Use sparingly and review every change                                   |
+| No test isolation                     | Tests pass individually but fail together               | Each test sets up and tears down its own state                          |
+| Mocking everything                    | Tests pass while production breaks                      | Real > fake > stub > mock; mock only at slow or non-deterministic edges |

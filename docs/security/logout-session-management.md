@@ -6,8 +6,9 @@ Logout is session mutation. `acme/www` owns logout, session revoke, revoke-all, 
 restricted session handling, device/session display, token-family revocation, and compromise state.
 
 `sign/id`, `core`, and `base` must not mutate authoritative acme logout or session state. They may
-host the surface-local browser ceremony (`/sign/out/new`, `/sign/out/edit`, `/sign/out`,
-`/sign/out/complete`) and, when they are RPs, launch logout toward Acme.
+host the surface-local browser ceremony (`/sign/out/new`, `/sign/out/edit`, `/sign/out`, and on
+Auth/Core/Side/Palm `/sign/out/complete`; Base completes on `/lobby`) and, when they are RPs, launch
+logout toward Acme.
 
 ## Redirect-Only Sign Route
 

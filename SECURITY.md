@@ -80,7 +80,7 @@ When appropriate we request a CVE and include references in the published securi
 
 ## Dependencies
 
-Dependency and code scanning run in CI: Dependabot, Brakeman, bundler-audit, `pnpm audit`, CodeQL,
+Dependency and code scanning run in CI: Dependabot, Brakeman, bundler-audit, `bun audit`, CodeQL,
 and Gitleaks. Findings from these tools are handled through the normal update process rather than
 the advisory channel.
 

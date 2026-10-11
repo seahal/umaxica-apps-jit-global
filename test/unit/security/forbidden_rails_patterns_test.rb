@@ -97,12 +97,9 @@ class ForbiddenRailsPatternsTest < ActiveSupport::TestCase
     app/controllers/base/app/edge/v0/cookies_controller.rb
     app/controllers/base/com/edge/v0/cookies_controller.rb
     app/controllers/base/org/edge/v0/cookies_controller.rb
-    app/controllers/core/app/edge/v0/cookies_controller.rb
-    app/controllers/core/app/edge/v0/dbsc_controller.rb
-    app/controllers/core/com/edge/v0/cookies_controller.rb
-    app/controllers/core/com/edge/v0/dbsc_controller.rb
-    app/controllers/core/org/edge/v0/cookies_controller.rb
-    app/controllers/core/org/edge/v0/dbsc_controller.rb
+    app/controllers/core/app/api/v0/preferences/dbsc_controller.rb
+    app/controllers/core/com/api/v0/preferences/dbsc_controller.rb
+    app/controllers/core/org/api/v0/preferences/dbsc_controller.rb
   ).freeze
 
   test "verification and client-auth before_actions are skipped only in the reviewed allowlist" do

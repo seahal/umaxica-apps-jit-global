@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "ostruct"
 
 # How a relying party authenticates to the token endpoint, and which surface's
 # tables an exchanged token is written into. Both pick per input, and both would
@@ -48,12 +49,13 @@ class OidcClientAuthenticationAndTokenScopingTest < ActiveSupport::TestCase
       OidcTokenExchangeCoordinator.new(
         grant_type: "authorization_code", code: "code", redirect_uri: "https://rp.example.test/callback",
         client_id: "rp-1", code_verifier: "verifier",
+        expected_resource_type: "client",
       )
 
     {
-      ClientToken.new => ClientTokenUsage,
-      OperatorToken.new => OperatorTokenUsage,
-      VisitorToken.new => VisitorTokenUsage,
+      ClientToken.new => ClientRpSession,
+      OperatorToken.new => OperatorRpSession,
+      VisitorToken.new => VisitorRpSession,
     }.each do |root_token, usage_class|
       assert_equal usage_class, coordinator.send(:usage_class_for_root_token, root_token)
     end
@@ -68,10 +70,14 @@ class OidcClientAuthenticationAndTokenScopingTest < ActiveSupport::TestCase
       OidcTokenExchangeCoordinator.new(
         grant_type: "authorization_code", code: "code", redirect_uri: "https://rp.example.test/callback",
         client_id: "rp-1", code_verifier: "verifier",
+        expected_resource_type: "client",
       )
 
     assert_not coordinator.send(:root_token_actor_matches?, ClientEmail.new, Object.new)
-    assert_nil coordinator.send(:root_token_from_authorization_code, Object.new)
+    assert_nil coordinator.send(
+      :resolve_root_token,
+      OpenStruct.new(base_session_ref: nil, resource_type: nil),
+    )
   end
 
   test "each usage class names the foreign key back to its own surface's token" do
@@ -79,10 +85,11 @@ class OidcClientAuthenticationAndTokenScopingTest < ActiveSupport::TestCase
       OidcTokenExchangeCoordinator.new(
         grant_type: "authorization_code", code: "code", redirect_uri: "https://rp.example.test/callback",
         client_id: "rp-1", code_verifier: "verifier",
+        expected_resource_type: "client",
       )
 
-    assert_equal :operator_token, coordinator.send(:parent_token_foreign_key_for, OperatorTokenUsage)
-    assert_equal :visitor_token, coordinator.send(:parent_token_foreign_key_for, VisitorTokenUsage)
-    assert_equal :client_token, coordinator.send(:parent_token_foreign_key_for, ClientTokenUsage)
+    assert_equal :operator_token, coordinator.send(:parent_token_foreign_key_for, OperatorRpSession)
+    assert_equal :visitor_token, coordinator.send(:parent_token_foreign_key_for, VisitorRpSession)
+    assert_equal :client_token, coordinator.send(:parent_token_foreign_key_for, ClientRpSession)
   end
 end

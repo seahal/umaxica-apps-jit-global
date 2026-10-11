@@ -15,14 +15,11 @@ const { default: SurfaceDashboard } = await import("@/features/auth/SurfaceDashb
 const { default: WelcomeShow } = await import("@/features/self_service/WelcomeShow");
 const { default: StandingShow } = await import("@/features/identity/StandingShow");
 const { default: SignOutConfirmation } = await import("@/features/sign_out/SignOutConfirmation");
-const { default: SignOutCompletion } = await import("@/features/sign_out/SignOutCompletion");
-
 const { default: AppDashboardShow } = await import("@/pages/base/app/dashboards/show");
 const { default: AppIdentityShow } = await import("@/pages/base/app/identities/show");
 const { default: AppWelcomeShow } = await import("@/pages/base/app/welcomes/show");
 const { default: AppStandingShow } = await import("@/pages/base/app/identity/standings/show");
 const { default: AppSignOutEdit } = await import("@/pages/base/app/sign_outs/edit");
-const { default: AppSignOutComplete } = await import("@/pages/base/app/sign_outs/complete");
 const { default: AppOidcLogoutShow } = await import("@/pages/base/app/oidc/logouts/show");
 
 const { default: ComDashboardShow } = await import("@/pages/base/com/dashboards/show");
@@ -30,7 +27,6 @@ const { default: ComIdentityShow } = await import("@/pages/base/com/identities/s
 const { default: ComWelcomeShow } = await import("@/pages/base/com/welcomes/show");
 const { default: ComStandingShow } = await import("@/pages/base/com/identity/standings/show");
 const { default: ComSignOutEdit } = await import("@/pages/base/com/sign_outs/edit");
-const { default: ComSignOutComplete } = await import("@/pages/base/com/sign_outs/complete");
 const { default: ComOidcLogoutShow } = await import("@/pages/base/com/oidc/logouts/show");
 
 const warning = {
@@ -143,7 +139,6 @@ describe("base/app and base/com page modules", () => {
     expect(AppWelcomeShow).toBe(WelcomeShow);
     expect(AppStandingShow).toBe(StandingShow);
     expect(AppSignOutEdit).toBe(SignOutConfirmation);
-    expect(AppSignOutComplete).toBe(SignOutCompletion);
     expect(AppOidcLogoutShow).toBe(SignOutConfirmation);
 
     expect(ComDashboardShow).toBe(SurfaceDashboard);
@@ -151,7 +146,6 @@ describe("base/app and base/com page modules", () => {
     expect(ComWelcomeShow).toBe(WelcomeShow);
     expect(ComStandingShow).toBe(StandingShow);
     expect(ComSignOutEdit).toBe(SignOutConfirmation);
-    expect(ComSignOutComplete).toBe(SignOutCompletion);
     expect(ComOidcLogoutShow).toBe(SignOutConfirmation);
   });
 });

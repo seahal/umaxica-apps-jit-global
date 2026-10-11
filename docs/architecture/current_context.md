@@ -88,7 +88,8 @@ The resolved context includes:
 - resolved `Actor::Preference`
 - resolved `Actor::Authz`
 - resolved `Actor::StepUp`
-- observability identifiers when performant consent allows them
+- technical observability identifiers from the current valid OpenTelemetry span context, when
+  OpenTelemetry is enabled; this is independent of product-analytics consent
 
 ## Surface Actors
 
@@ -130,8 +131,9 @@ screen renders. This refresh is a bounded preference-screen entry flow and must 
 
 Authenticated request setup must not repair a missing or malformed preference access-token by
 reading the preference database. Treat that as a token failure and route it through the normal
-failure path. `Actor::Preference::NULL` is reserved for unauthenticated, bearer-only, or explicitly
-preference-free paths that are designed to run without a preference token.
+failure path. A request that has not loaded a Preference JWT uses the default preference values
+(theme `sy`) rather than `Actor::Preference::NULL`. `Actor::Preference::NULL` is reserved for an
+unbound context (jobs, mailers, tests, and the empty snapshot before a request installs state).
 
 ## Authentication
 
@@ -170,6 +172,19 @@ current actor type is `:client`, `:operator`, or `:visitor`.
 
 `Actor.signed_up?` is true only when the current request has an authenticated actor with a persisted
 identity. Anonymous users and unsaved actor objects return false.
+
+## Selection context
+
+`Actor::SelectedContext#persona_selected?` reports whether a Persona/account identifier is selected.
+`#organization_context_selected?` additionally requires the organization and organization-unit
+identifiers. The existing `#selected?` predicate retains the complete organization-context contract,
+because full-access controllers require all three identifiers. Callers that only manage a Persona
+must use the narrower predicate rather than weakening `selected?` globally.
+
+The persisted protocol field names remain `selected_account_public_id`,
+`selected_collective_public_id`, and `selected_collective_unit_public_id` until a separate reader /
+writer migration is approved. A selected identifier is context, not authorization proof; the current
+surface authority must still be checked before an operation is performed.
 
 ## Configuration
 

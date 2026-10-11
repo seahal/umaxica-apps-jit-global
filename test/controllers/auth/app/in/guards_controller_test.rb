@@ -181,7 +181,7 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
       assert_no_difference("ClientGoogleIdentity.count") do
         assert_no_difference("ClientAppleIdentity.count") do
           assert_no_difference("ClientAccount.count") do
-            assert_no_difference("Organization.count") do
+            assert_no_difference("OperatorOrganization.count") do
               assert_no_difference("Avatar.count") do
                 assert_no_difference("ClientToken.count") do
                   assert_no_difference("ClientSignUpFlow.count", &)

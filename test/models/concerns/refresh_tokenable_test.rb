@@ -82,6 +82,16 @@ class RefreshTokenableTest < ActiveSupport::TestCase
     assert_nil original.reload.dbsc_session_id
   end
 
+  test "rotation preserves the authentication event time" do
+    event_at = Time.utc(2026, 1, 2, 3, 4, 5)
+    token = ClientToken.create!(user: clients(:one), authentication_event_at: event_at)
+
+    replacement = token.rotate_refresh_token!
+
+    assert_equal event_at, token.reload.authentication_event_at
+    assert_equal event_at, ClientToken.find_by!(public_id: replacement.split(".", 2).first).authentication_event_at
+  end
+
   test "expired_refresh? and active? reflect discarding time" do
     token = ClientToken.new(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.define_singleton_method(:discarded_at) { 1.day.from_now }

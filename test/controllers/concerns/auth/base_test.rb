@@ -131,7 +131,7 @@ module Auth
         :app
       end
 
-      def sign_app_dashboard_path(ri: nil, pt: nil)
+      def auth_app_root_path(ri: nil, pt: nil)
         path = "/dashboard"
         query = []
         query << "ri=#{ri}" if ri.present?
@@ -247,8 +247,8 @@ module Auth
       assert_equal %w(client operator visitor), AuthenticationBase::VALID_ACTOR_TYPES
     end
 
-    test "Token.extract_act returns nil for nil payload" do
-      assert_nil AuthenticationToken.extract_act(nil)
+    test "Token.extract_resource_type returns nil for nil payload" do
+      assert_nil AuthenticationToken.extract_resource_type(nil)
     end
 
     test "begin_sign_in_sequence stores only safe encoded return paths" do
@@ -323,7 +323,7 @@ module Auth
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
       cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING", step: "checkpoint")
-      cycle.update!(return_to: "/dashboard?ri=jp")
+      cycle.update!(return_to: "/?ri=jp")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
 
@@ -333,7 +333,7 @@ module Auth
       redirected = URI.parse(harness.redirected.first)
 
       assert_equal "/welcome", redirected.path
-      assert_equal "/dashboard?ri=jp",
+      assert_equal "/?ri=jp",
                    harness.path_from_signed_pt(Rack::Utils.parse_query(redirected.query).fetch("pt"))
     end
 
@@ -398,7 +398,7 @@ module Auth
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
       cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING", step: "dashboard")
-      cycle.update!(return_to: "/dashboard?ri=jp")
+      cycle.update!(return_to: "/?ri=jp")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
       harness.send(:issue_welcome_gate_and_path, pt: cycle.return_to, sequence_id: cycle.public_id)
@@ -406,7 +406,7 @@ module Auth
       harness.send(:continue_dashboard_sequence_without_content!)
 
       assert_nil harness.redirected
-      assert_equal "/dashboard?ri=jp", harness.instance_variable_get(:@welcome_next_path)
+      assert_equal "/?ri=jp", harness.instance_variable_get(:@welcome_next_path)
       assert_predicate cycle.reload, :sign_in_completed?
       assert_nil cycle.return_to
     end
@@ -423,7 +423,7 @@ module Auth
       harness.send(:continue_dashboard_sequence_without_content!)
 
       assert_nil harness.redirected
-      assert_equal "/dashboard", harness.instance_variable_get(:@welcome_next_path)
+      assert_equal "/", harness.instance_variable_get(:@welcome_next_path)
       assert_predicate cycle.reload, :sign_in_completed?
       assert_nil cycle.return_to
     end
@@ -491,10 +491,6 @@ module Auth
       )
 
       assert_equal({ plain: I18n.t("errors.messages.not_authorized"), status: :bad_request }, harness.rendered)
-    end
-
-    test "Token.extract_type returns nil for nil payload" do
-      assert_nil AuthenticationToken.extract_type(nil)
     end
 
     test "Token.extract_session_id returns nil for nil payload" do
@@ -611,10 +607,8 @@ module Auth
       assert_equal ["/default", {}], harness.redirected
     end
 
-    test "JwtConfiguration.issuer respects resource_type" do
-      assert_equal "urn:umaxica:test:auth:client", AuthenticationJwtConfiguration.issuer("client")
-      assert_equal "urn:umaxica:test:auth:operator", AuthenticationJwtConfiguration.issuer("operator")
-      assert_equal "urn:umaxica:test:auth", AuthenticationJwtConfiguration.issuer("invalid")
+    test "JwtConfiguration.issuer is the test-environment authorization-server identity" do
+      assert_equal "urn:umaxica:test:auth", AuthenticationJwtConfiguration.issuer
     end
 
     test "JwtConfiguration.audiences requires distinct resource-specific env" do
@@ -642,12 +636,6 @@ module Auth
       ) do
         assert_raises(ArgumentError) { AuthenticationJwtConfiguration.audiences("client") }
       end
-    end
-
-    test "JwtConfiguration.token_type returns correct format" do
-      assert_equal "auth-access-token;client", AuthenticationJwtConfiguration.token_type("client")
-      assert_equal "auth-access-token;operator", AuthenticationJwtConfiguration.token_type("operator")
-      assert_raises(ArgumentError) { AuthenticationJwtConfiguration.token_type("invalid") }
     end
 
     private

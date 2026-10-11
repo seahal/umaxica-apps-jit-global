@@ -36,7 +36,7 @@ We will split the application into 4 Rails Engines:
 
 > **Note (2026-04-14):** Engine names were updated from signature/world/station/press to
 > Signature/Zenith/Foundation/Publisher. Module names were updated: `core` to `base`, `docs` to
-> `post`. See `plans/active/four-engine-rename.md` for the rename plan.
+> `post`.
 
 ### Architecture Diagram
 

@@ -5,8 +5,10 @@ module OidcUserInfoResponseSerializer
   module_function
 
   def build(resource:, payload:)
-    resource_type = payload.fetch("act")
-    scopes = Array(payload["scp"]).map(&:to_s)
+    resource_type =
+      AuthorizationTokenClaims.resource_type(payload).presence ||
+      SecurityJwtOidcIdTokenCodec.resource_type_for_resource(resource)
+    scopes = AuthorizationTokenClaims.scopes(payload)
     claims = {
       sub: OidcSubject.for(resource, resource_type: resource_type),
       acr: payload["acr"],
@@ -25,4 +27,5 @@ module OidcUserInfoResponseSerializer
     claims[:email] = resource.email if resource.respond_to?(:email) && resource.email.present?
     claims[:email_verified] = true if claims[:email].present?
   end
+  private_class_method :attach_profile_claims
 end

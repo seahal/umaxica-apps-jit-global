@@ -195,7 +195,7 @@ class BaseSelectorBootstrapAuthority
 
   def bind_avatar_account!(avatar:, account:)
     case account
-    when Persona
+    when ClientPersona
       AvatarPersonaBinding.find_or_create_by!(avatar: avatar, persona: account)
     when Agent
       AvatarAgentBinding.find_or_create_by!(avatar: avatar, agent: account)
@@ -208,7 +208,7 @@ class BaseSelectorBootstrapAuthority
 
   def subject_type_for(account)
     case account
-    when Persona
+    when ClientPersona
       :persona
     when Agent
       :agent

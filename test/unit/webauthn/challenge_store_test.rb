@@ -42,6 +42,35 @@ module Webauthn
       end
     end
 
+    # Purposes are separate namespaces, not labels. Every ordered pair is checked
+    # rather than a sample, so adding a purpose without deciding what it may be
+    # confused with fails here.
+    test "no challenge issued for one purpose is usable under any other" do
+      Webauthn::ChallengeStore::PURPOSES.each do |issued|
+        Webauthn::ChallengeStore::PURPOSES.each do |consumed|
+          next if issued == consumed
+
+          id = @store.issue!(challenge: "raw-challenge", purpose: issued, **APP_BINDING)
+
+          assert_raises(
+            Webauthn::ChallengeStore::ChallengePurposeMismatchError,
+            "a #{issued} challenge was accepted by the #{consumed} verifier",
+          ) do
+            @store.consume!(id, purpose: consumed, **APP_BINDING)
+          end
+
+          id = @store.issue!(challenge: "raw-challenge", purpose: issued, **APP_BINDING)
+
+          assert_raises(
+            Webauthn::ChallengeStore::ChallengePurposeMismatchError,
+            "a #{issued} challenge was accepted by the identifier-first #{consumed} verifier",
+          ) do
+            @store.consume_with_actor!(id, purpose: consumed, **APP_BINDING.except(:actor_global_key))
+          end
+        end
+      end
+    end
+
     test "purpose mismatch is rejected and consumes the challenge" do
       id = @store.issue!(challenge: "raw-challenge", purpose: :registration, **APP_BINDING)
 

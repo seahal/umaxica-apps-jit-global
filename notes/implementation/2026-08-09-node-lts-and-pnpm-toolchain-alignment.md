@@ -7,14 +7,14 @@ Date: 2026-08-09
 The repository declared three different Node majors and three different pnpm versions, and the
 development image installed `pnpm@latest`, so no two rebuilds produced the same toolchain.
 
-| Declaration | Before |
-| --- | --- |
-| `Dockerfile` node stage | `node:26-trixie-slim` |
-| `.github/workflows/ci.yml` | Node `24` |
-| `README.md`, `docs/hld.md`, `docs/srs.md` | Node `22.13+`, pnpm `11.0.8` |
-| `package.json#packageManager` | `pnpm@11.1.3` |
-| `Dockerfile` pnpm install | `pnpm@latest` (unpinned) |
-| `pnpm-workspace.yaml` catalog `@types/node` | `26.1.2` |
+| Declaration                                 | Before                       |
+| ------------------------------------------- | ---------------------------- |
+| `Dockerfile` node stage                     | `node:26-trixie-slim`        |
+| `.github/workflows/ci.yml`                  | Node `24`                    |
+| `README.md`, `docs/hld.md`, `docs/srs.md`   | Node `22.13+`, pnpm `11.0.8` |
+| `package.json#packageManager`               | `pnpm@11.1.3`                |
+| `Dockerfile` pnpm install                   | `pnpm@latest` (unpinned)     |
+| `pnpm-workspace.yaml` catalog `@types/node` | `26.1.2`                     |
 
 ## Node version selection
 
@@ -31,9 +31,9 @@ builds from the same declaration.
 
 Runtime Node **24.19.0** is paired with `@types/node` **24.13.3**, the newest release in the 24.x
 line. The previous `26.1.2` pin described APIs that a Node 24 runtime does not provide, so
-`tsc --noEmit` was validating against a runtime the project does not ship. DefinitelyTyped tracks the
-Node major in its own major, so the correct pairing is major-for-major; `@types/node` 26.x is only
-appropriate once the runtime moves to Node 26 after 2026-10-28.
+`tsc --noEmit` was validating against a runtime the project does not ship. DefinitelyTyped tracks
+the Node major in its own major, so the correct pairing is major-for-major; `@types/node` 26.x is
+only appropriate once the runtime moves to Node 26 after 2026-10-28.
 
 ## pnpm
 
@@ -67,7 +67,7 @@ toolchain, so `pn` cannot leak into production.
 
 The wrapper has to `rm -f /usr/local/bin/pn` before writing. `npm install -g pnpm` has already
 created that path as a symlink to `lib/node_modules/pnpm/bin/pnpm.mjs`, so redirecting into it
-writes *through* the symlink and replaces pnpm's real entry point — which `/usr/local/bin/pnpm`
+writes _through_ the symlink and replaces pnpm's real entry point — which `/usr/local/bin/pnpm`
 points at too — with the two-line wrapper. The wrapper then resolves `pnpm` through `PATH` back to
 itself and execs in a loop: every pnpm invocation spins at 100% CPU and never returns. This was
 observed on 2026-08-10; it stalled Vite builds and, through them, Rails requests, because

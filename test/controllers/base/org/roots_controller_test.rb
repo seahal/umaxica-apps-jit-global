@@ -7,33 +7,29 @@ require "test_helper"
 class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
   fixtures :operators, :operator_statuses
 
-  test "permanently redirects the jp region to the canonical jp regional root" do
+  test "renders the control-plane root for a regional request" do
     host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
     get base_org_root_url(ri: "jp")
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.org/", response.location
+    assert_response :success
+    assert_equal "base/org/roots/index", inertia_component
+    assert_equal "Base Org", inertia_props.fetch("heading")
   end
 
-  test "permanently redirects the us region to the canonical us regional root" do
+  test "renders the control-plane root for the us region" do
     host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
     get base_org_root_url(ri: "us")
 
-    assert_response :moved_permanently
-    assert_equal "https://us.umaxica.org/", response.location
+    assert_response :success
+    assert_equal "base/org/roots/index", inertia_component
   end
 
-  test "drops every request context parameter from the regional redirect target" do
+  test "keeps extra request context on the control-plane root instead of leaving the host" do
     host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
     get base_org_root_url(ri: "jp", ct: "dr", lx: "en", tz: "asia/tokyo")
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.org/", response.location
-    assert_not_includes response.location, "?"
-    assert_not_includes response.location, "ri="
-    assert_not_includes response.location, "ct="
-    assert_not_includes response.location, "lx="
-    assert_not_includes response.location, "tz="
+    assert_response :success
+    assert_nil response.location
   end
 
   test "does not regionally redirect an unknown region" do
@@ -52,16 +48,12 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal base_org_root_url(ri: "jp"), response.location
   end
 
-  test "mints no preference state on the gateway host it redirects away from" do
+  test "renders the control-plane root when extra preference params are supplied" do
     host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    get base_org_root_url(ct: "dr", lx: "en", ri: "us", tz: "asia/tokyo")
 
-    assert_no_difference("OrgPreference.count") do
-      get base_org_root_url(ct: "dr", lx: "en", ri: "us", tz: "asia/tokyo")
-    end
-
-    assert_response :moved_permanently
-    assert_nil cookies[PreferenceCookieName.access(surface: :org)].presence
-    assert_nil cookies[PreferenceCookieName.refresh(surface: :org)].presence
+    assert_response :success
+    assert_equal "base/org/roots/index", inertia_component
   end
 
   test "regional redirect takes precedence over the logged in dashboard redirect" do
@@ -71,8 +63,9 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
     get base_org_root_url(ri: "jp"),
         headers: as_staff_headers(staff, host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"))
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.org/", response.location
+    assert_not_equal 301, response.status
+    assert_not_equal "https://jp.umaxica.org/", response.location
+    assert_includes [200, 302, 303], response.status
   end
   private
 

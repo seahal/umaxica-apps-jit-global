@@ -19,22 +19,22 @@ class OidcRpIdentityProvisioningTest < ActiveSupport::TestCase
 
     actor = controller.send(
       :provision_rp_account_from_id_token_payload!, {
-        "iss" => OidcIssuer.for_client(OidcClientRegistry.find!("core-next-rp")),
+        "iss" => OidcIssuer.for_client(OidcClientRegistry.find!("core-app")),
         "sub" => OidcSubject.for(client, resource_type: "client"),
-        "aud" => ["core-next-rp"],
+        "aud" => ["core-app"],
       },
-      "core-next-rp",
+      "core-app",
     )
 
     identity = ClientIdentity.find_by!(source_record_id: client.id)
     bridge = CoreAppClientBridge.find_by!(client_id: client.id)
 
     assert_equal client, actor
-    assert_equal OidcIssuer.for_client(OidcClientRegistry.find!("core-next-rp")), identity.issuer
+    assert_equal OidcIssuer.for_client(OidcClientRegistry.find!("core-app")), identity.issuer
     assert_equal OidcSubject.for(client, resource_type: "client"), identity.subject
-    assert_equal "core-next-rp", identity.audience
+    assert_equal "core-app", identity.audience
     assert_equal ClientIdentityState::ACTIVE, identity.status_id
-    assert_equal "core-next-rp", bridge.rp_client_id
+    assert_equal "core-app", bridge.rp_client_id
     assert_equal client.public_id, bridge.subject
   end
 

@@ -10,21 +10,10 @@ class Core::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     host! @host
   end
 
-  test "complete sign out consumes the state and renders completion" do
-    staff = Operator.create!(
-      status_id: OperatorStatus::ACTIVE,
-      visibility_id: OperatorVisibility::STAFF,
-    )
-    token = OperatorToken.create!(staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
-    satisfy_staff_verification(token)
+  test "get sign out without a one-shot notice is not found" do
+    get core_org_sign_out_url(ri: "jp")
 
-    post core_org_sign_out_url(ri: "jp"),
-         headers: as_staff_headers(staff, host: @host, session_public_id: token.public_id)
-
-    get core_org_sign_out_completion_url(ri: "jp")
-
-    assert_response :success
-    assert_select "h1", text: I18n.t("sign.shared.sign_out.completed_title")
+    assert_response :not_found
   end
 end
 

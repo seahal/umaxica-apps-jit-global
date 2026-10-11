@@ -18,7 +18,7 @@ class Base::App::WelcomesControllerTest < ActionDispatch::IntegrationTest
     get base_app_welcome_url(ri: "jp", host: @host),
         headers: as_user_headers(@user, host: @host, session_public_id: @token.public_id)
 
-    assert_redirected_to base_app_dashboard_path(ri: "jp")
+    assert_redirected_to base_app_root_path(ri: "jp")
   end
   private
 

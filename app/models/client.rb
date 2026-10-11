@@ -99,6 +99,7 @@ class Client < AppPrincipalRecord
   RECOVERY_IDENTITY_REQUIRED_MESSAGE = I18n.t("models.user.recovery_identity_required")
 
   attribute :status_id, default: ClientStatus::NOTHING
+  validates :status_id, numericality: { only_integer: true }
   mfa_level_reference ClientMfaLevel
   mfa_status_reference ClientMfaStatus
 
@@ -243,6 +244,21 @@ class Client < AppPrincipalRecord
            inverse_of: :user
   has_many :client_bulletins, foreign_key: :user_id, dependent: :destroy, inverse_of: :user
   has_one :rp_account, class_name: "ClientAccount", foreign_key: :user_id, dependent: :destroy, inverse_of: :user
+  has_many :client_persona_ownerships, dependent: :restrict_with_error, inverse_of: :client
+  has_many :owned_client_personas, through: :client_persona_ownerships, source: :client_persona
+  has_many :client_persona_administration_grants, dependent: :restrict_with_error, inverse_of: :client
+  has_many :client_persona_delegation_grants, dependent: :restrict_with_error, inverse_of: :client
+  has_many :client_persona_usage_grants, dependent: :restrict_with_error, inverse_of: :client
+  has_many :client_persona_view_grants, dependent: :restrict_with_error, inverse_of: :client
+  has_one :authority_lock,
+          class_name: "ClientAuthorityLock",
+          dependent: :destroy,
+          inverse_of: :client
+  has_many :enterprise_ownerships, dependent: :restrict_with_error, inverse_of: :client
+  has_many :owned_enterprises, through: :enterprise_ownerships, source: :enterprise
+  has_many :enterprise_administration_grants, dependent: :restrict_with_error, inverse_of: :client
+  has_many :enterprise_delegation_grants, dependent: :restrict_with_error, inverse_of: :client
+  has_many :enterprise_view_grants, dependent: :restrict_with_error, inverse_of: :client
   has_one :core_app_client_bridge,
           dependent: :destroy,
           inverse_of: :client

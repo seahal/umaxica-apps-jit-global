@@ -30,7 +30,7 @@ class Side::Com::DashboardsControllerTest < ActionDispatch::IntegrationTest
         ["Dashboard", side_com_dashboard_path(ri: "jp")],
         ["Settings", side_com_settings_path(ri: "jp")],
         ["Sign out", new_side_com_sign_out_path(ri: "jp")],
-        ["Authorize", side_com_oidc_authorization_path(ri: "jp")],
+        ["Authorize", side_com_sign_in_path(ri: "jp")],
       ],
       inertia_props.fetch("sections").flat_map { |section| section.fetch("links") }
         .map { |link| [link.fetch("label"), link.fetch("href")] },

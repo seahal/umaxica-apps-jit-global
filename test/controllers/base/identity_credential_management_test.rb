@@ -96,7 +96,11 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     token = VisitorToken.create!(
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      last_step_up_at: Time.current, last_step_up_scope: "settings_secret_credential",
+      last_step_up_aal: "aal2", last_step_up_method: "passkey",
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:com",
     )
+    token.update_columns(last_step_up_session_public_id: token.public_id)
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
     access_token = AuthenticationToken.encode(
@@ -133,7 +137,11 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     token = OperatorToken.create!(
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      last_step_up_at: Time.current, last_step_up_scope: "settings_secret_credential",
+      last_step_up_aal: "aal2", last_step_up_method: "passkey",
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
     )
+    token.update_columns(last_step_up_session_public_id: token.public_id)
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
     access_token = AuthenticationToken.encode(

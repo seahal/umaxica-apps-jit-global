@@ -136,36 +136,39 @@ export default function SessionLimitManager({
               </span>
             </h2>
             <ul className="flex flex-col gap-3">
-              {activeSessions.items.map((item, index) => (
-                <li
-                  key={item.ref ?? `current-${index}`}
-                  className="flex flex-col gap-2 rounded-lg border border-line bg-surface p-4"
-                >
-                  <div className="flex flex-col gap-1">
-                    <p className="text-sm font-medium text-fg">
-                      {item.label}
-                      {item.current_label ? (
-                        <span className="ml-2 text-xs font-medium text-accent">
-                          {item.current_label}
-                        </span>
-                      ) : null}
-                    </p>
-                    <SessionTimestamps item={item} />
-                  </div>
-                  {item.ref ? (
-                    <label className="flex items-center gap-2 text-sm text-fg">
-                      <input
-                        type="radio"
-                        name="ref"
-                        value={item.ref}
-                        checked={selectedRef === item.ref}
-                        onChange={() => setSelectedRef(item.ref ?? "")}
-                      />
-                      <span>{activeSessions.revoke_label}</span>
-                    </label>
-                  ) : null}
-                </li>
-              ))}
+              {activeSessions.items.map((item, index) => {
+                const sessionRef = item.ref;
+                return (
+                  <li
+                    key={sessionRef ?? `current-${index}`}
+                    className="flex flex-col gap-2 rounded-lg border border-line bg-surface p-4"
+                  >
+                    <div className="flex flex-col gap-1">
+                      <p className="text-sm font-medium text-fg">
+                        {item.label}
+                        {item.current_label ? (
+                          <span className="ml-2 text-xs font-medium text-accent">
+                            {item.current_label}
+                          </span>
+                        ) : null}
+                      </p>
+                      <SessionTimestamps item={item} />
+                    </div>
+                    {sessionRef ? (
+                      <label className="flex items-center gap-2 text-sm text-fg">
+                        <input
+                          type="radio"
+                          name="ref"
+                          value={sessionRef}
+                          checked={selectedRef === sessionRef}
+                          onChange={() => setSelectedRef(sessionRef)}
+                        />
+                        <span>{activeSessions.revoke_label}</span>
+                      </label>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ) : null}

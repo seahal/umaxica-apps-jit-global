@@ -26,6 +26,8 @@ module Base
           body: "avatars",
           empty: "None available",
           entries: avatars.map { |avatar| serialize_avatar_entry(avatar) },
+          create_action: { label: "Create Avatar" },
+          up_link: dashboard_up_link(label: t("base.shared.dashboard.links.dashboard")),
         }
       end
 
@@ -141,7 +143,7 @@ module Base
       end
 
       def current_persona
-        Persona.find_by!(public_id: Actor.selection.account_public_id)
+        ClientPersona.find_by!(public_id: Actor.selection.account_public_id)
       end
 
       def avatar_params

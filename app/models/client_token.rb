@@ -28,6 +28,7 @@
 #  rotated_at                         :datetime
 #  selected_at                        :datetime
 #  created_at                         :datetime         not null
+#  authentication_event_at            :datetime
 #  updated_at                         :datetime         not null
 #  dbsc_session_id                    :string
 #  device_session_id                  :bigint
@@ -106,7 +107,7 @@ class ClientToken < AppTicketRecord
   belongs_to :user_token_dbsc_status, class_name: "ClientTokenDbscStatus"
   belongs_to :oidc_connection, class_name: "ClientOidcConnection"
   belongs_to :device_session, class_name: "ClientDeviceSession", inverse_of: :client_tokens
-  has_many :client_token_usages, inverse_of: :client_token, dependent: :delete_all
+  has_many :client_rp_sessions, inverse_of: :client_token, dependent: :delete_all
   has_many :client_verifications, dependent: :delete_all, inverse_of: :user_token
   has_one :step_up_session,
           class_name: "ClientStepUpSession",

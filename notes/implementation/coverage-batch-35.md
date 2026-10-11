@@ -17,17 +17,21 @@
 - `CommonRedirect` malformed safe-jump URL handling and priority resolver failure logging
 - `Oidc::AcmeServiceOrigin` decision predicates and malformed URL handling
 - `IdentityPasskeyCeremonyContract` timestamp, navigation metadata, and malformed token validation
-- `SecurityJwtAuthAccessTokenCodec` payload mismatch, claim extraction, scope checks, and issuer inference
+- `SecurityJwtAuthAccessTokenCodec` payload mismatch, claim extraction, scope checks, and issuer
+  inference
 - `JumpRtReturnVerifier` bounded JWKS response parsing and normalized fetch failures
 
 ## Tests added
 
 - Added malformed URL and resolver failure coverage to `test/controllers/concerns/redirect_test.rb`.
-- Added decision predicate and malformed origin coverage to `test/services/oidc/acme_service_origin_test.rb`.
-- Added direct contract validation coverage to `test/services/identity/passkey_ceremony_contract_test.rb`.
+- Added decision predicate and malformed origin coverage to
+  `test/services/oidc/acme_service_origin_test.rb`.
+- Added direct contract validation coverage to
+  `test/services/identity/passkey_ceremony_contract_test.rb`.
 - Added claim helper, payload mismatch, and issuer inference coverage to
   `test/services/security_jwt_auth_access_token_codec_coverage_test.rb`.
-- Added network-free JWKS success and failure tests to `test/services/jump_rt/return_verifier_test.rb`.
+- Added network-free JWKS success and failure tests to
+  `test/services/jump_rt/return_verifier_test.rb`.
 
 ## Application and database changes
 
@@ -46,12 +50,13 @@
 - Read-only `jq` analysis of `coverage/coverage.json`
 
 `vp` and Vitest commands were not run because this batch was Rails-only. RuboCop was not run because
-the batch changed tests only and its known autocorrections conflict with required repository tests and
-unrelated existing files.
+the batch changed tests only and its known autocorrections conflict with required repository tests
+and unrelated existing files.
 
 ## Skipped risky areas
 
-- Authentication, session, OIDC token, logout, credential, and destructive lifecycle implementation changes
+- Authentication, session, OIDC token, logout, credential, and destructive lifecycle implementation
+  changes
 - External network access; JWKS HTTP behavior was exercised with an in-process stub
 - Controller-heavy targets requiring broad workflow setup
 - Application, database, configuration, route, fixture, and factory changes
@@ -62,7 +67,9 @@ unrelated existing files.
 - `IdentityEmailCeremonyFinalCommitter` (20 missed lines)
 - `IdentityTotpCeremonyCandidateStore` (19 missed lines)
 - `ClientSecretCredentialsUpdate` (19 missed lines)
-- Deterministic transaction purgers and `OidcTokenRevoker` after confirming their tests isolate side effects
+- Deterministic transaction purgers and `OidcTokenRevoker` after confirming their tests isolate side
+  effects
 
 `WithdrawalLifecycle` has 34 missed lines but remains lower priority because withdrawal behavior is
-destructive and requires a higher safety threshold than the candidate stores and pure validation paths.
+destructive and requires a higher safety threshold than the candidate stores and pure validation
+paths.

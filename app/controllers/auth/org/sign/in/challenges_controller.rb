@@ -6,6 +6,7 @@ module Auth
     module Sign
       module In
         class ChallengesController < ::Auth::Org::ApplicationController
+          include ::AuthenticationModeSwitchGuard
           include ::SurfaceInertiaPage
 
           AUTHENTICATION_MODE = :guest

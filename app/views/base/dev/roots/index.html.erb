@@ -1,0 +1,21 @@
+<!doctype html>
+<%# A standalone document: it bypasses the surface layouts, so it links its own stylesheet and
+    renders the theme attribute itself. %>
+<html lang="<%= I18n.locale %>"
+      data-theme="<%= theme_cookie_value %>"
+      data-edition="dev">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <%= display_meta_tags site: "#{ENV.fetch("BRAND_NAME").upcase} (DEV)", separator: "—", reverse: true %>
+    <%= vite_stylesheet_tag "~/styles/surfaces/base_dev.css", nonce: true %>
+  </head>
+  <body>
+    <main class="grid min-h-screen place-items-center p-8">
+      <section aria-labelledby="base-dev-title" class="w-full max-w-2xl">
+        <h1 id="base-dev-title" class="mb-3 text-4xl leading-none font-bold text-fg sm:text-5xl">Base Dev</h1>
+        <p class="text-base text-fg-muted"><%= t("base.dev.roots.message") %></p>
+      </section>
+    </main>
+  </body>
+</html>

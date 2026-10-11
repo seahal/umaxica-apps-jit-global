@@ -24,7 +24,8 @@
 
 - Added database-backed one-shot lifecycle, expiration, deletion, boolean normalization, and missing
   secret coverage for secret credential and TOTP ceremony candidate stores.
-- Added locked-record update and app audit coverage for email and telephone ceremony final committers.
+- Added locked-record update and app audit coverage for email and telephone ceremony final
+  committers.
 - Added atomic attribute normalization, persistence, and client audit coverage for secret credential
   updates.
 
@@ -45,8 +46,8 @@
 - Read-only `jq` analysis of `coverage/coverage.json`
 
 `vp` and Vitest commands were not run because this batch was Rails-only. RuboCop was not run because
-the batch changed tests only and its known autocorrections conflict with required repository tests and
-unrelated existing files.
+the batch changed tests only and its known autocorrections conflict with required repository tests
+and unrelated existing files.
 
 ## Skipped risky areas
 
@@ -63,5 +64,5 @@ unrelated existing files.
 - `SignOtpCeremony`, `SocialAuthCoordinator`, and deterministic transaction purgers
 - Controller concern branches with existing harness tests after exhausting safe service targets
 
-`WithdrawalLifecycle` still has 34 missed lines but remains deferred because its destructive behavior
-requires a higher safety threshold than the other candidates.
+`WithdrawalLifecycle` still has 34 missed lines but remains deferred because its destructive
+behavior requires a higher safety threshold than the other candidates.

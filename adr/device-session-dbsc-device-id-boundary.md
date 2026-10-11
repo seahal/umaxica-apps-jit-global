@@ -91,6 +91,6 @@ lookup code may need to accept legacy token public identifiers as a fallback.
 
 - `adr/logout-primitive-and-composition.md`
 - `adr/session-reset-on-privilege-transition.md`
-- `plans/backlog/gh610-decouple-session-id-from-token.md`
+- GH issue #610
 - `docs/architecture/dbsc.md`
 - `docs/architecture/dpop.md`

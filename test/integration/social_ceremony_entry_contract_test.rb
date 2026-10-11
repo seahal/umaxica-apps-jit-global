@@ -62,7 +62,27 @@ class SocialCeremonyEntryContractTest < ActionDispatch::IntegrationTest
       # /social/:provider after the 307. A per-form token is bound to one path
       # and method, so it would pass the first check and fail the second,
       # breaking the handoff for every user. Only a global token survives both.
-      get auth_app_sign_in_path(ri: "jp"), headers: { "Host" => @host }
+      issuance = OidcAuthorizationTransactionCoordinator.issue!(
+        surface: "app",
+        intent: "sign_in",
+        params: {
+          response_type: "code",
+          client_id: "core-app",
+          redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris.first,
+          code_challenge: "challenge",
+          code_challenge_method: "S256",
+          state: "state",
+          nonce: "nonce",
+          scope: "openid profile",
+        },
+      )
+      get auth_app_sign_in_path(
+        ri: "jp",
+        admission: BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code,
+      ), headers: { "Host" => @host }
+
+      assert_response :see_other
+      follow_redirect!
 
       assert_response :success
 

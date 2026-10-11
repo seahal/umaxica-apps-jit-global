@@ -9,6 +9,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
 
   setup do
     @host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
+    host! @host
     @user = clients(:one)
     # Ensure master data needed for audit
     ClientChronicleEvent.ensure_defaults! if ClientChronicleEvent.respond_to?(:ensure_defaults!)
@@ -29,7 +30,10 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "guest can access login page" do
-    get auth_app_sign_in_path(ri: "jp", login_challenge: login_challenge_for_sign_in), headers: { "Host" => @host }
+    get auth_app_sign_in_path(ri: "jp", admission: login_challenge_for_sign_in), headers: { "Host" => @host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :ok
   end
@@ -43,7 +47,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
 
     cookies[:auth_refresh] = refresh_plain
 
-    get auth_app_sign_in_path(login_challenge: login_challenge_for_sign_in), headers: { "Host" => @host }
+    get auth_app_sign_in_path(admission: login_challenge_for_sign_in), headers: { "Host" => @host }
 
     # First response should be a redirect (ri=jp or guest_only)
     assert_response :redirect
@@ -82,7 +86,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
     refresh_plain = token_record.rotate_refresh_token!
 
     cookies_header = "auth_refresh=#{refresh_plain}"
-    get auth_app_sign_in_path(login_challenge: login_challenge_for_sign_in),
+    get auth_app_sign_in_path(admission: login_challenge_for_sign_in),
         headers: { "Cookie" => cookies_header, "Host" => @host }
 
     # First response should be a redirect
@@ -119,7 +123,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
           events << payload
         end
 
-      get auth_app_sign_in_path(login_challenge: login_challenge_for_sign_in),
+      get auth_app_sign_in_path(admission: login_challenge_for_sign_in),
           headers: { "Cookie" => cookies_header, "Host" => @host }
 
       # First response should be a redirect (auth succeeded despite audit failure)
@@ -148,7 +152,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
 
     AuthenticationAuditWriter.stub(:write, false) do
       cookies_header = "auth_refresh=#{refresh_plain}"
-      get auth_app_sign_in_path(login_challenge: login_challenge_for_sign_in),
+      get auth_app_sign_in_path(admission: login_challenge_for_sign_in),
           headers: { "Cookie" => cookies_header, "Host" => @host }
 
       # First response should be a redirect
@@ -193,7 +197,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
   end
 
   def login_challenge_for_sign_in
-    OidcAuthorizationTransactionCoordinator.issue!(
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app",
       intent: "sign_in",
       params: {
@@ -206,6 +210,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
         nonce: SecureRandom.urlsafe_base64(16),
         scope: "openid profile",
       },
-    ).transaction.login_challenge
+    ).transaction
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
   end
 end

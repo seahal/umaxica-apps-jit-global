@@ -7,8 +7,8 @@ Design constraints that must not be changed on Google and Apple sign-in buttons.
 Applies to every Google and Apple sign-in entry point on the `app` surface: the sign-in page, the
 sign-up page, the social ceremony start page, and the link action on the settings pages.
 
-The `org` surface uses Microsoft Entra ID; Microsoft brand rules are outside this document. The `com`
-surface has no social sign-in.
+The `org` surface uses Microsoft Entra ID; Microsoft brand rules are outside this document. The
+`com` surface has no social sign-in.
 
 ## Why these are MUST NOT items
 
@@ -25,11 +25,11 @@ sources before writing button markup.
 - Alter the size or colour of the Google "G" logo. Only the standard colour version is permitted.
 - Use a monochrome "G", a self-drawn icon, or a superseded Google logo.
 - Show the "G" icon alone, without a button boundary and accompanying text.
-- Place the standard "G" on any background other than the approved themes: light `#FFFFFF`,
-  dark `#131314`, or neutral `#F2F2F2`.
+- Place the standard "G" on any background other than the approved themes: light `#FFFFFF`, dark
+  `#131314`, or neutral `#F2F2F2`.
 - Use "Google" alone as the label, without an action verb.
-- Use any call to action other than "Sign in with Google", "Sign up with Google", or
-  "Continue with Google".
+- Use any call to action other than "Sign in with Google", "Sign up with Google", or "Continue with
+  Google".
 - Distort the aspect ratio when scaling.
 - Present the Google button less prominently than other third-party sign-in options.
 
@@ -37,8 +37,8 @@ sources before writing button markup.
 
 - Text colour: `#1F1F1F` on the light and neutral themes, `#E3E3E3` on the dark theme.
 - Font: Google Sans Medium, 14/20.
-- Web and Android padding: 12px before the logo, 10px after the logo, 12px after the text.
-  iOS padding: 16px, 12px, 16px.
+- Web and Android padding: 12px before the logo, 10px after the logo, 12px after the text. iOS
+  padding: 16px, 12px, 16px.
 - Shape: rectangular or pill.
 - Localising the label into the interface language is encouraged.
 
@@ -49,14 +49,14 @@ sources before writing button markup.
   logo-only.
 - Recolour the logo or the title. They are black together or white together, never a custom colour.
 - Use any appearance other than black, white, or white with outline.
-- Recreate, redraw, or trace the Apple logo. Only official artwork from Apple Design Resources may be
-  used.
+- Recreate, redraw, or trace the Apple logo. Only official artwork from Apple Design Resources may
+  be used.
 - Go below the minimum size of 140pt wide by 30pt high.
 - Crowd the button. The minimum margin is 1/10 of the button height, the minimum right margin is 8%
   of the button width, and a logo-only button stays at a 1:1 aspect ratio with no added horizontal
   padding, because the supplied artwork already includes its padding.
-- Make the button smaller than other sign-in buttons, or place it where a user has to scroll to reach
-  it.
+- Make the button smaller than other sign-in buttons, or place it where a user has to scroll to
+  reach it.
 
 ### Apple — permitted variation
 
@@ -73,14 +73,14 @@ logo height to the button height.
 Apple's own web button component accepts these values, which also bound what a custom button should
 look like:
 
-| Attribute            | Allowed values                            |
-| -------------------- | ----------------------------------------- |
-| `data-type`          | `sign-in` (default), `continue`, `sign-up` |
-| `data-color`         | `black` (default), `white`                |
-| `data-border`        | `true` (default), `false`                 |
-| `data-border-radius` | 0–50 (default 15)                         |
-| `data-width`         | 130–375, or `100%` (default)              |
-| `data-height`        | 30–64, or `100%` (default)                |
+| Attribute            | Allowed values                                      |
+| -------------------- | --------------------------------------------------- |
+| `data-type`          | `sign-in` (default), `continue`, `sign-up`          |
+| `data-color`         | `black` (default), `white`                          |
+| `data-border`        | `true` (default), `false`                           |
+| `data-border-radius` | 0–50 (default 15)                                   |
+| `data-width`         | 130–375, or `100%` (default)                        |
+| `data-height`        | 30–64, or `100%` (default)                          |
 | `data-mode`          | `center-align` (default), `left-align`, `logo-only` |
 
 ## Artwork
@@ -132,8 +132,8 @@ and the button falls back to its title alone if a deployment lacks them. Do not 
 per-request check, and do not substitute a redrawn logo.
 
 Community Sketch and Figma files that reproduce the button are not official artwork and must not be
-used as the source, however accurate they look. <https://appleid.apple.com/signinwithapple/button> is
-useful for previewing colour, corner radius, and size, but it is not an artwork download either.
+used as the source, however accurate they look. <https://appleid.apple.com/signinwithapple/button>
+is useful for previewing colour, corner radius, and size, but it is not an artwork download either.
 
 ## Sources
 

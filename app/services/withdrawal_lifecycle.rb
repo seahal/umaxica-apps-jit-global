@@ -210,23 +210,8 @@ class WithdrawalLifecycle
     }
   end
 
-  def revoke_sessions(except_public_id: nil)
-    scope = AuthenticationSessionRevoker.tokens_for(actor)
-    scope = exclude_session_identifier(scope, except_public_id) if except_public_id.present?
-    scope.find_each(&:revoke!)
-  end
-
-  def exclude_session_identifier(scope, identifier)
-    excluded = scope.where.not(public_id: identifier)
-    return excluded unless scope.klass.column_names.include?("oidc_sid") && uuid_identifier?(identifier)
-
-    excluded.where.not(oidc_sid: identifier)
-  end
-
-  def uuid_identifier?(value)
-    /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i.match?(
-      value.to_s,
-    )
+  def revoke_sessions
+    AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
   end
 
   def finite_future_time?(value)

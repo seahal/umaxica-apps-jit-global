@@ -9,9 +9,9 @@ module Preference
     self.fixture_table_names = []
 
     test "resolves preference class from controller path" do
-      assert_equal AppPreference, PreferenceClassRegistry.for_controller_path("core/app/edge/v0/preferences")
-      assert_equal ComPreference, PreferenceClassRegistry.for_controller_path("core/com/edge/v0/preferences")
-      assert_equal OrgPreference, PreferenceClassRegistry.for_controller_path("core/org/edge/v0/preferences")
+      assert_equal AppPreference, PreferenceClassRegistry.for_controller_path("core/app/api/v0/preferences")
+      assert_equal ComPreference, PreferenceClassRegistry.for_controller_path("core/com/api/v0/preferences")
+      assert_equal OrgPreference, PreferenceClassRegistry.for_controller_path("core/org/api/v0/preferences")
     end
 
     test "resolves option classes by prefix and type" do
@@ -25,6 +25,26 @@ module Preference
       assert_equal AppPreferenceStatus, PreferenceClassRegistry.status_class_for(AppPreference)
       assert_equal ComPreferenceChronicle, PreferenceClassRegistry.audit_class_for(ComPreference)
       assert_equal OrgPreferenceChronicleEvent, PreferenceClassRegistry.audit_event_class_for(OrgPreference)
+    end
+
+    test "resolves a named preference audit event to its fixed id" do
+      assert_equal AppPreferenceChronicleEvent::UPDATE_PREFERENCE_LANGUAGE,
+                   PreferenceClassRegistry.audit_event_id_for(
+                     AppPreferenceChronicleEvent,
+                     "UPDATE_PREFERENCE_LANGUAGE",
+                   )
+    end
+
+    test "rejects an unknown preference audit event name instead of writing event id 0" do
+      error =
+        assert_raises(ArgumentError) do
+          PreferenceClassRegistry.audit_event_id_for(
+            AppPreferenceChronicleEvent,
+            "PREFERENCE_LANGUAGE_UPDATED",
+          )
+        end
+
+      assert_match(/unknown preference audit event/, error.message)
     end
   end
 end

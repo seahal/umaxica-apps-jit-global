@@ -7,6 +7,7 @@
 // one with a redirect into the next step.
 import Button from "@/components/ui/Button";
 import TextField from "@/components/ui/TextField";
+import TurnstileWidget, { type TurnstileWidgetProps } from "@/features/turnstile/TurnstileWidget";
 
 import { csrfToken } from "./csrf";
 
@@ -21,6 +22,8 @@ export type OtpVerificationFormProps = {
   code_placeholder: string;
   submit_label: string;
   delivery_help: string;
+  /** Interactive challenge required by email registration checkpoints. */
+  turnstile?: TurnstileWidgetProps | null;
   /** Heading shown above the validation errors, or null when there are none. */
   error_heading: string | null;
   errors: string[];
@@ -36,6 +39,7 @@ export default function OtpVerificationForm({
   code_placeholder: codePlaceholder,
   submit_label: submitLabel,
   delivery_help: deliveryHelp,
+  turnstile,
   error_heading: errorHeading,
   errors,
   return_link: returnLink,
@@ -88,6 +92,13 @@ export default function OtpVerificationForm({
           inputMode="numeric"
           pattern="[0-9]*"
         />
+
+        {turnstile ? (
+          <TurnstileWidget
+            key={turnstile.challenge_id ?? "otp"}
+            {...turnstile}
+          />
+        ) : null}
 
         <Button type="submit">{submitLabel}</Button>
       </form>

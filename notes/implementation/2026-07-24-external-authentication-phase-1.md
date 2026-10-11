@@ -6,7 +6,7 @@
 
 ## Context
 
-- Original plan: `plans/apple-google-external-authentication-architecture-audit.md`
+- Original plan: `plans/analysis/apple-google-external-authentication-architecture-audit.md`
 - Implementation date: 2026-07-24
 - Installed contracts:
   - `omniauth-apple` 1.4.0

@@ -95,13 +95,14 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 - **FR-02**: All surfaces implement the 2026-09-03 health contract via the shared `Health` service
   layer: `text/plain` probes at `/health` (seven-line aggregate) and
   `/health/{startup,liveness,readiness}` (`ok\n` / 503), plus machine JSON at `/api/v0/health.json`
-  (`pass/warn/fail` plus an RFC 3339 UTC timestamp) and `/api/v0/revision.json`. Every response carries `Cache-Control: no-store`
-  (a health verdict must not be cached). Details in `docs/reference/health-endpoints.md`.
+  (`pass/warn/fail` plus an RFC 3339 UTC timestamp) and `/api/v0/revision.json`. Every response
+  carries `Cache-Control: no-store` (a health verdict must not be cached). Details in
+  `docs/reference/health-endpoints.md`.
 - **FR-03**: Controllers must set consistent default URL parameters (`lx`, `ri`, `tz`) using
   `DefaultUrlOptions` so deep links retain localization context.
-- **FR-04**: Request throttling is enforced through the `RateLimit` concern (`rate_limit to: 1000
-  within 1.hour` against the Valkey-backed `config.x.rate_limit.store`) for every ActionController
-  except API health, with overrides for test environments.
+- **FR-04**: Request throttling is enforced through the `RateLimit` concern
+  (`rate_limit to: 1000 within 1.hour` against the Valkey-backed `config.x.rate_limit.store`) for
+  every ActionController except API health, with overrides for test environments.
 
 ### 4.2 Preference management & localization
 
@@ -204,7 +205,7 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 | Privacy & Compliance | Preference cookies must capture consent state (GDPR/ePrivacy). PII stored encrypted with separation by database cluster. Audit logs retained ≥ 180 days.                                            |
 | Maintainability      | Namespaced controllers/views keep code per host ≤ 500 LOC; shared concerns (`Authn`, `PreferenceRegions`, `Theme`, etc.) must remain framework-agnostic.                                            |
 | Localization         | UI copy available in Japanese (default) and English; URL params `lx`, `ri`, `tz`, `ct` propagate through redirects and forms.                                                                       |
-| Observability        | OTEL traces for HTTP, the Valkey rate-limit store, and Action Mailer; structured logs shipped to Loki; uptime monitors poll `/health` (text) + `/api/v0/health.json`.                                               |
+| Observability        | OTEL traces for HTTP, the Valkey rate-limit store, and Action Mailer; structured logs shipped to Loki; uptime monitors poll `/health` (text) + `/api/v0/health.json`.                               |
 
 ---
 
@@ -218,21 +219,21 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
   `POSTGRESQL_BEHAVIOR_PUB`).
 - Asset pipeline relies on Vite for browser CSS and pnpm-managed JS tooling for the app UI; Rails
   continues to serve static non-browser assets where appropriate.
-- Dependencies include ROTP, WebAuthn, OmniAuth (Google/Apple), Rswag, Action Policy, Shrine,
-  Fastly gem, AWS SDK.
+- Dependencies include ROTP, WebAuthn, OmniAuth (Google/Apple), Rswag, Action Policy, Shrine, Fastly
+  gem, AWS SDK.
 
 ### 6.2 Environmental & configuration constraints
 
 - Required ENV keys: host mappings (e.g., `TOP_CORPORATE_URL`, `ID_SERVICE_URL`, `API_STAFF_URL`),
-  downstream edge hosts (`EDGE_*`), the rate-limit store URL (`RATE_LIMIT_REDIS_URL`),
-  Cloudflare Turnstile secret, JWT private/public keys, SMS provider selector, storage credentials
-  (when the optional RustFS profile is used), OTLP endpoint.
-- The devcontainer Compose override publishes the optional RustFS API and console on loopback
-  ports 9000/9001 by default; both ports are configurable through `.env`.
+  downstream edge hosts (`EDGE_*`), the rate-limit store URL (`RATE_LIMIT_REDIS_URL`), Cloudflare
+  Turnstile secret, JWT private/public keys, SMS provider selector, storage credentials (when the
+  optional RustFS profile is used), OTLP endpoint.
+- The devcontainer Compose override publishes the optional RustFS API and console on loopback ports
+  9000/9001 by default; both ports are configurable through `.env`.
 - Foreman/Procfile required for multi-process dev; CI uses GitHub Actions runners with a PostgreSQL
-  service. CI needs no Valkey service: in test, both `Rails.cache` and the rate-limit
-  store default to `ActiveSupport::Cache::NullStore`, and a test whose subject is cache or
-  rate-limit behaviour opts into an in-memory `ActiveSupport::Cache::MemoryStore`.
+  service. CI needs no Valkey service: in test, both `Rails.cache` and the rate-limit store default
+  to `ActiveSupport::Cache::NullStore`, and a test whose subject is cache or rate-limit behaviour
+  opts into an in-memory `ActiveSupport::Cache::MemoryStore`.
 
 ### 6.3 External services & integrations
 
@@ -248,18 +249,18 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 
 ## 7. Acceptance Criteria
 
-| ID    | Condition                                                                                                                                            |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ID    | Condition                                                                                                                                             |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | AC-01 | `GET .../health` returns 200 `text/plain` (seven-line aggregate); `GET .../api/v0/health.json` returns `{"status":"pass",…}` for each host namespace. |
-| AC-02 | Editing language/region/timezone/theme updates cookies and redirects back to the proper Top scope with query parameters preserved.                   |
-| AC-03 | Email registration flow issues an OTP via ActionMailer only when Turnstile succeeds and saves `UserIdentityEmail` with encrypted address.            |
-| AC-04 | Telephone registration rejects invalid E.164 numbers and uses the configured SMS provider.                                                           |
-| AC-05 | Passkey flow returns creation options, stores the challenge in session, and accepts subsequent verification payloads.                                |
-| AC-06 | Help contact form cannot submit without policy consent; valid submissions persist to `service_site_contacts` and emit a Mailer call.                 |
-| AC-07 | API inquiry endpoints validate addresses/phones using shared rules (no divergent regex).                                                             |
-| AC-08 | Rate limiting, JWT verification, and Cloudflare Turnstile secrets are configurable per environment and validated during smoke tests.                 |
-| AC-09 | OpenTelemetry traces are visible in Grafana Tempo for at least the top/sign/help flows in staging/production.                                        |
-| AC-10 | CI pipeline executes `bundle exec rails test`, `pnpm run lint`, `pnpm run check`, `rubocop`, and `erb_lint` before merging.                          |
+| AC-02 | Editing language/region/timezone/theme updates cookies and redirects back to the proper Top scope with query parameters preserved.                    |
+| AC-03 | Email registration flow issues an OTP via ActionMailer only when Turnstile succeeds and saves `UserIdentityEmail` with encrypted address.             |
+| AC-04 | Telephone registration rejects invalid E.164 numbers and uses the configured SMS provider.                                                            |
+| AC-05 | Passkey flow returns creation options, stores the challenge in session, and accepts subsequent verification payloads.                                 |
+| AC-06 | Help contact form cannot submit without policy consent; valid submissions persist to `service_site_contacts` and emit a Mailer call.                  |
+| AC-07 | API inquiry endpoints validate addresses/phones using shared rules (no divergent regex).                                                              |
+| AC-08 | Rate limiting, JWT verification, and Cloudflare Turnstile secrets are configurable per environment and validated during smoke tests.                  |
+| AC-09 | OpenTelemetry traces are visible in Grafana Tempo for at least the top/sign/help flows in staging/production.                                         |
+| AC-10 | CI pipeline executes `bundle exec rails test`, `pnpm run lint`, `pnpm run check`, `rubocop`, and `erb_lint` before merging.                           |
 
 ---
 

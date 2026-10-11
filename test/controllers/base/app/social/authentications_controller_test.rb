@@ -68,6 +68,45 @@ class Base::App::Social::AuthenticationsControllerTest < ActionController::TestC
     assert_predicate sign_up_flow_completed, :itself
   end
 
+  test "completion forwards the signed social authentication event time" do
+    authentication_event_at = Time.utc(2026, 6, 24, 11, 59, 0)
+    captured = nil
+    commit = Struct.new(:user, :result, :pt, :identity, :existing_account).new(
+      @commit_user,
+      { "operation" => "login", "auth_time" => authentication_event_at.to_i },
+      nil,
+      Struct.new(:provider).new("google"),
+      true,
+    )
+
+    IdentitySocialCeremonyResult.stub(
+      :decode,
+      { "surface" => "app", "provider" => "google", "session_ref" => "session-1" },
+    ) do
+      IdentitySocialCeremonyContract.stub(
+        :decode_untrusted_routing_payload,
+        { "operation" => "login", "session_ref" => "session-1" },
+      ) do
+        IdentitySocialCeremonyFinalCommitter.stub(:call!, commit) do
+          IdentityGraphProvisioner.stub(:call!, ->(*_args, **_kwargs) { true }) do
+            AuthenticationSessionCommitter.stub(
+              :call,
+              ->(**kwargs) {
+                captured = kwargs
+                { status: :success, redirect_path: "/dashboard" }
+              },
+            ) do
+              post :create, params: { id: "google", ri: "jp", social_ceremony_result: "signed-token" }
+            end
+          end
+        end
+      end
+    end
+
+    assert_response :redirect
+    assert_equal authentication_event_at, captured.fetch(:authentication_event_at)
+  end
+
   test "completion does not establish a session when graph provisioning fails" do
     session_started = false
 

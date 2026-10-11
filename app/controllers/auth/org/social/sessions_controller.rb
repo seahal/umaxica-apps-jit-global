@@ -22,6 +22,7 @@ module Auth
       class SessionsController < ::Auth::Org::ApplicationController
         include SocialCeremonyEntry
         include ::SurfaceInertiaPage
+        include ::AuthenticationModeSwitchGuard
 
         AUTHENTICATION_MODE = :guest
 

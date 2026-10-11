@@ -6,7 +6,9 @@
 - Ending Rails coverage: 45,468 / 49,152 lines (92.5049%)
 - Rails line delta: +53 covered lines, +0.1078 percentage points
 - Starting failures/errors: 0 failures, 0 errors in the first full run for this cycle
-- Ending failures/errors: 1 failure, 0 errors in the safety rerun; the failure is unrelated to this batch and came from `test/config/host_authorization_contract_test.rb`, whose subprocess could not find the locally installed `ruby-saml` dependency
+- Ending failures/errors: 1 failure, 0 errors in the safety rerun; the failure is unrelated to this
+  batch and came from `test/config/host_authorization_contract_test.rb`, whose subprocess could not
+  find the locally installed `ruby-saml` dependency
 - VP coverage: not run by explicit user instruction
 
 ## Selected targets and result
@@ -37,7 +39,8 @@ The final report contains no `app/models/**` file below 100% line coverage.
 
 ## Tests added
 
-Added `test/models/targeted_model_line_coverage_test.rb` with 16 focused tests covering deterministic model branches and fallback behavior, including:
+Added `test/models/targeted_model_line_coverage_test.rb` with 16 focused tests covering
+deterministic model branches and fallback behavior, including:
 
 - unsupported withdrawal occurrence mappings and optional digest handling
 - existing session-limit transaction refresh and state transitions
@@ -63,20 +66,31 @@ Targeted result: 16 runs, 70 assertions, 0 failures, 0 errors.
 - `bin/rails test test/models/targeted_model_line_coverage_test.rb test/support/parallel_test_database_cloner_test.rb`
 - `COVERAGE=true bin/rails test test/`
 - `bin/rails test test/models/targeted_model_line_coverage_test.rb`
-- `COVERAGE=true bin/rails test test/` (safety rerun after the report exposed one test-helper setup that raised before the intended OIDC concern line)
+- `COVERAGE=true bin/rails test test/` (safety rerun after the report exposed one test-helper setup
+  that raised before the intended OIDC concern line)
 - read-only `jq` analysis of `coverage/coverage.json`
 
-The first full coverage run succeeded with 9,233 runs, 43,962 assertions, 0 failures, and 0 errors. The safety rerun recorded 9,233 runs, 43,953 assertions, 1 unrelated subprocess failure, and 0 errors while still generating the report that confirms every requested model target at 100%.
+The first full coverage run succeeded with 9,233 runs, 43,962 assertions, 0 failures, and 0 errors.
+The safety rerun recorded 9,233 runs, 43,953 assertions, 1 unrelated subprocess failure, and 0
+errors while still generating the report that confirms every requested model target at 100%.
 
-`bundle exec rubocop -a` reported repository-wide pre-existing offenses. Its unrelated automatic edits in the parallel database cloner tests were restored; the batch-specific test remained formatted.
+`bundle exec rubocop -a` reported repository-wide pre-existing offenses. Its unrelated automatic
+edits in the parallel database cloner tests were restored; the batch-specific test remained
+formatted.
 
 ## Skipped risky areas
 
-- No application authentication, OIDC, logout, token, credential, or security-flow implementation was changed.
-- No configuration, routes, fixtures, factories, dependencies, migrations, external services, VP, Vitest, browser, Redis, or system paths were changed or inspected.
-- The external gem paths printed by the failing subprocess were treated only as runtime context and were not opened.
+- No application authentication, OIDC, logout, token, credential, or security-flow implementation
+  was changed.
+- No configuration, routes, fixtures, factories, dependencies, migrations, external services, VP,
+  Vitest, browser, Redis, or system paths were changed or inspected.
+- The external gem paths printed by the failing subprocess were treated only as runtime context and
+  were not opened.
 
 ## Next batch candidates
 
-- Preserve the now-complete `app/models/**` line coverage and select the next safe Rails layer from the repository coverage report, such as deterministic helpers, serializers, policies, mailers, or simple services.
-- Before the next full run, separately confirm whether the host-authorization subprocess dependency failure reproduces with its narrow repository test; do not inspect or modify installed gems.
+- Preserve the now-complete `app/models/**` line coverage and select the next safe Rails layer from
+  the repository coverage report, such as deterministic helpers, serializers, policies, mailers, or
+  simple services.
+- Before the next full run, separately confirm whether the host-authorization subprocess dependency
+  failure reproduces with its narrow repository test; do not inspect or modify installed gems.

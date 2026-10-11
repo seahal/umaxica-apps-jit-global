@@ -134,8 +134,7 @@ A self-review after the first pass found three real defects. All three are fixed
   code — CDN choice and public delivery hostname, per-resource public/private policy, the public
   object-key contract, direct and multipart upload, `Publishing::MediaFile` Shrine integration,
   background promotion, and orphan cleanup and retention.
-- Contradiction found, not acted on: `plans/rails-db-deep-pnueli.md:173` assumes media metadata
-  lives in the `storage` database with Shrine, which contradicts
-  `adr/publishing-db-content-authority.md` §8 ("storage ... reserved for another purpose") and
-  `adr/avatar-db-content-db-boundary.md`. The ADRs were treated as authoritative; that plan line
-  should be corrected or retired.
+- Contradiction found, not acted on: a since-removed v1 plan assumed media metadata lives in the
+  `storage` database with Shrine, which contradicts `adr/publishing-db-content-authority.md` §8
+  ("storage ... reserved for another purpose") and `adr/avatar-db-content-db-boundary.md`. The ADRs
+  were treated as authoritative; that plan line should be corrected or retired.

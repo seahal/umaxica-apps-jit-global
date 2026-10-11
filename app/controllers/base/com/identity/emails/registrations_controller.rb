@@ -100,9 +100,8 @@ module Base
               return
             end
 
-            result = verify_otp_code(@user_email, submitted_code)
+            result = verify_otp_code_and_consume(@user_email, submitted_code)
             unless result[:success]
-              increment_otp_attempts!(@user_email)
               if @user_email.locked?
                 @user_email.destroy!
                 reset_email_registration_flow!
@@ -115,8 +114,6 @@ module Base
               return
             end
 
-            clear_otp(@user_email)
-            @user_email.save! if @user_email.changed?
             finish_email_ceremony!(
               surface: "com",
               actor: current_visitor,

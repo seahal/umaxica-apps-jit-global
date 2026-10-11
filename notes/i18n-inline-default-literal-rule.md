@@ -75,5 +75,4 @@ than dressing it as a translation lookup.
 ## Related
 
 - `AGENTS.md`
-- `plans/archive/fix-i18n-inline-defaults.md`
 - `notes/implementation/2026-08-13-i18n-missing-translation-detection.md`

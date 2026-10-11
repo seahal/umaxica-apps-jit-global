@@ -38,10 +38,10 @@ class AuthenticationTokenServiceTest < ActiveSupport::TestCase
     assert_equal 123, AuthenticationTokenService.extract_subject(payload)
   end
 
-  test "extract_act returns act from payload" do
-    payload = { "act" => "operator" }
+  test "extract_resource_type returns act from payload" do
+    payload = { "scope" => "authenticated domain:operator read:org" }
 
-    assert_equal "operator", AuthenticationTokenService.extract_act(payload)
+    assert_equal "operator", AuthenticationTokenService.extract_resource_type(payload)
   end
 
   test "extract_session_id returns sid from payload" do
@@ -56,28 +56,28 @@ class AuthenticationTokenServiceTest < ActiveSupport::TestCase
     assert_equal "xyz789", AuthenticationTokenService.extract_jti(payload)
   end
 
-  test "validate_actor_claim! returns true for matching user" do
-    payload = { "act" => "client" }
+  test "resource_type_scope_matches? returns true for matching user" do
+    payload = { "scope" => "authenticated domain:client" }
 
-    assert AuthenticationTokenService.validate_actor_claim!(payload, "client")
+    assert AuthenticationTokenService.resource_type_scope_matches?(payload, "client")
   end
 
-  test "validate_actor_claim! returns false for mismatched actor" do
-    payload = { "act" => "client" }
+  test "resource_type_scope_matches? returns false for mismatched actor" do
+    payload = { "scope" => "authenticated domain:client" }
 
-    assert_not AuthenticationTokenService.validate_actor_claim!(payload, "operator")
+    assert_not AuthenticationTokenService.resource_type_scope_matches?(payload, "operator")
   end
 
-  test "validate_actor_claim! rejects blank and unknown actor claims" do
-    assert_not AuthenticationTokenService.validate_actor_claim!(nil, "client")
-    assert_not AuthenticationTokenService.validate_actor_claim!({}, "client")
-    assert_not AuthenticationTokenService.validate_actor_claim!({ "act" => "bad" }, "client")
+  test "resource_type_scope_matches? rejects blank and unknown actor claims" do
+    assert_not AuthenticationTokenService.resource_type_scope_matches?(nil, "client")
+    assert_not AuthenticationTokenService.resource_type_scope_matches?({}, "client")
+    assert_not AuthenticationTokenService.resource_type_scope_matches?({ "scope" => "domain:bad" }, "client")
   end
 
-  test "validate_actor_claim! returns true for matching visitor" do
-    payload = { "act" => "client" }
+  test "resource_type_scope_matches? returns true for matching visitor" do
+    payload = { "scope" => "authenticated domain:client" }
 
-    assert AuthenticationTokenService.validate_actor_claim!(payload, "client")
+    assert AuthenticationTokenService.resource_type_scope_matches?(payload, "client")
   end
 
   test "encode creates valid token that can be decoded" do
@@ -92,7 +92,7 @@ class AuthenticationTokenServiceTest < ActiveSupport::TestCase
     payload = AuthenticationTokenService.decode(token, host: "example.com", resource_type: "client")
 
     assert_predicate payload, :present?
-    assert_equal user.id, payload["sub"]
+    assert_equal user.id.to_s, payload["sub"]
     assert_nil payload["prf"], "auth access tokens must not carry preference snapshots"
   end
 
@@ -129,8 +129,8 @@ class AuthenticationTokenServiceTest < ActiveSupport::TestCase
 
     payload = AuthenticationTokenService.decode(token, host: "example.com", resource_type: "operator")
 
-    assert_equal staff.id, payload["sub"]
-    assert_equal "operator", payload["act"]
+    assert_equal staff.id.to_s, payload["sub"]
+    assert_equal "operator", AuthorizationTokenClaims.resource_type(payload)
   end
 
   test "encode returns nil when keyring raises" do
@@ -164,8 +164,8 @@ class AuthenticationTokenServiceTest < ActiveSupport::TestCase
     payload = AuthenticationTokenService.decode(token, host: "example.com", resource_type: "visitor")
 
     assert_predicate payload, :present?
-    assert_equal visitor.id, payload["sub"]
-    assert_equal "visitor", payload["act"]
+    assert_equal visitor.id.to_s, payload["sub"]
+    assert_equal "visitor", AuthorizationTokenClaims.resource_type(payload)
   end
 
   test "encode infers visitor resource type" do
@@ -177,8 +177,8 @@ class AuthenticationTokenServiceTest < ActiveSupport::TestCase
 
     payload = AuthenticationTokenService.decode(token, host: "example.com", resource_type: "visitor")
 
-    assert_equal visitor.id, payload["sub"]
-    assert_equal "visitor", payload["act"]
+    assert_equal visitor.id.to_s, payload["sub"]
+    assert_equal "visitor", AuthorizationTokenClaims.resource_type(payload)
   end
 
   test "encode includes cnf.jkt when dpop_jkt provided" do
@@ -194,10 +194,10 @@ class AuthenticationTokenServiceTest < ActiveSupport::TestCase
   end
 
   test "extract type scopes and scope membership" do
-    payload = { "act" => "client", "scp" => "profile email" }
+    payload = { "scope" => "domain:client profile email" }
 
-    assert_equal "client", AuthenticationTokenService.extract_type(payload)
-    assert_equal "profile email", AuthenticationTokenService.extract_scopes(payload)
+    assert_equal "client", AuthenticationTokenService.extract_resource_type(payload)
+    assert_equal %w(domain:client profile email), AuthenticationTokenService.extract_scopes(payload)
     assert AuthenticationTokenService.has_scope?(payload, :profile)
     assert_not AuthenticationTokenService.has_scope?(payload, :admin)
   end

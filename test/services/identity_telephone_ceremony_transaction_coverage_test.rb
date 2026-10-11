@@ -91,4 +91,36 @@ class IdentityTelephoneCeremonyTransactionCoverageTest < ActiveSupport::TestCase
       )
     end
   end
+
+  test "rejects blank ids, blank grant jti, and an unknown status" do
+    assert_raises(IdentityTelephoneCeremony::Error) do
+      IdentityTelephoneCeremonyTransaction.new(
+        surface: "app",
+        actor_ref: "actor-1",
+        session_ref: "session-1",
+        operation: "registration",
+        transaction_id: "",
+      )
+    end
+
+    assert_raises(IdentityTelephoneCeremony::Error) do
+      IdentityTelephoneCeremonyTransaction.new(
+        surface: "app",
+        actor_ref: "actor-1",
+        session_ref: "session-1",
+        operation: "registration",
+        grant_jti: "",
+      )
+    end
+
+    assert_raises(IdentityTelephoneCeremony::Error) do
+      IdentityTelephoneCeremonyTransaction.new(
+        surface: "app",
+        actor_ref: "actor-1",
+        session_ref: "session-1",
+        operation: "registration",
+        status: "bogus",
+      )
+    end
+  end
 end

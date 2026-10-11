@@ -4,8 +4,8 @@ Date: 2026-07-05 UTC
 
 ## Summary
 
-This pass advanced the route-naming cleanup from `plans/rails-routing-lovely-river.md` without
-breaking existing path helpers or external path contracts.
+This pass advanced the route-naming cleanup without breaking existing path helpers or external path
+contracts.
 
 ## What Changed
 

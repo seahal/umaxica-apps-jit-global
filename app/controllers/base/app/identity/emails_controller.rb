@@ -14,6 +14,9 @@ module Base
 
         before_action :authenticate_client!
         before_action :authorize_emails!, only: :index
+        # The edit page carries the delete action, so it is gated with it; this matches com,
+        # which requires settings_email step-up for the whole controller.
+        step_up only: %i(edit update destroy), scope: "settings_email"
 
         def index
           render inertia: true, props: emails_index_props(current_client.client_emails)

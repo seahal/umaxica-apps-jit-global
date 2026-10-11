@@ -5,7 +5,7 @@ require "test_helper"
 class ProcessorErasureNotificationJobTest < ActiveJob::TestCase
   self.fixture_table_names = []
 
-  test "job marks client notification notified and records occurrence" do
+  test "job does not mark an unimplemented client processor as notified" do
     client = create_client
     privacy_request = ClientPrivacyRequest.create!(client: client)
     notification = ClientProcessorErasureNotification.create!(
@@ -15,8 +15,12 @@ class ProcessorErasureNotificationJobTest < ActiveJob::TestCase
 
     ProcessorErasureNotificationJob.perform_now(surface: "app", public_id: notification.public_id)
 
-    assert_equal ClientProcessorErasureNotification.status_id_for("NOTIFIED"), notification.reload.status_id
-    assert_predicate ClientOccurrence.where(event_type: "processor_erasure.notified"), :exists?
+    notification.reload
+
+    assert_equal ClientProcessorErasureNotification.status_id_for("FAILED"), notification.status_id
+    assert_equal "processor_unavailable", notification.last_error_code
+    assert_not_predicate ClientOccurrence.where(event_type: "processor_erasure.notified"), :exists?
+    assert_predicate ClientOccurrence.where(event_type: "processor_erasure.failed"), :exists?
   end
 
   test "job is idempotent for notified visitor notification" do

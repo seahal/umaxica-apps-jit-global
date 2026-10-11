@@ -69,26 +69,6 @@ module Base
         assert_includes around_filters, :with_actor_lifecycle
       end
 
-      def test_has_oidc_client_id_method
-        controller = ApplicationController.new
-
-        assert_respond_to controller, :oidc_client_id
-        assert_equal "base-rails-rp", controller.send(:oidc_client_id)
-      end
-
-      def test_has_oidc_sign_host_method
-        controller = ApplicationController.new
-
-        assert_respond_to controller, :oidc_sign_host
-      end
-
-      def test_has_oidc_base_host_method
-        controller = ApplicationController.new
-
-        assert_respond_to controller, :oidc_base_host
-        assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"), controller.send(:oidc_base_host)
-      end
-
       def test_trusts_only_the_base_app_origin_by_default
         trusted_origins = ApplicationController.forgery_protection_trusted_origins
 

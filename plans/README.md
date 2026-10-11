@@ -1,32 +1,44 @@
 # Plans
 
-This directory stores future-facing material.
+This directory contains planning material that has not yet become an implementation source of truth.
 
-- Write plans in English. Do not add Japanese or other non-English prose unless the plan explicitly
-  covers localization, translation fixtures, or a quoted source whose original language matters.
-- `active/` holds current implementation work and near-term plans. As of 2026-07-29, prior active
-  plans were filed as GitHub issues and moved to `archive/`; GitHub issues are now the source of
-  truth for active-work tracking.
-- `backlog/` holds proposals, ideas, and follow-up items that are not active yet.
-- `archive/` holds older planning and work-log material kept for traceability.
+## Directories
 
-Return-target rule:
+- `analysis/` contains investigation and decision-support material. Analysis documents are not
+  implementation specifications.
+- `backlog/` contains proposed future work that has not yet been accepted for implementation.
+- `archive/` contains historical planning material retained only when useful for traceability.
 
-- Do not introduce or preserve `safe_path_from_encoded_rt` in new plans. It is deprecated; if this
-  term appears while updating a plan, replace the direction with signed `ReturnTargetToken`
-  issuance/verification or explicitly schedule deletion of the stale helper use.
+## Source of truth
 
-Current identity authority implementation plan:
+GitHub issues are the source of truth for accepted active implementation work.
 
-- `plans/active/umaxica-v1-architecture-implementation-plan.md` sequences the Umaxica v1
-  architecture implementation after the architecture lock and guard rails.
-- `adr/acme-sign-core-base-port-boundary.md` is the current accepted boundary for Acme as the only
-  IdP / Authorization Server, Sign as a special RP, Core as the Next.js web RP/BFF, Base as the
-  Rails foundation/control-plane subdomain, and Palm as the native bearer-token API Resource Server
-  formerly tracked as Port.
-- GH issue #829 (`plans/archive/acme-sign-core-base-port-implementation.md`, deactivated) tracks
-  current implementation follow-up.
-- `adr/sign-residual-idp-surface-retirement.md`,
-  `plans/identity-authority-inversion-implementation.md`, and
-  `plans/active/identity-authority-inversion-first-slice.md` are superseded where they conflict with
-  the Acme / Sign / Core / Base / Palm boundary.
+Documents under `plans/` MUST NOT override current accepted ADRs, explicit architecture contracts,
+or current implementation decisions.
+
+An open, recent, or detailed plan does not by itself establish current architecture.
+
+## Lifecycle
+
+Planning material should normally move through:
+
+`analysis -> backlog -> GitHub issue -> implementation`
+
+After implementation, obsolete planning documents should be deleted or moved to `archive/` only when
+historical traceability is useful.
+
+Do not maintain a parallel `active/` implementation backlog in this directory.
+
+## Maintenance rules
+
+- Keep planning documents in English.
+- Do not keep generated prompts, agent conversation residue, or duplicated implementation
+  instructions.
+- Do not preserve obsolete plans merely because they contain a small amount of still-useful
+  information. Move the useful information to its canonical destination and remove the obsolete
+  document.
+- Historical documents in `archive/` are non-normative.
+- Do not place current architecture summaries in this README. Architecture belongs in the
+  appropriate ADR or architecture documentation.
+- Broken references and references to deleted planning paths should be removed or replaced when
+  encountered.

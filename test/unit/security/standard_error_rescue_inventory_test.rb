@@ -9,7 +9,7 @@ class StandardErrorRescueInventoryTest < ActiveSupport::TestCase
 
   REVIEWED_RESCUES = {
     "app/controllers/concerns/actor_support.rb" => {
-      count: 6,
+      count: 5,
       classification: "auth boundary; each rescue logs and re-raises ActorSupport::ResolutionError",
     },
     "app/controllers/concerns/authentication_logoutable.rb" => {

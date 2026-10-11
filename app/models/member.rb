@@ -33,7 +33,6 @@
 
 class Member < AppPrincipalRecord
   include Retainable
-  include ::Account
 
   attribute :status_id, default: MemberStatus::NOTHING
 

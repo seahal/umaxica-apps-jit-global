@@ -20,7 +20,28 @@ class Auth::Org::Social::SessionsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "staff sign-in page offers the Entra ceremony entry point" do
-    get "/sign/in", params: { ri: "jp" }
+    issuance = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "org",
+      intent: "sign_in",
+      params: {
+        response_type: "code",
+        client_id: "edit-org",
+        redirect_uri: OidcClientRegistry.find!("edit-org").redirect_uris.first,
+        code_challenge: "challenge",
+        code_challenge_method: "S256",
+        state: "state",
+        nonce: "nonce",
+        scope: "openid profile",
+      },
+    )
+    get "/sign/in",
+        params: {
+          ri: "jp",
+          admission: BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code,
+        }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     entra = inertia_props.fetch("methods").find { |method| method.fetch("key") == "entra" }

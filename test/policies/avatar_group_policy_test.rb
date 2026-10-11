@@ -46,4 +46,33 @@ class AvatarGroupPolicyTest < ActiveSupport::TestCase
     assert_not AvatarGroupPolicy.new(archived, user: Client.new).destroy?
     assert_not AvatarGroupPolicy.new(Object.new, user: Client.new).show?
   end
+
+  test "relation scope keeps only the selected account's app groups" do
+    own = AvatarGroup.create!(account_surface: "app", account_public_id: "account-1", name: "Own", state: "active")
+    AvatarGroup.create!(account_surface: "app", account_public_id: "account-2", name: "Other", state: "active")
+    AvatarGroup.create!(account_surface: "org", account_public_id: "account-1", name: "Surface", state: "active")
+
+    scoped = AvatarGroupPolicy.new(AvatarGroup, user: Client.new).apply_scope(
+      AvatarGroup.all,
+      type: :active_record_relation,
+    )
+
+    assert_equal [own.id], scoped.pluck(:id)
+  end
+
+  test "relation scope is empty for a non-client or without a selected account" do
+    AvatarGroup.create!(account_surface: "app", account_public_id: "account-1", name: "Own", state: "active")
+
+    assert_empty AvatarGroupPolicy.new(AvatarGroup, user: Visitor.new).apply_scope(
+      AvatarGroup.all,
+      type: :active_record_relation,
+    )
+
+    Actor.install_context!(selection: Actor::SelectedContext.new(account_public_id: nil))
+
+    assert_empty AvatarGroupPolicy.new(AvatarGroup, user: Client.new).apply_scope(
+      AvatarGroup.all,
+      type: :active_record_relation,
+    )
+  end
 end

@@ -131,7 +131,10 @@ class Auth::App::Sign::In::SessionsControllerExtraTest < ActionDispatch::Integra
   end
 
   def as_user_headers_with_token(user, token, host:)
-    access_token = AuthenticationToken.encode(user, host: host, session_public_id: token.public_id)
+    access_token = AuthenticationToken.encode(
+      user, host: host, session_public_id: token.public_id,
+            jwt_issuer_id: jwt_issuer_id_for_test_host(host, "client"),
+    )
     {
       "Host" => host,
       "Authorization" => "Bearer #{access_token}",

@@ -11,7 +11,10 @@ module Outbound
     retry_on Net::OpenTimeout, wait: :polynomially_longer, attempts: 3
     retry_on Net::ReadTimeout, wait: :polynomially_longer, attempts: 3
 
-    discard_on ArgumentError
+    # A malformed or mixed payload is a permanent producer/configuration
+    # failure. It must not be silently discarded because doing so hides a
+    # delivery gap while preserving the no-plaintext-delivery boundary.
+    discard_on ArgumentError, report: true
 
     def perform(encrypted_payload: nil, to: nil, title: nil, encrypted_body: nil, body: nil)
       payload = delivery_payload(encrypted_payload:, to:, title:, encrypted_body:, body:)

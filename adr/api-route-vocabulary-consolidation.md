@@ -1,17 +1,18 @@
 # API Route Vocabulary Consolidation Toward `/api/v0`
 
-**Status:** Accepted (2026-06-13)
+**Status:** Accepted; Core preference API migration amended (2026-09-15)
 
-> This ADR records a route-naming direction only. It changes no routes, controllers, helpers, or
-> runtime behavior. Implementation is deferred to later, separately reviewed work.
+> The original decision recorded a route-naming direction only. Its implementation amendment below
+> records the first separately reviewed migration slice; the remaining legacy namespaces are still
+> governed by the original decision.
 
 ## Status
 
-Accepted (2026-06-13).
+Accepted (2026-06-13); amended for the Core preference migration (2026-09-15).
 
 This decision establishes preferred long-term vocabulary for API route namespaces. It is a naming
-and direction decision, not an implementation. No routes are added, removed, redirected, or aliased
-by recording this ADR.
+and direction decision. The implementation amendment below records a reviewed Core preference API
+migration; recording the original decision alone did not add, remove, redirect, or alias routes.
 
 ## Context
 
@@ -95,8 +96,9 @@ remain outside `/api/v0` unless a later ADR explicitly moves them:
 
 - A single canonical API namespace (`/api/v0`) gives clients one stable vocabulary and removes the
   `web` versus `edge` distinction, which no longer carries useful meaning for API consumers.
-- Because nothing is implemented here, current clients and tests that reference `/web/v0/...` and
-  `/edge/v0/...` continue to work unchanged. There is no immediate compatibility impact.
+- For endpoints not yet migrated, current clients and tests that reference `/web/v0/...` and
+  `/edge/v0/...` continue to work unchanged. The Core preference amendment has its own reviewed
+  compatibility boundary; it does not imply that other legacy endpoints have moved.
 - Future migration work will need to reconcile a large existing surface: `/web/v0` and `/edge/v0`
   paths are referenced across JavaScript controllers, controller concerns, and tests, so any actual
   move is a cross-cutting change requiring its own plan and review.
@@ -117,11 +119,34 @@ These requirements constrain any _future_ implementation; they are not actions t
 
 ## Future implementation notes
 
-- Implementation must happen later, under its own plan and review, and is explicitly out of scope
-  here.
+- Remaining endpoint migrations must happen under their own plan and review; the Core preference
+  slice is the separately reviewed implementation amendment below.
 - A future migration should begin by classifying each existing `web/v0` and `edge/v0` endpoint as an
   actual API endpoint or a protocol/ceremony/operational endpoint, then migrating only the former.
 - The content-read endpoints `/edge/v0/entries` (docs/help/news) are an open classification question
   and require separate review before any decision; they are intentionally not classified here.
 - Exploratory implementation notes, the candidate-route inventory, risks, and open questions are
   recorded in `memos/2026-06-13-claude-api-route-vocabulary-consolidation.md`.
+
+## Implementation amendment — Core preference APIs (2026-09-15)
+
+The following reviewed migration slice is now implemented on the `feature` branch:
+
+- Core app, com, and org preference cookie and theme endpoints remain at their established
+  `/api/v0/preferences/{cookie,theme}` paths, but their controllers now live under the matching
+  `Core::<surface>::Api::V0::Preferences` namespace.
+- Core DBSC registration remains the protocol endpoint `POST /api/v0/preferences/dbsc` and now uses
+  the same canonical API namespace.
+- The old Core `Web::V0` and `Edge::V0` controller files for these endpoints were removed after
+  route and source searches showed no remaining application caller.
+- The cookie/theme routes intentionally remain explicit `GET` + `PATCH` declarations. Rails'
+  resource update mapping also exposes `PUT`, while the existing OpenAPI documents and route
+  contract intentionally allow only `PATCH`; changing that verb contract would be an unrelated API
+  change. The DBSC endpoint uses ordinary resource routing because its protocol contract is `POST`
+  only.
+
+This amendment does not migrate Auth, Base, Side, Docs, Help, News, or other protocol/ceremony
+endpoints. Their legacy route vocabulary remains subject to endpoint-specific compatibility review.
+The route contract, DBSC wiring, preference registry, and security invariant tests were updated to
+follow the canonical controller locations. Runtime request tests remain required before accepting
+the migration because the current environment has no reachable isolated PostgreSQL/Valkey targets.

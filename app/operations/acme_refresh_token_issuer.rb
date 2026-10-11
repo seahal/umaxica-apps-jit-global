@@ -112,9 +112,21 @@ class AcmeRefreshTokenIssuer
       )
     end
 
+    RefreshTokenReuseActivityRecorder.call(token: token, result: "token_family_revoked")
+
+    Rails.logger.warn(
+      # This is an internal diagnostic, not user-facing copy.
+      # rubocop:disable I18n/RailsI18n/DecorateString
+      "Refresh token reuse detected; the refresh token family was revoked so the user can sign in again.",
+      # rubocop:enable I18n/RailsI18n/DecorateString
+    )
     Rails.logger.info(
       JitLogEvent.format(
         "authentication.refresh.reuse_detected",
+        # This is an internal diagnostic, not user-facing copy.
+        # rubocop:disable I18n/RailsI18n/DecorateString
+        message: "Refresh token reuse detected; the refresh token family was revoked.",
+        # rubocop:enable I18n/RailsI18n/DecorateString
         token_id: token.public_id,
         refresh_token_family_id: token.refresh_token_family_id,
         actor_type: actor_type_label(token),

@@ -15,7 +15,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     create_active_secret_credential(@operator)
 
     post base_org_identity_secret_removal_url(target.public_id, ri: "jp", host: @host),
-         headers: as_staff_headers(@operator, host: @host)
+         headers: step_up_staff_headers(@operator, host: @host)
 
     assert_response :see_other
     assert_redirected_to base_org_identity_secrets_path(ri: "jp")
@@ -26,7 +26,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     only = create_active_secret_credential(@operator)
 
     post base_org_identity_secret_removal_url(only.public_id, ri: "jp", host: @host),
-         headers: as_staff_headers(@operator, host: @host)
+         headers: step_up_staff_headers(@operator, host: @host)
 
     assert_response :see_other
     assert_redirected_to base_org_identity_secrets_path(ri: "jp")
@@ -39,13 +39,55 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     create_active_secret_credential(other)
 
     post base_org_identity_secret_removal_url(other_secret.public_id, ri: "jp", host: @host),
-         headers: as_staff_headers(@operator, host: @host)
+         headers: step_up_staff_headers(@operator, host: @host)
 
     assert_response :not_found
     assert_equal OperatorSecretCredentialStatus::ACTIVE, other_secret.reload.staff_secret_status_id
   end
 
+  test "removal without fresh step-up is refused and keeps the credential" do
+    target = create_active_secret_credential(@operator)
+    create_active_secret_credential(@operator)
+
+    post base_org_identity_secret_removal_url(target.public_id, ri: "jp", host: @host),
+         headers: as_staff_headers(@operator, host: @host)
+
+    assert_not response.location.to_s.end_with?(base_org_identity_secrets_path(ri: "jp"))
+    assert_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
+  end
+
+  test "an Emergency session cannot remove a credential" do
+    target = create_active_secret_credential(@operator)
+    create_active_secret_credential(@operator)
+    emergency_token = OperatorToken.create!(
+      staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 30.days.from_now,
+      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
+      authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
+    )
+
+    post base_org_identity_secret_removal_url(target.public_id, ri: "jp", host: @host),
+         headers: as_staff_headers(@operator, host: @host, session_public_id: emergency_token.public_id)
+
+    assert_not response.location.to_s.end_with?(base_org_identity_secrets_path(ri: "jp"))
+    assert_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
+  end
+
   private
+
+  def step_up_staff_headers(actor, host:)
+    headers = as_staff_headers(actor, host: host)
+    OperatorToken.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID")).update_columns(
+      last_step_up_at: Time.current,
+      last_step_up_scope: "settings_secret_credential",
+      last_step_up_aal: "aal2",
+      last_step_up_method: "passkey",
+      last_step_up_session_public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"),
+      last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:org",
+    )
+    headers
+  end
 
   def create_active_secret_credential(operator)
     OperatorSecretCredential.create!(

@@ -7,6 +7,7 @@ module Auth
       module In
         module Challenge
           class TotpsController < ::Auth::App::ApplicationController
+            include ::AuthenticationModeSwitchGuard
             include ::SurfaceInertiaPage
 
             include ::TurnstilePageProps

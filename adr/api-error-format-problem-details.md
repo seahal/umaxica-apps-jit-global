@@ -116,7 +116,7 @@ and the separate string-valued `error` member in `publishing_content_rendering.r
 Every `/api/v0` error response now carries the RFC 9457 members and nothing else.
 
 The `Deprecation` and `Sunset` announcement that step 2 called for was not required, for three
-reasons established by the audit in `plans/rails-nextjs-openapi-contract-audit.md`:
+reasons established by the audit in `plans/analysis/rails-nextjs-openapi-contract-audit.md`:
 
 - **The named consumer does not read it.** `seahal/umaxica-apps-edge` forwards `/api/v0/*` to Rails
   byte for byte over a Cloudflare VPC binding and never parses the JSON

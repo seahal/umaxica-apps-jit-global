@@ -883,8 +883,11 @@ Target decision:
 
 - App/com sign-up progression is carried by `ClientSignUpFlow` and `VisitorSignUpFlow` tickets, not
   by credential-specific session state as the source of truth.
-- `SignUpStateMachine` owns one-way progression through contact/social verification, optional guard,
-  checkpoint, finalization, sign-in handoff, and completion.
+- `SignUpStateMachine` owns one-way progression through contact/social verification, the required
+  guardrail for email/telephone flows, checkpoint, finalization, sign-in handoff, and completion.
+  `CONTACT_VERIFIED` cannot enter `CHECKPOINT_PENDING` directly; the state machine and policies
+  require `GUARDRAIL_PENDING` first. App social callback completion remains its separately verified
+  path to the checkpoint and does not add a second, unapproved guardrail contract.
 - The checkpoint records compact cleared requirements. Email/telephone OTP and social confirmation
   are recorded as prior cleared gates; checkpoint-visible setup still owns birthdate, passkey, and
   passcode requirements before durable finalization.

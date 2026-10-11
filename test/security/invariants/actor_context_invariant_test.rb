@@ -67,6 +67,26 @@ module Security
                      "Actor.install_context! must stay inside request lifecycle boundaries:\n#{offenders.join("\n")}"
       end
 
+      test "request id is never used as an OpenTelemetry trace id" do
+        paths = [
+          Rails.root.join("app/controllers/concerns/actor_support.rb"),
+          Rails.root.join("app/controllers/concerns/core_browser_api_boundary.rb"),
+        ]
+
+        offenders =
+          paths.flat_map do |path|
+            relative_path = path.relative_path_from(Rails.root).to_s
+            path.read.each_line.with_index(1).filter_map do |line, line_number|
+              next unless line.match?(/trace_id\s*[:=]\s*request\.request_id/)
+
+              "#{relative_path}:#{line_number}: #{line.strip}"
+            end
+          end
+
+        assert_empty offenders,
+                     "request_id must never substitute for an OpenTelemetry trace_id:\n#{offenders.join("\n")}"
+      end
+
       test "old Actor authentication and preference APIs are not used" do
         offenders =
           Rails.root.glob("{app,test}/**/*").flat_map do |path|

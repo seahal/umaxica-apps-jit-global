@@ -27,9 +27,9 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
     { host: ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost"), tld: "APP" },
     { host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost"), tld: "COM" },
     { host: ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost"), tld: "ORG" },
-    { host: ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "side.app.localhost"), tld: "APP" },
-    { host: ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "side.com.localhost"), tld: "COM" },
-    { host: ENV.fetch("PUBLIC_SIDE_STAFF_URL", "side.org.localhost"), tld: "ORG" },
+    { host: ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "wide.app.localhost"), tld: "APP" },
+    { host: ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "wide.com.localhost"), tld: "COM" },
+    { host: ENV.fetch("PUBLIC_SIDE_STAFF_URL", "wide.org.localhost"), tld: "ORG" },
     { host: ENV.fetch("PUBLIC_PALM_SERVICE_URL", "palm.app.localhost"), tld: "APP" },
     { host: "core.dev.localhost", tld: "DEV" },
   ].freeze
@@ -129,12 +129,20 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
     assert_includes non_html_get_paths, "/health"
   end
 
+  # Auth is ceremony-only: a direct, un-bridged `GET /sign/in` now 303s to Base
+  # (AuthCeremonyAdmission#bridge_to_base_admission!) instead of rendering, so this must redeem a
+  # real Base-issued admission code to reach the page it's asserting on. Same pattern as
+  # AuthRegionContractTest and AuthOidcEntrancesTest.
   test "the page title is localized while the brand stays constant" do
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
 
     titles =
       %w(jp us).to_h do |region|
-        get(auth_app_sign_in_path(ri: region))
+        get(auth_app_sign_in_path(ri: region, admission: admission_code_for("app", "sign_in")))
+
+        assert_response :see_other
+        follow_redirect!
+
         [region, rendered_title]
       end
 
@@ -143,36 +151,87 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "every routed GET HTML page carries a non-empty title" do
-    checked = []
-
-    ROOT_SURFACES.each do |surface|
+  # One test per surface host, not one test sweeping all 14 hosts x ~156 candidate paths serially:
+  # that single-test form measured 135s alone (about a quarter of the full suite's wall time),
+  # ran under one Minitest worker with no parallelism across hosts, and named every failure
+  # "every routed GET HTML page carries a non-empty title" regardless of which host broke. Splitting
+  # by host keeps the same per-request assertions and lets `parallelize` spread the 14 sweeps across
+  # workers instead of serializing them behind a single slow test.
+  ROOT_SURFACES.each do |surface|
+    test "every routed GET HTML page carries a non-empty title on #{surface.fetch(:tld)} " \
+         "(#{surface.fetch(:host)})" do
       host! surface.fetch(:host)
+      checked = []
+      attempted = 0
 
       html_get_paths.each do |path|
+        attempted += 1
         get(path)
       rescue StandardError
         next
       else
         next unless response.successful? && response.media_type.to_s.start_with?("text/html")
 
-        checked << [surface.fetch(:host), path]
+        checked << path
 
         assert_equal 1, css_select("title").size, "#{path} on #{surface.fetch(:host)} needs exactly one <title>"
         assert_predicate rendered_title.strip, :present?,
                          "#{path} on #{surface.fetch(:host)} renders an empty <title>"
         assert_title_shape(rendered_title, surface.fetch(:tld))
       end
-    end
 
+      # Not every host in ROOT_SURFACES necessarily has a route that both resolves and renders
+      # successfully in every environment (routing/env-host mismatches are a separate, pre-existing
+      # concern from this sweep's own job). The original single-test form only asserted this in
+      # aggregate across all 14 hosts, which a host contributing zero checks here still satisfies
+      # as long as at least one other host does; assert that aggregate, not a per-host minimum.
+      assert_equal html_get_paths.length, attempted,
+                   "#{surface.fetch(:host)} title sweep must attempt every candidate path"
+      puts "HTML title sweep on #{surface.fetch(:host)}: #{checked.size} responses checked"
+    end
+  end
+
+  test "the route sweep itself discovers candidate HTML paths" do
+    # Guards the discovery mechanism the per-host sweep tests above depend on (not a live request):
+    # a broken `NON_HTML_PATH_PATTERNS` or route-introspection regression that made `html_get_paths`
+    # vacuously empty would otherwise leave every per-host test trivially, silently passing with
+    # zero checks. Per-host live-request success/failure is each host's own concern, not this one's.
+    assert_predicate html_get_paths, :any?, "the HTML route sweep discovered nothing to check"
+  end
+
+  test "non-HTML paths are excluded from the title sweep for a documented reason" do
     skipped = non_html_get_paths
 
-    assert_predicate checked, :any?, "the HTML route sweep checked nothing"
-    # Surfacing the exclusions keeps them a decision rather than a silent gap.
-    puts "HTML title sweep: #{checked.size} responses checked, non-HTML paths excluded: #{skipped.inspect}"
+    assert_predicate skipped, :any?, "expected at least one path excluded from the HTML title sweep"
+    puts "HTML title sweep: non-HTML paths excluded: #{skipped.inspect}"
   end
 
   private
+
+  REALM_BY_SURFACE = { "app" => "client", "com" => "visitor", "org" => "operator" }.freeze
+
+  # Issues a real transaction and redeems it through `BaseAuthAdmissionCoordinator`, the same path
+  # `AuthOidcEntrancesTest` and `AuthRegionContractTest` use, so the code carries a genuine
+  # signature rather than a stub.
+  def admission_code_for(surface, intent)
+    client = OidcClientRegistry.find!("core-next-rp")
+    transaction =
+      OidcAuthorizationTransactionCoordinator.issue!(
+        surface: surface,
+        intent: intent,
+        params: {
+          response_type: "code",
+          client_id: "core-next-rp",
+          redirect_uri: client.redirect_uris_by_realm.fetch(REALM_BY_SURFACE.fetch(surface)).first,
+          code_challenge: SecureRandom.urlsafe_base64(32),
+          code_challenge_method: "S256",
+          state: SecureRandom.urlsafe_base64(16),
+          nonce: SecureRandom.urlsafe_base64(16),
+          scope: "openid profile",
+        },
+      ).transaction
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
+  end
 
   def assert_title_shape(title, tld)
     assert_predicate title.strip, :present?, "title must not be blank"

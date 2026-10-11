@@ -1,7 +1,6 @@
 # Security Audit Implementation Notes — FINDING-01 through FINDING-04
 
-> Date: 2026-06-13 Plan: `plans/l-hono-ethereal-babbage.md` (security audit plan) ADR:
-> `adr/security-audit-findings-2026-06-13.md`
+> Date: 2026-06-13 ADR: `adr/security-audit-findings-2026-06-13.md`
 
 ---
 

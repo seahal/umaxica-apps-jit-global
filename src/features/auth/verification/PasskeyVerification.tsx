@@ -61,6 +61,7 @@ export default function PasskeyVerification({
 
       // Written straight into the field, as the Stimulus target was, so the value is in the DOM
       // before `requestSubmit` rather than one React render later.
+      /* v8 ignore next -- the hidden field is mounted before authenticate runs */
       if (credentialRef.current) {
         credentialRef.current.value = JSON.stringify(credential);
       }

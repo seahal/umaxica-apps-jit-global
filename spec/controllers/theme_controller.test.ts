@@ -2,14 +2,20 @@
 //
 // The mapping, the cookie parsing, the DOM application and both HTTP calls live in `@/lib/theme`
 // and are covered by spec/lib/theme.test.ts. What belongs here is what the controller itself
-// decides: which radio is checked, that the visitor's own choice outranks a slower server answer,
-// and that an unreachable server falls back to the cookie the first paint already used.
+// decides: which radio is checked, that a colour change waits for the server to accept the write,
+// that the visitor's own choice outranks a slower stored-preference read, and that an unreachable
+// server falls back to the cookie the first paint already used.
 import { Controller } from "@hotwired/stimulus";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ThemeController from "@/controllers/theme_controller";
 
-import { type FetchMock, jsonResponse as httpJson, requestWithMethod } from "../support/http";
+import {
+  type FetchMock,
+  jsonResponse as httpJson,
+  requestWithMethod,
+  stubFetchAnswering,
+} from "../support/http";
 import { mountController } from "../support/stimulus";
 
 const jsonResponse = (body: unknown, ok = true) => httpJson(body, ok ? 200 : 500);
@@ -136,7 +142,7 @@ describe("ThemeController", () => {
   });
 
   describe("select", () => {
-    it("applies the chosen theme immediately and reports it to the server", async () => {
+    it("reports the choice and applies the theme the server stored", async () => {
       const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse({ theme: "dr" })));
       vi.stubGlobal("fetch", fetchMock);
       const { controller, element } = await mountRadioGroup();
@@ -161,28 +167,32 @@ describe("ThemeController", () => {
       expect(checkedTheme(element)).toBe("light");
     });
 
-    it("keeps the requested theme when the server answers no theme", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse({}))),
-      );
+    it("leaves the rendered theme in place when the server answers no theme", async () => {
+      stubFetchAnswering({
+        GET: () => jsonResponse({ theme: "li" }),
+        PATCH: () => jsonResponse({}),
+      });
       const { controller, element } = await mountRadioGroup();
+      await controller.syncFromServer();
 
       await controller.persist("dark");
 
-      expect(checkedTheme(element)).toBe("dark");
+      expect(checkedTheme(element)).toBe("light");
+      expect(document.documentElement.dataset["theme"]).toBe("light");
     });
 
-    it("keeps the requested theme when the request fails", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn<typeof fetch>(() => Promise.reject(new Error("offline"))),
-      );
+    it("leaves the rendered theme in place when the request fails", async () => {
+      stubFetchAnswering({
+        GET: () => jsonResponse({ theme: "dr" }),
+        PATCH: () => Promise.reject(new Error("offline")),
+      });
       const { controller, element } = await mountRadioGroup();
+      await controller.syncFromServer();
 
       await controller.persist("light");
 
-      expect(checkedTheme(element)).toBe("light");
+      expect(checkedTheme(element)).toBe("dark");
+      expect(document.documentElement.dataset["theme"]).toBe("dark");
     });
 
     it("ignores a change event that did not come from a radio", async () => {
@@ -201,7 +211,7 @@ describe("ThemeController", () => {
     it("treats a value it does not recognise as the system theme", async () => {
       vi.stubGlobal(
         "fetch",
-        vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse({}))),
+        vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse({ theme: "sy" }))),
       );
       const { controller, element } = await mountRadioGroup();
 
@@ -211,6 +221,7 @@ describe("ThemeController", () => {
       const event = new Event("change");
       Object.defineProperty(event, "target", { value: stray });
       controller.select(event);
+      await controller.persist("system");
 
       expect(checkedTheme(element)).toBe("system");
     });

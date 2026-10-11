@@ -95,19 +95,28 @@ module OidcRpLogoutLauncher
   end
 
   def complete_oidc_rp_logout!
-    completion_state = session[SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY]
-    return render_oidc_rp_logout_completion unless completion_state.is_a?(Hash)
+    return head(:not_found) if sign_out_active_context_present?
+
+    notice_id = session[SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY]
+    return head(:not_found) unless notice_id.is_a?(String) && notice_id.present?
+
+    completion_state = Valkey::AuthState::SignOutNoticeStore.new.read(raw_id: notice_id)
+    return head(:not_found) unless completion_state
+    return head(:not_found) unless completion_state["face"].to_s == logout_surface_name.to_s
 
     expected_state = completion_state["state"].to_s
     provided_state = params[:state].to_s
-    return render_oidc_rp_logout_completion if expected_state.blank? || provided_state.blank?
-    return render_oidc_rp_logout_completion unless expected_state.length == provided_state.length
-    return render_oidc_rp_logout_completion unless ActiveSupport::SecurityUtils.secure_compare(
+    return head(:not_found) if expected_state.present? && provided_state.blank?
+    return head(:not_found) if expected_state.blank? && provided_state.present?
+    return head(:not_found) unless expected_state.blank? || expected_state.length == provided_state.length
+    return head(:not_found) if expected_state.present? && !ActiveSupport::SecurityUtils.secure_compare(
       expected_state,
       provided_state,
     )
 
-    consume_sign_out_notice
+    @sign_out_notice = consume_sign_out_notice
+    return head(:not_found) unless @sign_out_notice
+
     render_oidc_rp_logout_completion
   end
 
@@ -155,7 +164,6 @@ module OidcRpLogoutLauncher
   end
 
   def render_oidc_rp_logout_completion
-    @sign_out_notice = consume_sign_out_notice
     render "auth/shared/sign_outs/complete", status: :ok
   end
 

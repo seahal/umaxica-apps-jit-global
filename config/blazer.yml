@@ -1,0 +1,13 @@
+# Blazer's SQL exploration dashboard, mounted on its own dedicated host
+# (config/routes/blazer.rb). See config/initializers/blazer.rb for the audit-log setting.
+#
+# One data source: the `primary` database that ApplicationRecord itself connects to
+# (app/models/application_record.rb). Every domain database (publishing, app_zenith, ...) has its
+# own dedicated `connects_to` and is intentionally not exposed here; add a data source only after
+# reviewing what read access it grants through this dashboard.
+data_sources:
+  primary:
+    url: <%=
+      config = ActiveRecord::Base.connection_db_config.configuration_hash
+      "postgresql://#{config[:username]}:#{config[:password]}@#{config[:host]}:#{config[:port]}/#{config[:database]}"
+    %>

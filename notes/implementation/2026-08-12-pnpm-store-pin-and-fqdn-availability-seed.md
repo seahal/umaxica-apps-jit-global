@@ -2,7 +2,6 @@
 
 ## Context
 
-- Original plan/spec: `plans/pnpm-up-err-pnpm-unexpected-store-virtual-lemur.md`
 - Related decisions/docs/plans: `docs/reference/feature-flags.md`,
   `app/values/fqdn_availability_registry.rb`, `app/controllers/concerns/fqdn_availability_gate.rb`,
   `config/vite.rb`, `compose.yaml` (uncommitted `npm_config_store_dir` pin)

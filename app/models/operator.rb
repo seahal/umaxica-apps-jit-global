@@ -80,6 +80,7 @@ class Operator < OrgPrincipalRecord
   MAX_PUBLIC_ID_RETRIES = 5
 
   attribute :status_id, default: OperatorStatus::NOTHING
+  validates :status_id, numericality: { only_integer: true }
   mfa_level_reference OperatorMfaLevel
   mfa_status_reference OperatorMfaStatus
 
@@ -129,6 +130,10 @@ class Operator < OrgPrincipalRecord
            foreign_key: :staff_id,
            dependent: :destroy,
            inverse_of: :staff
+  has_one :authority_lock,
+          class_name: "OperatorAuthorityLock",
+          dependent: :destroy,
+          inverse_of: :operator
   has_many :operator_tokens, class_name: "OperatorToken", foreign_key: :staff_id,
                              inverse_of: :staff
   has_many :oidc_connections,
@@ -155,6 +160,17 @@ class Operator < OrgPrincipalRecord
   has_many :staff_bulletins, class_name: "OperatorBulletin", dependent: :destroy, inverse_of: :staff
   has_many :staff_banners, class_name: "OperatorBanner", dependent: :destroy, inverse_of: :staff
   has_one :rp_account, class_name: "OperatorAccount", dependent: :destroy, inverse_of: :staff
+  has_many :agent_ownerships, dependent: :restrict_with_error, inverse_of: :operator
+  has_many :owned_agents, through: :agent_ownerships, source: :agent
+  has_many :agent_administration_grants, dependent: :restrict_with_error, inverse_of: :operator
+  has_many :agent_delegation_grants, dependent: :restrict_with_error, inverse_of: :operator
+  has_many :agent_usage_grants, dependent: :restrict_with_error, inverse_of: :operator
+  has_many :agent_view_grants, dependent: :restrict_with_error, inverse_of: :operator
+  has_many :bureau_ownerships, dependent: :restrict_with_error, inverse_of: :operator
+  has_many :owned_bureaus, through: :bureau_ownerships, source: :bureau
+  has_many :bureau_administration_grants, dependent: :restrict_with_error, inverse_of: :operator
+  has_many :bureau_delegation_grants, dependent: :restrict_with_error, inverse_of: :operator
+  has_many :bureau_view_grants, dependent: :restrict_with_error, inverse_of: :operator
   has_one :core_org_operator_bridge,
           dependent: :destroy,
           inverse_of: :operator

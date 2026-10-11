@@ -1,0 +1,35 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "redis"
+require "active_support/core_ext/object/blank"
+require "active_support/core_ext/object/inclusion"
+require_relative "../lib/umaxica/valkey/error"
+require_relative "../lib/umaxica/valkey/configuration_error"
+require_relative "../lib/umaxica/valkey/operation_error"
+require_relative "../lib/umaxica/valkey/unavailable"
+require_relative "../lib/umaxica/valkey/connection"
+require_relative "../lib/umaxica/valkey/cleanup"
+require_relative "../lib/umaxica/valkey/responsibility_urls"
+require_relative "../lib/umaxica/valkey/test_target"
+require_relative "../lib/umaxica/valkey/test_run_scope"
+
+run_id = ENV.fetch("VALKEY_NAMESPACE_RUN_ID")
+Umaxica::Valkey::TestRunScope.validate!(run_id)
+Umaxica::Valkey::TestRunScope.ensure_cleanup_allowed!(run_id)
+
+parsed_urls = Umaxica::Valkey::TestTarget.parse!
+url = parsed_urls.fetch(:auth_state).url
+connection = Umaxica::Valkey::Connection.new(url: url, namespace: "e0_cleanup")
+prefixes =
+  %w(authorization_code admission sign_out_notice).map do |kind|
+    "auth_state:#{kind}:#{run_id}:"
+  end
+
+deleted =
+  prefixes.sum do |prefix|
+    Umaxica::Valkey::Cleanup.delete_by_prefix(connection, prefix: prefix)
+  end
+prefixes.each { |prefix| Umaxica::Valkey::Cleanup.ensure_empty!(connection, prefix: prefix) }
+puts "Valkey scoped cleanup: run_id=#{run_id} deleted=#{deleted} prefixes=#{prefixes.length}"
+connection.close

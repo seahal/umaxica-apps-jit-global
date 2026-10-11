@@ -63,7 +63,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       end
 
     TurnstileVerifierStub.challenge_enabled = false
-    JitSecurityTurnstileVerifier.stub(:verify, verifier) do
+    TurnstileVerifierStub.stub(:verify, verifier) do
       post(
         auth_app_sign_up_email_url(ri: "jp"),
         params: {
@@ -97,6 +97,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal "auth/app/sign/up/emails/new", inertia_component
     assert_equal I18n.t("sign.app.registration.email.new.page_title"), inertia_props.fetch("title")
     assert_equal "client_email", inertia_props.fetch("scope")
+    assert_equal "", inertia_props.fetch("field").fetch("value")
     checkbox_names = inertia_props.fetch("checkboxes").map { |checkbox| checkbox.fetch("name") }
 
     assert_equal 1, checkbox_names.count("promotional")
@@ -109,12 +110,13 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :success
 
-    # One link on the page itself and one in the surface chrome, as before.
+    # The links a specific ceremony needs live in the page body; the shared auth header carries no
+    # sign-in/sign-up navigation of its own.
     page_links = inertia_props.fetch("links").map { |link| link.fetch("href") }
-    chrome_links = inertia_props.fetch("chrome").fetch("primary_navigation").map { |link| link.fetch("href") }
 
-    assert_equal 2, (page_links + chrome_links).count(auth_app_sign_up_path(ri: "jp"))
+    assert_equal 1, page_links.count(auth_app_sign_up_path(ri: "jp"))
     assert_equal 1, page_links.count(new_auth_app_sign_in_email_path(ri: "jp"))
+    assert_not inertia_props.fetch("chrome").key?("primary_navigation")
   end
 
   test "edit uses current registration email from session" do
@@ -429,6 +431,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_response :unprocessable_content
+    assert_equal email, inertia_props.fetch("field").fetch("value")
     assert_includes @response.body, I18n.t("sign.app.registration.email.new.error_summary")
     assert_not_includes @response.body, "prohibited this sample from being saved"
   end
@@ -451,6 +454,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_response :unprocessable_content
+    assert_equal "policy_missing@example.com", inertia_props.fetch("field").fetch("value")
     assert_includes @response.body, I18n.t("sign.app.registration.email.new.error_summary")
     assert_includes @response.body, ClientEmail.human_attribute_name(:confirm_policy)
     assert_not_includes @response.body, "prohibited this sample from being saved"
@@ -477,6 +481,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_response :unprocessable_content
+    assert_equal email, inertia_props.fetch("field").fetch("value")
     assert_includes @response.body, I18n.t("sign.app.registration.email.create.turnstile_validation_failed")
   ensure
     TurnstileVerifierStub.challenge_response = { "success" => true }
@@ -992,9 +997,9 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     cancellation_path = auth_app_sign_up_check_email_birthdate_path(ri: "jp")
 
     assert_equal cancellation_path, inertia_props.fetch("cancellation").fetch("action")
-    # The checkpoint offers no escape hatch: `@hide_auth_navigation` suppresses the surface
-    # navigation that would otherwise link to sign-up and sign-in.
-    assert_nil inertia_props.fetch("chrome").fetch("primary_navigation")
+    # The auth surface carries no header navigation to sign-up/sign-in on any page, so a checkpoint
+    # offers no escape hatch without needing a per-page suppression flag.
+    assert_not inertia_props.fetch("chrome").key?("primary_navigation")
 
     get auth_app_sign_up_check_email_birthdate_url(ri: "jp"), headers: default_headers
 

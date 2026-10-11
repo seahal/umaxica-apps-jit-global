@@ -6,7 +6,9 @@ same toolchain.
 
     client ---- tailnet tcp/22 ----> tailscaled in core ---- 127.0.0.1:2222 ----> sshd
 
-Opt-in. Nothing loads `compose.remote-access.yaml` implicitly.
+Opt-in. The overlay lives in `compose.override.yaml` behind `profiles: [remote-access]`, so nothing
+starts it implicitly: a bare `podman compose up` resolves `core` out of the merged configuration
+entirely, and the Dev Containers CLI never loads that file.
 
 This document is one of three. `umaxica-apps-global`, `umaxica-apps-edge` and `portal` share one
 contract, described in `plans/global-portal-edge-dreamy-spring.md`; only the account name, the
@@ -20,8 +22,8 @@ tailnet hostname and the toolchain differ. **Fix something here, fix it in all t
 | sshd config          | `/etc/ssh/remote-sshd_config` (baked, 0444 root)                                             |
 | sshd wrapper         | `/usr/local/bin/remote-sshd-entrypoint` (baked, 0555 root)                                   |
 | authorized keys      | `.secrets/codex_authorized_keys` → `/home/global/.config/umaxica/authorized_keys`, read-only |
-| sshd host key        | volume `umaxicaappsglobaldc_sshd-host-keys` → `/home/global/.local/state/remote-sshd`     |
-| Tailscale node state | volume `umaxicaappsglobaldc_tailscale-state` → `/home/global/.local/state/tailscale`      |
+| sshd host key        | volume `umaxicaappsglobaldc_sshd-host-keys` → `/home/global/.local/state/remote-sshd`        |
+| Tailscale node state | volume `umaxicaappsglobaldc_tailscale-state` → `/home/global/.local/state/tailscale`         |
 | tailnet hostname     | `umaxica-global-core`                                                                        |
 | tailnet tag          | `tag:umaxica-devcontainer`                                                                   |
 
@@ -99,7 +101,8 @@ substitute for it.
 
    ```bash
    .devcontainer/remote-access-preflight.sh
-   podman compose -f compose.yaml -f compose.remote-access.yaml up -d
+   podman compose -f compose.yaml -f .devcontainer/compose.yaml \
+     -f compose.override.yaml --profile remote-access up -d
    ```
 
 5. **Confirm the node registered.**
@@ -153,8 +156,10 @@ not a copy.
 ## Restart behaviour
 
 ```bash
-podman compose -f compose.yaml -f compose.remote-access.yaml down
-podman compose -f compose.yaml -f compose.remote-access.yaml up -d
+podman compose -f compose.yaml -f .devcontainer/compose.yaml \
+  -f compose.override.yaml --profile remote-access down
+podman compose -f compose.yaml -f .devcontainer/compose.yaml \
+  -f compose.override.yaml --profile remote-access up -d
 ssh umaxica-global-core hostname
 ```
 
@@ -204,13 +209,12 @@ volumes, which deregisters the node and forces a fresh enrolment.
   checklist that expects `bun --version` is checking for something no repository in this group
   ships.
 
-- **The compose project name is `umaxicaappsglobaldc`,** set in `.devcontainer/compose.yaml`.
-  It carries no separators because the Dev Containers CLI derives its own project name from
+- **The compose project name is `umaxicaappsglobaldc`,** set in `.devcontainer/compose.yaml`. It
+  carries no separators because the Dev Containers CLI derives its own project name from
   `devcontainer.json`'s `name` by stripping every non-alphanumeric character and passes it as
   `--project-name`; a separated value in the Compose files would put a bare `podman compose` in a
   second project that collides with the Dev Container over the `global-devcontainer-*` container
   names and the published ports. Volume names are prefixed with the project name, which is why the
   preflight looks for `umaxicaappsglobaldc_tailscale-state`. A bare
-  `podman compose -f compose.yaml -f compose.remote-access.yaml` without the override uses a
-  different project and therefore different, empty volumes — include the override, or expect to
-  enrol a second node.
+  `podman compose -f compose.yaml -f compose.override.yaml` without `.devcontainer/compose.yaml` has
+  no `core` to overlay at all. Include all three files, or expect the profile to select nothing.

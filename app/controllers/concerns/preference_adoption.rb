@@ -358,7 +358,7 @@ module PreferenceAdoption
         resolved_id = resolve_cross_db_option_id(source_child, target_option_class)
         next unless resolved_id
 
-        connection_class = target.class.ancestors.find { |a| a.is_a?(Class) && a < ActiveRecord::Base && a.abstract_class? }
+        connection_class = preference_connection_class(target)
         if connection_class
           connection_class.connected_to(role: :writing) { target_child.update!(option_id: resolved_id) }
         else
@@ -446,7 +446,7 @@ module PreferenceAdoption
 
     if target.respond_to?(:consented)
       # Target is ClientPreference/OperatorPreference (direct columns)
-      connection_class = target.class.ancestors.find { |a| a.is_a?(Class) && a < ActiveRecord::Base && a.abstract_class? }
+      connection_class = preference_connection_class(target)
       if connection_class
         connection_class.connected_to(role: :writing) { target.update!(source_consent) }
       else
@@ -458,7 +458,7 @@ module PreferenceAdoption
         target.public_send("#{target_assoc_name}_cookie")
       } ||
         with_preference_writing_connection(target) { target.public_send("create_#{target_assoc_name}_cookie!") }
-      connection_class = target.class.ancestors.find { |a| a.is_a?(Class) && a < ActiveRecord::Base && a.abstract_class? }
+      connection_class = preference_connection_class(target)
       if connection_class
         connection_class.connected_to(role: :writing) { target_cookie.update!(source_consent) }
       else
@@ -473,7 +473,7 @@ module PreferenceAdoption
     snapshot = preference_snapshot_for(source)
     return if snapshot.blank?
 
-    connection_class = target.class.ancestors.find { |a| a.is_a?(Class) && a < ActiveRecord::Base && a.abstract_class? }
+    connection_class = preference_connection_class(target)
     if connection_class
       connection_class.connected_to(role: :writing) { target.update!(snapshot) }
     else
@@ -578,6 +578,7 @@ module PreferenceAdoption
 
   def preference_connection_class(record_or_class)
     klass = record_or_class.is_a?(Class) ? record_or_class : record_or_class.class
-    klass.ancestors.find { |ancestor| ancestor.is_a?(Class) && ancestor < ActiveRecord::Base && ancestor.abstract_class? }
+    # Only Active Record classes own a connection; plain objects are written directly.
+    klass.connection_class_for_self if klass < ActiveRecord::Base
   end
 end

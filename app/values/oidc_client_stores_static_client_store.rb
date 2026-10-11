@@ -8,10 +8,75 @@ module OidcClientStoresStaticClientStore
   module_function
 
   def clients
-    sign_and_browser_rp_clients.merge(native_and_content_rp_clients).freeze
+    first_party_browser_rp_clients
+      .merge(deprecated_shared_browser_rp_clients)
+      .merge(native_and_content_rp_clients)
+      .freeze
   end
 
-  def sign_and_browser_rp_clients
+  # Seven independent first-party browser RPs (AuthBoundaryAuthorityMap).
+  def first_party_browser_rp_clients
+    FIRST_PARTY_RP_SPECS.to_h { |client_id, spec| [client_id, face_rp_client(**spec)] }
+  end
+
+  FIRST_PARTY_RP_SPECS = {
+    "core-app" => {
+      env_key: "PUBLIC_CORE_SERVICE_URL",
+      resource_type: "client",
+      aud: "core-app",
+      name: "Core App RP",
+      jwt_namespace: "CORE_APP",
+    },
+    "core-com" => {
+      env_key: "PUBLIC_CORE_CORPORATE_URL",
+      resource_type: "visitor",
+      aud: "core-com",
+      name: "Core Com RP",
+      jwt_namespace: "CORE_COM",
+    },
+    "core-org" => {
+      env_key: "PUBLIC_CORE_STAFF_URL",
+      resource_type: "operator",
+      aud: "core-org",
+      name: "Core Org RP",
+      jwt_namespace: "CORE_ORG",
+    },
+    "side-app" => {
+      env_key: "SIDE_SERVICE_URL",
+      default_host: "wide.app.localhost",
+      resource_type: "client",
+      aud: "side-app",
+      name: "Side App RP",
+      jwt_namespace: "SIDE_APP",
+    },
+    "side-com" => {
+      env_key: "SIDE_CORPORATE_URL",
+      default_host: "wide.com.localhost",
+      resource_type: "visitor",
+      aud: "side-com",
+      name: "Side Com RP",
+      jwt_namespace: "SIDE_COM",
+    },
+    "side-org" => {
+      env_key: "SIDE_STAFF_URL",
+      default_host: "wide.org.localhost",
+      resource_type: "operator",
+      aud: "side-org",
+      name: "Side Org RP",
+      jwt_namespace: "SIDE_ORG",
+    },
+    "edit-org" => {
+      env_key: "PUBLIC_EDIT_STAFF_URL",
+      default_host: "edit.org.localhost",
+      resource_type: "operator",
+      aud: "edit-org",
+      name: "Edit Org RP",
+      jwt_namespace: "EDIT_ORG",
+    },
+  }.freeze
+
+  # Shared browser clients retained during migration; prefer first_party_browser_rp_clients.
+  def deprecated_shared_browser_rp_clients
     {
       "sign-rp" => sign_rp_client,
       "base-rails-rp" => base_rails_rp_client,
@@ -61,18 +126,20 @@ module OidcClientStoresStaticClientStore
     {
       redirect_uris_by_realm: {
         "client" => build_redirect_uris("BASE_SERVICE_URL", "www.app.localhost") +
-          build_redirect_uris("SIDE_SERVICE_URL", "side.app.localhost"),
+          build_redirect_uris("SIDE_SERVICE_URL", "wide.app.localhost"),
         "operator" => build_redirect_uris("BASE_STAFF_URL", "www.org.localhost") +
-          build_redirect_uris("SIDE_STAFF_URL", "side.org.localhost"),
+          build_redirect_uris("SIDE_STAFF_URL", "wide.org.localhost"),
         "visitor" => build_redirect_uris("BASE_CORPORATE_URL", "www.com.localhost") +
-          build_redirect_uris("SIDE_CORPORATE_URL", "side.com.localhost"),
+          build_redirect_uris("SIDE_CORPORATE_URL", "wide.com.localhost"),
       },
-      post_logout_redirect_uris: build_post_logout_redirect_uris("BASE_SERVICE_URL", "www.app.localhost") +
-        build_post_logout_redirect_uris("BASE_STAFF_URL", "www.org.localhost") +
-        build_post_logout_redirect_uris("BASE_CORPORATE_URL", "www.com.localhost") +
-        build_post_logout_redirect_uris("SIDE_SERVICE_URL", "side.app.localhost") +
-        build_post_logout_redirect_uris("SIDE_STAFF_URL", "side.org.localhost") +
-        build_post_logout_redirect_uris("SIDE_CORPORATE_URL", "side.com.localhost"),
+      post_logout_redirect_uris: build_post_logout_redirect_uris(
+        "BASE_SERVICE_URL", "www.app.localhost", path: "/sign/out",
+      ) +
+        build_post_logout_redirect_uris("BASE_STAFF_URL", "www.org.localhost", path: "/sign/out") +
+        build_post_logout_redirect_uris("BASE_CORPORATE_URL", "www.com.localhost", path: "/sign/out") +
+        build_post_logout_redirect_uris("SIDE_SERVICE_URL", "wide.app.localhost") +
+        build_post_logout_redirect_uris("SIDE_STAFF_URL", "wide.org.localhost") +
+        build_post_logout_redirect_uris("SIDE_CORPORATE_URL", "wide.com.localhost"),
       aud: "base-rails-rp",
       resource_type: "client",
       name: "Base Rails RP",
@@ -85,16 +152,16 @@ module OidcClientStoresStaticClientStore
   def side_rails_rp_client
     {
       redirect_uris_by_realm: {
-        "client" => build_redirect_uris("SIDE_SERVICE_URL", "side.app.localhost"),
-        "operator" => build_redirect_uris("SIDE_STAFF_URL", "side.org.localhost"),
-        "visitor" => build_redirect_uris("SIDE_CORPORATE_URL", "side.com.localhost"),
+        "client" => build_redirect_uris("SIDE_SERVICE_URL", "wide.app.localhost"),
+        "operator" => build_redirect_uris("SIDE_STAFF_URL", "wide.org.localhost"),
+        "visitor" => build_redirect_uris("SIDE_CORPORATE_URL", "wide.com.localhost"),
       },
-      post_logout_redirect_uris: build_post_logout_redirect_uris("SIDE_SERVICE_URL", "side.app.localhost") +
-        build_post_logout_redirect_uris("SIDE_STAFF_URL", "side.org.localhost") +
-        build_post_logout_redirect_uris("SIDE_CORPORATE_URL", "side.com.localhost"),
-      backchannel_logout_uris: build_logout_uris("SIDE_SERVICE_URL", "backchannel/logout", "side.app.localhost") +
-        build_logout_uris("SIDE_STAFF_URL", "backchannel/logout", "side.org.localhost") +
-        build_logout_uris("SIDE_CORPORATE_URL", "backchannel/logout", "side.com.localhost"),
+      post_logout_redirect_uris: build_post_logout_redirect_uris("SIDE_SERVICE_URL", "wide.app.localhost") +
+        build_post_logout_redirect_uris("SIDE_STAFF_URL", "wide.org.localhost") +
+        build_post_logout_redirect_uris("SIDE_CORPORATE_URL", "wide.com.localhost"),
+      backchannel_logout_uris: build_logout_uris("SIDE_SERVICE_URL", "backchannel/logout", "wide.app.localhost") +
+        build_logout_uris("SIDE_STAFF_URL", "backchannel/logout", "wide.org.localhost") +
+        build_logout_uris("SIDE_CORPORATE_URL", "backchannel/logout", "wide.com.localhost"),
       backchannel_logout_session_required: true,
       aud: "side-rails-rp",
       resource_type: "client",
@@ -125,6 +192,27 @@ module OidcClientStoresStaticClientStore
       allowed_scopes: OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
       token_endpoint_auth_method: "private_key_jwt",
       jwt_namespace: "CORE_APP",
+    }
+  end
+
+  def face_rp_client(env_key:, resource_type:, aud:, name:, jwt_namespace:, default_host: nil,
+                     callback_path: AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH,
+                     sign_out_path: AuthBoundaryAuthorityMap::CANONICAL_RP_SIGN_OUT_PATH)
+    {
+      redirect_uris_by_realm: {
+        resource_type => build_redirect_uris(env_key, default_host, path: callback_path),
+      },
+      post_logout_redirect_uris: build_post_logout_redirect_uris(
+        env_key, default_host, path: sign_out_path,
+      ),
+      backchannel_logout_uris: build_logout_uris(env_key, "backchannel/logout", default_host),
+      backchannel_logout_session_required: true,
+      aud: aud,
+      resource_type: resource_type,
+      name: name,
+      allowed_scopes: OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      token_endpoint_auth_method: "private_key_jwt",
+      jwt_namespace: jwt_namespace,
     }
   end
 
@@ -189,19 +277,19 @@ module OidcClientStoresStaticClientStore
 
   # default_host is only consulted for env keys boot_host_for does not map; keys it maps resolve
   # from boot config and must not carry a literal default that can drift from the real host.
-  def build_redirect_uris(env_key, default_host = nil)
+  def build_redirect_uris(env_key, default_host = nil, path: "/oidc/callback")
     configured_hosts_for(env_key, default_host).map do |host|
       protocol = (Rails.env.production? || public_host?(host)) ? "https" : "http"
       port_suffix = (Rails.env.production? || public_host?(host)) ? "" : ":3000"
-      "#{protocol}://#{host}#{port_suffix}/oidc/callback"
+      "#{protocol}://#{host}#{port_suffix}#{path}"
     end
   end
 
-  def build_post_logout_redirect_uris(env_key, default_host = nil)
+  def build_post_logout_redirect_uris(env_key, default_host = nil, path: "/sign/out")
     configured_hosts_for(env_key, default_host).map do |host|
       protocol = (Rails.env.production? || public_host?(host)) ? "https" : "http"
       port_suffix = (Rails.env.production? || public_host?(host)) ? "" : ":3000"
-      "#{protocol}://#{host}#{port_suffix}/sign/out/complete"
+      "#{protocol}://#{host}#{port_suffix}#{path}"
     end
   end
 
@@ -264,6 +352,8 @@ module OidcClientStoresStaticClientStore
     host.to_s
   end
 
-  private_class_method :build_redirect_uris, :build_post_logout_redirect_uris, :build_logout_uris,
-                       :public_host?, :configured_hosts_for, :boot_host_for, :normalize_host
+  private_class_method :first_party_browser_rp_clients, :deprecated_shared_browser_rp_clients,
+                       :face_rp_client, :build_redirect_uris, :build_post_logout_redirect_uris,
+                       :build_logout_uris, :public_host?, :configured_hosts_for, :boot_host_for,
+                       :normalize_host
 end

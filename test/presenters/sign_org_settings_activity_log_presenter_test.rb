@@ -25,11 +25,11 @@ class SignOrgSettingsActivityLogPresenterTest < ActiveSupport::TestCase
     assert_equal time, @log.occurred_at(activity)
   end
 
-  test "occurred_at falls back to created_at" do
+  test "occurred_at does not use persistence metadata when the event time is absent" do
     time = Time.zone.parse("2024-01-01 12:00:00 UTC")
     activity = stub_activity(occurred_at: nil, created_at: time)
 
-    assert_equal time, @log.occurred_at(activity)
+    assert_nil @log.occurred_at(activity)
   end
 
   test "event_label translates known event" do

@@ -71,7 +71,21 @@ module RefreshTokenable
       attrs = rotated_token_core_attributes(previous_token)
       copy_rotated_token_optional_attributes(attrs, previous_token)
       copy_rotated_token_binding_attributes(attrs, previous_token)
+      copy_rotated_token_authentication_context(attrs, previous_token)
       attrs
+    end
+
+    # Rotation replaces the session row, so anything the replacement does not
+    # copy is silently dropped. The authentication context must not be: a
+    # Restricted Mode session that rotated into a row with no context would
+    # become a Normal session, which is exactly the upgrade the design forbids.
+    # Kept as its own step rather than one more line in the optional-attribute
+    # list, because this one is a security invariant
+    # (docs/security/org-emergency-access.md).
+    def copy_rotated_token_authentication_context(attrs, previous_token)
+      return unless previous_token.has_attribute?(:authentication_context)
+
+      attrs[:authentication_context] = previous_token.authentication_context
     end
 
     def rotated_token_core_attributes(previous_token)
@@ -94,6 +108,7 @@ module RefreshTokenable
       copy_attribute_if_present(attrs, previous_token, :oidc_client_id)
       copy_attribute_if_present(attrs, previous_token, :oidc_scope)
       copy_attribute_if_present(attrs, previous_token, :oidc_sid)
+      copy_attribute_if_present(attrs, previous_token, :authentication_event_at)
 
       actor_key = actor_foreign_key_from(previous_token)
       token_status_key = token_status_key_from(previous_token)
@@ -188,7 +203,7 @@ module RefreshTokenable
       self.refresh_token_digest = digest_refresh_token(verifier)
       self.discarded_at =
         if discarded_at
-          discarded_at
+          SessionAbsoluteExpiryValue.cap(proposed_expiry: discarded_at, absolute_expiry: self.discarded_at)
         elsif self.discarded_at.respond_to?(:infinite?) && self.discarded_at.infinite?
           default_lapses_at
         else

@@ -147,6 +147,8 @@ module IdentityTelephoneCeremonyContract
 
   def decode_unverified_payload(token)
     payload, = JWT.decode(token, nil, false)
+    raise IdentityTelephoneCeremony::Error, "token payload must be a JSON object" unless payload.is_a?(Hash)
+
     payload
   rescue JWT::DecodeError => e
     raise IdentityTelephoneCeremony::Error, "token is invalid: #{e.message}"

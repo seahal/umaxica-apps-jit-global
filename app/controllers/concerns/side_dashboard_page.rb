@@ -35,7 +35,7 @@ module SideDashboardPage
           links: [
             {
               label: "Authorize",
-              href: side_dashboard_url_for(surface, "side_%{surface}_oidc_authorization_path"),
+              href: side_dashboard_url_for(surface, "side_%{surface}_sign_in_path"),
             },
           ],
         },

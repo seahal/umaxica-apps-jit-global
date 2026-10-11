@@ -1,6 +1,6 @@
 # Feature Flags
 
-Flags are stored in Flipper (PostgreSQL `platform` database, see `config/initializers/flipper.rb`)
+Flags are stored in Flipper (PostgreSQL `primary` database, see `config/initializers/flipper.rb`)
 and toggled through the Flipper UI mounted on the developer surface. They are runtime operational
 controls, not deploy-time configuration: required configuration still uses `ENV.fetch("NAME")` and
 fails at boot when missing.

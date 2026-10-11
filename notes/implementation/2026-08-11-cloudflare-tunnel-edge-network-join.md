@@ -2,7 +2,7 @@
 
 ## Context
 
-- Original plan/spec: session plan "cloudflare-tunnel を外部 Edge ネットワークへ参加させる"
+- Original plan/spec: session plan "join cloudflare-tunnel to the external Edge network"
   (2026-08-11), derived from an operator investigation of persistent 502s on Edge-bound ingress.
 - Related decisions/docs/plans: `docs/operations/cloudflare-private-origin.md`,
   `docs/architecture/cloudflare-request-paths.md`,

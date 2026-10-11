@@ -125,8 +125,7 @@ mismatch.
   bubble, only interface unified with `Actor::Preference`)
 - Related plan: `plans/backlog/legacy-preference-models-retirement-plan.md` (planned to be
   rewritten)
-- Related plan: `plans/backlog/gh578-preference-consolidation.md` (aggregation of
-  `Actor::Preference`)
+- Related plan: GH issue #578 (aggregation of `Actor::Preference`)
 - Related ADR (existing): `adr/setting-preference-remove-polymorphic-owner.md`
   (`ComPreferenceRecord` precedent for adoption)
 

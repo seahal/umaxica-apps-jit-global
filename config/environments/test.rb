@@ -3,6 +3,24 @@
 
 require_relative "../../test/support/swappable_cache_store"
 
+# Test boot must be explicit about the Valkey topology. The application cache and rate-limit
+# stores remain deterministic in-memory stores below; these URLs are still required so auth-state
+# tests and request paths cannot silently inherit development logical databases.
+require_relative "../../lib/umaxica/valkey/error"
+require_relative "../../lib/umaxica/valkey/configuration_error"
+require_relative "../../lib/umaxica/valkey/responsibility_urls"
+require_relative "../../lib/umaxica/valkey/test_target"
+
+if Rails.env.test?
+  Umaxica::Valkey::TestTarget.parse!
+
+  run_id = ENV.fetch("VALKEY_NAMESPACE_RUN_ID")
+  unless run_id.match?(/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\z/)
+    raise Umaxica::Valkey::ConfigurationError,
+          "VALKEY_NAMESPACE_RUN_ID must contain only letters, digits, dot, underscore, or hyphen"
+  end
+end
+
 # The test environment is used exclusively to run your application's
 # test suite. You never need to work with it otherwise. Remember that
 # your test database is "scratch space" for the test suite and is wiped

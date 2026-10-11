@@ -60,7 +60,8 @@ Enforced boundary (the only sanctioned exceptions):
   machine-to-machine endpoint that renders no regional HTML: skipping the callback on a controller
   that renders HTML strips `ri` from every URL that controller generates, because
   `PreferenceGlobal#default_url_options` reads the request params only and has no fallback. That is
-  the auth sign-in/sign-up regression recorded in `plans/ri-preference-routing-regression-audit.md`.
+  the auth sign-in/sign-up regression recorded in
+  `plans/analysis/ri-preference-routing-regression-audit.md`.
 - Skipping the remaining non-security context/preference callbacks (for example
   `:set_preferences_cookie`, `:set_color_theme`) is allowed where an endpoint legitimately does not
   participate in that context, and is not a security relaxation.

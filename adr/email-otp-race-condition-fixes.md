@@ -107,6 +107,34 @@ return :cooldown if cooldown_active
 The pre-transaction check is retained as a fast path to avoid acquiring a lock on every request. The
 in-transaction check is the authoritative gate.
 
+### Sign-up ceremony application
+
+`SignOtpCeremony#issue!` follows the same rule for the app and com sign-up email paths. Its initial
+cooldown check is only a fast path; after the bound contact row is locked, the ceremony checks the
+cooldown again before replacing the stored OTP or invoking the delivery adapter. This prevents two
+concurrent resend requests from both issuing a code when the first request has already advanced the
+send timestamp. The row lock also keeps the OTP replacement and the timestamp update in the same
+serialized write boundary.
+
+### One-time verification consumption
+
+Record-backed callers must not verify an OTP in one request and clear it in a later, unlocked
+operation. `CommonOtp#verify_otp_code_and_consume` locks the record before reading the OTP, clears a
+successful code before releasing the lock, and increments a failed-attempt counter in the same
+boundary. Callers may provide a pre-consumption authorization check; a rejected check does not
+consume the code or count as a failed OTP attempt. This keeps login/account eligibility checks from
+turning a valid but unauthorized record into a consumed code while still preventing two eligible
+requests from accepting the same code.
+
+The helper is used by the existing app/com/org email and telephone verification, sign-in,
+enforcement-recovery, and withdrawal-reentry paths. It changes no OTP length, expiry, attempt
+threshold, cooldown, or delivery-provider setting.
+
+Malformed OTP input is rejected before the constant-time comparison. Every record-backed verifier
+must keep the comparison operands at the generated code length; a short, oversized, non-numeric, or
+nil value is invalid input and must not turn into a comparison exception or a successful consume.
+The sign-up ceremony applies the same boundary to its direct verifier.
+
 ## Trade-offs
 
 - `with_lock` holds `SELECT ... FOR UPDATE` on the email row for the whole read-modify-write, which
@@ -122,3 +150,6 @@ in-transaction check is the authoritative gate.
 
 - `app/models/concerns/email.rb` — `increment_attempts!`
 - `app/controllers/concerns/sign/email_registrable.rb` — `initiate_email_verification!`
+- `app/services/sign_otp_ceremony.rb` — locked cooldown recheck for sign-up resend
+- `app/controllers/concerns/common_otp.rb` — locked verification/consumption boundary and malformed
+  input handling

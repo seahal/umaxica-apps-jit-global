@@ -12,7 +12,7 @@ class Base::App::FullAccessGateTest < ActionDispatch::IntegrationTest
   end
 
   test "dashboard redirects authenticated unselected session to selector" do
-    get base_app_dashboard_url(host: @host, ri: "jp"), headers: as_user_headers(@user, host: @host)
+    get base_app_root_url(host: @host, ri: "jp"), headers: as_user_headers(@user, host: @host)
 
     assert_redirected_to base_app_selector_path(ri: "jp")
   end
@@ -21,7 +21,7 @@ class Base::App::FullAccessGateTest < ActionDispatch::IntegrationTest
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
 
-    get base_app_dashboard_url(host: @host, ri: "jp"), headers: as_user_headers(
+    get base_app_root_url(host: @host, ri: "jp"), headers: as_user_headers(
       @user,
       host: @host,
       session_public_id: @token.public_id,
@@ -31,7 +31,7 @@ class Base::App::FullAccessGateTest < ActionDispatch::IntegrationTest
   end
 
   test "dashboard requests selection as json when context is missing" do
-    get base_app_dashboard_url(host: @host, ri: "jp"), headers: as_user_headers(
+    get base_app_root_url(host: @host, ri: "jp"), headers: as_user_headers(
       @user,
       host: @host,
     ), as: :json

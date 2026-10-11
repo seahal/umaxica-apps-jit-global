@@ -5,7 +5,7 @@
 - Original plan/spec: latest OIDC Entry Flow Audit and the current OIDC/Sign boundary plan in the
   conversation.
 - Related ADR/docs/plans: `adr/sign-residual-idp-surface-retirement.md`,
-  `docs/identity/authority-boundary.md`, `plans/active/step-up-authentication-rebuild.md`.
+  `docs/identity/authority-boundary.md`.
 - Implementation date: 2026-06-12.
 
 ## Decisions Made During Implementation

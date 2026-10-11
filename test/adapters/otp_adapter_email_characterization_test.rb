@@ -41,6 +41,28 @@ class OtpAdapterEmailCharacterizationTest < ActiveSupport::TestCase
     assert_equal "123456", OutboundSensitivePayload.decrypt_email_otp(enqueued_encrypted_hotp_token)
   end
 
+  test "the enqueued job arguments carry no plaintext verification token" do
+    record = create_otp_email_record(:app, address: "characterization-verification@example.com")
+    clear_enqueued_jobs
+
+    OtpAdapter.for(surface: :app, channel: :email).deliver(
+      record: record,
+      otp_code: "123456",
+      verification_token: "verification-token",
+      public_id: record.public_id,
+    )
+
+    arguments = enqueued_jobs.last[:args].inspect
+
+    assert_not_includes arguments, "verification-token"
+    assert_equal(
+      "verification-token",
+      OutboundSensitivePayload.decrypt_email_verification_token(
+        enqueued_jobs.last[:args].last.fetch("params").fetch("encrypted_verification_token"),
+      ),
+    )
+  end
+
   test "each surface routes to its own otp mailer" do
     SURFACE_MAILERS.each do |surface, mailer|
       clear_enqueued_jobs

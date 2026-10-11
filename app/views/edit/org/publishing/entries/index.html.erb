@@ -1,0 +1,51 @@
+<% page_title(title) %>
+<div class="mx-auto flex max-w-5xl flex-col gap-4 p-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-fg"><%= title %></h1>
+      <p class="text-sm text-fg-muted"><%= description %></p>
+    </div>
+    <%= link_to "New entry", new_href,
+          class: "inline-flex items-center rounded-md bg-fg px-3 py-2 text-sm font-medium text-surface" %>
+  </div>
+
+  <% if entries.empty? %>
+    <p class="text-sm text-fg-muted">No entries in this cell.</p>
+  <% else %>
+    <table class="w-full border-collapse text-left text-sm">
+      <thead>
+        <tr class="border-b border-line text-fg-muted">
+          <th class="py-2 pr-3 font-medium">Title</th>
+          <th class="py-2 pr-3 font-medium">Slug</th>
+          <th class="py-2 pr-3 font-medium">Locale</th>
+          <th class="py-2 pr-3 font-medium">Publication</th>
+          <th class="py-2 pr-3 font-medium">Revision</th>
+          <th class="py-2 pr-3 font-medium">Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% entries.each do |entry| %>
+          <tr class="border-b border-line">
+            <td class="py-2 pr-3">
+              <%= link_to entry[:title] || entry[:public_id], entry[:show_href],
+                    class: "text-fg underline-offset-4 hover:underline" %>
+            </td>
+            <td class="py-2 pr-3"><%= entry[:canonical_slug] || "—" %></td>
+            <td class="py-2 pr-3"><%= entry[:locale] %></td>
+            <td class="py-2 pr-3">
+              <%= entry[:publication_state] %><%= " / archived" if entry[:archive_state] == "archived" %>
+            </td>
+            <td class="py-2 pr-3"><%= entry[:revision_sequence] || "—" %></td>
+            <td class="py-2 pr-3"><%= entry[:updated_at] || "—" %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+
+  <nav aria-label="Pagination" class="flex items-center gap-3 text-sm">
+    <span class="text-fg-muted"><%= page[:total] %> entries · page <%= page[:number] %></span>
+    <%= link_to "Previous", page[:previous_href] if page[:previous_href] %>
+    <%= link_to "Next", page[:next_href] if page[:next_href] %>
+  </nav>
+</div>

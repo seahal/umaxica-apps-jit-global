@@ -57,14 +57,14 @@ previous session's evidence concluded that no migration creates them. That concl
 `git grep publishing_docs_app_vocabularies -- db/` because the names are composed at migration time
 from `FAMILIES`.
 
-The real cause is that `origin/feature` squashed the publishing migrations **in place**
-(`0c2544695` rewrote the already-applied `20260716180000`, deleting `20260801142552` and
-`20260801143622`), so every database that had already run the old version kept the old
-single-family schema and reported nothing pending. `test_publishing_db` held 17 tables, including
-`publishing_editions`, which `Publishing::SchemaAndModelsTest` asserts is gone.
+The real cause is that `origin/feature` squashed the publishing migrations **in place** (`0c2544695`
+rewrote the already-applied `20260716180000`, deleting `20260801142552` and `20260801143622`), so
+every database that had already run the old version kept the old single-family schema and reported
+nothing pending. `test_publishing_db` held 17 tables, including `publishing_editions`, which
+`Publishing::SchemaAndModelsTest` asserts is gone.
 
-`docs/operations/db-workflow.md` names the remedy: migrations are the reconstruction authority and
-a squash is recovered with a reset. Applied to the test database only:
+`docs/operations/db-workflow.md` names the remedy: migrations are the reconstruction authority and a
+squash is recovered with a reset. Applied to the test database only:
 
 ```bash
 RAILS_ENV=test bin/rails db:drop:publishing db:create:publishing db:migrate:publishing
@@ -79,10 +79,10 @@ dropping a development database is not a change to make without asking.
 
 ## Test results
 
-| Run | Result |
-| --- | --- |
-| Baseline, merged tree, before any change | 12361 runs, 70283 assertions, 9 failures, 182 errors, 1 skip (841s) |
-| After the DB reset, package updates and the fixes below | 12361 runs, 71784 assertions, 3 failures, 0 errors, 1 skip (732s) |
+| Run                                                     | Result                                                              |
+| ------------------------------------------------------- | ------------------------------------------------------------------- |
+| Baseline, merged tree, before any change                | 12361 runs, 70283 assertions, 9 failures, 182 errors, 1 skip (841s) |
+| After the DB reset, package updates and the fixes below | 12361 runs, 71784 assertions, 3 failures, 0 errors, 1 skip (732s)   |
 
 `pnpm test`: 84 files, 1020 tests, all passing, before and after.
 
@@ -95,8 +95,8 @@ resolve; both are described below.
 
 `test/tooling/database_reconstruction_authority_test.rb` pins that committed structure dumps are
 session-setting stubs, because migrations — not dumps — reconstruct a database here. `9a9483e86`
-committed a populated 109 KB dump for `app_ticket`, presumably a stray `db:schema:dump` while
-adding `security_one_time_reveals`. Restored to the 448-byte stub every other dump uses.
+committed a populated 109 KB dump for `app_ticket`, presumably a stray `db:schema:dump` while adding
+`security_one_time_reveals`. Restored to the 448-byte stub every other dump uses.
 
 ### Two tests that no longer tested what they claimed
 
@@ -137,9 +137,8 @@ scheduled.
 
 - `539376{path}` — a repository-root file, added 2026-08-30, holding a single 63-character random
   string and referenced by nothing. See "Still open" below.
-- Three `.orig` merge backups committed by `9a9483e86`
-  (`health_check_rendering.rb.orig`, `health_status_serializer.rb.orig`,
-  `health_endpoints_test.rb.orig`).
+- Three `.orig` merge backups committed by `9a9483e86` (`health_check_rendering.rb.orig`,
+  `health_status_serializer.rb.orig`, `health_endpoints_test.rb.orig`).
 - `.gitignore` now covers `*.orig` and `*.rej` so the backups cannot be committed again.
 
 ## Coverage
@@ -152,12 +151,12 @@ Added interactive tests (`@testing-library/react` + `user-event`) for the submit
 branches, and the all-fields-null render, plus static cases for the empty index, a row with no
 revision, and a show page with no summary.
 
-| Metric | Before | After |
-| --- | --- | --- |
-| Statements | 99.31% | 99.54% |
-| Branches | 97.68% (fails 98% gate) | 98.98% |
-| Functions | 98.29% | 98.82% |
-| Lines | 99.58% | 99.81% |
+| Metric     | Before                  | After  |
+| ---------- | ----------------------- | ------ |
+| Statements | 99.31%                  | 99.54% |
+| Branches   | 97.68% (fails 98% gate) | 98.98% |
+| Functions  | 98.29%                  | 98.82% |
+| Lines      | 99.58%                  | 99.81% |
 
 `src/features/publishing` is now 100% statements/functions/lines and 97.36% branches.
 
@@ -182,9 +181,9 @@ nil-lock and no-current-revision guards in `ReviseEntryOperation`.
 - **`Security::Invariants::FlatRubySourceLayoutInvariantTest` fails on 11 files.** The publishing
   model concerns live at `app/models/concerns/publishing/*.rb` and define `Publishing::EntryRecord`
   and friends; the invariant requires `app/models/concerns` to be flat with a matching top-level
-  constant. Satisfying it means renaming 11 files and updating 158 includers. That is mechanical
-  and zero-behaviour, but it is a layout decision on code still being written on `origin/feature`,
-  and a rename of that size would conflict with the next merge. Left for the author of that branch.
+  constant. Satisfying it means renaming 11 files and updating 158 includers. That is mechanical and
+  zero-behaviour, but it is a layout decision on code still being written on `origin/feature`, and a
+  rename of that size would conflict with the next merge. Left for the author of that branch.
 - **`ComposeLocalOverrideOptionalTest`** fails only because of the read-only mount described above.
   The committed file is correct.
 - **The staff publishing CMS is unauthenticated.** `Base::Org::Publishing::*::EntriesController`
@@ -195,5 +194,5 @@ nil-lock and no-current-revision guards in `ReviseEntryOperation`.
 - **`PublishingManagementEntriesQuery#call` is unbounded.** The CMS index orders every entry in the
   family with no limit or pagination and builds two `url_for` calls per row. Correct and cheap at
   alpha volume; it is the first thing that will not scale.
-- **`resuts.md`** (sic) is a 2026-08-15 quality-gate report at the repository root. It predates
-  this session and belongs under `evidence/`; left alone rather than moved as unrelated cleanup.
+- **`resuts.md`** (sic) is a 2026-08-15 quality-gate report at the repository root. It predates this
+  session and belongs under `evidence/`; left alone rather than moved as unrelated cleanup.

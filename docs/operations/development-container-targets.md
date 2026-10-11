@@ -29,10 +29,14 @@ The repository keeps exactly two Compose files:
 
 - `compose.yaml` — the project-common definition, including the workspace bind mount, the loopback
   host publications, `userns_mode: keep-id`, and the build target knob.
-- `compose.override.yaml` — the OPTIONAL, gitignored developer override for anything specific to one machine or one
-  person: the Cloudflare connector, host devices, personal tooling.
+- `compose.override.yaml` — **untracked and gitignored since 2026-09-14**, auto-discovered. It
+  carries the opt-in `remote-access` overlay behind a profile, and is where anything specific to one
+  machine or one person goes: host devices, personal tooling. Being untracked is what keeps those
+  per-machine; previously the file shipped to every clone. Profile-gate anything that should stay
+  inert on a bare `podman compose up`.
 
-`.devcontainer/devcontainer.json` loads both, in that order. Do not add a third overlay.
+`.devcontainer/devcontainer.json` loads `compose.yaml` and `.devcontainer/compose.yaml`, in that
+order. Do not add a third root overlay.
 
 ## Start normal development
 
@@ -68,10 +72,8 @@ The workspace target is an explicit, per-developer opt-in with two steps.
    CORE_BUILD_TARGET=workspace
    ```
 
-2. Give `core` the FUSE device in your own `compose.override.yaml` (copy the commented block out of
-   `compose.override.yaml.example`). It is not committed because
-   not every host exposes `/dev/fuse`, and a device Compose cannot resolve makes the whole project
-   fail to start:
+2. Give `core` the FUSE device locally in `compose.override.yaml`. Do not commit it: not every host
+   exposes `/dev/fuse`, and a device Compose cannot resolve makes the whole project fail to start:
 
    ```yaml
    services:

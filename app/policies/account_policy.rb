@@ -10,7 +10,7 @@ class AccountPolicy < ApplicationPolicy
 
   def account_owned_by_current_principal?
     case record
-    when Persona
+    when ClientPersona
       user.is_a?(Client) && record.client_identity&.source_record_id == user.id
     when Individual
       user.is_a?(Visitor) && record.visitor_identity&.source_record_id == user.id

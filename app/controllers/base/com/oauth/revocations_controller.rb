@@ -8,6 +8,7 @@ module Base
         include BaseOauthEndpoint
 
         AUTHENTICATION_MODE = :open
+        OIDC_RESOURCE_TYPE = "visitor"
 
         before_action :skip_oauth_session!
         after_action :set_oauth_cache_headers
@@ -33,6 +34,7 @@ module Base
             client_secret: params[:client_secret],
             token_type_hint: params[:token_type_hint],
             host: request.host,
+            expected_resource_type: OIDC_RESOURCE_TYPE,
           )
           return head :ok if result.success?
 

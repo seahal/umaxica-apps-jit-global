@@ -117,11 +117,11 @@ module Authentication
     end
 
     test "returns resource and session id when token is valid" do
-      payload = { "sub" => 123, "sid" => "sess_1", "act" => "client", "jti" => "current-jti" }
+      payload = { "sub" => "123", "sid" => "sess_1", "scope" => "domain:client", "jti" => "current-jti" }
       FakeTokenScope.token_oidc_jti = "current-jti"
 
       AuthenticationToken.stub(:decode, payload) do
-        AuthenticationToken.stub(:validate_actor_claim!, true) do
+        AuthenticationToken.stub(:resource_type_scope_matches?, true) do
           connection_calls = []
           OrgTicketRecord.stub(:connected_to, ->(**options, &block) { connection_calls << options; block.call }) do
             result = AuthenticationCurrentResourceResolver.new(
@@ -145,11 +145,11 @@ module Authentication
     end
 
     test "returns token_jti_mismatch when access token jti is stale" do
-      payload = { "sub" => 123, "sid" => "sess_1", "act" => "client", "jti" => "stale-jti" }
+      payload = { "sub" => "123", "sid" => "sess_1", "scope" => "domain:client", "jti" => "stale-jti" }
       FakeTokenScope.token_oidc_jti = "current-jti"
 
       AuthenticationToken.stub(:decode, payload) do
-        AuthenticationToken.stub(:validate_actor_claim!, true) do
+        AuthenticationToken.stub(:resource_type_scope_matches?, true) do
           OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             result = AuthenticationCurrentResourceResolver.new(
               access_token: "token",
@@ -170,9 +170,9 @@ module Authentication
 
     test "returns administrative_access_locked when resource is admin locked" do
       payload = {
-        "sub" => 123,
+        "sub" => "123",
         "sid" => "sess_1",
-        "act" => "client",
+        "scope" => "domain:client",
         "jti" => "current-jti",
         "iat" => Time.current.to_i,
       }
@@ -180,7 +180,7 @@ module Authentication
       FakeResourceClass.resource = FakeResource.new(id: 123, admin_locked: true)
 
       AuthenticationToken.stub(:decode, payload) do
-        AuthenticationToken.stub(:validate_actor_claim!, true) do
+        AuthenticationToken.stub(:resource_type_scope_matches?, true) do
           OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             result = resolve_client_resource
 
@@ -196,9 +196,9 @@ module Authentication
 
     test "returns administrative_access_token_stale when token predates access state change" do
       payload = {
-        "sub" => 123,
+        "sub" => "123",
         "sid" => "sess_1",
-        "act" => "client",
+        "scope" => "domain:client",
         "jti" => "current-jti",
         "iat" => 10.minutes.ago.to_i,
       }
@@ -210,7 +210,7 @@ module Authentication
       )
 
       AuthenticationToken.stub(:decode, payload) do
-        AuthenticationToken.stub(:validate_actor_claim!, true) do
+        AuthenticationToken.stub(:resource_type_scope_matches?, true) do
           OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             result = resolve_client_resource
 
@@ -225,10 +225,10 @@ module Authentication
     end
 
     test "returns actor_mismatch failure when actor claim differs" do
-      payload = { "sub" => 123, "sid" => "sess_1", "act" => "operator" }
+      payload = { "sub" => "123", "sid" => "sess_1", "scope" => "domain:operator" }
 
       AuthenticationToken.stub(:decode, payload) do
-        AuthenticationToken.stub(:validate_actor_claim!, false) do
+        AuthenticationToken.stub(:resource_type_scope_matches?, false) do
           result = AuthenticationCurrentResourceResolver.new(
             access_token: "token",
             request_host: "app.localhost",
@@ -244,12 +244,12 @@ module Authentication
     end
 
     test "returns idle_timeout when the session has been inactive beyond the window" do
-      payload = { "sub" => 123, "sid" => "sess_1", "act" => "client", "jti" => "current-jti" }
+      payload = { "sub" => "123", "sid" => "sess_1", "scope" => "domain:client", "jti" => "current-jti" }
       FakeTokenScope.token_oidc_jti = "current-jti"
       FakeTokenScope.token_last_used_at = 9.hours.ago # client idle window is 8h
 
       AuthenticationToken.stub(:decode, payload) do
-        AuthenticationToken.stub(:validate_actor_claim!, true) do
+        AuthenticationToken.stub(:resource_type_scope_matches?, true) do
           OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             result = resolve_client_resource
 
@@ -264,11 +264,11 @@ module Authentication
     end
 
     test "writes last_used_at only when activity is past the throttle window" do
-      payload = { "sub" => 123, "sid" => "sess_1", "act" => "client", "jti" => "current-jti" }
+      payload = { "sub" => "123", "sid" => "sess_1", "scope" => "domain:client", "jti" => "current-jti" }
       FakeTokenScope.token_oidc_jti = "current-jti"
 
       AuthenticationToken.stub(:decode, payload) do
-        AuthenticationToken.stub(:validate_actor_claim!, true) do
+        AuthenticationToken.stub(:resource_type_scope_matches?, true) do
           OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             # Within the throttle window: no activity write.
             FakeTokenScope.token_last_used_at = 10.seconds.ago

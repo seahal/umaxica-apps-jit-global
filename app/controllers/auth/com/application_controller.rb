@@ -42,6 +42,7 @@ module Auth
       authorize :user, through: :current_policy_user
       authorize :actor, through: :current_actor
       rescue_from AuthenticationBase::LoginCooldownError, with: :render_login_cooldown
+      rescue_from AlreadyAuthenticatedError, with: :render_sign_in_unavailable_while_authenticated
       rescue_from ApplicationError, with: :handle_application_error
       rescue_from ActionController::InvalidCrossOriginRequest, with: :handle_csrf_failure
       rescue_from ActionPolicy::Unauthorized, with: :handle_authorization_error
@@ -147,7 +148,8 @@ module Auth
       def after_login_path
         return oidc_authorization_after_login_path if oidc_authorization_login_challenge.present?
 
-        base_com_dashboard_url(ri: current_region_identifier, host: base_authority_host)
+        session.delete(:auth_ceremony_admitted_intent)
+        base_com_root_url(ri: current_region_identifier, host: base_authority_host)
       end
 
       def after_login_allows_other_host?
@@ -210,17 +212,19 @@ module Auth
       def oidc_authorization_after_login_path
         challenge = oidc_authorization_login_challenge
         result =
-          OidcAuthorizationTransactionCoordinator.register_result!(
+          BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
             surface: "com",
             login_challenge: challenge,
             actor: current_resource,
             session_ref: current_session_public_id,
             auth_method: Array(Actor.authn.access_claims&.dig("amr")).first || "unknown",
             acr: Actor.authn.access_claims&.dig("acr"),
+            authentication_event_at: current_authentication_event_at,
           )
         result.resume_url
       ensure
         session.delete(:oidc_authorization_login_challenge)
+        session.delete(:oidc_authorization_intent)
       end
     end
   end

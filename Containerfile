@@ -3,7 +3,7 @@
 # ============================================================================
 # Shared build arguments
 # ============================================================================
-ARG RUBY_VERSION=4.0.6
+ARG RUBY_VERSION=4.0.7
 ARG DOCKER_UID=1000
 ARG DOCKER_GID=1000
 ARG DOCKER_USER=global
@@ -265,7 +265,12 @@ ARG DOCKER_USER
 ARG DOCKER_GROUP
 ARG GITHUB_ACTIONS
 ARG BUN_VERSION
+# `exec`-created sessions inherit no login shell, so SHELL is unset and every
+# tool that shells out (Dev Containers CLI, git, editors, agents) falls back to
+# /bin/sh -- dash here. The account's shell is already bash; this makes the
+# environment agree with it.
 ENV HOME=/home/${DOCKER_USER} \
+    SHELL=/bin/bash \
     CORE_WORKLOAD_USER=${DOCKER_USER} \
     CORE_WORKLOAD_GROUP=${DOCKER_GROUP}
 WORKDIR ${HOME}/workspace
@@ -384,7 +389,8 @@ COPY --chown=0:0 podman/core/dev-supervisor.sh /usr/local/bin/core-dev-superviso
 # these there would let anything with a development shell rewrite what the next
 # container start executes -- including which keys it accepts.
 #
-# Both are inert unless `compose.remote-access.yaml` replaces `core`'s command.
+# Both are inert unless `compose.override.yaml`'s `remote-access` profile replaces
+# `core`'s command.
 # The names are the shared ones: umaxica-apps-edge and portal bake the same two
 # paths from the same two source files.
 COPY --chown=0:0 .devcontainer/remote-sshd_config /etc/ssh/remote-sshd_config

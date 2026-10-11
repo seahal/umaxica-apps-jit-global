@@ -34,8 +34,8 @@ module Base
         )
 
         respond_to do |format|
-          format.json { render json: { status: "switched", next: base_app_dashboard_path(ri: params[:ri]) } }
-          format.html { redirect_to(base_app_dashboard_path(ri: params[:ri]), status: :see_other) }
+          format.json { render json: { status: "switched", next: base_app_root_path(ri: params[:ri]) } }
+          format.html { redirect_to(base_app_root_path(ri: params[:ri]), status: :see_other) }
         end
       rescue BaseSwitcherAuthority::InvalidSwitch => e
         switcher = current_context
@@ -57,6 +57,7 @@ module Base
 
         {
           title: "Switcher",
+          up_link: dashboard_up_link,
           current: current && {
             account_public_id: current[:account_public_id],
             organization_public_id: current[:organization_public_id],

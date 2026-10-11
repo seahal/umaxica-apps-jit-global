@@ -4,7 +4,49 @@
 class OidcAuthorizeRequestResolver < ApplicationService
   class InvalidScope < ArgumentError; end
 
-  ValidatedRequest = Data.define(:client, :scope)
+  SUPPORTED_PROMPTS = %w(login none).freeze
+
+  ValidatedRequest = Data.define(:client, :scope, :prompt, :max_age)
+
+  class << self
+    public
+
+    def normalize_prompt(value)
+      tokens = value.to_s.split
+      return nil if tokens.empty?
+      return tokens.first if tokens.one? && SUPPORTED_PROMPTS.include?(tokens.first)
+
+      raise ArgumentError, "prompt is not supported"
+    end
+
+    def normalize_max_age(value)
+      return nil if value.blank?
+
+      normalized =
+        if value.is_a?(Integer)
+          value
+        elsif value.to_s.match?(/\A\d+\z/)
+          value.to_i
+        else
+          raise ArgumentError
+        end
+      raise ArgumentError, "max_age must be a non-negative integer" if normalized.negative?
+
+      normalized
+    rescue ArgumentError, TypeError
+      raise ArgumentError, "max_age must be a non-negative integer"
+    end
+
+    def authentication_satisfied?(prompt:, max_age:, authenticated_at:, now: Time.current)
+      return false if normalize_prompt(prompt) == "login"
+
+      age = normalize_max_age(max_age)
+      return true if age.nil?
+      return false if authenticated_at.blank?
+
+      authenticated_at.to_time >= now.to_time - age
+    end
+  end
 
   def initialize(params:, resource:, resource_type: nil)
     super()
@@ -17,10 +59,12 @@ class OidcAuthorizeRequestResolver < ApplicationService
     validate_required_params!
     client = find_client!
     scope = validate_scope_allowlist!(client)
+    prompt = self.class.normalize_prompt(params[:prompt])
+    max_age = self.class.normalize_max_age(params[:max_age])
     validate_redirect_uri!
     validate_state_and_nonce!
     validate_resource!
-    ValidatedRequest.new(client: client, scope: scope)
+    ValidatedRequest.new(client: client, scope: scope, prompt: prompt, max_age: max_age)
   end
 
   private

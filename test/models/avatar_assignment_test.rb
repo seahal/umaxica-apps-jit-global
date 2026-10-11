@@ -240,6 +240,6 @@ class AvatarAssignmentTest < ActiveSupport::TestCase
       source_record_id: SecureRandom.random_number(1_000_000) + 5000,
       status_id: ClientIdentityState::ACTIVE,
     )
-    Persona.create!(client_identity: identity, moniker: "Assignment Persona", title: "Persona01")
+    ClientPersona.create!(client_identity: identity, moniker: "Assignment ClientPersona", title: "Persona01")
   end
 end

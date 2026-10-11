@@ -528,6 +528,7 @@ module AuthenticationSequenceGate
       require_totp_check: false,
       audit_context: { auth_method: "session_limit_promotion" },
       bootstrap_actor: true,
+      authentication_event_at: current_authentication_event_at,
     )
     return false unless session_result[:status] == :success && current_session
 
@@ -568,6 +569,7 @@ module AuthenticationSequenceGate
       require_totp_check: false,
       audit_context: { auth_method: "oidc_session_limit_promotion" },
       bootstrap_actor: true,
+      authentication_event_at: current_authentication_event_at,
     )
     return nil unless session_result[:status] == :success && current_session
 
@@ -605,16 +607,18 @@ module AuthenticationSequenceGate
     end
 
     issuance =
-      OidcAuthorizationTransactionCoordinator.register_result!(
+      BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
         surface: sign_in_sequence_surface.to_s,
         login_challenge: challenge,
         actor: actor,
         session_ref: issued_session.public_id,
         auth_method: auth_method,
         acr: "aal1",
+        authentication_event_at: current_authentication_event_at,
       )
 
     session.delete(:oidc_authorization_login_challenge)
+    session.delete(:oidc_authorization_intent)
     sign_in_flow_locator_for(actor: actor, token: issued_session).issue!(cycle.reload)
     reset_current_db_sign_in_flow_for_sequence!
     issuance.resume_url

@@ -57,6 +57,14 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     assert_nil session[:email_registration_public_id]
   end
 
+  test "new links back to the public preference page" do
+    get new_base_app_identity_emails_registration_url(ri: "jp", host: @host), headers: @headers
+
+    assert_response :success
+    assert_equal base_app_preference_url(ri: "jp", host: @host, protocol: request.protocol),
+                 inertia_props.dig("back_link", "href")
+  end
+
   test "edit redirects back to new when no registration is in progress" do
     get edit_base_app_identity_emails_registration_url(ri: "jp", host: @host), headers: @headers
 

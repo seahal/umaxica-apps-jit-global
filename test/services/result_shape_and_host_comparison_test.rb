@@ -58,21 +58,23 @@ class ResultShapeAndHostComparisonTest < ActiveSupport::TestCase
   # A redirect URI carrying its scheme's default port is normalised so it
   # compares equal to the registered one, which never carries it.
   test "a default port is dropped from a redirect URI and a non-default one kept" do
-    coordinator = OidcAuthorizeCoordinator.allocate
+    redirect =
+      lambda do |uri|
+        URI.parse(
+          OidcAuthorizeCoordinator.rp_redirect_url(redirect_uri: uri, resource_type: "client", response_params: []),
+        )
+      end
 
-    https = URI.parse("https://rp.example.test:443/callback")
-    coordinator.send(:normalize_default_port!, https)
+    https = redirect.call("https://rp.example.test:443/callback")
 
-    assert_equal "https://rp.example.test/callback", https.to_s
+    assert_equal "https://rp.example.test/callback", https.to_s.split("?").first
 
-    http = URI.parse("http://rp.example.test:80/callback")
-    coordinator.send(:normalize_default_port!, http)
+    http = redirect.call("http://rp.example.test:80/callback")
 
-    assert_equal "http://rp.example.test/callback", http.to_s
+    assert_equal "http://rp.example.test/callback", http.to_s.split("?").first
 
-    explicit = URI.parse("https://rp.example.test:8443/callback")
-    coordinator.send(:normalize_default_port!, explicit)
+    explicit = redirect.call("https://rp.example.test:8443/callback")
 
-    assert_equal "https://rp.example.test:8443/callback", explicit.to_s
+    assert_equal "https://rp.example.test:8443/callback", explicit.to_s.split("?").first
   end
 end

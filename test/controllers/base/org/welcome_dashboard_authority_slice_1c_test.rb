@@ -9,28 +9,34 @@ class Base::Org::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
 
   setup do
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    @sign_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
     @staff = operators(:one)
   end
 
-  test "dashboard_requires_authentication" do
-    get base_org_dashboard_url(ri: "jp"), headers: host_headers(@host)
+  test "public_root_renders Base-owned local authentication forms" do
+    get base_org_root_url(ri: "jp"), headers: host_headers(@host)
 
-    assert_response :redirect
-    signin_uri = URI.parse(jump_rt_url_from_location(response.location))
+    assert_response :success
+    %w(sign_in sign_up).each do |intent|
+      action = inertia_props.fetch(intent)
 
-    assert_equal @host, signin_uri.host
-    assert_equal "/oauth/authorize", signin_uri.path
+      assert_equal base_org_root_authentication_path(ri: "jp"), action.fetch("action")
+      assert_equal "post", action.fetch("method")
+      assert_equal intent, action.fetch("intent")
+      assert_predicate action.fetch("authenticity_token"), :present?
+      assert_nil action["href"]
+    end
   end
 
   test "dashboard_renders_when_signed_in" do
     token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     select_token!(surface: :org, principal: @staff, token: token)
 
-    get base_org_dashboard_url(ri: "jp"), headers: session_headers(token)
+    get base_org_root_url(ri: "jp"), headers: session_headers(token)
 
     assert_response :success
     assert_equal "base/org/dashboards/show", inertia_component
-    assert_equal "Dashboard", inertia_props.fetch("title")
+    assert_equal I18n.t("base.shared.dashboard.title", locale: :ja), inertia_props.fetch("title")
     assert_no_match(/id\.umaxica/, response.body)
 
     links =
@@ -47,47 +53,68 @@ class Base::Org::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     labelled = links.to_h { |link| [link.fetch("label"), link.fetch("href")] }
 
     assert_includes hrefs, base_org_root_path(ri: "jp")
-    assert_includes hrefs, base_org_dashboard_path(ri: "jp")
-    assert_equal base_org_accounts_path(ri: "jp"), labelled.fetch("Account")
-    assert_equal base_org_organizations_path(ri: "jp"), labelled.fetch("Organization")
-    assert_equal base_org_avatar_path(ri: "jp"), labelled.fetch("Avatar")
+    assert_equal base_org_accounts_path(ri: "jp"), labelled.fetch(dashboard_label(:account))
+    assert_equal base_org_organizations_path(ri: "jp"), labelled.fetch(dashboard_label(:organization))
+    assert_equal base_org_avatar_path(ri: "jp"), labelled.fetch(dashboard_label(:avatar))
     assert_includes hrefs, base_org_selector_path(ri: "jp")
+    assert_equal base_org_preference_path(ri: "jp"), labelled.fetch(dashboard_label(:preference))
+    assert_equal base_org_pwa_offline_path(ri: "jp"), labelled.fetch(dashboard_label(:offline))
+    assert_not hrefs.any? { |href| href.match?(%r{/preference/(calendar|clock|currency)}) }
+    assert_not hrefs.any? { |href| href.match?(%r{/identity/(emails|telephones|secrets|sessions)}) }
     assert_includes hrefs, new_base_org_sign_out_path(ri: "jp")
-    assert_includes hrefs, base_org_oidc_authorization_path(ri: "jp", screen_hint: "signin")
-    assert_includes hrefs, base_org_oidc_authorization_path(ri: "jp", screen_hint: "signup")
-    assert_includes labelled.keys, "OIDC discovery"
-    assert_includes labelled.keys, "JWKS"
-    assert_includes labelled.keys, "UserInfo"
+    assert_not hrefs.any? { |href| href.include?("/sign/in") || href.include?("/sign/up") }
+    assert_not labelled.key?(dashboard_label(:oidc_discovery))
+    assert_not labelled.key?(dashboard_label(:jwks))
+    assert_not labelled.key?(dashboard_label(:userinfo))
 
-    publishing = inertia_props.fetch("sections").find { |section| section.fetch("heading") == "Publishing" }
+    publishing_heading = I18n.t("base.shared.dashboard.sections.publishing", locale: :ja)
 
-    assert publishing
-    surfaces = publishing.fetch("groups").map { |group| group.fetch("heading") }
-
-    assert_equal %w(info docs news help), surfaces
-    hrefs_by_cell =
-      publishing.fetch("groups").flat_map { |group|
-        group.fetch("items").map { |item| [group.fetch("heading"), item.fetch("label"), item.fetch("href")] }
-      }
-
-    assert_equal(
-      [
-        ["info", "app", base_org_publishing_info_app_entries_path(ri: "jp")],
-        ["info", "com", base_org_publishing_info_com_entries_path(ri: "jp")],
-        ["info", "org", base_org_publishing_info_org_entries_path(ri: "jp")],
-        ["docs", "app", base_org_publishing_docs_app_entries_path(ri: "jp")],
-        ["docs", "com", base_org_publishing_docs_com_entries_path(ri: "jp")],
-        ["docs", "org", base_org_publishing_docs_org_entries_path(ri: "jp")],
-        ["news", "app", base_org_publishing_news_app_entries_path(ri: "jp")],
-        ["news", "com", base_org_publishing_news_com_entries_path(ri: "jp")],
-        ["news", "org", base_org_publishing_news_org_entries_path(ri: "jp")],
-        ["help", "app", base_org_publishing_help_app_entries_path(ri: "jp")],
-        ["help", "com", base_org_publishing_help_com_entries_path(ri: "jp")],
-        ["help", "org", base_org_publishing_help_org_entries_path(ri: "jp")],
-      ],
-      hrefs_by_cell,
-    )
+    assert_not inertia_props.fetch("sections").any? { |section| section.fetch("heading") == publishing_heading }
     assert_no_match(%r{//example|umaxica\.example|evil\.example}, response.body)
+  end
+
+  test "identity_show_links_up_to_the_dashboard" do
+    token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    select_token!(surface: :org, principal: @staff, token: token)
+
+    get base_org_identity_url(ri: "jp"), headers: session_headers(token)
+
+    assert_response :success
+    assert_equal "base/org/identities/show", inertia_component
+    assert_equal I18n.t("base.shared.identity.up_link", locale: :ja), inertia_props.dig("up_link", "label")
+    assert_equal base_org_root_path(ri: "jp"), inertia_props.dig("up_link", "href")
+  end
+
+  test "identity_show_links_to_identity_pages" do
+    token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    select_token!(surface: :org, principal: @staff, token: token)
+
+    get base_org_identity_url(ri: "jp"), headers: session_headers(token)
+
+    assert_response :success
+    labelled =
+      inertia_props.fetch("sections")
+        .flat_map { |section| section.fetch("items") }
+        .to_h { |link| [link.fetch("label"), link.fetch("href")] }
+
+    assert_equal base_org_identity_emails_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.emails", locale: :ja))
+    assert_equal base_org_identity_telephones_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.telephones", locale: :ja))
+    assert_equal base_org_identity_birthdate_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.birthdate", locale: :ja))
+    assert_equal base_org_identity_secrets_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.secrets", locale: :ja))
+    assert_equal base_org_sessions_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.sessions", locale: :ja))
+    assert_equal base_org_identity_activities_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.activities", locale: :ja))
+    assert_equal base_org_identity_standing_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.standing", locale: :ja))
+    assert_equal base_org_identity_withdrawal_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.withdrawal", locale: :ja))
+    assert_equal new_base_org_sign_out_path(ri: "jp"),
+                 labelled.fetch(I18n.t("sign.app.settings.show.logout", locale: :ja))
   end
 
   test "welcome_route_exists" do
@@ -100,6 +127,11 @@ class Base::Org::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   private
+
+  # Requests use ri=jp, so the dashboard renders its Japanese copy.
+  def dashboard_label(key)
+    I18n.t(key, scope: "base.shared.dashboard.links", locale: :ja)
+  end
 
   def select_token!(surface:, principal:, token:)
     BaseSelectorBootstrapAuthority.call(surface: surface, principal: principal)

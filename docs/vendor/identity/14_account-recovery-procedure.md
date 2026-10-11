@@ -11,7 +11,7 @@ owner: internal-architecture-owner
 last-reviewed: 2026-06-24
 source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
-related-audit-ledger: plans/umaxica-immutable-pinwheel.md
+related-audit-ledger: docs/vendor/identity/11_decision-register.md
 ---
 
 # Purpose
@@ -45,14 +45,14 @@ Five prerequisites must be satisfied before MFA reset UI may be enabled:
 
 # 1. Document Status
 
-| Field           | Value                                                                                                  |
-| --------------- | ------------------------------------------------------------------------------------------------------ |
-| Status          | rfi-draft                                                                                              |
-| Owner           | internal-architecture-owner                                                                            |
-| Audience        | SIer, security-vendor, internal-architecture, support-operations                                       |
-| Confidentiality | internal-vendor-shareable                                                                              |
-| Last reviewed   | 2026-06-24 (Round 4 audit)                                                                             |
-| Related docs    | `docs/security/mfa-reset-account-recovery.md` (intended design), `plans/umaxica-immutable-pinwheel.md` |
+| Field           | Value                                                                                                           |
+| --------------- | --------------------------------------------------------------------------------------------------------------- |
+| Status          | rfi-draft                                                                                                       |
+| Owner           | internal-architecture-owner                                                                                     |
+| Audience        | SIer, security-vendor, internal-architecture, support-operations                                                |
+| Confidentiality | internal-vendor-shareable                                                                                       |
+| Last reviewed   | 2026-06-24 (Round 4 audit)                                                                                      |
+| Related docs    | `docs/security/mfa-reset-account-recovery.md` (intended design), `docs/vendor/identity/11_decision-register.md` |
 
 ---
 
@@ -422,4 +422,4 @@ All acceptance criteria MUST be verified before MFA reset UI is enabled in produ
 | `docs/vendor/identity/13_normative-baseline.md`          | Defines MFA reset as DISABLED in §9. Recovery passcode gap in §9.                      |
 | `docs/vendor/identity/08_threat-model.md`                | DRAFT. Account takeover via social engineering support is a relevant threat scenario.  |
 | `docs/vendor/identity/09_acceptance-criteria.md`         | General acceptance criteria. Recovery-specific criteria in §12 above take precedence.  |
-| `plans/umaxica-immutable-pinwheel.md`                    | Audit ledger. DEC-009 (MFA reset prerequisites), GAP-NEW-006/007, RSK-009, DEC-005.    |
+| `docs/vendor/identity/11_decision-register.md`           | Audit ledger. DEC-009 (MFA reset prerequisites), GAP-NEW-006/007, RSK-009, DEC-005.    |

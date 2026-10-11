@@ -14,7 +14,7 @@ class Base::Org::Identity::Revocations::OthersController < ::Base::Org::Applicat
       current_token: current_session,
       current_session_public_id: current_session_public_id,
     )
-    redirect_to(base_org_identity_sessions_path(ri: params[:ri]), status: :see_other)
+    redirect_to(base_org_sessions_path(ri: params[:ri]), status: :see_other)
   end
   alias_method :destroy, :create
 end

@@ -84,6 +84,7 @@ class Visitor < ComPrincipalRecord
   RECOVERY_IDENTITY_REQUIRED_MESSAGE = I18n.t("models.visitor.recovery_identity_required")
 
   attribute :status_id, default: VisitorStatus::NOTHING
+  validates :status_id, numericality: { only_integer: true }
   mfa_level_reference VisitorMfaLevel
   mfa_status_reference VisitorMfaStatus
 
@@ -133,6 +134,10 @@ class Visitor < ComPrincipalRecord
   has_many :visitor_device_sessions,
            dependent: :destroy,
            inverse_of: :visitor
+  has_one :authority_lock,
+          class_name: "VisitorAuthorityLock",
+          dependent: :destroy,
+          inverse_of: :visitor
   has_many :visitor_banners,
            dependent: :destroy,
            inverse_of: :visitor
@@ -152,6 +157,17 @@ class Visitor < ComPrincipalRecord
           class_name: "VisitorAccount",
           inverse_of: :visitor,
           dependent: :destroy
+  has_many :individual_ownerships, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :owned_individuals, through: :individual_ownerships, source: :individual
+  has_many :individual_administration_grants, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :individual_delegation_grants, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :individual_usage_grants, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :individual_view_grants, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :company_ownerships, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :owned_companies, through: :company_ownerships, source: :company
+  has_many :company_administration_grants, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :company_delegation_grants, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :company_view_grants, dependent: :restrict_with_error, inverse_of: :visitor
   has_one :core_com_visitor_bridge,
           dependent: :destroy,
           inverse_of: :visitor

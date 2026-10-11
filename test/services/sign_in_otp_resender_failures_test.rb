@@ -16,7 +16,7 @@ class SignInOtpResenderFailuresTest < ActiveSupport::TestCase
 
     Rails.error.stub(:report, ->(error, **context) { reported << [error, context] }) do
       SignInOtpResendState.stub(:parse, exploding) do
-        response = SignInOtpResender.new(kind: :email, state: "any-state").call
+        response = SignInOtpResender.new(kind: :email, state: "any-state", surface: :app).call
 
         assert_not response.resendable
       end
@@ -27,6 +27,8 @@ class SignInOtpResenderFailuresTest < ActiveSupport::TestCase
   end
 
   test "an unsupported resend kind is refused when the resender is built" do
-    assert_raises(ArgumentError) { SignInOtpResender.new(kind: :telephone, state: "any-state") }
+    assert_raises(ArgumentError) do
+      SignInOtpResender.new(kind: :telephone, state: "any-state", surface: :app)
+    end
   end
 end

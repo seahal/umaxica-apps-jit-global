@@ -70,10 +70,35 @@ module Security
         # Rails mounts the ActionCable server by default. The application defines no
         # channels and no Connection class, so there is no reachable subscription.
         "/cable" => "ActionCable::Server::Base",
-        # Feature-flag UI on the developer host. Guarded by Rack::Auth::Basic in
-        # config/routes/base.rb, which fails closed when credentials are unset.
-        "/flipper" => "Rack::Auth::Basic",
+        # Feature-flag UI on its dedicated hosts (config/routes/flipper.rb). Guarded by
+        # Rack::Auth::Basic, which fails closed when credentials are unset.
+        "flipper.umaxica.dev /" => "Rack::Auth::Basic",
+        "flipper.core.dev.localhost /" => "Rack::Auth::Basic",
+        # Solid Queue job-monitoring UI, dedicated host (config/routes/mission.rb). Guarded by
+        # MissionControl::Jobs' own HTTP Basic Auth (config/initializers/mission_control_jobs.rb),
+        # which fails closed (401) when its credentials are unset. Not loaded in test (the gem is
+        # `group :development, :production`), so this entry documents production; it is inert here.
+        "mission.core.dev.localhost /" => "MissionControl::Jobs::Engine",
+        # SQL exploration dashboard, dedicated host (config/routes/blazer.rb). `blazer` stays a
+        # `group :development` gem (Gemfile) even though it is mounted -- it is not loaded outside
+        # development, so this entry is inert in test/production and documents development only.
+        # Guarded by Rack::Auth::Basic, which fails closed when credentials are unset.
+        "blazer.core.dev.localhost /" => "Rack::Auth::Basic",
+        # PostgreSQL monitoring dashboard, dedicated host (config/routes/pghero.rb). Same
+        # `group :development`-only, mounted-in-dev-only shape as Blazer above.
+        "pghero.core.dev.localhost /" => "Rack::Auth::Basic",
       }.freeze
+
+      # Both the Flipper and Mission Control mounts sit at the path root of their own dedicated
+      # host, so path alone no longer identifies a mount uniquely; the key folds in the route's
+      # host constraint (nil for an unconstrained mount such as /cable).
+      def self.mount_key(route) = [route.constraints[:host]&.first, route.path.spec.to_s].compact.join(" ")
+
+      # A directly-mounted Rails::Engine class responds to `.call` as a class method, so its
+      # dispatcher's `#app` is the class itself and `.class.name` is always the unhelpful "Class".
+      # Rack apps mounted as an instance (Rack::Auth::Basic.new(...), ActionCable.server) keep
+      # `.class.name`, which is what actually names the guard.
+      def self.mount_identity(endpoint) = endpoint.is_a?(Class) ? endpoint.name : endpoint.class.name
 
       test "every mounted Rack app is reviewed and carries its own authorization guard" do
         # `mount` produces a route whose endpoint is not the application's own router.
@@ -88,7 +113,7 @@ module Security
             next unless endpoint.respond_to?(:call)
             next if endpoint.is_a?(Proc)
 
-            [route.path.spec.to_s, endpoint.class.name]
+            [self.class.mount_key(route), self.class.mount_identity(endpoint)]
           end.to_h
 
         unreviewed = mounted.keys - REVIEWED_MOUNTS.keys
@@ -98,17 +123,18 @@ module Security
                      "Mounted apps bypass enforce_access_policy! and surface isolation entirely — " \
                      "add an authorization guard, then record it in REVIEWED_MOUNTS."
 
-        REVIEWED_MOUNTS.each do |path, expected_endpoint|
-          next unless mounted.key?(path)
+        REVIEWED_MOUNTS.each do |key, expected_endpoint|
+          next unless mounted.key?(key)
 
-          assert_equal expected_endpoint, mounted.fetch(path),
-                       "The Rack app mounted at #{path} changed from #{expected_endpoint} to " \
-                       "#{mounted.fetch(path)}. If its authorization guard was removed, restore it."
+          assert_equal expected_endpoint, mounted.fetch(key),
+                       "The Rack app mounted at #{key} changed from #{expected_endpoint} to " \
+                       "#{mounted.fetch(key)}. If its authorization guard was removed, restore it."
         end
       end
 
       test "the Flipper UI mount is wrapped in an authorization guard" do
-        flipper_route = Rails.application.routes.routes.find { |route| route.path.spec.to_s == "/flipper" }
+        flipper_route =
+          Rails.application.routes.routes.find { |route| route.constraints[:host] == ["flipper.core.dev.localhost"] }
 
         skip "Flipper UI is not mounted in this environment" if flipper_route.nil?
 

@@ -18,7 +18,7 @@ module Base
             surface: "org",
             actor: current_operator,
             token: current_session_token,
-            fallback: base_org_dashboard_path(ri: params[:ri]),
+            fallback: base_org_root_path(ri: params[:ri]),
           )
         end
 

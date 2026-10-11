@@ -12,10 +12,6 @@ module SignUpSequenceControllerSupport
 
   private
 
-  def hide_sign_up_auth_navigation
-    @hide_auth_navigation = true
-  end
-
   def load_sign_up_ticket
     return render_sign_up_age_restricted if sign_up_session_state.age_restricted?
 

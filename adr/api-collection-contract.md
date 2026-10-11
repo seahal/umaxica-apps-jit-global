@@ -1,6 +1,8 @@
 # API Collection Contract: Envelope and Cursor Pagination
 
-**Status:** Accepted (2026-08-16); implemented (2026-08-22)
+**Status:** Accepted (2026-08-16); implemented (2026-08-22); pagination mechanism superseded
+(2026-09-10) by `adr/api-collection-offset-pagination.md`. The `{ data, page }` envelope and
+unwrapped single-resource object remain in force.
 
 > This ADR recorded a target contract and deferred it as externally breaking. The migration
 > constraint rested on a premise that a later audit disproved, and the contract was implemented on
@@ -9,7 +11,9 @@
 
 ## Status
 
-Accepted (2026-08-16).
+Accepted (2026-08-16) for the success envelope. **Pagination mechanism superseded** on 2026-09-10 by
+`adr/api-collection-offset-pagination.md` (Pagy offset pages). Do not implement the signed cursor
+described below.
 
 **No standard governs this area.** HTTP defines no pagination mechanism and no response-envelope
 convention. This record therefore states a repository decision and names the de facto practice it
@@ -68,8 +72,8 @@ Offset pagination must not be added to any public collection.
 ## Migration constraint
 
 > **Superseded 2026-08-22.** The premise below — that edge applications consume the entries API —
-> was disproved by the audit in `plans/rails-nextjs-openapi-contract-audit.md`. Retained as the
-> reasoning at the time. See [Implementation 2026-08-22](#implementation-2026-08-22).
+> was disproved by the audit in `plans/analysis/rails-nextjs-openapi-contract-audit.md`. Retained as
+> the reasoning at the time. See [Implementation 2026-08-22](#implementation-2026-08-22).
 
 This contract cannot be applied to the existing entries API without an externally coordinated
 breaking change.

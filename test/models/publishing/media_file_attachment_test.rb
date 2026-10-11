@@ -4,7 +4,10 @@ require "test_helper"
 
 module Publishing
   class MediaFileAttachmentTest < ActiveSupport::TestCase
-    PNG = ["89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415408d763f80f00000101000518d84e0000000049454e44ae426082"].pack("H*")
+    PNG_HEX =
+      "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de" \
+      "0000000c4944415408d763f80f00000101000518d84e0000000049454e44ae426082"
+    PNG = [PNG_HEX].pack("H*")
 
     test "a valid png is stored on the publishing boundary and persisted in the publishing database" do
       media = Publishing::MediaFile.new
@@ -19,9 +22,11 @@ module Publishing
       assert_match(/\A[0-9a-f]{64}\z/, media.digest)
       assert_equal "publishing", Publishing::MediaFile.connection_db_config.name
       persisted = PublishingRecord.lease_connection.select_value(
+        # rubocop:disable I18n/RailsI18n/DecorateString
         Publishing::MediaFile.sanitize_sql_array(
           ["SELECT file_data FROM publishing_media_files WHERE id = ?", media.id],
         ),
+        # rubocop:enable I18n/RailsI18n/DecorateString
       )
 
       assert_not_nil persisted

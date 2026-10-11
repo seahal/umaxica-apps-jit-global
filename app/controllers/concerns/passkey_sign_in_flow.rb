@@ -32,6 +32,7 @@ module PasskeySignInFlow
 
     challenge_id, request_options = issue_passkey_authentication_challenge(
       allow_credentials: anonymized_passkey_allow_credentials(passkeys), actor: actor,
+      purpose: passkey_ceremony_purpose,
     )
 
     render json: {
@@ -53,7 +54,7 @@ module PasskeySignInFlow
     return render_error("errors.webauthn.challenge_id_required", :bad_request) if challenge_id.blank?
 
     begin
-      consumed = consume_passkey_challenge_with_actor!(challenge_id)
+      consumed = consume_passkey_challenge_with_actor!(challenge_id, purpose: passkey_ceremony_purpose)
       actor_id = passkey_actor_id_from(consumed.actor_global_key)
       @_risk_actor_id = actor_id
       verify_and_login(consumed.challenge, actor_id)
@@ -105,7 +106,7 @@ module PasskeySignInFlow
       config: webauthn_relying_party_config,
       public_key: passkey.public_key,
       sign_count: passkey.sign_count,
-      purpose: :direct_sign_in,
+      purpose: passkey_assertion_uv_purpose,
     )
 
     attrs = { sign_count: context.sign_count }
@@ -164,6 +165,23 @@ module PasskeySignInFlow
     )
   rescue StandardError
     # Best-effort: do not let risk emission failures disrupt the auth flow
+  end
+
+  # -- ceremony purpose ----------------------------------------------------
+
+  # The challenge-store purpose this flow issues and consumes under. Purposes
+  # are separate namespaces (Webauthn::ChallengeStore::PURPOSES), so a
+  # controller that overrides this cannot consume another ceremony's challenge
+  # and its own challenge cannot be replayed into one.
+  def passkey_ceremony_purpose
+    :authentication
+  end
+
+  # The UV policy purpose the assertion is verified under. Kept as its own hook
+  # because the challenge purpose and the UV purpose are separate registries
+  # and a future decision may relax one without the other.
+  def passkey_assertion_uv_purpose
+    PasskeyCeremonyContext::DEFAULT_UV_PURPOSES.fetch(passkey_ceremony_purpose)
   end
 
   # -- options hooks -------------------------------------------------------

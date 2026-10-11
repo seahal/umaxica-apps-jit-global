@@ -42,8 +42,10 @@ class AuthenticationReissueAccessTokenTest < ActiveSupport::TestCase
     def token_record_expiry_at(record) = record.discarded_at
   end
 
-  def session_double(public_id: "session-1", discarded_at: 1.day.from_now, oidc_jti: SecureRandom.uuid)
-    Struct.new(:public_id, :discarded_at, :oidc_jti, :dpop_jkt).new(public_id, discarded_at, oidc_jti, "jkt-1")
+  def session_double(public_id: "session-1", discarded_at: 1.day.from_now, oidc_jti: SecureRandom.uuid,
+                     authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5))
+    Struct.new(:public_id, :discarded_at, :oidc_jti, :dpop_jkt, :authentication_event_at)
+      .new(public_id, discarded_at, oidc_jti, "jkt-1", authentication_event_at)
   end
 
   def build_harness(session_record)
@@ -79,6 +81,7 @@ class AuthenticationReissueAccessTokenTest < ActiveSupport::TestCase
     assert_equal "session-1", call.fetch(:oidc_sid)
     assert_equal session_record.oidc_jti, call.fetch(:oidc_jti)
     assert_equal "jkt-1", call.fetch(:dpop_jkt)
+    assert_equal session_record.authentication_event_at, call.fetch(:auth_time)
   end
 
   # The session is the shorter-lived of the two, so its expiry wins; a reissue

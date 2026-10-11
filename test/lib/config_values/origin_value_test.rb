@@ -40,4 +40,9 @@ class ConfigValuesOriginValueTest < ActiveSupport::TestCase
     assert_equal "https://jump.umaxica.net", value.to_s
     assert_equal "jump.umaxica.net", value.host
   end
+
+  test "rejects blank and control-character origins" do
+    assert_raises(ArgumentError) { ConfigValues.build("") }
+    assert_raises(ArgumentError) { ConfigValues.build("https://example.com" + 1.chr) }
+  end
 end

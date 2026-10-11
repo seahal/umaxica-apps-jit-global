@@ -3,8 +3,6 @@
 ## Context
 
 - Related plans / ADRs:
-  - `plans/active/public-request-context-implementation.md` (Phase 1, Phase 5 subphase 1)
-  - `plans/active/step-up-authentication-rebuild.md` (Phase 6, Phase 7)
 - Predecessor note:
   `notes/implementation/2026-05-23-authentication-rt-signed-token-compatibility.md`
 - Concurrent constraint:
@@ -84,8 +82,7 @@
   - `bin/rails test` on the new Minitest files — blocked by the 791-pending-migration gate. The test
     files are syntactically valid and should run once the migration backlog is resolved.
 - Documentation or ADR promotion needed:
-  - None for this note. Behavior belongs in the existing canonical plans and the predecessor ADRs
-    (referenced from `plans/active/public-request-context-implementation.md`).
+  - None for this note. Behavior belongs in the existing canonical plans and the predecessor ADRs .
 
 ## Follow-Up
 

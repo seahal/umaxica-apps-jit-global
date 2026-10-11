@@ -12,6 +12,10 @@ class OidcSsoInitiatorTestController < ApplicationController
     head :ok unless performed?
   end
 
+  def fresh
+    redirect_to_oidc_authorization_url(initiate_oidc_session!(pt: "/fresh", prompt: "login", max_age: 60))
+  end
+
   def logged_in?
     request.headers["X-Logged-In"] == "1"
   end
@@ -57,6 +61,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     load_jump_rt_env!
     Rails.application.routes.draw do
       get "/oidc/sso" => "oidc_sso_initiator_test#index"
+      get "/oidc/sso/fresh" => "oidc_sso_initiator_test#fresh"
     end
   end
 
@@ -130,6 +135,18 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     pending_flow = session.fetch("oidc_pending_flows").fetch(query.fetch("state"))
 
     assert_equal "/oidc/sso?ri=jp", pending_flow.fetch("pt")
+  end
+
+  test "authorization URL carries prompt and max_age into the pending flow" do
+    get "/oidc/sso/fresh", headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
+
+    assert_response :redirect
+    uri = URI.parse(response.location)
+    query = Rack::Utils.parse_nested_query(uri.query)
+
+    assert_equal "login", query.fetch("prompt")
+    assert_equal "60", query.fetch("max_age")
+    assert_equal 60, session.fetch("oidc_pending_flows").fetch(query.fetch("state")).fetch("max_age")
   end
 
   test "token endpoint uses local rails port for local public Acme hosts" do

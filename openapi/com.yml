@@ -43,7 +43,7 @@ info:
 
     Some `/api/v0` error responses currently also carry a transitional `error` member that is
     deliberately not described here. It has no known consumer and is scheduled for removal
-    (decision D6 in plans/rails-nextjs-openapi-contract-audit.md). No schema in this description
+    (decision D6 in plans/analysis/rails-nextjs-openapi-contract-audit.md). No schema in this description
     sets `additionalProperties: false`, so clients must tolerate it and any other unknown member.
 
 tags:

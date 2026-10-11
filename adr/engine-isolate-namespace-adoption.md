@@ -125,6 +125,5 @@ end
 
 - `adr/four-engine-split.md` (original decision, partially superseded)
 - `adr/four-app-wrapper-runtime-and-root-retirement.md`
-- `plans/active/four-engine-reframe.md` (execution direction)
 - `lib/cross_engine_url_helpers.rb` (to be retired)
 - GitHub #725 (parent rename issue)

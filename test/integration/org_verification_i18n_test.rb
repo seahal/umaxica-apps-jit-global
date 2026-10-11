@@ -8,7 +8,7 @@ class OrgVerificationI18nTest < ActionDispatch::IntegrationTest
   setup do
     @host = ENV.fetch("PRIVATE_AUTH_STAFF_URL")
     host! @host
-    OrgPrincipalRecord.connected_to(role: :writing) do
+    OrgZenithRecord.connected_to(role: :writing) do
       OperatorStatus.insert_missing_fixed_ids!(
         [OperatorStatus::ACTIVE,
          OperatorStatus::NOTHING, OperatorStatus::RESERVED,],

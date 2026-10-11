@@ -72,6 +72,8 @@ class LayoutTitleContractTest < ActiveSupport::TestCase
         app/views/layouts/mailer/app/mailer.html.erb
         app/views/layouts/mailer/com/mailer.html.erb
         app/views/layouts/mailer/org/mailer.html.erb
+        app/views/guid/net/roots/index.html.erb
+        app/views/edit/org/roots/index.html.erb
       ).map { |path| Rails.root.join(path).to_s }
 
     offenders =

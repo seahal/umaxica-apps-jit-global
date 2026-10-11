@@ -40,17 +40,14 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "the sign-in entry stores the login challenge for the rest of the ceremony" do
-    challenge = issue_login_challenge
-
-    get auth_app_sign_in_url(ri: "jp", login_challenge: challenge), headers: { "Host" => @host }
+    admit_sign_in!
 
     assert_response :success
-    assert_equal challenge, session[:oidc_authorization_login_challenge]
+    assert_equal @transaction.login_challenge, session[:oidc_authorization_login_challenge]
   end
 
   test "the primary factor sends the ceremony to the sign-in checkpoint" do
-    challenge = issue_login_challenge
-    get auth_app_sign_in_url(ri: "jp", login_challenge: challenge), headers: { "Host" => @host }
+    admit_sign_in!
 
     submit_secret_credential!
 
@@ -59,13 +56,12 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "the checkpoint binds the signed-in actor to the authorization transaction" do
-    challenge = issue_login_challenge
-    get auth_app_sign_in_url(ri: "jp", login_challenge: challenge), headers: { "Host" => @host }
+    admit_sign_in!
     submit_secret_credential!
 
     follow_redirect!
 
-    transaction = ClientOidcAuthorizationTransaction.find_by!(login_challenge: challenge)
+    transaction = ClientOidcAuthorizationTransaction.find_by!(login_challenge: @transaction.login_challenge)
 
     assert_equal @user.public_id, transaction.actor_ref
     assert_predicate transaction.authenticated_at, :present?
@@ -73,22 +69,22 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "the checkpoint hands the browser back to the authorization endpoint" do
-    challenge = issue_login_challenge
-    get auth_app_sign_in_url(ri: "jp", login_challenge: challenge), headers: { "Host" => @host }
+    admit_sign_in!
     submit_secret_credential!
 
     follow_redirect!
 
     assert_response :redirect
     authorize_uri = URI.parse(response.location)
+    query = Rack::Utils.parse_nested_query(authorize_uri.query)
 
     assert_equal "/oauth/authorize", authorize_uri.path
-    assert_equal challenge, Rack::Utils.parse_nested_query(authorize_uri.query).fetch("login_challenge")
+    assert_predicate query["result"], :present?
+    assert_nil query["login_challenge"]
   end
 
   test "the checkpoint clears the login challenge from the session" do
-    challenge = issue_login_challenge
-    get auth_app_sign_in_url(ri: "jp", login_challenge: challenge), headers: { "Host" => @host }
+    admit_sign_in!
     submit_secret_credential!
 
     follow_redirect!
@@ -97,12 +93,14 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "a sign-in that carries no login challenge leaves the transaction unauthenticated" do
-    challenge = issue_login_challenge
+    @transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_in", params: oidc_authorize_params(realm: "client"),
+    ).transaction
 
     submit_secret_credential!
 
     assert_response :redirect
-    transaction = ClientOidcAuthorizationTransaction.find_by!(login_challenge: challenge)
+    transaction = ClientOidcAuthorizationTransaction.find_by!(login_challenge: @transaction.login_challenge)
 
     assert_nil transaction.actor_ref
     assert_nil transaction.authenticated_at
@@ -122,10 +120,15 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     )
   end
 
-  def issue_login_challenge
-    OidcAuthorizationTransactionCoordinator.issue!(
+  def admit_sign_in!
+    @transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app", intent: "sign_in", params: oidc_authorize_params(realm: "client"),
-    ).transaction.login_challenge
+    ).transaction
+    code = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: @transaction).code
+    get(auth_app_sign_in_url(ri: "jp", admission: code), headers: { "Host" => @host })
+
+    assert_response :see_other
+    follow_redirect!
   end
 
   def oidc_authorize_params(realm:)

@@ -492,6 +492,7 @@ class SignFlowTest < ActiveSupport::TestCase
 
     cycle.transition_to!("CONTACT_PENDING", step: "contact")
     cycle.transition_to!("CONTACT_VERIFIED", step: "contact_verified")
+    cycle.transition_to!("GUARDRAIL_PENDING", step: "guardrail")
     cycle.transition_to!("CHECKPOINT_PENDING", step: "checkpoint")
 
     assert_raises(ArgumentError) { cycle.transition_to!("COMPLETED", step: "completed") }
@@ -505,6 +506,7 @@ class SignFlowTest < ActiveSupport::TestCase
     travel_to now do
       cycle.transition_to!("CONTACT_PENDING", step: "contact")
       cycle.transition_to!("CONTACT_VERIFIED", step: "contact_verified")
+      cycle.transition_to!("GUARDRAIL_PENDING", step: "guardrail")
       cycle.transition_to!("CHECKPOINT_PENDING", step: "checkpoint")
       cycle.transition_to!("FINALIZING", step: "finalizing")
       cycle.transition_to!("FINALIZED", step: "finalized")

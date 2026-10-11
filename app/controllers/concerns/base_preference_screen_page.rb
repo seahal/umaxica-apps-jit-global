@@ -125,12 +125,26 @@ module BasePreferenceScreenPage
     option_class = model.class.reflect_on_association(:option)&.klass
     option_type = screen.to_sym
 
-    option_class.order(:id).filter_map do |option|
+    preference_ordered_options(option_class, option_type).filter_map do |option|
       name = option.name.to_s
       next if name.blank?
 
-      { label: t(preference_option_translation_key(option_type, name)), value: option.id }
+      {
+        label: t(preference_option_translation_key(option_type, name)),
+        value: option.id,
+        disabled: option.id == model.option_id,
+      }
     end
+  end
+
+  # Timezone options are presented in ascending UTC offset (UTC-12 .. UTC+00 .. UTC+14) rather than
+  # by row id; every other option set keeps its curated id order. The offset is the standard
+  # (non-DST) one, so the list does not reshuffle twice a year -- see TimezoneIdentifier.
+  def preference_ordered_options(option_class, option_type)
+    rows = option_class.order(:id).to_a
+    return rows unless option_type == :timezone
+
+    rows.sort_by { |option| TimezoneIdentifier.utc_offset_sort_key(option.name) }
   end
 
   def preference_option_key(option_type, name)
@@ -170,7 +184,9 @@ module BasePreferenceScreenPage
         field: "option_id",
         label: t(preference_base_i18n_key(:preference, type, :edit, :option_label)),
         value: @preference_option.option_id,
-        choices: @preference_option_choices.map { |label, value| { label: label, value: value } },
+        choices: @preference_option_choices.map { |label, value|
+          { label: label, value: value, disabled: value == @preference_option.option_id }
+        },
         submit_label: t(preference_base_i18n_key(:preferences, :update_settings)),
         submitting_label: t(preference_base_i18n_key(:preferences, :submitting)),
       },

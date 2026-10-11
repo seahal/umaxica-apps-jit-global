@@ -18,7 +18,8 @@ class OidcRpTokenClient < ApplicationService
       def success? = success
     end
 
-  def initialize(token_url:, client_id:, client_secret:, code:, redirect_uri:, code_verifier:, client_assertion: nil)
+  def initialize(token_url:, client_id:, client_secret:, code:, redirect_uri:, code_verifier:, client_assertion: nil,
+                 require_https: true)
     super()
     @token_url = token_url
     @client_id = client_id
@@ -27,6 +28,7 @@ class OidcRpTokenClient < ApplicationService
     @code = code
     @redirect_uri = redirect_uri
     @code_verifier = code_verifier
+    @require_https = require_https
   end
 
   def call
@@ -38,7 +40,7 @@ class OidcRpTokenClient < ApplicationService
       url: uri,
       open_timeout: OPEN_TIMEOUT,
       read_timeout: READ_TIMEOUT,
-      require_https: true,
+      require_https: require_https,
     )
     response = connection.post(uri, params)
     body = JSON.parse(response.body.presence || "{}").with_indifferent_access
@@ -54,7 +56,8 @@ class OidcRpTokenClient < ApplicationService
 
   private
 
-  attr_reader :token_url, :client_id, :client_secret, :client_assertion, :code, :redirect_uri, :code_verifier
+  attr_reader :token_url, :client_id, :client_secret, :client_assertion, :code, :redirect_uri, :code_verifier,
+              :require_https
 
   def request_params
     params = {

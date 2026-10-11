@@ -24,7 +24,7 @@ module JumpRtReturnVerification
         "jump_return.rejected",
         reason: result.error,
         request_id: request.request_id,
-        request_uri: request.original_url,
+        request_path: request.path,
       ),
     )
     render plain: I18n.t("errors.messages.invalid_request"),

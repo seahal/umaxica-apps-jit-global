@@ -80,6 +80,7 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
         expected_aal: "aal2",
         expected_method: "totp",
         audience: "step_up:app",
+        surface: "app",
         now: @now,
       )
 
@@ -100,6 +101,7 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
           expected_aal: "aal2",
           expected_method: "totp",
           audience: "step_up:app",
+          surface: "app",
           now: @now,
         )
       end
@@ -123,6 +125,7 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
             expected_aal: "aal2",
             expected_method: "totp",
             audience: "step_up:app",
+            surface: "app",
             now: @now,
           )
         end
@@ -143,6 +146,7 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
             expected_aal: "aal2",
             expected_method: "totp",
             audience: "step_up:app",
+            surface: "app",
             now: @now,
           )
         end
@@ -162,6 +166,7 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
             expected_aal: "aal2",
             expected_method: "totp",
             audience: "step_up:app",
+            surface: "app",
             now: @now,
           )
         end
@@ -176,6 +181,7 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
             expected_aal: "aal2",
             expected_method: "passkey",
             audience: "step_up:app",
+            surface: "app",
             now: @now,
           )
         end
@@ -199,6 +205,7 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
             expected_aal: "aal2",
             expected_method: "totp",
             audience: "step_up:app",
+            surface: "app",
             now: @now,
           )
         end
@@ -222,6 +229,7 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
         expected_aal: "aal2",
         expected_method: "totp",
         audience: "step_up:app",
+        surface: "app",
         now: @now,
       )
 
@@ -238,6 +246,7 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
         expected_aal: "aal2",
         expected_method: "totp",
         audience: "step_up:app",
+        surface: "app",
         now: @now,
       )
 
@@ -354,6 +363,47 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
       end
 
     assert_includes error.message, "method is invalid"
+  end
+
+  test "freshness committer rejects a result whose surface differs from the caller surface" do
+    travel_to @now do
+      result_token = IdentityStepUpCeremonyResult.issue(
+        valid_result_claims,
+        issuer_id: IdentityStepUpCeremonyContract.sign_issuer_id("app"),
+        now: @now,
+      )
+
+      error =
+        assert_raises(IdentityStepUpCeremonyContract::Error) do
+          IdentityStepUpCeremonyFreshnessCommitter.call!(
+            result_token: result_token,
+            token: @token,
+            expected_scope: "settings_email",
+            expected_aal: "aal2",
+            expected_method: "totp",
+            audience: "step_up:app",
+            surface: "org",
+            now: @now,
+          )
+        end
+
+      assert_includes error.message, "kid is unknown"
+      assert_nil @token.reload.last_step_up_at
+    end
+  end
+
+  test "decode_unverified_payload rejects a token whose payload is not a JSON object" do
+    header = Base64.urlsafe_encode64(%q({"alg":"none"}), padding: false)
+
+    ["[1]", "5", %q("surface")].each do |body|
+      token = "#{header}.#{Base64.urlsafe_encode64(body, padding: false)}."
+
+      error =
+        assert_raises(IdentityStepUpCeremonyContract::Error) do
+          IdentityStepUpCeremonyContract.decode_unverified_payload(token)
+        end
+      assert_includes error.message, "must be a JSON object", "payload #{body}"
+    end
   end
 
   private

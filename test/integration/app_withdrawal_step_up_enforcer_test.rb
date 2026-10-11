@@ -7,7 +7,6 @@ class AppWithdrawalStepUpEnforcerTest < ActionDispatch::IntegrationTest
   fixtures :client_totp_credential_statuses
 
   setup do
-    ClientToken.skip_callback(:validation, :before, :ensure_device_session_record)
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
     ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
@@ -35,10 +34,6 @@ class AppWithdrawalStepUpEnforcerTest < ActionDispatch::IntegrationTest
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @client)
     BaseSelectorAuthority.prepare(surface: :app, principal: @client, session: @token)
-  end
-
-  teardown do
-    ClientToken.set_callback(:validation, :before, :ensure_device_session_record)
   end
 
   test "app withdrawal destructive action requires fresh step-up" do

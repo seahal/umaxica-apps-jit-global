@@ -381,7 +381,7 @@ module Auth::App::In
     test "options returns turnstile error when response token is missing" do
       TurnstileVerifierStub.challenge_enabled = false
       TurnstileVerifierStub.enabled = false
-      TurnstileVerifierStub.response = nil
+      TurnstileVerifierStub.response = { "success" => false, "error" => "missing cf-turnstile-response" }
 
       post auth_app_sign_in_passkey_options_path(ri: "jp"), params: { identifier: @user_email.address }
 

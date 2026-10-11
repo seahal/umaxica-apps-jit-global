@@ -19,8 +19,8 @@ this implementation has not been deployed.
   `SecureRandom.urlsafe_base64(32)` through the `WebauthnUserHandleOwner` concern and enforce NOT
   NULL and UNIQUE constraints.
 - Use this handle as `user.id` in registration options built by `PasskeyCeremonyContext`.
-- Keep the handle immutable after generation. Rotation would orphan existing credentials because
-  the value is stored by the authenticator.
+- Keep the handle immutable after generation. Rotation would orphan existing credentials because the
+  value is stored by the authenticator.
 - Prohibit PII such as email addresses and internal primary keys as user handles, as documented in
   `docs/security/webauthn-security-invariants.md`.
 

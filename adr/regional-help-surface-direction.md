@@ -74,5 +74,3 @@ We accept the following direction for `help`.
 ## Related
 
 - `adr/regional-docs-news-content-model.md`
-- `plans/active/regional-help-surface-plan.md`
-- `plans/active/regional-docs-news-cms-implementation-plan.md`

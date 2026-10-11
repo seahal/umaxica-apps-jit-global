@@ -9,12 +9,10 @@ class ReadOnlySurfacesTest < ActionDispatch::IntegrationTest
     ["palm_app_root_url", "PUBLIC_PALM_SERVICE_URL", "palm.app.localhost", "Palm API is available"],
   ].freeze
 
-  # The base gateway roots answer with a canonical redirect to the regional root instead of a
-  # page, so they are asserted on their `Location` rather than on a body.
   BASE_GATEWAY_ROOTS = [
-    ["base_app_root_url", "BASE_SERVICE_URL", "base.app.localhost", "https://jp.umaxica.app/"],
-    ["base_com_root_url", "BASE_CORPORATE_URL", "base.com.localhost", "https://jp.umaxica.com/"],
-    ["base_org_root_url", "BASE_STAFF_URL", "base.org.localhost", "https://jp.umaxica.org/"],
+    ["base_app_root_url", "PUBLIC_BASE_SERVICE_URL", "base.app.localhost", "base/app/roots/index"],
+    ["base_com_root_url", "PUBLIC_BASE_CORPORATE_URL", "base.com.localhost", "base/com/roots/index"],
+    ["base_org_root_url", "PUBLIC_BASE_STAFF_URL", "base.org.localhost", "base/org/roots/index"],
   ].freeze
 
   CONTENT_SURFACES = [
@@ -52,14 +50,14 @@ class ReadOnlySurfacesTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "base gateway roots answer with the canonical regional redirect" do
-    BASE_GATEWAY_ROOTS.each do |helper, env_key, fallback, expected_location|
+  test "base gateway roots render the control-plane home" do
+    BASE_GATEWAY_ROOTS.each do |helper, env_key, fallback, component|
       host = ENV.fetch(env_key, fallback)
       host! host
       get public_send(helper, ri: "jp", host: host)
 
-      assert_response :moved_permanently
-      assert_equal expected_location, response.location
+      assert_response :success
+      assert_equal component, inertia_component
     end
   end
 

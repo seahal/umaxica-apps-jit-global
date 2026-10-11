@@ -9,7 +9,7 @@ require "test_helper"
 # The three surfaces (app/client, com/visitor, org/operator) are independent authentication
 # boundaries. Credentials minted for one surface must not authenticate an actor on another
 # surface's host. The per-surface dashboard (`AUTHENTICATION_MODE = :private`, trivial `show`) is
-# used as a representative protected endpoint; each surface's own DashboardsControllerTest already
+# used as a representative protected endpoint; each surface's own settings tests already
 # covers anonymous-redirect and own-surface success, so this test pins the missing cross-surface
 # denial matrix.
 #
@@ -39,19 +39,19 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
   # --- positive controls: each surface accepts its own actor ---
 
   test "client is authenticated on the app dashboard" do
-    get sign_app_dashboard_url(ri: "jp"), headers: as_user_headers(@client, host: APP_HOST)
+    get auth_app_settings_passkeys_url(ri: "jp"), headers: as_user_headers(@client, host: APP_HOST)
 
     assert_same_surface_dashboard_redirect(APP_HOST)
   end
 
   test "visitor is authenticated on the com dashboard" do
-    get sign_com_dashboard_url(ri: "jp"), headers: as_visitor_headers(@visitor, host: COM_HOST)
+    get auth_com_settings_passkeys_url(ri: "jp"), headers: as_visitor_headers(@visitor, host: COM_HOST)
 
     assert_same_surface_dashboard_redirect(COM_HOST)
   end
 
   test "operator is authenticated on the org dashboard" do
-    get sign_org_dashboard_url(ri: "jp"), headers: as_staff_headers(@operator, host: ORG_HOST)
+    get auth_org_settings_passkeys_url(ri: "jp"), headers: as_staff_headers(@operator, host: ORG_HOST)
 
     assert_same_surface_dashboard_redirect(ORG_HOST)
   end
@@ -59,37 +59,37 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
   # --- isolation matrix: foreign-surface credentials are rejected (redirect to sign-in) ---
 
   test "operator credentials are rejected on the app surface" do
-    get sign_app_dashboard_url(ri: "jp"), headers: as_staff_headers(@operator, host: APP_HOST)
+    get auth_app_settings_passkeys_url(ri: "jp"), headers: as_staff_headers(@operator, host: APP_HOST)
 
     assert_cross_surface_rejected
   end
 
   test "visitor credentials are rejected on the app surface" do
-    get sign_app_dashboard_url(ri: "jp"), headers: as_visitor_headers(@visitor, host: APP_HOST)
+    get auth_app_settings_passkeys_url(ri: "jp"), headers: as_visitor_headers(@visitor, host: APP_HOST)
 
     assert_cross_surface_rejected
   end
 
   test "client credentials are rejected on the com surface" do
-    get sign_com_dashboard_url(ri: "jp"), headers: as_user_headers(@client, host: COM_HOST)
+    get auth_com_settings_passkeys_url(ri: "jp"), headers: as_user_headers(@client, host: COM_HOST)
 
     assert_cross_surface_rejected
   end
 
   test "operator credentials are rejected on the com surface" do
-    get sign_com_dashboard_url(ri: "jp"), headers: as_staff_headers(@operator, host: COM_HOST)
+    get auth_com_settings_passkeys_url(ri: "jp"), headers: as_staff_headers(@operator, host: COM_HOST)
 
     assert_cross_surface_rejected
   end
 
   test "client credentials are rejected on the org surface" do
-    get sign_org_dashboard_url(ri: "jp"), headers: as_user_headers(@client, host: ORG_HOST)
+    get auth_org_settings_passkeys_url(ri: "jp"), headers: as_user_headers(@client, host: ORG_HOST)
 
     assert_cross_surface_rejected
   end
 
   test "visitor credentials are rejected on the org surface" do
-    get sign_org_dashboard_url(ri: "jp"), headers: as_visitor_headers(@visitor, host: ORG_HOST)
+    get auth_org_settings_passkeys_url(ri: "jp"), headers: as_visitor_headers(@visitor, host: ORG_HOST)
 
     assert_cross_surface_rejected
   end

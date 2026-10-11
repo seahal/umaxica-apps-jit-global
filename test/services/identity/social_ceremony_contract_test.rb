@@ -59,6 +59,15 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
     end
   end
 
+  test "rejects an authentication event time from the future" do
+    assert_social_ceremony_error("auth_time must not be in the future") do
+      IdentitySocialCeremonyResult.new(
+        valid_result_claims.merge("auth_time" => (@now + 2.minutes).to_i),
+        now: @now,
+      )
+    end
+  end
+
   test "candidate store is one-shot and persists only a verified principal" do
     travel_to(@now) do
       callback_result = ExternalAuthentication::CallbackResult.verified(
@@ -277,6 +286,20 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
       assert_social_ceremony_error("token verification failed") do
         IdentitySocialCeremonyGrant.decode(tampered, issuer_id: acme_issuer_id, now: @now)
       end
+    end
+  end
+
+  test "decode_untrusted_routing_payload rejects a token whose payload is not a JSON object" do
+    header = Base64.urlsafe_encode64(%q({"alg":"none"}), padding: false)
+
+    ["[1]", "5", %q("surface")].each do |body|
+      token = "#{header}.#{Base64.urlsafe_encode64(body, padding: false)}."
+
+      error =
+        assert_raises(IdentitySocialCeremonyContract::Error) do
+          IdentitySocialCeremonyContract.decode_untrusted_routing_payload(token)
+        end
+      assert_includes error.message, "must be a JSON object", "payload #{body}"
     end
   end
 

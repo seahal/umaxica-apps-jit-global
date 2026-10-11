@@ -7,33 +7,50 @@ require "test_helper"
 class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_statuses
 
-  test "permanently redirects the jp region to the canonical jp regional root" do
+  test "renders the control-plane root for a regional request" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     get base_app_root_url(ri: "jp")
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.app/", response.location
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
+    assert_equal "Base App", inertia_props.fetch("heading")
   end
 
-  test "permanently redirects the us region to the canonical us regional root" do
+  test "preserves an incoming request id through Rails request and response handling" do
+    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    request_id = "550e8400-e29b-41d4-a716-446655440000"
+
+    get base_app_root_url(ri: "jp"), headers: { "X-Request-ID" => request_id }
+
+    assert_response :success
+    assert_equal request_id, request.request_id
+    assert_equal request_id, response.headers.fetch("X-Request-Id")
+  end
+
+  test "generates a request id when the request does not provide one" do
+    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+
+    get base_app_root_url(ri: "jp")
+
+    assert_response :success
+    assert_predicate request.request_id, :present?
+    assert_equal request.request_id, response.headers.fetch("X-Request-Id")
+  end
+
+  test "renders the control-plane root for the us region" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     get base_app_root_url(ri: "us")
 
-    assert_response :moved_permanently
-    assert_equal "https://us.umaxica.app/", response.location
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
   end
 
-  test "drops every request context parameter from the regional redirect target" do
+  test "keeps extra request context on the control-plane root instead of leaving the host" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     get base_app_root_url(ri: "jp", ct: "dr", lx: "en", tz: "asia/tokyo")
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.app/", response.location
-    assert_not_includes response.location, "?"
-    assert_not_includes response.location, "ri="
-    assert_not_includes response.location, "ct="
-    assert_not_includes response.location, "lx="
-    assert_not_includes response.location, "tz="
+    assert_response :success
+    assert_nil response.location
   end
 
   test "does not regionally redirect an unknown region" do
@@ -52,52 +69,27 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal base_app_root_url(ri: "jp"), response.location
   end
 
-  test "auth authorize preserves app sign up and sign in screen hints" do
+  test "renders the control-plane root when extra preference params are supplied" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    get base_app_root_url(ct: "dr", lx: "en", ri: "us", tz: "asia/tokyo")
 
-    get base_app_oidc_authorization_url(ri: "jp", screen_hint: "signup")
-
-    assert_response :redirect
-    signup_uri = URI.parse(jump_rt_url_from_location(response.location))
-    signup_query = Rack::Utils.parse_nested_query(signup_uri.query)
-
-    assert_equal "signup", signup_query["screen_hint"]
-    assert_equal "/dashboard?ri=jp", session[:oidc_pt]
-
-    get base_app_oidc_authorization_url(ri: "jp", screen_hint: "signin")
-
-    assert_response :redirect
-    signin_uri = URI.parse(jump_rt_url_from_location(response.location))
-    signin_query = Rack::Utils.parse_nested_query(signin_uri.query)
-
-    assert_equal "signin", signin_query["screen_hint"]
-    assert_equal "/dashboard?ri=jp", session[:oidc_pt]
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
   end
 
-  test "mints no preference state on the gateway host it redirects away from" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-
-    assert_no_difference("AppPreference.count") do
-      get base_app_root_url(ct: "dr", lx: "en", ri: "us", tz: "asia/tokyo")
-    end
-
-    assert_response :moved_permanently
-    assert_nil cookies[PreferenceCookieName.access(surface: :app)].presence
-    assert_nil cookies[PreferenceCookieName.refresh(surface: :app)].presence
-  end
-
-  test "regional redirect takes precedence over the logged in dashboard redirect" do
+  test "a logged in request stays on the control-plane root instead of a public regional host" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
 
     get base_app_root_url(ri: "jp"),
         headers: as_user_headers(user, host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"))
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.app/", response.location
+    assert_not_equal 301, response.status
+    assert_not_equal "https://jp.umaxica.app/", response.location
+    assert_includes [200, 302, 303], response.status
   end
 
-  test "a logged in request without a region normalizes the region then leaves the gateway host" do
+  test "a logged in request without a region normalizes the region then stays on the control-plane host" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
 
@@ -108,8 +100,8 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
 
     follow_redirect!
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.app/", response.location
+    assert_not_equal "https://jp.umaxica.app/", response.location
+    assert_includes [200, 302, 303], response.status
   end
   private
 

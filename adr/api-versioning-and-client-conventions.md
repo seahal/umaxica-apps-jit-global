@@ -210,8 +210,8 @@ the probe responses carry a `namespace` member that was undocumented.
 
 ### Where the full analysis lives
 
-`plans/rails-nextjs-openapi-contract-audit.md` — the audit, the tool comparison with sources and
-access dates, and the sixteen decision records this amendment implements the first of.
+`plans/analysis/rails-nextjs-openapi-contract-audit.md` — the audit, the tool comparison with
+sources and access dates, and the sixteen decision records this amendment implements the first of.
 
 ## Scope
 
@@ -246,8 +246,8 @@ description format and the accuracy requirement on `public/openapi.yml`.
   no test, initializer, rake task, or CI job reads the file. The guard must be mechanical:
   `committee` request and response validation in the Minitest suite, a bidirectional route-coverage
   test, a lint and bundle-drift CI gate, and `oasdiff` on pull requests. Choosing 3.0.4 is what
-  makes the first of those possible. `plans/rails-nextjs-openapi-contract-audit.md` carries the
-  plan.
+  makes the first of those possible. `plans/analysis/rails-nextjs-openapi-contract-audit.md` carries
+  the plan.
 - Targeting 3.0.4 means tracking a specification line that the OpenAPI Initiative has moved two
   minor versions past. The exposure is bounded to the features listed above, none of which this API
   uses, and the reversal condition is recorded.

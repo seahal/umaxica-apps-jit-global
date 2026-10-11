@@ -17,14 +17,9 @@ module Security
       setup do
         ensure_client_token_reference_records!
         ensure_visitor_token_reference_records!
-        ClientToken.skip_callback(:validation, :before, :ensure_device_session_record)
         @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
         @com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
         host! @host
-      end
-
-      teardown do
-        ClientToken.set_callback(:validation, :before, :ensure_device_session_record)
       end
 
       test "closing resource is redirected away from protected html routes" do
@@ -120,25 +115,20 @@ module Security
 
       test "application controllers do not skip the withdrawal gate" do
         allowlist = {
-          # Edge cookie endpoints are reviewed self-defending preference/auth cookie APIs.
-          "app/controllers/acme/app/edge/v0/cookies_controller.rb" => "edge cookie endpoint owns its own auth boundary",
-          "app/controllers/acme/com/edge/v0/cookies_controller.rb" => "edge cookie endpoint owns its own auth boundary",
-          "app/controllers/core/app/edge/v0/cookies_controller.rb" => "edge cookie endpoint owns its own auth boundary",
-          "app/controllers/core/com/edge/v0/cookies_controller.rb" => "edge cookie endpoint owns its own auth boundary",
-          "app/controllers/core/org/edge/v0/cookies_controller.rb" => "edge cookie endpoint owns its own auth boundary",
+          # Base/Acme edge cookie endpoints are reviewed self-defending preference/auth cookie APIs.
           "app/controllers/base/app/edge/v0/cookies_controller.rb" => "edge cookie endpoint owns its own auth boundary",
           "app/controllers/base/com/edge/v0/cookies_controller.rb" => "edge cookie endpoint owns its own auth boundary",
           # DBSC endpoints must process device-session challenge state before the normal withdrawal gate.
           "app/controllers/acme/app/edge/v0/dbsc_controller.rb" =>
-            "DBSC edge endpoint owns its device binding boundary",
+            "DBSC endpoint owns its device binding boundary",
           "app/controllers/acme/com/edge/v0/dbsc_controller.rb" =>
-            "DBSC edge endpoint owns its device binding boundary",
+            "DBSC endpoint owns its device binding boundary",
           "app/controllers/acme/org/edge/v0/dbsc_controller.rb" =>
-            "DBSC edge endpoint owns its device binding boundary",
-          "app/controllers/core/app/edge/v0/dbsc_controller.rb" =>
-            "DBSC edge endpoint owns its device binding boundary",
-          "app/controllers/core/com/edge/v0/dbsc_controller.rb" =>
-            "DBSC edge endpoint owns its device binding boundary",
+            "DBSC endpoint owns its device binding boundary",
+          "app/controllers/core/app/api/v0/preferences/dbsc_controller.rb" =>
+            "DBSC endpoint owns its device binding boundary",
+          "app/controllers/core/com/api/v0/preferences/dbsc_controller.rb" =>
+            "DBSC endpoint owns its device binding boundary",
         }
 
         assert allowlist.values.all?(&:present?), "Withdrawal gate skip allowlist entries require reasons"

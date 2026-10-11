@@ -5,39 +5,46 @@ module Auth
   module Org
     module Sign
       module In
-        # PasskeysController handles Passkey-based operator authentication.
+        # GET /sign/in/passkey/new
         #
-        # Flow:
-        # 1. Operator visits /in/passkeys/new and enters their operator public_id
-        # 2. POST /in/passkeys/options with identifier to get WebAuthn challenge
-        # 3. Browser performs navigator.credentials.get()
-        # 4. POST /in/passkeys/verification with credential + challenge_id
-        # 5. Server verifies and establishes session via AuthenticationBase#log_in
+        # Second stage of Normal org sign-in. Entra ID has already identified
+        # the Operator, so this page no longer asks who is signing in: the
+        # pending Entra transaction names them, and the ceremony below reads the
+        # Operator from there rather than from anything the browser sends.
         #
-        # Note: Discoverable credentials (passwordless without identifier) are
-        # planned for a future phase. Currently, identifier is required to look up
-        # the operator's registered passkeys.
+        # Without that transaction there is nothing to continue, so the page
+        # sends the visitor back to the sign-in entry instead of offering a
+        # standalone passkey sign-in. Passkey sign-in without Entra is Emergency
+        # Access, which is its own ceremony under /sign/in/emergency.
         class PasskeysController < ::Auth::Org::ApplicationController
           include MinimumResponseBudget
-
-          include SessionLimitGate
-
-          include CloudflareTurnstile
-
+          include ::CloudflareTurnstile
           include ::TurnstilePageProps
           include ::SurfaceInertiaPage
+          include ::OrgNormalSignInTransaction
+          include ::AuthenticationModeSwitchGuard
 
           AUTHENTICATION_MODE = :guest
+
           before_action :start_minimum_response_budget
           after_action :enforce_minimum_response_budget
+          before_action :require_org_normal_sign_in_transaction!
 
-          # GET /in/passkeys/new
-          # Render login page with identifier input and passkey button
           def new
             render inertia: true, props: passkey_sign_in_props
           end
 
           private
+
+          def require_org_normal_sign_in_transaction!
+            return if org_normal_sign_in_operator.present?
+
+            clear_org_normal_sign_in_transaction!
+            redirect_to(
+              auth_org_sign_in_path(ri: current_region_identifier),
+              status: :see_other,
+            )
+          end
 
           def passkey_sign_in_props
             pt = signed_pt_param
@@ -50,17 +57,17 @@ module Auth
                 options_url: auth_org_sign_in_passkey_options_path(pt: pt, ri: region),
                 verification_url: auth_org_sign_in_passkey_verification_path(pt: pt, ri: region),
                 region: region.to_s,
-                identifier_param: "identifier",
+                # The Operator is fixed by the Entra transaction, so the panel
+                # submits no identifier and renders no field for one.
+                identifier_param: nil,
                 turnstile_site_key: turnstile_site_key(:CLOUDFLARE_TURNSTILE_SITE_STEALTH_KEY),
                 turnstile_error_message: t("turnstile_error"),
-                field: {
-                  label: t("sign.org.authentication.passkey.new.identifier_label"),
-                  placeholder: t("sign.org.authentication.passkey.new.identifier_placeholder"),
-                  min_length: Operator::PUBLIC_ID_LENGTH,
-                  max_length: Operator::PUBLIC_ID_LENGTH,
-                  pattern: "[0-9A-FGHJKMNPQRSTVWXYZ]{16}",
-                },
+                field: nil,
                 submit_label: t("sign.org.authentication.passkey.new.submit"),
+              },
+              secret_link: {
+                label: t("sign.org.authentication.passkey.new.secret_credential"),
+                href: new_auth_org_sign_in_secret_path(pt: pt, ri: region),
               },
               back_link: {
                 label: t("sign.org.authentication.new.back"),
@@ -70,7 +77,7 @@ module Auth
           end
 
           def minimum_response_budget_enabled?
-            action_name == "options"
+            false
           end
         end
       end

@@ -76,13 +76,11 @@ module WithdrawalCeremonyReentry
       return render_withdrawal_reentry_invalid_code(start_time)
     end
 
-    result = verify_otp_code(email, params[:pass_code])
+    result = verify_otp_code_and_consume(email, params[:pass_code])
     unless result[:success]
-      increment_otp_attempts!(email)
       return render_withdrawal_reentry_invalid_code(start_time)
     end
 
-    clear_otp(email)
     session.delete(REENTRY_SESSION_KEY)
     ensure_min_elapsed(start_time)
     issue_withdrawal_ceremony!(subject: subject, purpose: "status")

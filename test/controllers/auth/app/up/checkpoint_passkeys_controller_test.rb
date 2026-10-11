@@ -207,14 +207,9 @@ module Auth::App::Up
       assert_response :created
 
       auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-      get auth_app_dashboard_url(ri: "jp", host: auth_host)
+      get auth_app_root_url(ri: "jp", host: auth_host)
 
-      assert_response :redirect
-      # Auth and Base are same-site, so the authorize hop goes straight to Base. The jump
-      # gateway is for cross-site hops and is not used here.
-      assert_equal Rails.configuration.x.boot_config.fetch(:hosts).base_service.host,
-                   URI.parse(response.location).host
-      assert_equal "/oauth/authorize", URI.parse(response.location).path
+      assert_response :success
       assert_no_match(
         /#{Regexp.escape(::AuthenticationClient::ACCESS_COOKIE_KEY.to_s)}=/,
         response.headers["Set-Cookie"].to_s,

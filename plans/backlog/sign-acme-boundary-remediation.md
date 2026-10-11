@@ -33,9 +33,9 @@ direction-independent cleanups (welcome, preference, jump). No broad implementat
 produces the corrected audit + a staged remediation plan with tests.
 
 Evidence base (read this slice): `config/routes/sign.rb`, `config/routes/acme.rb`, the ADRs above,
-`plans/active/acme-sign-core-base-port-implementation.md`,
-`plans/active/identity-authority-inversion-first-slice.md` (body superseded on authority direction;
-its route-classification _vocabulary_ is reusable but its `SIGN_AUTHORITY` assignments are NOT).
+GH issue #829, `plans/active/identity-authority-inversion-first-slice.md` (body superseded on
+authority direction; its route-classification _vocabulary_ is reusable but its `SIGN_AUTHORITY`
+assignments are NOT).
 
 ---
 

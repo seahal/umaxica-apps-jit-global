@@ -30,37 +30,13 @@ class BaseRpBrowserFlowTest < ActionDispatch::IntegrationTest
     OperatorIdentityState.ensure_defaults!
   end
 
-  test "base callback routes establish a base rp session" do
+  test "leftover base RP authorize and callback paths are unroutable" do
     SURFACES.each do |surface|
-      reset!
-      host! surface[:host]
-      https!
-
-      get "/oidc/authorization", headers: browser_headers
-
-      state = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("state")
-      resource = instance_exec(&surface[:resource])
-      resource_type = oidc_resource_type_for(resource)
-      id_token = OidcIdTokenIssuer.call(
-        resource: resource,
-        client: OidcClientRegistry.find!(surface[:client_id]),
-        nonce: session.fetch(:oidc_nonce),
-        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(resource_type),
-        issuer: OidcIssuer.for_resource_type(resource_type),
-      )
-      token_result = OidcRpTokenClient::Result.new(
-        success: true,
-        token_response: { id_token: id_token },
-        error: nil,
-      )
-
-      OidcRpTokenClient.stub(:call, token_result) do
-        get "/oidc/callback", params: { code: "code", state: state }, headers: browser_headers
+      ["/oidc/authorization", "/oidc/callback"].each do |path|
+        assert_raises(ActionController::RoutingError, surface[:host] + path) do
+          Rails.application.routes.recognize_path("http://#{surface[:host]}#{path}", method: :get)
+        end
       end
-
-      assert_response :redirect
-      assert_match %r{\Ahttps://#{Regexp.escape(surface[:host])}/(?:dashboard|sign/in/session)?(?:\z|[?#])},
-                   response.location
     end
   end
 

@@ -64,5 +64,3 @@ Do not use this ADR as the source of truth for:
 ## Current Source Of Truth
 
 - `adr/four-engine-restoration-and-base-contract.md`
-- `plans/active/four-engine-reframe.md`
-- `plans/active/dev-audience-tier.md`

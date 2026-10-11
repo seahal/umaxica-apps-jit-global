@@ -18,7 +18,6 @@ SimpleCov.merge_subprocesses true
 # repository's 15,847 measured branches were such arms and 5,727 of them were covered, because "the
 # guard did not fire" is the ordinary path. Counting them reported 84.53% branch coverage; without
 # them the figure is 82.14% over the 9,335 branches a test can actually take. Measure the decisions.
-SimpleCov.ignore_branches :implicit_else
 
 SimpleCov.group "Services", "app/services"
 SimpleCov.group "Values", "app/values"
@@ -36,19 +35,19 @@ SimpleCov.coverage :line do
   minimum 97
   # Suite-wide averages let a file with no test hide behind well-covered neighbours.
   # Hold every file to a floor of its own.
-  minimum_per_file 70
-  # Security-decision code carries a higher floor than the repository default. `only:` takes a
+  minimum 70, per: :file
+  # Security-decision code carries a higher floor than the repository default. `per:` takes a
   # project-relative path, and a trailing slash makes it a directory prefix.
-  minimum_per_file 95, only: "app/policies/"
-  minimum_per_file 95, only: "app/models/"
-  minimum_per_file 90, only: "app/values/"
-  minimum_per_file 90, only: "app/services/"
+  minimum 95, per: "app/policies/"
+  minimum 95, per: "app/models/"
+  minimum 90, per: "app/values/"
+  minimum 90, per: "app/services/"
   # Groups already at or near full coverage should not decay behind the suite-wide average.
-  minimum_per_group 99, only: "Models"
-  minimum_per_group 99, only: "Policies"
-  minimum_per_group 99, only: "Values"
-  minimum_per_group 98, only: "Services"
-  minimum_per_group 98, only: "Controllers"
+  minimum 99, per: group("Models")
+  minimum 99, per: group("Policies")
+  minimum 99, per: group("Values")
+  minimum 98, per: group("Services")
+  minimum 98, per: group("Controllers")
   # The check that survives a growing codebase: not "are we above 97" but "did this run make it
   # worse". 0.2 points is roughly a hundred lines, wide enough for an ordinary refactor and narrow
   # enough to catch a feature that arrived without tests.
@@ -56,9 +55,10 @@ SimpleCov.coverage :line do
 end
 
 # Branch floors per group are deliberately not set yet: the baseline above only became meaningful
-# once `ignore_branches :implicit_else` removed the synthetic arms, and it should be observed over
+# once `ignore :implicit_else` removed the synthetic arms, and it should be observed over
 # several runs before it gates a group.
 SimpleCov.coverage :branch do
+  ignore :implicit_else
   minimum 90
   maximum_drop 0.5
 end

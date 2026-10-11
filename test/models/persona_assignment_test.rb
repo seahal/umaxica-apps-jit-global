@@ -62,7 +62,7 @@ class PersonaAssignmentTest < ActiveSupport::TestCase
       source_record_id: SecureRandom.random_number(1_000_000) + 1000,
       status_id: ClientIdentityState::ACTIVE,
     )
-    persona = Persona.create!(client_identity: identity, moniker: "Default Persona", title: "Persona01")
+    persona = ClientPersona.create!(client_identity: identity, moniker: "Default ClientPersona", title: "Persona01")
     [persona, identity]
   end
 end

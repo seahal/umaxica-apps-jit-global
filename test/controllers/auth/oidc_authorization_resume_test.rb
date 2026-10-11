@@ -27,15 +27,24 @@ class Auth::OidcAuthorizationResumeTest < ActiveSupport::TestCase
       harness = harness_for(klass)
       harness.session[:oidc_authorization_login_challenge] = "challenge-1"
       captured = nil
+      # `oidc_authorization_after_login_path` calls `BaseAuthAdmissionCoordinator.register_result_and_issue_resume!`
+      # directly (not `OidcAuthorizationTransactionCoordinator.register_result!`, which that method calls
+      # internally and then feeds through the real `issue_result!`/`resume_url` computation) -- stubbing at
+      # the inner layer with a double missing the `:transaction` field it needs raises a NoMethodError, and
+      # even a complete double there would have its `resume_url` overwritten by the real downstream
+      # computation. Stub at the same layer the code under test actually calls.
       registrar =
         lambda do |**arguments|
           captured = arguments
-          Struct.new(:resume_url).new("https://www.example/oauth/authorize?resume=1")
+          BaseAuthAdmissionCoordinator::Issuance.new(
+            transaction: nil, code: nil,
+            resume_url: "https://www.example/oauth/authorize?resume=1",
+          )
         end
 
       Actor.clear
 
-      OidcAuthorizationTransactionCoordinator.stub(:register_result!, registrar) do
+      BaseAuthAdmissionCoordinator.stub(:register_result_and_issue_resume!, registrar) do
         assert_equal "https://www.example/oauth/authorize?resume=1",
                      harness.invoke(:oidc_authorization_after_login_path)
       end

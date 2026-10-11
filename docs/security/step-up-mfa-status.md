@@ -100,3 +100,12 @@ material, the reset path follows the account-recovery design in
 After an approved reset revokes the actor's surface-counting credentials, `multi_factor_status_id`
 is recalculated. If no step-up method remains, the actor returns to `UNCONFIGURED` and must use the
 existing bootstrap-exempt registration flow before sensitive actions can pass normal step-up again.
+
+## Restricted Mode
+
+A session established through org Emergency Access is not eligible to perform step-up-protected
+operations at all, regardless of the credentials the Operator holds. This is an authentication
+context decision rather than a freshness one: the ceremony entry is refused, `StepUpResolver` never
+reports satisfaction, and the freshness committer refuses to write. There is no separate Emergency
+step-up mechanism, and normal step-up behaviour is unchanged. See
+`docs/security/org-emergency-access.md`.

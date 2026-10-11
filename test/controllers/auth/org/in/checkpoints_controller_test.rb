@@ -107,7 +107,7 @@ class Auth::Org::Sign::In::CheckpointsControllerTest < ActionDispatch::Integrati
 
   def start_checkpoint_sequence
     @checkpoint_headers = as_staff_headers(@staff, host: @host)
-    get(auth_org_dashboard_url(ri: "jp"), headers: checkpoint_headers)
+    get(auth_org_root_url(ri: "jp"), headers: checkpoint_headers)
 
     SignInSequenceCarrier.new(session, surface: :org).start!(
       surface: :org,

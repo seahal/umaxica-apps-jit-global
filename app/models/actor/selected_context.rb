@@ -16,8 +16,18 @@ class Actor
       freeze
     end
 
+    public
+
+    def persona_selected?
+      account_public_id.present?
+    end
+
+    def organization_context_selected?
+      persona_selected? && collective_public_id.present? && collective_unit_public_id.present?
+    end
+
     def selected?
-      account_public_id.present? && collective_public_id.present? && collective_unit_public_id.present?
+      organization_context_selected?
     end
 
     def ==(other)

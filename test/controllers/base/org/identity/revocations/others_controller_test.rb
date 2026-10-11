@@ -34,7 +34,7 @@ class Base::Org::Identity::Revocations::OthersControllerTest < ActionDispatch::I
     delete base_org_identity_other_sessions_url(ri: "jp", host: @host), headers: headers
 
     assert_response :see_other
-    assert_redirected_to base_org_identity_sessions_path(ri: "jp")
+    assert_redirected_to base_org_sessions_path(ri: "jp")
     assert_not_predicate other.reload, :currently_usable?
     assert_predicate current.reload, :currently_usable?
   end

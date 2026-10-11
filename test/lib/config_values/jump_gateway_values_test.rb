@@ -13,24 +13,52 @@ class ConfigValuesJumpGatewayValuesTest < ActiveSupport::TestCase
     assert_equal "https://jump.umaxica.net", values.origin.to_s
     assert_equal "https://jump.umaxica.net/.well-known/jwks.json", values.jwks_uri
     assert_equal "https://jump.umaxica.net", values.audience
-    assert_equal 5.minutes.to_i, values.ttl_seconds
+    assert_equal 30, values.ttl_seconds
     assert_empty values.revoked_kids
     assert_predicate values, :frozen?
   end
 
-  test "build honors explicit ENV overrides for origin, jwks, audience, and ttl" do
+  test "build honors explicit ENV overrides for origin, audience, and ttl" do
     env = {
       "PUBLIC_JUMP_GATEWAY_URL" => "https://gateway.example.test",
-      "PUBLIC_JUMP_GATEWAY_JWKS_URL" => "https://jwks.example.test",
+      "PUBLIC_JUMP_GATEWAY_JWKS_URL" => "https://gateway.example.test/.well-known/jwks.json",
       "PUBLIC_JUMP_GATEWAY_AUDIENCE" => "custom-audience",
-      "JUMP_RT_TTL_SECONDS" => "900",
+      "JUMP_RT_TTL_SECONDS" => "30",
     }
     values = ConfigValues::JumpGatewayValues.build(env: env, production: true)
 
     assert_equal "https://gateway.example.test", values.origin.to_s
-    assert_equal "https://jwks.example.test", values.jwks_uri
+    assert_equal "https://gateway.example.test/.well-known/jwks.json", values.jwks_uri
     assert_equal "custom-audience", values.audience
-    assert_equal 900, values.ttl_seconds
+    assert_equal 30, values.ttl_seconds
+  end
+
+  test "build in production rejects a jwks url that is not the origin well-known path" do
+    env = {
+      "PUBLIC_JUMP_GATEWAY_URL" => "https://gateway.example.test",
+      "PUBLIC_JUMP_GATEWAY_JWKS_URL" => "https://jwks.example.test/.well-known/jwks.json",
+    }
+
+    error =
+      assert_raises(ArgumentError) do
+        ConfigValues::JumpGatewayValues.build(env: env, production: true)
+      end
+
+    assert_match(/JUMP_GATEWAY_JWKS_URL must equal/, error.message)
+  end
+
+  test "build rejects a ttl longer than thirty seconds" do
+    env = {
+      "PUBLIC_JUMP_GATEWAY_URL" => "https://gateway.example.test",
+      "JUMP_RT_TTL_SECONDS" => "900",
+    }
+
+    error =
+      assert_raises(ArgumentError) do
+        ConfigValues::JumpGatewayValues.build(env: env, production: false)
+      end
+
+    assert_match(/JUMP_RT_TTL_SECONDS must be between 1 and 30/, error.message)
   end
 
   test "build derives the jwks URI from the origin when JUMP_GATEWAY_JWKS_URL is absent" do

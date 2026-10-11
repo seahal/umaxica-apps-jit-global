@@ -80,10 +80,9 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{SIGN_APP_HOST}/sign/out", method: :delete },
     )
 
-    assert_recognizes(
-      { controller: "auth/app/sign/outs/completions", action: "show" },
-      { path: "http://#{SIGN_APP_HOST}/sign/out/complete", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/sign/out/complete", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/sign/out/cancellation", method: :post)
@@ -97,10 +96,9 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/oidc/logout", method: :post)
     end
 
-    assert_recognizes(
-      { controller: "auth/app/oidc/backchannel/logouts", action: "create" },
-      { path: "http://#{SIGN_APP_HOST}/oidc/backchannel/logout", method: :post },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/oidc/backchannel/logout", method: :post)
+    end
 
     assert_recognizes(
       { controller: "auth/app/csp_violation_reports", action: "create" },
@@ -112,25 +110,22 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{SIGN_APP_HOST}/apple/notifications", method: :post },
     )
 
-    assert_recognizes(
-      { controller: "auth/app/dashboards", action: "show" },
-      { path: "http://#{SIGN_APP_HOST}/dashboard", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/dashboard", method: :get)
+    end
 
     assert_recognizes(
       { controller: "auth/app/billings", action: "index" },
       { path: "http://#{SIGN_APP_HOST}/billings", method: :get },
     )
 
-    assert_recognizes(
-      { controller: "auth/app/oidc/callbacks", action: "show" },
-      { path: "http://#{SIGN_APP_HOST}/oidc/callback", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/oidc/callback", method: :get)
+    end
 
-    assert_recognizes(
-      { controller: "auth/app/oidc/authorizations", action: "show" },
-      { path: "http://#{SIGN_APP_HOST}/oidc/authorization", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/oidc/authorization", method: :get)
+    end
 
     assert_recognizes(
       { controller: "auth/app/sign/ups", action: "show" },
@@ -509,10 +504,9 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{SIGN_COM_HOST}/sign/out", method: :delete },
     )
 
-    assert_recognizes(
-      { controller: "auth/com/sign/outs/completions", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/sign/out/complete", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/sign/out/complete", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/sign/out/cancellation", method: :post)
@@ -526,30 +520,26 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/oidc/logout", method: :post)
     end
 
-    assert_recognizes(
-      { controller: "auth/com/oidc/backchannel/logouts", action: "create" },
-      { path: "http://#{SIGN_COM_HOST}/oidc/backchannel/logout", method: :post },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/oidc/backchannel/logout", method: :post)
+    end
 
     assert_recognizes(
       { controller: "auth/com/csp_violation_reports", action: "create" },
       { path: "http://#{SIGN_COM_HOST}/csp-violation-report", method: :post },
     )
 
-    assert_recognizes(
-      { controller: "auth/com/dashboards", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/dashboard", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/dashboard", method: :get)
+    end
 
-    assert_recognizes(
-      { controller: "auth/com/oidc/callbacks", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/oidc/callback", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/oidc/callback", method: :get)
+    end
 
-    assert_recognizes(
-      { controller: "auth/com/oidc/authorizations", action: "show" },
-      { path: "http://#{SIGN_COM_HOST}/oidc/authorization", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_COM_HOST}/oidc/authorization", method: :get)
+    end
 
     assert_recognizes(
       { controller: "auth/com/sign/ups", action: "show" },
@@ -750,10 +740,9 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{SIGN_ORG_HOST}/sign/out", method: :delete },
     )
 
-    assert_recognizes(
-      { controller: "auth/org/sign/outs/completions", action: "show" },
-      { path: "http://#{SIGN_ORG_HOST}/sign/out/complete", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_ORG_HOST}/sign/out/complete", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{SIGN_ORG_HOST}/sign/out/cancellation", method: :post)
@@ -767,30 +756,26 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       Rails.application.routes.recognize_path("http://#{SIGN_ORG_HOST}/oidc/logout", method: :post)
     end
 
-    assert_recognizes(
-      { controller: "auth/org/oidc/backchannel/logouts", action: "create" },
-      { path: "http://#{SIGN_ORG_HOST}/oidc/backchannel/logout", method: :post },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_ORG_HOST}/oidc/backchannel/logout", method: :post)
+    end
 
     assert_recognizes(
       { controller: "auth/org/csp_violation_reports", action: "create" },
       { path: "http://#{SIGN_ORG_HOST}/csp-violation-report", method: :post },
     )
 
-    assert_recognizes(
-      { controller: "auth/org/dashboards", action: "show" },
-      { path: "http://#{SIGN_ORG_HOST}/dashboard", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_ORG_HOST}/dashboard", method: :get)
+    end
 
-    assert_recognizes(
-      { controller: "auth/org/oidc/callbacks", action: "show" },
-      { path: "http://#{SIGN_ORG_HOST}/oidc/callback", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_ORG_HOST}/oidc/callback", method: :get)
+    end
 
-    assert_recognizes(
-      { controller: "auth/org/oidc/authorizations", action: "show" },
-      { path: "http://#{SIGN_ORG_HOST}/oidc/authorization", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_ORG_HOST}/oidc/authorization", method: :get)
+    end
 
     assert_recognizes(
       { controller: "auth/org/sign/ups", action: "show" },

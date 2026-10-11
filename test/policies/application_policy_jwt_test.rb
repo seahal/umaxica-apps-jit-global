@@ -31,7 +31,7 @@ class ApplicationPolicyJwtTest < ActiveSupport::TestCase
 
   def test_jwt_scopes_extracts_scopes_from_current_token
     set_current_claims(
-      "scp" => ["authenticated", "domain:client", "read:self"],
+      "scope" => "authenticated domain:client read:self",
     )
     policy = ApplicationPolicy.new(user: TestRecord.new(1))
 
@@ -47,7 +47,7 @@ class ApplicationPolicyJwtTest < ActiveSupport::TestCase
 
   # has_scope? checks
   def test_has_scope_returns_true_when_scope_present
-    set_current_claims("scp" => ["authenticated", "read:self"])
+    set_current_claims("scope" => "authenticated read:self")
     policy = ApplicationPolicy.new(user: TestRecord.new(1))
 
     assert policy.send(:has_scope?, "authenticated")
@@ -55,14 +55,14 @@ class ApplicationPolicyJwtTest < ActiveSupport::TestCase
   end
 
   def test_has_scope_returns_false_when_scope_missing
-    set_current_claims("scp" => ["authenticated"])
+    set_current_claims("scope" => "authenticated")
     policy = ApplicationPolicy.new(user: TestRecord.new(1))
 
     assert_not policy.send(:has_scope?, "admin")
   end
 
   def test_has_scope_handles_symbol_arguments
-    set_current_claims("scp" => ["read:self"])
+    set_current_claims("scope" => "read:self")
     policy = ApplicationPolicy.new(user: TestRecord.new(1))
 
     assert policy.send(:has_scope?, :"read:self")
@@ -165,7 +165,7 @@ class ApplicationPolicyJwtTest < ActiveSupport::TestCase
     user = clients(:one) # from fixtures
     set_current_claims(
       "sub" => user.id,
-      "scp" => ["authenticated", "read:self", "domain:client"],
+      "scope" => "authenticated read:self domain:client",
       "aud" => ["app.api.example.com"],
     )
 

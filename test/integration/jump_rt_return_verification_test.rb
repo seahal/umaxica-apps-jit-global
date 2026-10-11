@@ -85,6 +85,26 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
     assert_response :bad_request
   end
 
+  test "rejected jump return logs do not include the rt token" do
+    app_origin = acme_app_origin
+    https!
+    token = "aaaaaaaa.bbbbbbbb.cccccccc"
+    log_io = StringIO.new
+    previous_logger = Rails.logger
+    Rails.logger = ActiveSupport::Logger.new(log_io)
+    begin
+      get("#{app_origin}/", params: { rt: token })
+    ensure
+      Rails.logger = previous_logger
+    end
+    joined = log_io.string
+
+    assert_response :bad_request
+    assert_includes joined, "jump_return.rejected"
+    assert_not_includes joined, token
+    assert_no_match(/rt=#{Regexp.escape(token)}/, joined)
+  end
+
   test "sign app includes jump return verification" do
     assert_includes Auth::App::ApplicationController.ancestors, JumpRtReturnVerification
   end
@@ -197,7 +217,7 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
       jti: "jump-jti",
       iat: @now.to_i,
       nbf: @now.to_i,
-      exp: @now.to_i + 60,
+      exp: @now.to_i + 30,
     )
     "#{acme_app_origin}/?#{Rack::Utils.build_query(rt: return_rt)}"
   end
@@ -205,7 +225,7 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
   def prime_jump_jwks_cache
     jwks_url = "https://jump.umaxica.net/.well-known/jwks.json"
     cache_key = "jump_rt:return_jwks:#{Digest::SHA256.hexdigest(jwks_url)}"
-    Rails.cache.write(cache_key, { "keys" => [@jump_public_jwk] }, expires_in: 5.minutes)
+    Rails.cache.write(cache_key, { "keys" => [@jump_public_jwk] }, expires_in: 30.seconds)
   end
 
   def sign_return_token(overrides = {})
@@ -217,7 +237,7 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
       sub: "jump-redirect",
       iat: iat,
       nbf: iat,
-      exp: iat + 60,
+      exp: iat + 30,
       jti: "jump-return-jti",
       src: "https://#{ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")}",
       dst: "internal",

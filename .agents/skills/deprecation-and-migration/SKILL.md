@@ -2,8 +2,8 @@
 name: deprecation-and-migration
 description:
   Retires old systems and moves their users safely to the replacement. Use when replacing a system
-  or API or library, sunsetting a feature, consolidating duplicate implementations, removing
-  unowned code that things still depend on, planning a new system's lifecycle, or deciding between
+  or API or library, sunsetting a feature, consolidating duplicate implementations, removing unowned
+  code that things still depend on, planning a new system's lifecycle, or deciding between
   maintaining a legacy system and investing in migration.
 ---
 

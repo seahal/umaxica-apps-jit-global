@@ -102,4 +102,3 @@ Public readability depends on both:
 
 - `adr/news-is-timeline.md`
 - `docs/architecture/regional-content.md`
-- `plans/active/regional-docs-news-cms-implementation-plan.md`

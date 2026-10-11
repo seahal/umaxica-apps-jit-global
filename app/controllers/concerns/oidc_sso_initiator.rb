@@ -34,7 +34,9 @@ module OidcSsoInitiator
 
   private
 
-  def initiate_oidc_session!(pt: "/", screen_hint: nil)
+  def initiate_oidc_session!(pt: "/", screen_hint: nil, prompt: nil, max_age: nil)
+    prompt = OidcAuthorizeRequestResolver.normalize_prompt(prompt)
+    max_age = OidcAuthorizeRequestResolver.normalize_max_age(max_age)
     verifier = SecureRandom.urlsafe_base64(48)
     challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(verifier), padding: false)
     state = SecureRandom.urlsafe_base64(32)
@@ -46,12 +48,14 @@ module OidcSsoInitiator
       session[:oidc_state] = state
       session[:oidc_nonce] = nonce
       session[:oidc_pt] = oidc_pt
+      session[:oidc_max_age] = max_age
     else
       remember_oidc_pending_flow!(
         state: state,
         verifier: verifier,
         nonce: nonce,
         pt: oidc_pt,
+        max_age: max_age,
       )
     end
     log_oidc_pending_flow_created(state: state, pt: oidc_pt)
@@ -61,6 +65,8 @@ module OidcSsoInitiator
       code_challenge: challenge,
       state: state,
       nonce: nonce,
+      prompt: prompt,
+      max_age: max_age,
     )
   end
 
@@ -90,7 +96,7 @@ module OidcSsoInitiator
     oidc_acme_service_origin.decision_for_authorize_url(url, request: request)
   end
 
-  def oidc_authorization_url(screen_hint:, code_challenge:, state:, nonce:)
+  def oidc_authorization_url(screen_hint:, code_challenge:, state:, nonce:, prompt: nil, max_age: nil)
     query = {
       response_type: "code",
       client_id: oidc_client_id,
@@ -108,19 +114,23 @@ module OidcSsoInitiator
       ri: RequestContextContract.normalize_region(params[:ri]),
     }
     query[:screen_hint] = screen_hint if screen_hint.present?
+    query[:prompt] = prompt if prompt.present?
+    query[:max_age] = max_age if max_age.present?
     oidc_acme_service_origin.authorization_endpoint(query: query)
   end
 
-  def remember_oidc_pending_flow!(state:, verifier:, nonce:, pt:)
+  def remember_oidc_pending_flow!(state:, verifier:, nonce:, pt:, max_age: nil)
     flows = session[OIDC_PENDING_FLOWS_SESSION_KEY]
     flows = {} unless flows.is_a?(Hash)
-    flows[state] = {
-      "code_verifier" => verifier,
-      "nonce" => nonce,
-      "pt" => pt,
-      "created_at" => Time.current.to_i,
-    }
-    session[OIDC_PENDING_FLOWS_SESSION_KEY] = flows.sort_by { |_key, flow| flow["created_at"].to_i }
+    flow =
+      {
+        "code_verifier" => verifier,
+        "nonce" => nonce,
+        "pt" => pt,
+        "created_at" => Time.current.to_i,
+      }.tap { |pending_flow| pending_flow["max_age"] = max_age if max_age.present? }
+    flows[state] = flow
+    session[OIDC_PENDING_FLOWS_SESSION_KEY] = flows.sort_by { |_key, entry| entry["created_at"].to_i }
       .last(OIDC_PENDING_FLOW_LIMIT)
       .to_h
   end

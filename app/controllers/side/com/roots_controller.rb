@@ -24,7 +24,7 @@ module Side
           sign_up: nil,
           links: [
             { label: "Settings", href: side_com_settings_path(ri: params[:ri]) },
-            { label: "Sign up", href: side_com_oidc_authorization_path(ri: params[:ri]) },
+            { label: "Sign up", href: side_com_sign_in_path(ri: params[:ri]) },
           ],
         }
       end

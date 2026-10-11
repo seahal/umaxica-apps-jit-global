@@ -10,8 +10,8 @@ description:
 # Spec-Driven Development
 
 The spec is the shared source of truth between the agent and the engineer: what is being built, why,
-and how completion is recognized. Its value comes from forcing that clarity before code exists,
-when changing direction is still cheap.
+and how completion is recognized. Its value comes from forcing that clarity before code exists, when
+changing direction is still cheap.
 
 **When NOT to use:** single-line fixes, typo corrections, or changes whose requirements are already
 unambiguous and self-contained.

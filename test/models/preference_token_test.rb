@@ -76,7 +76,11 @@ class PreferenceTokenModelTest < ActiveSupport::TestCase
       assert_equal @preference_type, payload["preference_type"]
       assert_equal @public_id, payload["public_id"]
       assert_equal @jti, payload["jti"]
-      assert_equal PreferenceToken::TOKEN_TYPE, payload["typ"]
+      assert_nil payload["typ"]
+      assert_equal PreferenceToken::TOKEN_TYPE, JWT.decode(token, nil, false)[1]["typ"]
+      assert_equal @public_id, payload["sub"]
+      assert_equal "preference", payload["scope"]
+      assert_equal PreferenceJwtConfiguration.client_id, payload["client_id"]
     end
   end
 
@@ -218,7 +222,7 @@ class PreferenceTokenModelTest < ActiveSupport::TestCase
     end
   end
 
-  test "decode rejects missing typ claim" do
+  test "decode rejects missing JOSE typ" do
     with_jwt_keys do
       token = PreferenceToken.encode(
         @preferences,
@@ -228,7 +232,7 @@ class PreferenceTokenModelTest < ActiveSupport::TestCase
         jti: @jti,
       )
       payload, header = JWT.decode(token, nil, false)
-      payload.delete("typ")
+      header.delete("typ")
       tampered = JWT.encode(payload, @private_key, "ES384", header)
 
       assert_nil PreferenceToken.decode(tampered, host: @host)

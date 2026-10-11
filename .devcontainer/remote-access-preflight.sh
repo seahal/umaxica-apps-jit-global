@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Host-side checks for the Tailscale remote-access overlay, run before
 # `podman compose -f compose.yaml -f .devcontainer/compose.yaml \
-#  -f compose.remote-access.yaml up`. The middle file is where `core` is defined.
+#  -f compose.override.yaml --profile remote-access up`. The middle file is where
+# `core` is defined; the last one carries the profile-gated sshd overlay.
 #
 # Identical in umaxica-apps-global, umaxica-apps-edge and portal except for the
 # compose project name, the tailnet hostname, and the document it points at.

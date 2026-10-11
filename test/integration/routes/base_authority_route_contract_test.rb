@@ -85,10 +85,9 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_APP_HOST}/welcome", method: :get },
     )
 
-    assert_recognizes(
-      { controller: "base/app/dashboards", action: "show" },
-      { path: "http://#{BASE_APP_HOST}/dashboard", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_APP_HOST}/dashboard", method: :get)
+    end
 
     assert_recognizes(
       { controller: "base/app/verification/cancellations", action: "create" },
@@ -135,15 +134,13 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_APP_HOST}/sign/in/limitation", method: :delete },
     )
 
-    assert_recognizes(
-      { controller: "base/app/oidc/callbacks", action: "show" },
-      { path: "http://#{BASE_APP_HOST}/oidc/callback", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_APP_HOST}/oidc/callback", method: :get)
+    end
 
-    assert_recognizes(
-      { controller: "base/app/oidc/authorizations", action: "show" },
-      { path: "http://#{BASE_APP_HOST}/oidc/authorization", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_APP_HOST}/oidc/authorization", method: :get)
+    end
 
     assert_recognizes(
       { controller: "base/app/sign_outs", action: "new" },
@@ -160,13 +157,19 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_APP_HOST}/sign/out", method: :post },
     )
 
-    assert_recognizes(
-      { controller: "base/app/sign_outs/completions", action: "show" },
-      { path: "http://#{BASE_APP_HOST}/sign/out/complete", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_APP_HOST}/lobby", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_APP_HOST}/sign/out", method: :delete)
+      Rails.application.routes.recognize_path("http://#{BASE_APP_HOST}/sign/out/complete", method: :get)
+    end
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{BASE_APP_HOST}/sign/out",
+        method: :delete,
+      )
     end
 
     assert_raises(ActionController::RoutingError) do
@@ -457,10 +460,9 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_COM_HOST}/welcome", method: :get },
     )
 
-    assert_recognizes(
-      { controller: "base/com/dashboards", action: "show" },
-      { path: "http://#{BASE_COM_HOST}/dashboard", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/dashboard", method: :get)
+    end
 
     assert_recognizes(
       { controller: "base/com/verification/cancellations", action: "create" },
@@ -487,15 +489,13 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_COM_HOST}/switcher", method: :patch },
     )
 
-    assert_recognizes(
-      { controller: "base/com/oidc/callbacks", action: "show" },
-      { path: "http://#{BASE_COM_HOST}/oidc/callback", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/oidc/callback", method: :get)
+    end
 
-    assert_recognizes(
-      { controller: "base/com/oidc/authorizations", action: "show" },
-      { path: "http://#{BASE_COM_HOST}/oidc/authorization", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/oidc/authorization", method: :get)
+    end
 
     assert_recognizes(
       { controller: "base/com/sign_outs", action: "new" },
@@ -512,13 +512,19 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_COM_HOST}/sign/out", method: :post },
     )
 
-    assert_recognizes(
-      { controller: "base/com/sign_outs/completions", action: "show" },
-      { path: "http://#{BASE_COM_HOST}/sign/out/complete", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/lobby", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/sign/out", method: :delete)
+      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/sign/out/complete", method: :get)
+    end
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{BASE_COM_HOST}/sign/out",
+        method: :delete,
+      )
     end
 
     [
@@ -680,10 +686,9 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_ORG_HOST}/welcome", method: :get },
     )
 
-    assert_recognizes(
-      { controller: "base/org/dashboards", action: "show" },
-      { path: "http://#{BASE_ORG_HOST}/dashboard", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/dashboard", method: :get)
+    end
 
     assert_recognizes(
       { controller: "base/org/verification/cancellations", action: "create" },
@@ -710,15 +715,13 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_ORG_HOST}/switcher", method: :patch },
     )
 
-    assert_recognizes(
-      { controller: "base/org/oidc/callbacks", action: "show" },
-      { path: "http://#{BASE_ORG_HOST}/oidc/callback", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/oidc/callback", method: :get)
+    end
 
-    assert_recognizes(
-      { controller: "base/org/oidc/authorizations", action: "show" },
-      { path: "http://#{BASE_ORG_HOST}/oidc/authorization", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/oidc/authorization", method: :get)
+    end
 
     assert_recognizes(
       { controller: "base/org/sign_outs", action: "new" },
@@ -735,13 +738,19 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_ORG_HOST}/sign/out", method: :post },
     )
 
-    assert_recognizes(
-      { controller: "base/org/sign_outs/completions", action: "show" },
-      { path: "http://#{BASE_ORG_HOST}/sign/out/complete", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/lobby", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/sign/out", method: :delete)
+      Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/sign/out/complete", method: :get)
+    end
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{BASE_ORG_HOST}/sign/out",
+        method: :delete,
+      )
     end
   end
 

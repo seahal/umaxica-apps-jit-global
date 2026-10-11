@@ -54,5 +54,4 @@ Normal revoke state also blocks later refresh attempts.
 
 ## Related
 
-- Former plan: `plans/backlog/gh612-harden-refresh-revoke-aal.md`
 - Related notes: `adr/oidc-claims-decision.md`

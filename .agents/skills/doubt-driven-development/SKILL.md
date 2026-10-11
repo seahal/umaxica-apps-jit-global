@@ -18,7 +18,7 @@ verdict on a finished artifact.
 Ordinary work does not need this skill. Correctness checking already happens inside the main working
 loop, and a second pass over work the loop has already checked produces redundant effort rather than
 better outcomes — see `.agents/harnesses/rules/generic/model-behavior-calibration.mdc`. This skill
-exists for the narrower case where being wrong is expensive *and* hard to undo.
+exists for the narrower case where being wrong is expensive _and_ hard to undo.
 
 A decision is **high-stakes** when at least one of these is true:
 
@@ -61,7 +61,7 @@ fresh-context reviewer when a decision is irreversible.
 Applied from inside a subagent, where nested spawning is unavailable, the in-loop review that Step 3
 makes the default still works: rewrite ARTIFACT + CONTRACT as a fresh self-prompt separated from the
 prior reasoning, and walk Steps 1–5. If the decision meets the irreversible bar that calls for a
-*spawned* reviewer, say so, flag the in-loop result as un-escalated, and leave the escalation to the
+_spawned_ reviewer, say so, flag the in-loop result as un-escalated, and leave the escalation to the
 main session.
 
 ## The Process
@@ -304,8 +304,8 @@ After applying doubt-driven development:
 - [ ] Every high-stakes decision (per the definition above) was named explicitly as a CLAIM before
       standing
 - [ ] At least one adversarial review per high-stakes artifact — in-loop by default, spawned
-      fresh-context only where the blast radius is irreversible (a failing test produced by TDD's RED
-      step satisfies this for behavioral claims, per Interaction with Other Skills)
+      fresh-context only where the blast radius is irreversible (a failing test produced by TDD's
+      RED step satisfies this for behavioral claims, per Interaction with Other Skills)
 - [ ] The review worked from ARTIFACT + CONTRACT — NOT the CLAIM, NOT your reasoning
 - [ ] The prompt was adversarial ("find issues"), not validating ("is it good")
 - [ ] Findings were classified against the artifact text (not rubber-stamped) using the precedence:

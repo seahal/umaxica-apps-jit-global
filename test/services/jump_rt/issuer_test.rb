@@ -102,7 +102,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
 
   test "uses environment configured ttl when ttl is omitted" do
     hosts = HostSet.new(OpenStruct.new(host: "sign.example.test"))
-    boot_config = BootConfig.new(hosts, OpenStruct.new(ttl_seconds: 60, audience: "https://jump.umaxica.net"))
+    boot_config = BootConfig.new(hosts, OpenStruct.new(ttl_seconds: 30, audience: "https://jump.umaxica.net"))
 
     with_env("JWT_SIGN_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
       Rails.configuration.x.stub(:boot_config, boot_config) do
@@ -116,7 +116,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
           payload, = JWT.decode(token, nil, false)
 
           assert_equal 1_800_000_000, payload["iat"]
-          assert_equal 1_800_000_060, payload["exp"]
+          assert_equal 1_800_000_030, payload["exp"]
         end
       end
     end

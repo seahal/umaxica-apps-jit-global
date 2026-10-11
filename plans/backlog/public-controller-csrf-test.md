@@ -22,7 +22,6 @@ exercises the forgery protection directly.
 
 ## Related
 
-- `plans/archive/public-controller-base-plan.md` (original plan)
 - `app/controllers/acme/public_controller.rb`
 - `app/controllers/sign/public_controller.rb`
 - `app/controllers/jump/public_controller.rb`

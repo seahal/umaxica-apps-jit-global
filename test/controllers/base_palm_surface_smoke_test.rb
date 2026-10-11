@@ -11,9 +11,8 @@ class BasePalmSurfaceSmokeTest < ActionDispatch::IntegrationTest
 
     get "/?ri=jp", headers: { "Host" => host }
 
-    # The gateway root canonicalizes to the regional root instead of serving a page.
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.app/", response.location
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
 
     get "/health", headers: { "Host" => host }
 
@@ -34,18 +33,18 @@ class BasePalmSurfaceSmokeTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "base public host family canonicalizes to its regional roots" do
+  test "base public host family renders the control-plane home" do
     [
-      [ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"), "https://jp.umaxica.app/"],
-      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"), "https://jp.umaxica.com/"],
-      [ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"), "https://jp.umaxica.org/"],
-    ].each do |host, expected_location|
+      [ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"), "base/app/roots/index"],
+      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"), "base/com/roots/index"],
+      [ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"), "base/org/roots/index"],
+    ].each do |host, component|
       host! host
 
       get "/?ri=jp", headers: { "Host" => host }
 
-      assert_response :moved_permanently
-      assert_equal expected_location, response.location
+      assert_response :success
+      assert_equal component, inertia_component
     end
   end
 

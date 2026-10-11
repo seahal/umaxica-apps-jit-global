@@ -32,6 +32,7 @@ class SignAppOidcBrowserFlowTest < ActionDispatch::IntegrationTest
           user: @user,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE,
+          authentication_event_at: Time.current,
         )
       @current_session_id = current_session.id
       acme_headers = as_user_headers(@user, host: acme_host, session_public_id: current_session.public_id)
@@ -63,7 +64,7 @@ class SignAppOidcBrowserFlowTest < ActionDispatch::IntegrationTest
       assert_predicate pending_flow.fetch("code_verifier"), :present?
 
       root_token_count = ClientToken.where(user_id: @user.id).count
-      usage_count = ClientTokenUsage.count
+      usage_count = ClientRpSession.count
 
       AppTicketRecord.connected_to(role: :writing) do
         acme_session.get("/oauth/authorize", params: authorize_query, headers: acme_headers)
@@ -75,12 +76,12 @@ class SignAppOidcBrowserFlowTest < ActionDispatch::IntegrationTest
         assert_equal "/oidc/callback", callback_uri.path
         assert_predicate callback_query["code"], :present?
         assert_equal authorize_query.fetch("state"), callback_query.fetch("state")
-        code_record = ClientAuthorizationCode.find_by!(code: callback_query.fetch("code"))
+        payload = Valkey::AuthState::AuthorizationCodeStore.new.read(callback_query.fetch("code"))
 
-        assert_equal @user.id, code_record.user_id
-        assert_equal @current_session_id, code_record.client_token_id
-        assert_predicate code_record.client_token, :present?
-        assert_predicate code_record.resource, :present?
+        assert_not_nil payload
+        assert_equal OidcSubject.for(@user, resource_type: "client"), payload.fetch("subject")
+        assert_equal ClientToken.find(@current_session_id).public_id, payload.fetch("base_session_ref")
+        assert_equal "issued", payload.fetch("state")
 
         id_token = OidcIdTokenIssuer.call(
           resource: @user,
@@ -88,6 +89,7 @@ class SignAppOidcBrowserFlowTest < ActionDispatch::IntegrationTest
           nonce: authorize_query.fetch("nonce"),
           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
           issuer: OidcIssuer.for_resource_type("client"),
+          auth_time: Time.iso8601(payload.fetch("auth_time")),
         )
         token_result = OidcRpTokenClient::Result.new(
           success: true,
@@ -97,7 +99,7 @@ class SignAppOidcBrowserFlowTest < ActionDispatch::IntegrationTest
 
         host! sign_host
         OidcRpTokenClient.stub(:call, token_result) do
-          get auth_app_oidc_callback_url(host: sign_host), params: callback_query, headers: browser_headers
+          get "https://#{sign_host}/oidc/callback", params: callback_query, headers: browser_headers
         end
       end
 
@@ -111,7 +113,7 @@ class SignAppOidcBrowserFlowTest < ActionDispatch::IntegrationTest
       assert_includes response.headers["Set-Cookie"].to_s, "#{AuthenticationBase::ACCESS_COOKIE_KEY}="
       assert_includes response.headers["Set-Cookie"].to_s, "#{AuthenticationBase::REFRESH_COOKIE_KEY}="
       assert_equal root_token_count, ClientToken.where(user_id: @user.id).count
-      assert_equal usage_count + 1, ClientTokenUsage.count
+      assert_equal usage_count + 1, ClientRpSession.count
 
       get auth_app_settings_url(ri: "jp"), headers: browser_headers.merge("Host" => sign_host)
 
@@ -135,16 +137,12 @@ class SignAppOidcBrowserFlowTest < ActionDispatch::IntegrationTest
     return unless defined?(@user) && @user.present?
 
     AppTicketRecord.connected_to(role: :writing) do
-      ClientAuthorizationCode.where(
-        client_id: "sign-rp",
-        client_token_id: @current_session_id,
-      ).delete_all if defined?(@current_session_id)
-      ClientTokenUsage.where(client_token_id: @current_session_id).delete_all if defined?(@current_session_id)
+      ClientRpSession.where(client_token_id: @current_session_id).delete_all if defined?(@current_session_id)
       ClientOidcConnection.where(user_id: @user.id, client_id: "sign-rp").delete_all
       ClientToken.where(id: @current_session_id).find_each(&:destroy!) if defined?(@current_session_id)
     end
 
-    AppPrincipalRecord.connected_to(role: :writing) do
+    AppZenithRecord.connected_to(role: :writing) do
       ClientEmail.where(user_id: @user.id).find_each(&:destroy!)
       Client.where(id: @user.id).find_each(&:destroy!)
     end
@@ -566,6 +564,7 @@ class SignAppOidcBrowserFlowTest
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
     )
     access_token = jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
     base.merge(
@@ -591,6 +590,7 @@ class SignAppOidcBrowserFlowTest
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
       staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
     )
     base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
     base
@@ -611,6 +611,7 @@ class SignAppOidcBrowserFlowTest
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
       visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
     )
     base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
     base

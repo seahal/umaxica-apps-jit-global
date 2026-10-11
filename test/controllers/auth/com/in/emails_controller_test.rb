@@ -260,13 +260,59 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
 
     patch auth_com_sign_in_email_url(ri: "jp"),
-          params: { visitor_email: { pass_code: ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s } },
+          params: {
+            "visitor_email" => { "pass_code" => ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s },
+            "cf-turnstile-response" => "valid-turnstile-token",
+          },
           headers: { "Host" => @host }
 
     assert_response :see_other
     assert_nil session[:user_email_authentication_id]
     assert_nil session[:user_email_authentication_address]
     assert_predicate email.reload, :otp_expired?
+  end
+
+  test "patch with a correct otp and missing or invalid Turnstile does not authenticate" do
+    visitor = create_verified_visitor_with_email(email_address: "com-turnstile-update@example.com")
+    email = visitor.visitor_emails.last
+
+    post auth_com_sign_in_email_url(ri: "jp"),
+         params: {
+           "user_email" => { "address" => email.address },
+           "cf-turnstile-response" => "valid-create-token",
+         },
+         headers: { "Host" => @host }
+
+    assert_response :redirect
+    assert_equal email.id, session[:user_email_authentication_id]
+
+    otp_private_key = ROTP::Base32.random_base32
+    otp_counter = 12_345
+    valid_pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
+    email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    expires_at_before = email.reload.otp_expires_at
+    attempts_before = email.otp_attempts_count
+    token_count_before = VisitorToken.where(visitor_id: visitor.id).count
+    TurnstileVerifierStub.challenge_response = { "success" => false }
+
+    [nil, "invalid-turnstile-token"].each do |turnstile_token|
+      params = { visitor_email: { pass_code: valid_pass_code } }
+      params["cf-turnstile-response"] = turnstile_token if turnstile_token
+
+      patch auth_com_sign_in_email_url(ri: "jp"), params: params, headers: { "Host" => @host }
+
+      assert_response :unprocessable_content
+      assert_equal "auth/com/sign/in/emails/edit", inertia_component
+      assert_equal "render", inertia_props.fetch("turnstile").fetch("mode")
+      assert_includes inertia_props.fetch("form_errors"), I18n.t("turnstile_error")
+    end
+
+    assert_equal expires_at_before, email.reload.otp_expires_at
+    assert_equal attempts_before, email.reload.otp_attempts_count
+    assert_equal email.id, session[:user_email_authentication_id]
+    assert_equal token_count_before, VisitorToken.where(visitor_id: visitor.id).count
+    assert_nil cookies["auth_access"]
+    assert_nil cookies["auth_refresh"]
   end
 
   test "patch update with a malformed pass code re-renders the code page" do

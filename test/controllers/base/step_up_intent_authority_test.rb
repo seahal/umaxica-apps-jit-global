@@ -184,7 +184,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_not_equal "evil.example", uri.host
     assert_includes [nil, host], uri.host
-    assert_equal base_app_dashboard_path(ri: "jp"), uri.request_uri
+    assert_equal base_app_root_path(ri: "jp"), uri.request_uri
     assert_equal "settings_email", token.reload.last_step_up_scope
   end
 
@@ -300,6 +300,52 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
       transaction: issuance.transaction,
       method: "passkey",
     )
+
+    post base_app_verification_completion_url(ri: "jp", host: host),
+         params: { step_up_ceremony_result: result },
+         headers: app_session_headers(host, token, user)
+
+    assert_response :bad_request
+    assert_nil token.reload.last_step_up_at
+    assert_not_predicate issuance.transaction.reload, :consumed?
+  end
+
+  test "app base completion rejects a result whose payload is not a JSON object" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    user = clients(:one)
+    token = create_client_token!(user)
+    header = Base64.urlsafe_encode64(%q({"alg":"none"}), padding: false)
+    result = "#{header}.#{Base64.urlsafe_encode64("[1]", padding: false)}."
+
+    post base_app_verification_completion_url(ri: "jp", host: host),
+         params: { step_up_ceremony_result: result },
+         headers: app_session_headers(host, token, user)
+
+    assert_response :bad_request
+    assert_nil token.reload.last_step_up_at
+  end
+
+  test "app base completion rejects an unsigned result before consuming its transaction" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    user = clients(:one)
+    token = create_client_token!(user)
+    issuance = issue_step_up_grant!(
+      surface: "app",
+      actor_ref: user.public_id,
+      session_ref: token.public_id,
+      scope: "settings_email",
+      methods: ["passkey"],
+      return_to: base_app_identity_emails_path(ri: "jp"),
+    )
+    signed = issue_step_up_result!(
+      surface: "app",
+      actor_ref: user.public_id,
+      session_ref: token.public_id,
+      transaction: issuance.transaction,
+      method: "passkey",
+    )
+    signed_header, signed_body, = signed.split(".")
+    result = "#{signed_header}.#{signed_body}.#{Base64.urlsafe_encode64("forged", padding: false)}"
 
     post base_app_verification_completion_url(ri: "jp", host: host),
          params: { step_up_ceremony_result: result },

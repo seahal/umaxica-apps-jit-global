@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
+import ButtonLink from "@/components/ui/ButtonLink";
 import { hasRecordedCookieConsent } from "@/lib/cookies";
 import { readBoolean } from "@/lib/payload";
 import { csrfToken, preferenceQueryParameters } from "@/lib/request";
@@ -20,6 +21,14 @@ function cookieEndpointUrl(): string {
 }
 
 export default function CookieBanner({ controls }: { controls: ChromeCookieControls }) {
+  if (controls.hidden) {
+    return null;
+  }
+
+  return <CookieBannerPrompt controls={controls} />;
+}
+
+function CookieBannerPrompt({ controls }: { controls: ChromeCookieControls }) {
   // Nothing is painted until something says the visitor has not answered. The consent buffer
   // cookie is a projection of the same decision the endpoint below reports, and reading it through
   // the Cookie Store API is asynchronous, so it can no longer seed the first render - starting
@@ -183,13 +192,13 @@ export default function CookieBanner({ controls }: { controls: ChromeCookieContr
             {controls.reject_all}
           </Button>
 
-          <Button
+          <ButtonLink
             variant="secondary"
             size="sm"
-            onPress={() => window.location.assign(controls.settings_url)}
+            href={controls.settings_url}
           >
             {controls.open_settings}
-          </Button>
+          </ButtonLink>
 
           <Button
             size="sm"

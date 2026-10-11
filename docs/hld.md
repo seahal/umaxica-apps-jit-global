@@ -67,8 +67,7 @@ host—marketing, authentication, docs/news, help/support, BFF, and API—consis
 - Ruby 3.4.7 / Rails 8.x
 - pnpm 12.0.0 / Node 24.19.0 (Active LTS) for JavaScript tooling (Vite-backed)
 - PostgreSQL 18 primaries/replicas per logical database
-- Valkey for the application cache and for distributed rate-limit counters, on two separate
-  services
+- Valkey for the application cache and for distributed rate-limit counters, on two separate services
 - Cloudflare/ Fastly handle TLS and CDN duties
 
 ---
@@ -113,8 +112,8 @@ concerns scoped.
    Turnstile, rate limiting, redirect sanitization). Models inherit from base records
    (`IdentitiesRecord`, `ComPrincipalRecord`, etc.) to target specific DB clusters. Services (e.g.,
    `Outbound::Sms`, `AccountService`) encapsulate integration logic.
-3. **Integration**: ActionMailer namespaces, Sms providers, OpenTelemetry instrumentation,
-   the Valkey rate-limit store, external CDNs/cloud providers.
+3. **Integration**: ActionMailer namespaces, Sms providers, OpenTelemetry instrumentation, the
+   Valkey rate-limit store, external CDNs/cloud providers.
 
 ---
 
@@ -212,15 +211,16 @@ Sensitive columns leverage Active Record encryption.
 
 - `Rails.cache` is an `ActiveSupport::Cache::RedisCacheStore` on Valkey, configured by
   `CACHE_REDIS_URL` in development and production and `:null_store` in test. Solid Cache was
-  removed: a database-backed cache reads at the call site exactly like durable storage, which is
-  how replay-prevention state and one-shot secrets ended up in it. Every cache entry now carries
-  an explicit TTL and is reconstructible from its source.
+  removed: a database-backed cache reads at the call site exactly like durable storage, which is how
+  replay-prevention state and one-shot secrets ended up in it. Every cache entry now carries an
+  explicit TTL and is reconstructible from its source.
 - Rate limiting uses Rails' `rate_limit` DSL against `config.x.rate_limit.store`, a separate
   `ActiveSupport::Cache::RedisCacheStore` on Valkey configured by `RATE_LIMIT_REDIS_URL`. The
   default limit is 1,000 req/hour per client.
-- The two stores stay separate even though both are Valkey: development runs `valkey-cache` and
-  `valkey-rate-limit` as distinct services, so a cache flush cannot reset rate-limit windows.
-  Counters and cache entries are both disposable; neither can lose authoritative state.
+- Cache, rate-limit, and auth-state share one nonprod Valkey with logical DBs 0/1/2 (dev) and 3/4/5
+  (test) via responsibility URLs (`adr/valkey-nonprod-logical-db-topology.md`). Production may still
+  use separate hosts. Counters and cache entries are both disposable; neither can lose authoritative
+  state.
 - Staging and production both use logical DB 0. Staging shares `CACHE_REDIS_URL`; production
   requires both URLs on `/0` (one managed database or two).
 - Runtime URL context is resolved from the Preference JWT projection and request-local context, not
@@ -270,8 +270,8 @@ Sensitive columns leverage Active Record encryption.
   arguments.
 - **Redirect safety**: `Redirect::ALLOWED_HOSTS` enumerates permitted targets; Base64-encoded jump
   tokens validated before allowing cross-host redirects.
-- **Secrets**: Rails credentials store JWT keys, Cloudflare Turnstile secrets, AWS keys,
-  SMTP secrets. Compose `.env` wiring required for local runs.
+- **Secrets**: Rails credentials store JWT keys, Cloudflare Turnstile secrets, AWS keys, SMTP
+  secrets. Compose `.env` wiring required for local runs.
 - **Logging & auditing**: Rails logs feed Loki; OTEL traces capture request IDs and hostnames for
   auditability.
 
@@ -282,11 +282,11 @@ Sensitive columns leverage Active Record encryption.
 | Interface      | Type          | Description                                                                                                                                                 |
 | -------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | HTTP           | REST          | Host-scoped routes for top/sign/help/docs/news/api/bff, including `/health` (text), `/api/v0/health.json`, `/sign/...`, `/help/...`, `/api/v1/inquiry/...`. |
-| Mail           | SMTP / API    | `Email::App/Com/Org::{Otp,Alert,Promotional}Mailer` deliver surface-scoped mail. OTP job arguments carry encrypted OTP payloads.            |
-| SMS            | HTTPS         | `Outbound::Sms` sends OTP codes through the configured provider. SMS job arguments carry encrypted message bodies.                          |
-| Valkey         | RESP          | Two separate services: application cache (`CACHE_REDIS_URL`) and rate-limit counters (`RATE_LIMIT_REDIS_URL`). Non-authoritative, disposable, TTL-bound. |
-| OTLP           | HTTP/gRPC     | OpenTelemetry exporter pushes spans to Tempo (`http://tempo:4318/v1/traces`).                                                               |
-| Object storage | S3-compatible | Opt-in RustFS smoke-test integration for local development; production storage is deferred.                                                 |
+| Mail           | SMTP / API    | `Email::App/Com/Org::{Otp,Alert,Promotional}Mailer` deliver surface-scoped mail. OTP job arguments carry encrypted OTP payloads.                            |
+| SMS            | HTTPS         | `Outbound::Sms` sends OTP codes through the configured provider. SMS job arguments carry encrypted message bodies.                                          |
+| Valkey         | RESP          | Two separate services: application cache (`CACHE_REDIS_URL`) and rate-limit counters (`RATE_LIMIT_REDIS_URL`). Non-authoritative, disposable, TTL-bound.    |
+| OTLP           | HTTP/gRPC     | OpenTelemetry exporter pushes spans to Tempo (`http://tempo:4318/v1/traces`).                                                                               |
+| Object storage | S3-compatible | Opt-in RustFS smoke-test integration for local development; production storage is deferred.                                                                 |
 
 ---
 

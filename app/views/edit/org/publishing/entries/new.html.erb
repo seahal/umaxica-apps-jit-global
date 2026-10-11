@@ -1,0 +1,66 @@
+<% page_title(title) %>
+<div class="mx-auto flex max-w-3xl flex-col gap-6 p-6">
+  <%= link_to "← All entries", index_href, class: "text-sm text-fg-muted underline-offset-4 hover:underline" %>
+  <div>
+    <h1 class="text-2xl font-bold text-fg"><%= title %></h1>
+    <p class="text-sm text-fg-muted"><%= description %></p>
+  </div>
+
+  <%= form_with url: form[:action], method: form[:method], class: "flex flex-col gap-4" do %>
+    <p class="text-sm text-fg-muted">
+      The locale and the slug are fixed when the entry is created. A translation is a separate entry
+      in this cell.
+    </p>
+
+    <label class="flex flex-col gap-1 text-sm">
+      <span>Locale</span>
+      <%= select_tag "entry[locale]", options_for_select(locales, form[:locale]),
+            class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
+      <% if errors["locale"] %>
+        <span role="alert" class="text-danger"><%= errors["locale"] %></span>
+      <% end %>
+    </label>
+
+    <label class="flex flex-col gap-1 text-sm">
+      <span>Slug</span>
+      <%= text_field_tag "entry[slug]", form[:slug], autocomplete: "off",
+            class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
+      <% if errors["slug"] %>
+        <span role="alert" class="text-danger"><%= errors["slug"] %></span>
+      <% end %>
+    </label>
+
+    <label class="flex flex-col gap-1 text-sm">
+      <span>Title</span>
+      <%= text_field_tag "entry[title]", form[:title], autocomplete: "off",
+            class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
+      <% if errors["title"] %>
+        <span role="alert" class="text-danger"><%= errors["title"] %></span>
+      <% end %>
+    </label>
+
+    <label class="flex flex-col gap-1 text-sm">
+      <span>Summary</span>
+      <%= text_area_tag "entry[summary]", form[:summary], rows: 3,
+            class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
+    </label>
+
+    <label class="flex flex-col gap-1 text-sm">
+      <span>Body (JSON)</span>
+      <%= text_area_tag "entry[body]", form[:body], rows: 16,
+            class: "w-full rounded-md border border-line bg-surface px-3 py-2 font-mono text-xs text-fg" %>
+      <% if errors["body"] %>
+        <span role="alert" class="text-danger"><%= errors["body"] %></span>
+      <% end %>
+    </label>
+
+    <% if errors["base"] %>
+      <p role="alert" class="text-sm text-danger"><%= errors["base"] %></p>
+    <% end %>
+
+    <div class="flex items-center gap-3">
+      <%= submit_tag "Create entry", class: "rounded-md bg-fg px-3 py-2 text-sm font-medium text-surface" %>
+      <%= link_to "All entries", index_href, class: "text-sm text-fg-muted underline-offset-4 hover:underline" %>
+    </div>
+  <% end %>
+</div>

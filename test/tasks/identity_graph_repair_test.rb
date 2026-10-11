@@ -30,7 +30,7 @@ class IdentityGraphRepairTest < ActiveSupport::TestCase
 
     assert_equal 1, ClientIdentity.where(source_record_id: user.id).count
     assert_equal 1, ClientAccount.where(user_id: user.id).count
-    assert_equal 1, Persona.where(client_identity_id: ClientIdentity.find_by!(source_record_id: user.id).id).count
+    assert_equal 1, ClientPersona.where(client_identity_id: ClientIdentity.find_by!(source_record_id: user.id).id).count
   end
 
   test "does not duplicate an already provisioned graph" do

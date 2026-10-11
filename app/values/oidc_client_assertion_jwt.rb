@@ -35,7 +35,7 @@ module OidcClientAssertionJwt
       "typ" => TOKEN_TYPE,
     }
 
-    JitSecurityJwtKeyring.encode(payload, issuer_id: issuer_id)
+    JitSecurityJwtKeyring.encode(payload, typ: TOKEN_TYPE, issuer_id: issuer_id)
   end
 
   def valid?(client_id:, assertion:, token_url:, now: Time.current)

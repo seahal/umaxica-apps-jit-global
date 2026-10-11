@@ -1,0 +1,65 @@
+# Loki for development. Replaces the image's packaged `local-config.yaml`, whose
+# compactor never deletes: a development volume that grows without bound is a
+# misconfiguration under adr/traces-and-metrics-routing-via-alloy.md.
+#
+# Retention is 24h, matching `compactor.compaction.block_retention` in
+# podman/tempo/tempo.yaml and `--storage.tsdb.retention.time` on the `prometheus`
+# service. The three backends expire together so a trace, its metrics and its log
+# lines do not outlive each other.
+#
+# Loki is reached only over the `observability` network: Alloy pushes to
+# `loki:3100`, Grafana queries it. No host port is published.
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-04-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # The retention the compactor enforces below. Nothing here is a source of
+  # truth: audit and security records live in the database
+  # (docs/security/observability-boundary.md), so expiring development logs
+  # loses diagnostics only.
+  retention_period: 24h
+  # A single developer's Rails process, not a fleet. These bound what a runaway
+  # log loop can push before the write path starts rejecting.
+  ingestion_rate_mb: 8
+  ingestion_burst_size_mb: 16
+  reject_old_samples: true
+  reject_old_samples_max_age: 24h
+
+compactor:
+  working_directory: /loki/compactor
+  # Without this the retention_period above is advisory and chunks stay forever.
+  retention_enabled: true
+  delete_request_store: filesystem
+  compaction_interval: 10m
+  retention_delete_delay: 1h
+
+# Development installations report usage upstream by default. A local
+# observability stack has no reason to talk to the internet at all.
+analytics:
+  reporting_enabled: false

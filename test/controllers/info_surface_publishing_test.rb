@@ -10,6 +10,15 @@ class InfoSurfacePublishingTest < ActionDispatch::IntegrationTest
     { host_fallback: "info.org.localhost", audience: "org" },
   ].freeze
 
+  test "info org root renders its localized landing message" do
+    host! "info.org.localhost"
+
+    get "/", headers: { "Accept" => "text/html" }
+
+    assert_response :success
+    assert_includes response.body, "情報 API を提供しています。ブラウザ用の記事ページは Rails の外部で提供されます。"
+  end
+
   test "info surfaces read published entries from the publishing DB" do
     SURFACES.each do |surface|
       host! surface.fetch(:host_fallback)

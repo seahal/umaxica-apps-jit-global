@@ -81,6 +81,5 @@ Already done in the active plan:
 
 ## Related
 
-- `plans/active/token-rotation-concurrency-hardening.md`
 - `docs/security/refresh-token-rotation.md`
 - `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md`

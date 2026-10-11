@@ -100,6 +100,6 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
   private
 
   def state_for(email)
-    SignInOtpResendState.issue(kind: :email, target: email)
+    SignInOtpResendState.issue(kind: :email, target: email, surface: :app)
   end
 end

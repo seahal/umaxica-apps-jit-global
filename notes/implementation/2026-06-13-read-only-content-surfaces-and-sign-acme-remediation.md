@@ -3,9 +3,7 @@
 ## Context
 
 - Original plans:
-  - `plans/archive/surface-routing-controller-pass-base-palm-help-docs-news.md`
-  - `plans/active/docs-news-help-content-surface-reimplementation-plan.md`
-  - `plans/active/sign-acme-boundary-remediation.md`
+  - `plans/backlog/sign-acme-boundary-remediation.md`
 - Related decisions:
   - `adr/acme-sign-core-base-port-boundary.md`
   - `adr/read-only-content-surfaces-in-rails.md`

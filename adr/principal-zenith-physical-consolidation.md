@@ -4,13 +4,22 @@
 
 Accepted on 2026-06-30.
 
+> **Partially superseded (2026-09-08) by `adr/global-regional-database-ownership.md`:** the
+> consolidation of `*_principal` migration history into `*_zenith` and the semantic
+> `*PrincipalRecord` base classes stand. The claim that the reserved empty `*_principal` databases
+> "are available for a future regional-ready application-data role" is retired: `*_zenith` is Global
+> canonical authority, and regional-ready application data belongs in the future Regional
+> repository's own application database, not in a `*_principal` connection key in this repository.
+> The Phase 1.5 investigation also found the `db/{app,com,org}_principal_reserved_migrate`
+> directories and `*_principal` connection keys named below were never actually created.
+
 ## Context
 
 The repository historically separated each surface into `*_principal` and `*_zenith` physical
 databases. That reflected an older identity/account split where principal-side identity data and
 RP/account projections were treated as separate physical authorities.
 
-The current authority direction treats Identity, Account, and Organization as the same global
+The current authority direction treats Identity, Persona, and Organization as the same global
 authority family for placement purposes. The old Acme/Sign-style boundary no longer justifies a
 separate physical database between principal and zenith for these records.
 
@@ -32,15 +41,10 @@ The semantic principal abstract bases remain as compatibility and domain-languag
 - `OrgPrincipalRecord` connects to `org_zenith`.
 - `ComPrincipalRecord` connects to `com_zenith`.
 
-The physical `*_principal` connection keys remain configured, but their migration paths are empty
-reserved directories:
-
-- `db/app_principal_reserved_migrate`
-- `db/org_principal_reserved_migrate`
-- `db/com_principal_reserved_migrate`
-
-These reserved databases are intentionally empty after this consolidation. They are available for a
-future regional-ready application-data role, but not for new global authority data.
+The physical `*_principal` connection keys remain configured for compatibility, but they are not a
+regional application-data store. The matching `*_principal` migration paths are empty reserved paths
+where the current repository defines them. Regional-ready application data belongs in the future
+Regional repository's own application database under a separate placement decision.
 
 ## Consequences
 
@@ -49,8 +53,9 @@ future regional-ready application-data role, but not for new global authority da
 - Existing semantic base classes can keep code readable while the physical storage is consolidated.
 - Migration version collisions between the merged histories must be resolved before the combined
   paths are applied.
-- Future regional data must be placed deliberately into the reserved principal databases only after
-  a separate placement decision.
+- Future regional data must be placed in the future Regional repository only after a separate
+  placement decision. This repository must not add regional application authority to a retained
+  `*_principal` connection key.
 - Read-only content in `*_zenith` remains content storage and is not reclassified as authority data.
 
 ## Non-Goals

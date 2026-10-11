@@ -18,7 +18,7 @@ module Base
               current_token: current_session,
               current_session_public_id: current_session_public_id,
             )
-            redirect_to(base_app_identity_sessions_path(ri: params[:ri]), status: :see_other)
+            redirect_to(base_app_sessions_path(ri: params[:ri]), status: :see_other)
           end
           alias_method :destroy, :create
         end

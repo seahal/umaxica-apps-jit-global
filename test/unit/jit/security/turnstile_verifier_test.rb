@@ -8,10 +8,6 @@ require "jit_security_turnstile_verifier"
 module Jit
   module Security
     class TurnstileVerifierTest < ActiveSupport::TestCase
-      # Pure unit test - no database/fixtures needed
-      self.use_transactional_tests = false
-      self.fixture_table_names = []
-
       def setup
         # All four stub slots, not just the two this file sets: the challenge slot wins over the
         # verifier slot inside the stub, so a value left behind by another test would answer these
@@ -95,6 +91,14 @@ module Jit
         result = Turnstile::VerifierFactory.current.verify(token: "foo", remote_ip: "127.0.0.1")
 
         assert result["success"]
+      end
+
+      test "injected verifier rejects an unstubbed provider call" do
+        TurnstileVerifierStub.reset!
+
+        assert_raises(TestSupport::ExternalCommunicationError) do
+          Turnstile::VerifierFactory.current.verify(token: "foo", remote_ip: "127.0.0.1")
+        end
       end
 
       test "performs http request when verifying" do
@@ -342,7 +346,49 @@ module Jit
         logger.verify
       end
 
+      test "verifying twice runs the real connection builder and never mutates the frozen siteverify URI" do
+        # Regression: VERIFY_URI is a frozen class constant. OutboundHttp::Connection.build used to
+        # hand it straight to Faraday, which mutates the URI's path, so every real Turnstile check
+        # raised FrozenError and returned an "unavailable" failure (HTTP 422 on Google/Apple
+        # sign-up confirmation). Exercise the real builder here and stub only the network POST.
+        TurnstileVerifierStub.enabled = false
+        uri_before = JitSecurityTurnstileVerifier::VERIFY_URI.dup
+        fake_response = Struct.new(:body).new('{"success": true}')
+        real_build = OutboundHttp::Connection.method(:build)
+
+        OutboundHttp::Connection.stub(
+          :build, lambda { |**kwargs|
+                    connection = real_build.call(**kwargs)
+                    connection.define_singleton_method(:post) { |*| fake_response }
+                    connection
+                  },
+        ) do
+          2.times do
+            result = JitSecurityTurnstileVerifier.verify(token: "tok", remote_ip: "1.2.3.4", secret_key: "secret")
+
+            assert result["success"], "verification failed: #{result.inspect}"
+            assert_nil result["error"]
+          end
+        end
+
+        assert_predicate JitSecurityTurnstileVerifier::VERIFY_URI, :frozen?
+        assert_equal uri_before.to_s, JitSecurityTurnstileVerifier::VERIFY_URI.to_s
+      end
+
       private
+
+      # Pure unit test - no database/fixtures needed. `use_transactional_tests = false` was the
+      # wrong tool for that: it makes Rails clear the process-wide fixture cache
+      # (`@@already_loaded_fixtures`) on every run, which forces every other `fixtures :all` test
+      # class to reload all ~200 fixture tables (~600 extra queries) on its next example.
+      # Overriding these two hooks as no-ops opts this class out of the fixtures machinery
+      # entirely, without that side effect, while keeping every other `ActiveSupport::TestCase`
+      # behavior (assertions, the `test` DSL) intact. See docs/guides/test-profiling.md.
+      def setup_fixtures(*)
+      end
+
+      def teardown_fixtures(*)
+      end
 
       # siteverify is reached through OutboundHttp::Connection, so the stub
       # states the URL and the response body rather than mocking a transport

@@ -16,20 +16,21 @@ module PublishingManagementEntriesActions
   def index
     authorize_publishing!(current_operator, to: :index?)
 
-    render inertia: true, props: index_page_props(publishing_entries_query.page(number: page_number))
+    render entries_template("index"),
+           locals: index_page_props(publishing_entries_query.page(number: page_number))
   end
 
   def show
     entry = find_management_entry!
     authorize_publishing!(entry, to: :show?)
 
-    render inertia: true, props: show_entry_props(entry)
+    render entries_template("show"), locals: show_entry_props(entry)
   end
 
   def new
     authorize_publishing!(current_operator, to: :create?)
 
-    render inertia: true, props: new_entry_props
+    render entries_template("new"), locals: new_entry_props
   end
 
   def create
@@ -63,7 +64,7 @@ module PublishingManagementEntriesActions
     entry = find_management_entry!
     authorize_publishing!(entry, to: :update?)
 
-    render inertia: true, props: edit_entry_props(entry, errors: {})
+    render entries_template("edit"), locals: edit_entry_props(entry, errors: {})
   end
 
   def update
@@ -130,14 +131,14 @@ module PublishingManagementEntriesActions
   end
 
   def render_edit_failure(entry, errors:, form:)
-    render inertia: entries_component("edit"),
-           props: edit_entry_props(entry, errors: errors, form: form),
+    render entries_template("edit"),
+           locals: edit_entry_props(entry, errors: errors, form: form),
            status: :unprocessable_content
   end
 
   def render_new_failure(errors:, form:)
-    render inertia: entries_component("new"),
-           props: new_entry_props(errors: errors, form: form),
+    render entries_template("new"),
+           locals: new_entry_props(errors: errors, form: form),
            status: :unprocessable_content
   end
 end

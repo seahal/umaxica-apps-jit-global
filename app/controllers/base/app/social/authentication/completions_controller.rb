@@ -120,6 +120,7 @@ module Base
               pt: commit.pt,
               ri: params[:ri],
               auth_method: "social",
+              authentication_event_at: authentication_event_at_from_social_result(commit.result),
               audit_context: { auth_method: "social", provider: normalized_provider },
               # "social" cannot distinguish google from apple; the provider is
               # known here (adr/unified-enforcement.md, Session attribution).
@@ -138,6 +139,11 @@ module Base
             end
 
             handle_social_login_failure!(sign_in_result)
+          end
+
+          def authentication_event_at_from_social_result(result)
+            raw = result.is_a?(Hash) ? result["auth_time"] : nil
+            parse_authentication_event_at(raw)
           end
 
           def base_social_login_redirect_to(sign_in_result)

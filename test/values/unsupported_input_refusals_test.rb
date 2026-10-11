@@ -49,6 +49,14 @@ class UnsupportedInputRefusalsTest < ActiveSupport::TestCase
     end
   end
 
+  test "quota policies refuse a principal from another surface" do
+    account_policy = Acme::AccountQuotaPolicy.new(surface: :app, principal: Visitor.new)
+    organization_policy = Acme::OrganizationQuotaPolicy.new(surface: :com, principal: Client.new)
+
+    assert_raises(ArgumentError) { account_policy.current_count }
+    assert_raises(ArgumentError) { organization_policy.current_count }
+  end
+
   test "a sign-up surface with no minimum age is refused rather than treated as unrestricted" do
     assert_predicate SignUpEligibilityPolicy.minimum_age(surface: :app), :positive?
     assert_predicate SignUpEligibilityPolicy.minimum_age(surface: :com), :positive?

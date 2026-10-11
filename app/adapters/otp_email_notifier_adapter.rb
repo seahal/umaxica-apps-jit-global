@@ -13,12 +13,14 @@ class OtpEmailNotifierAdapter < OtpAdapter
     @notifier = notifier
   end
 
-  def deliver(record:, otp_code:, verification_token: nil, public_id: nil, **)
-    @notifier.issue(
+  def deliver(record:, otp_code:, verification_token: nil, public_id: nil, purpose: nil, **)
+    notifier_params = {
       record: record,
       otp_code: otp_code,
       verification_token: verification_token,
       public_id: public_id,
-    )
+    }
+    notifier_params[:purpose] = purpose if purpose.present?
+    @notifier.issue(**notifier_params)
   end
 end

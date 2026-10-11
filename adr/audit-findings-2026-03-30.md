@@ -1,7 +1,6 @@
 # Audit Findings
 
 > Generated: 2026-03-30  
-> Original location: `plans/archive/audit-findings-2026-03-30.md`  
 > Migrated to: `audit-findings-2026-03-30.md`  
 > Total findings: 136 (Critical: 2, High: 33, Medium: 90, Low: 8)
 

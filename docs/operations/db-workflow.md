@@ -21,6 +21,22 @@ stubs, that task does not prove object-level reconstruction. Use
 `test/tooling/database_reconstruction_authority_test.rb` and
 `test/tooling/database_migration_path_ownership_test.rb` for the current invariant.
 
+## Global / Regional Split (planned)
+
+`adr/global-regional-database-ownership.md` fixes which databases this repository keeps and which
+are duplicated into the future `umaxica-apps-regional` repository. After that repository is created:
+
+- Global keeps every currently-populated database (`*_zenith`, `*_ticket`, `*_setting`, `*_signal`,
+  `avatar`, `publishing`) plus its own `chronicle`, `occurrence`, `primary`, and `queue`.
+- `chronicle`, `occurrence`, `primary`, and `queue` exist independently on both sides — same
+  starting schema, **separate databases, separate data, separate migration history**. The two
+  histories are not synchronized after the split.
+- Regional gets a new application database and does not run any Global-only migration path.
+- `search` and `storage` (zero migrations) and `db/audit_schema.rb` (orphan) are deletion candidates
+  for the split; no deletion has been performed yet.
+
+Until the split happens, this repository still prepares the full fleet as one unit.
+
 ## Principles
 
 1. **Do not use incremental `bin/rails db:migrate` on a branch with in-progress table-rename
@@ -59,11 +75,11 @@ bin/rails db:verify_no_schema_drift
 
 ## Stop the Server Before Resetting Databases
 
-The `app_setting` database initializes preference reference rows through
-`insert_missing_fixed_ids!` on demand. If the server remains active during a reset, an incoming
-request can arrive while databases are being dropped and recreated. Connection-pool checkout then
-blocks until the socket timeout, approximately ten seconds, and produces a
-`Rack::Timeout::RequestTimeoutException` with an HTTP 500 response.
+The `app_setting` database initializes preference reference rows through `insert_missing_fixed_ids!`
+on demand. If the server remains active during a reset, an incoming request can arrive while
+databases are being dropped and recreated. Connection-pool checkout then blocks until the socket
+timeout, approximately ten seconds, and produces a `Rack::Timeout::RequestTimeoutException` with an
+HTTP 500 response.
 
 ```bash
 # Correct procedure
@@ -92,12 +108,12 @@ end
 
 `rename_table_strict` behaves as follows:
 
-| Old table | New table | Behavior |
-|---|---|---|
-| Present | Absent | Rename the table |
-| Absent | Present | Skip as an idempotent rerun |
-| Present | Present | **Raise** because the schema is partially renamed and requires manual resolution |
-| Absent | Absent | **Raise** because the schema does not match the expected state |
+| Old table | New table | Behavior                                                                         |
+| --------- | --------- | -------------------------------------------------------------------------------- |
+| Present   | Absent    | Rename the table                                                                 |
+| Absent    | Present   | Skip as an idempotent rerun                                                      |
+| Present   | Present   | **Raise** because the schema is partially renamed and requires manual resolution |
+| Absent    | Absent    | **Raise** because the schema does not match the expected state                   |
 
 The former `rename_table_if_present` silently skipped whenever either side was missing. That hid
 partial renames and produced schema drift. `rename_table_strict` raises for every state requiring

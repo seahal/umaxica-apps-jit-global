@@ -10,7 +10,7 @@ document; where an accepted ADR governs a behavior, the ADR remains authoritativ
 
 ## Authentication architecture
 
-Rails 8.2.0.alpha on Ruby 4.0.6. There is no Devise, Warden, Pundit, or Rodauth. Authentication is
+Rails 8.2.0.alpha on Ruby 4.0.7. There is no Devise, Warden, Pundit, or Rodauth. Authentication is
 implemented in-repository in `app/controllers/concerns/authentication_base.rb`; authorization is
 Action Policy.
 
@@ -74,8 +74,13 @@ Protocol posture, as implemented:
 - Discovery is disabled. The org surface federates a **single tenant**, whose tenant id and client
   id are named on the `ExternalAuthentication::ProviderRegistry` entry and read from Rails
   credentials, so endpoints are tenant-fixed rather than `common`, `organizations`, or `consumers`.
-- Client authentication is `client_secret_basic`, with the secret in Rails encrypted credentials. No
+- Client authentication is `client_secret_post`: the client id and secret go in the token request
+  body and no `Authorization` header is sent. The secret lives in Rails encrypted credentials; no
   Entra secret is stored in the database.
+- All three Entra credentials (`OMNI_AUTH_ENTRA_ORG_TENANT_ID`, `OMNI_AUTH_ENTRA_ORG_CLIENT_ID`,
+  `OMNI_AUTH_ENTRA_ORG_CLIENT_SECRET`) are required at boot outside development and test, and the
+  two identifiers must be UUIDs. Validation is presence and shape only and performs no network I/O;
+  no credential value reaches an exception or a log.
 - The callback is normalized by `ExternalAuthentication::EntraProviderAdapter` into the same
   `CallbackResult`/`VerifiedPrincipal` shape the app surface's Apple and Google adapters produce,
   carrying an `EntraTenantContext` rather than an opaque subject.

@@ -37,21 +37,14 @@ class Side::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL", "www.org.localhost"), location.host
     assert_equal "/oidc/logout", location.path
     assert_predicate query["id_token_hint"], :present?
-    assert_equal side_org_sign_out_completion_url(ri: "jp", protocol: "https"), query["post_logout_redirect_uri"]
+    assert_equal side_org_sign_out_url(ri: "jp", protocol: "https"), query["post_logout_redirect_uri"]
     assert_predicate query["logout_challenge"], :present?
   end
 
-  test "complete sign out consumes the state and renders completion" do
-    user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+  test "get sign out without a one-shot notice is not found" do
+    get side_org_sign_out_url(ri: "jp")
 
-    post side_org_sign_out_url(ri: "jp"), headers: session_headers(user, token)
-
-    get side_org_sign_out_completion_url(ri: "jp")
-
-    assert_response :success
-    assert_select "h1", text: I18n.t("sign.shared.sign_out.completed_title")
+    assert_response :not_found
   end
 
   private

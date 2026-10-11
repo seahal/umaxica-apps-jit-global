@@ -178,14 +178,6 @@ class ClientPolicyTest < ActiveSupport::TestCase
     assert_equal policy.send(:update?), policy.send(:edit?)
   end
 
-  def test_revoke_all_requires_the_owner_client
-    user = clients(:one)
-    policy = ClientPolicy.new(Struct.new(:id).new(user.id), user: user)
-
-    assert_predicate policy, :revoke_all?
-    assert_not ClientPolicy.new(Struct.new(:id).new(user.id), user: clients(:two)).revoke_all?
-  end
-
   def test_purge_sessions_is_operator_only
     staff = operators(:one)
 

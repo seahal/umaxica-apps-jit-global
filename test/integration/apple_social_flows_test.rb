@@ -120,7 +120,7 @@ class AppleSocialFlowsTest < ActionDispatch::IntegrationTest
     redirect_uri = URI.parse(response.location)
 
     assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), redirect_uri.host
-    assert_equal "/dashboard", redirect_uri.path
+    assert_equal "/", redirect_uri.path
     assert_empty redirect_uri.query.to_s
   end
 

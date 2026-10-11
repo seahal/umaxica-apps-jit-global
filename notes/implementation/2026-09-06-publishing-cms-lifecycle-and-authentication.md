@@ -2,11 +2,11 @@
 
 ## Context
 
-- Original plan/spec: conversation request to close the gaps found in the 2026-09-06 CMS audit --
-  no publish path, no authentication or authorization, no operator provenance, no entry creation,
-  no archive, and an unbounded management index.
-- Related decisions/docs/plans: `notes/implementation/2026-09-04-publishing-management-ui.md`
-  (which recorded the unauthenticated alpha posture and named this follow-up),
+- Original plan/spec: conversation request to close the gaps found in the 2026-09-06 CMS audit -- no
+  publish path, no authentication or authorization, no operator provenance, no entry creation, no
+  archive, and an unbounded management index.
+- Related decisions/docs/plans: `notes/implementation/2026-09-04-publishing-management-ui.md` (which
+  recorded the unauthenticated alpha posture and named this follow-up),
   `docs/architecture/publishing-persistence.md`, `docs/security/public-entrypoints.md`,
   `adr/application-logging-boundary.md`, `db/migration_support/publishing_schema.rb`.
 - Implementation date: 2026-09-06.
@@ -41,8 +41,8 @@
     controller actions and asks for a noun resource. A publication is a real row with its own
     lifecycle, and an entry has exactly one archive state, so plural and singular resources
     respectively. Nesting is expressed with `scope module: :entries`, a pre-approved wrapper.
-  - Alternatives considered: flat `publications` controllers alongside `entries`. Rejected: the
-    URL and the controller namespace should agree.
+  - Alternatives considered: flat `publications` controllers alongside `entries`. Rejected: the URL
+    and the controller namespace should agree.
 
 - Decision: `EndPublicationOperation` decides between cancelling and terminating from the row, not
   from the caller.
@@ -55,12 +55,12 @@
 - Decision: a new migration adds `archived_by_operator_public_id` to the twelve entries tables and
   `ended_by_operator_public_id` to the twelve publications tables.
   - Why: revisions, versions, and publications already carry `created_by_operator_public_id`, so
-    every appearance of content named its author. The two transitions that make content
-    *disappear* named nobody, and `adr/application-logging-boundary.md` forbids using logs as the
-    authoritative record for that.
-  - Alternatives considered: separate cancelled-by and terminated-by columns. Rejected: which
-    ending applies is already decided by the two check constraints; the operator is the same fact
-    either way.
+    every appearance of content named its author. The two transitions that make content _disappear_
+    named nobody, and `adr/application-logging-boundary.md` forbids using logs as the authoritative
+    record for that.
+  - Alternatives considered: separate cancelled-by and terminated-by columns. Rejected: which ending
+    applies is already decided by the two check constraints; the operator is the same fact either
+    way.
   - Follow-up needed: `development_publishing_db` needs `bin/rails db:migrate:publishing` (or the
     reset the 2026-09-05 evidence already calls for).
 
@@ -84,14 +84,14 @@
 
 - Change: taxonomy assignment editing, vocabulary and term management, and media upload were not
   implemented.
-  - Why: each is a feature of its own rather than a gap in this one. Taxonomy terms need a term
-    CRUD surface before an assignment picker has anything to pick; media needs a Shrine uploader,
-    storage configuration, and a decision about direct-to-S3 uploads that is not verifiable from
-    this container. Revisions still carry their taxonomy and media forward unchanged, so nothing
+  - Why: each is a feature of its own rather than a gap in this one. Taxonomy terms need a term CRUD
+    surface before an assignment picker has anything to pick; media needs a Shrine uploader, storage
+    configuration, and a decision about direct-to-S3 uploads that is not verifiable from this
+    container. Revisions still carry their taxonomy and media forward unchanged, so nothing
     regressed.
   - Risk: the CMS can create, revise, publish, schedule, unpublish, and archive content, but cannot
-    classify it or attach an image. Content created here inherits no taxonomy, so it is invisible
-    to the category and tag filters on the public read path.
+    classify it or attach an image. Content created here inherits no taxonomy, so it is invisible to
+    the category and tag filters on the public read path.
   - Follow-up: promote both into the planning system as their own tasks.
 
 - Change: `PUBLIC_PUBLISHING_CMS` was removed from `docs/security/public-entrypoints.md` and from

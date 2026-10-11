@@ -9,17 +9,7 @@ module BaseStepUpCompletion
   def complete_step_up_ceremony!(surface:, actor:, token:, fallback:)
     now = Time.current
     result_token = params.require(:step_up_ceremony_result)
-    payload = IdentityStepUpCeremonyContract.decode_unverified_payload(result_token)
-    raise ActionController::BadRequest, "surface mismatch" unless payload["surface"].to_s == surface.to_s
-
-    transaction =
-      IdentityStepUpCeremonyReplayStore
-        .for(surface)
-        .find_transaction!(payload.fetch("transaction_id"))
-    raise IdentityStepUpCeremonyContract::Error,
-          "transaction actor mismatch" unless transaction.actor_ref == actor.public_id
-    raise IdentityStepUpCeremonyContract::Error,
-          "transaction session mismatch" unless transaction.session_ref == token.public_id
+    transaction = verified_step_up_transaction!(result_token, surface: surface, actor: actor, token: token, now: now)
 
     consumption = IdentityStepUpCeremonyResultConsumer.new(transaction: transaction, now: now).call(result_token)
     IdentityStepUpCeremonyFreshnessCommitter.call!(
@@ -30,6 +20,7 @@ module BaseStepUpCompletion
       expected_method: consumption.transaction.method,
       expected_phishing_resistant: consumption.transaction.phishing_resistant_required,
       audience: step_up_audience,
+      surface: surface,
       now: now,
     )
 
@@ -53,5 +44,26 @@ module BaseStepUpCompletion
       ),
     )
     raise ActionController::BadRequest, "invalid step-up completion"
+  end
+
+  # Verify against the surface this controller serves before any claim reaches the database, so
+  # the transaction lookup only ever sees a signed transaction_id.
+  def verified_step_up_transaction!(result_token, surface:, actor:, token:, now:)
+    verified = IdentityStepUpCeremonyResult.decode(
+      result_token,
+      issuer_id: IdentityStepUpCeremonyContract.sign_issuer_id(surface), now: now,
+    )
+    raise ActionController::BadRequest, "surface mismatch" unless verified["surface"].to_s == surface.to_s
+
+    transaction =
+      IdentityStepUpCeremonyReplayStore
+        .for(surface)
+        .find_transaction!(verified["transaction_id"].to_s)
+    raise IdentityStepUpCeremonyContract::Error,
+          "transaction actor mismatch" unless transaction.actor_ref == actor.public_id
+    raise IdentityStepUpCeremonyContract::Error,
+          "transaction session mismatch" unless transaction.session_ref == token.public_id
+
+    transaction
   end
 end

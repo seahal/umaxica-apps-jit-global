@@ -7,6 +7,7 @@ require "test_helper"
 class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
   setup do
     @sign_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    host! @sign_host
     ClientIdentityState.ensure_defaults!
   end
 
@@ -17,8 +18,11 @@ class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
       params: authorize_params,
     )
 
-    get auth_app_sign_in_url(ri: "jp", login_challenge: issuance.transaction.login_challenge),
+    get auth_app_sign_in_url(ri: "jp", admission: admission_code(issuance)),
         headers: { "Host" => @sign_host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     assert_equal issuance.transaction.login_challenge, session[:oidc_authorization_login_challenge]
@@ -31,8 +35,11 @@ class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
       params: authorize_params(screen_hint: "signup"),
     )
 
-    get auth_app_sign_up_url(ri: "jp", login_challenge: issuance.transaction.login_challenge),
+    get auth_app_sign_up_url(ri: "jp", admission: admission_code(issuance)),
         headers: { "Host" => @sign_host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     assert_equal issuance.transaction.login_challenge, session[:oidc_authorization_login_challenge]
@@ -41,25 +48,29 @@ class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
   test "sign in entry without login challenge lists methods and stores no challenge" do
     get auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @sign_host }
 
-    assert_response :success
+    assert_response :see_other
     assert_nil session[:oidc_authorization_login_challenge]
   end
 
   test "sign up entry without login challenge lists methods and stores no challenge" do
     get auth_app_sign_up_url(ri: "jp"), headers: { "Host" => @sign_host }
 
-    assert_response :success
+    assert_response :see_other
     assert_nil session[:oidc_authorization_login_challenge]
   end
 
   test "sign in started flow without issued login challenge stores no challenge" do
     get auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @sign_host }
 
-    assert_response :success
+    assert_response :see_other
     assert_nil session[:oidc_authorization_login_challenge]
   end
 
   private
+
+  def admission_code(issuance)
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code
+  end
 
   def authorize_params(screen_hint: nil)
     params = {

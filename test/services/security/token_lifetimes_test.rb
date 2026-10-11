@@ -9,7 +9,7 @@ module Security
       assert_equal 5.minutes, SecurityTokenLifetimes::AUTH_ACCESS_JWT_TTL
       assert_equal 7.days, SecurityTokenLifetimes::PREFERENCE_JWT_TTL
       assert_equal 5.minutes, SecurityTokenLifetimes::OIDC_ID_TOKEN_TTL
-      assert_equal 5.minutes, SecurityTokenLifetimes::JUMP_RT_TTL
+      assert_equal 30.seconds, SecurityTokenLifetimes::JUMP_RT_TTL
     end
 
     test "defines old kid verification windows as token ttl plus jwks and cdn leeway" do
@@ -19,7 +19,7 @@ module Security
                    SecurityTokenLifetimes.old_kid_verification_window(SecurityTokenLifetimes::PREFERENCE_JWT_TTL)
       assert_equal 2.hours + 5.minutes,
                    SecurityTokenLifetimes.old_kid_verification_window(SecurityTokenLifetimes::OIDC_ID_TOKEN_TTL)
-      assert_equal 2.hours + 5.minutes,
+      assert_equal 2.hours + 30.seconds,
                    SecurityTokenLifetimes.old_kid_verification_window(SecurityTokenLifetimes::JUMP_RT_TTL)
     end
 

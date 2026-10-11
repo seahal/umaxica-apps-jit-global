@@ -153,6 +153,29 @@ class OpenapiContentEntriesContractTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "a publication outside its window is not readable or listed" do
+    prepare(service: "docs", surface: "app")
+
+    scheduled = publishing_draft(audience: "app", surface: "docs", slug: "scheduled-entry", title: "Scheduled Entry")
+    publishing_publish(entry: scheduled, published_at: 1.hour.from_now)
+    get "/api/v0/entries/#{scheduled.public_id}?locale=ja", headers: json_headers(service: "docs", surface: "app")
+
+    assert_response :not_found
+
+    expired = publishing_draft(audience: "app", surface: "docs", slug: "expired-entry", title: "Expired Entry")
+    publishing_publish(entry: expired, published_at: 2.hours.ago, effective_until: 1.hour.ago)
+    get "/api/v0/entries/#{expired.public_id}?locale=ja", headers: json_headers(service: "docs", surface: "app")
+
+    assert_response :not_found
+
+    get "/api/v0/entries?locale=ja", headers: json_headers(service: "docs", surface: "app")
+
+    assert_response :success
+    slugs = response.parsed_body.fetch("data").map { |entry| entry.fetch("slug") }
+
+    assert_empty slugs & %w(scheduled-entry expired-entry)
+  end
+
   test "a draft or archived entry is not readable by a known public_id" do
     prepare(service: "docs", surface: "app")
 
@@ -168,7 +191,7 @@ class OpenapiContentEntriesContractTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
-  test "a collection is bounded even when the client asks for no limit" do
+  test "a collection is bounded even when the client omits page" do
     prepare(service: "docs", surface: "app")
     25.times { |i| publish("bounded-#{i}", "Bounded #{i}", published_at: (i + 1).hours.ago) }
 
@@ -178,60 +201,40 @@ class OpenapiContentEntriesContractTest < ActionDispatch::IntegrationTest
 
     body = response.parsed_body
 
-    # adr/api-collection-contract.md: the page size is a server-side guarantee, not a client
-    # courtesy. Before this change the response carried all 25.
-    assert_equal PublishingPublishedEntriesQuery::DEFAULT_LIMIT, body.fetch("data").length
-    assert body.dig("page", "has_more")
-    assert_not_nil body.dig("page", "next_cursor")
+    assert_equal PublishingPublishedEntriesQuery::PAGE_SIZE, body.fetch("data").length
+    assert_equal 1, body.dig("page", "current")
+    assert_nil body.dig("page", "previous")
+    assert_equal 2, body.dig("page", "next")
+    assert_equal 2, body.dig("page", "last")
+    assert_not body.fetch("page").key?("next_cursor")
+    assert_not body.fetch("page").key?("has_more")
     assert_openapi_conform 200
   end
 
-  test "a cursor walks the whole collection exactly once, in order" do
+  test "page numbers walk the whole collection exactly once, in order" do
     prepare(service: "docs", surface: "app")
-    expected = 7.times.map { |i| "walked-#{i}" }
+    expected = (PublishingPublishedEntriesQuery::PAGE_SIZE + 5).times.map { |i| "walked-#{i}" }
     expected.each_with_index { |slug, i| publish(slug, slug, published_at: (i + 1).hours.ago) }
 
     seen = []
-    cursor = nil
-    5.times do
-      query = "locale=ja&limit=3"
-      query += "&cursor=#{CGI.escape(cursor)}" if cursor
-
-      get "/api/v0/entries?#{query}", headers: json_headers(service: "docs", surface: "app")
+    2.times do |index|
+      get "/api/v0/entries?locale=ja&page=#{index + 1}", headers: json_headers(service: "docs", surface: "app")
 
       assert_response :success
       assert_openapi_conform 200
 
       body = response.parsed_body
       seen.concat(body.fetch("data").map { |entry| entry.fetch("slug") })
-      cursor = body.dig("page", "next_cursor")
-      break unless body.dig("page", "has_more")
     end
 
-    # Newest published first, no row skipped and none repeated across the page boundaries.
     assert_equal expected, seen
-    assert_nil cursor
   end
 
-  test "a limit outside the bounds is clamped rather than refused" do
+  test "a malformed page is refused rather than silently defaulted" do
     prepare(service: "docs", surface: "app")
-    3.times { |i| publish("clamped-#{i}", "Clamped #{i}", published_at: (i + 1).hours.ago) }
+    publish("guarded", "Guarded")
 
-    get "/api/v0/entries?locale=ja&limit=0", headers: json_headers(service: "docs", surface: "app")
-
-    assert_response :success
-    assert_equal 1, response.parsed_body.fetch("data").length
-
-    get "/api/v0/entries?locale=ja&limit=1000", headers: json_headers(service: "docs", surface: "app")
-
-    assert_response :success
-    assert_equal 3, response.parsed_body.fetch("data").length
-  end
-
-  test "a malformed limit is refused rather than silently defaulted" do
-    prepare(service: "docs", surface: "app")
-
-    get "/api/v0/entries?locale=ja&limit=twenty", headers: json_headers(service: "docs", surface: "app")
+    get "/api/v0/entries?locale=ja&page=twenty", headers: json_headers(service: "docs", surface: "app")
 
     assert_response :bad_request
     assert_equal "application/problem+json", response.media_type
@@ -239,12 +242,11 @@ class OpenapiContentEntriesContractTest < ActionDispatch::IntegrationTest
     assert_openapi_response_conform 400
   end
 
-  test "a forged cursor is refused rather than answering with the first page" do
+  test "an out-of-range page is refused rather than answering with the first page" do
     prepare(service: "docs", surface: "app")
-    publish("guarded", "Guarded")
+    publish("only-one", "Only One")
 
-    get "/api/v0/entries?locale=ja&cursor=not-a-real-cursor",
-        headers: json_headers(service: "docs", surface: "app")
+    get "/api/v0/entries?locale=ja&page=2", headers: json_headers(service: "docs", surface: "app")
 
     assert_response :bad_request
     assert_equal "urn:umaxica:problem:bad-request", response.parsed_body.fetch("type")
@@ -253,20 +255,19 @@ class OpenapiContentEntriesContractTest < ActionDispatch::IntegrationTest
 
   test "the validator is page-specific" do
     prepare(service: "docs", surface: "app")
-    4.times { |i| publish("paged-#{i}", "Paged #{i}", published_at: (i + 1).hours.ago) }
+    (PublishingPublishedEntriesQuery::PAGE_SIZE + 1).times do |i|
+      publish("paged-#{i}", "Paged #{i}", published_at: (i + 1).hours.ago)
+    end
     headers = json_headers(service: "docs", surface: "app")
 
-    get "/api/v0/entries?locale=ja&limit=2", headers: headers
+    get "/api/v0/entries?locale=ja&page=1", headers: headers
 
     assert_response :success
     first_page_etag = response.headers.fetch("ETag")
-    cursor = response.parsed_body.dig("page", "next_cursor")
 
-    get "/api/v0/entries?locale=ja&limit=2&cursor=#{CGI.escape(cursor)}", headers: headers
+    get "/api/v0/entries?locale=ja&page=2", headers: headers
 
     assert_response :success
-    # Two pages of the same collection must never share a validator, or a client would be served
-    # page one from cache when it asked for page two.
     assert_not_equal first_page_etag, response.headers.fetch("ETag")
   end
 

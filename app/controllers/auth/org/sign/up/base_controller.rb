@@ -43,6 +43,7 @@ module Auth
           private
 
           def after_login_path
+            session.delete(:auth_ceremony_admitted_intent)
             base_org_identity_url(ri: current_region_identifier, host: base_authority_host)
           end
         end

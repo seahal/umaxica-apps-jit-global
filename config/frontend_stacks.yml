@@ -28,13 +28,17 @@ stacks:
     - base/org/inertia
     - core/app/inertia
     - core/com/inertia
-    - core/dev/inertia
     - core/org/inertia
     - palm/app/inertia
     - side/app/inertia
     - side/com/inertia
     - side/org/inertia
-    # Public content keeps its Vite-owned surface styles and has no Importmap entry.
+    # Not Inertia: plain ERB + Turbo/Stimulus (via importmap), styled with a Vite/Tailwind
+    # stylesheet. See adr/publish-repository-importmap-boundary.md.
+    - edit/org/application
+    - edit/org/root
+    - base/dev/root
+    - core/dev/root
     - docs/app/root
     - docs/com/root
     - docs/org/root

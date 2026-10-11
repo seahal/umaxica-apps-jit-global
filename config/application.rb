@@ -8,9 +8,55 @@ require "rails/all"
 
 Bundler.require(*Rails.groups)
 
+# `pghero`, `blazer`, the two `rswag` halves, `rails_performance`, and `coverband` are
+# `group :development` gems with `require: false` (Gemfile), so Bundler.require never auto-requires
+# them and the gems are not on the load path outside development. They must be required here rather
+# than from config/initializers: an engine only
+# contributes its own config/routes.rb through the `add_routing_paths` initializer, which has
+# already run by the time config/initializers/* are loaded, so a late require leaves the engine
+# mounted with an empty route set and every request 404s past it.
+if Rails.env.development?
+  require "pghero"
+  require "blazer"
+  require "rswag/api"
+  require "rswag/ui"
+
+  require "rails_performance"
+  # The gem ships one config/routes.rb that draws the engine's own route set and then calls
+  # `Rails.application.routes.draw { mount RailsPerformance::Engine => RailsPerformance.mount_at }`
+  # with no host constraint and no flag to disable it. Left in place, the dashboard answers on
+  # every host this application serves -- every app, com, org, content, and service FQDN -- which
+  # is the leak a dedicated host exists to prevent, and a mount
+  # test/security/invariants/mounted_engine_invariant_test.rb has no way to constrain.
+  #
+  # Dropping the routing path is the only available off switch, and it has to happen here: an
+  # engine contributes its routes through the `add_routing_paths` initializer, which has already
+  # run by the time config/initializers/* load. config/routes/performance.rb draws the engine's own
+  # routes and mounts it behind the host constraint instead.
+  #
+  # On upgrading this gem, re-read its config/routes.rb: the copied route list in
+  # config/routes/performance.rb has to be brought across by hand, and a renamed route shows up
+  # only as a dashboard tab that 404s.
+  RailsPerformance::Engine.paths["config/routes.rb"] = []
+
+  # Coverband measures which Ruby lines execute, which is only a meaningful question for the
+  # process serving requests. Requiring the gem is what starts it: its railtie hooks
+  # `before_configuration`, which fires on the `class Application < Rails::Application` line below,
+  # and calls `Coverband.configure` (loading config/coverband.rb) followed by `Coverband.start`.
+  # Not requiring it is therefore the off switch for a console, a rake task, a Solid Queue worker,
+  # or the test suite -- see lib/coverband_process_gate.rb for why that is an allowlist.
+  #
+  # This require must also come before the Application class for the collector to see the
+  # application's own eager loading; a later require would start measurement after the code under
+  # observation had already been loaded.
+  require_relative "../lib/coverband_process_gate"
+  require "coverband" if CoverbandProcessGate.measuring?
+end
+
 require_relative "../lib/jit_security_active_record_encryption_key_provider"
 require_relative "../lib/app_config_loader"
 require_relative "../lib/trusted_forwarded_headers"
+require_relative "../lib/umaxica/test_environment/database_safety"
 
 module Jit
   module TrustedProxiesConfig
@@ -52,7 +98,11 @@ module Jit
     # the omniauth_openid_connect gem's own OmniAuth::Strategies module
     # (capitalized "OmniAuth"); Zeitwerk's inflection for the directory name
     # ("Omniauth") would otherwise collide with it.
-    config.autoload_lib(ignore: %w(assets tasks omniauth))
+    # `rubocop` holds lib/rubocop/cop/umaxica/*.rb, the repository's custom
+    # architecture cops. They subclass RuboCop::Cop::Base, which only exists
+    # under `bin/rubocop`; autoloading them into the application would raise at
+    # boot and, under eager loading, take the whole app down.
+    config.autoload_lib(ignore: %w(assets tasks omniauth rubocop))
 
     # Configuration for the application, engines, and railties goes here.
     #
@@ -139,6 +189,10 @@ module Jit
 
     # Multi-database async query executor (one thread pool per database)
     config.active_record.async_query_executor = :multi_thread_pool
+
+    initializer "umaxica.test_database_safety", before: "active_record.initialize_database" do
+      Umaxica::TestEnvironment::DatabaseSafety.verify!
+    end
 
     # Required belongs_to validation should confirm the associated row, not only
     # the foreign-key value. Tests that create many records should pass loaded

@@ -8,20 +8,20 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
   SURFACES = [
     {
       host: ENV.fetch("PUBLIC_CORE_SERVICE_URL", ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")),
-      client_id: "core-next-rp",
+      client_id: "core-app",
       acme_host: ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost"),
       resource: -> { clients(:one) },
     },
     {
       host: ENV.fetch("PUBLIC_CORE_STAFF_URL", ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost")),
-      client_id: "core-next-rp",
-      acme_host: ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost"),
+      client_id: "core-org",
+      acme_host: ENV.fetch("PRIVATE_BASE_STAFF_URL", "www.org.localhost"),
       resource: -> { operators(:one) },
     },
     {
       host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost")),
-      client_id: "core-next-rp",
-      acme_host: ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost"),
+      client_id: "core-com",
+      acme_host: ENV.fetch("PRIVATE_BASE_CORPORATE_URL", "www.com.localhost"),
       resource: -> { create_visitor! },
     },
   ].freeze
@@ -62,7 +62,7 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     expectations.each do |host, controller|
       assert_routing(
-        { method: :get, path: "http://#{host}/oidc/callback" },
+        { method: :get, path: "http://#{host}/sign/in/callback" },
         { controller: controller, action: "show" },
       )
     end
@@ -73,7 +73,7 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
       host! surface[:host]
       https!
 
-      get "/oidc/authorization", headers: browser_headers
+      get "/sign/in", headers: browser_headers.merge("Host" => surface[:host])
 
       assert_response :redirect
       uri = URI.parse(jump_rt_url_from_location(response.location))
@@ -83,7 +83,7 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
       assert_equal "/oauth/authorize", uri.path
       assert_not_equal "jump.umaxica.net", uri.host
       assert_equal surface[:client_id], query["client_id"]
-      assert_equal OidcClientRegistry.find!(surface[:client_id]).redirect_uris.first, query["redirect_uri"]
+      assert_equal redirect_uri_for(surface), query["redirect_uri"]
       assert_equal "signup", query["screen_hint"]
       assert_equal "S256", query["code_challenge_method"]
       assert_predicate query["state"], :present?

@@ -6,12 +6,19 @@ require "test_helper"
 class ModelTableFixtureConsistencyTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
+  # Concrete model renames that intentionally keep their existing physical tables.
+  # Renaming these tables requires a separate data migration.
+  RETAINED_TABLE_NAMES = {
+    "ClientPersona" => "personas",
+    "OperatorOrganization" => "organizations",
+  }.freeze
+
   test "application record table names follow model tableize convention" do
     Rails.application.eager_load!
 
     mismatches =
       application_record_models.filter_map do |model|
-        expected = model.name.tableize
+        expected = RETAINED_TABLE_NAMES.fetch(model.name) { model.name.tableize }
         actual = model.table_name
         "#{model.name}: expected #{expected}, got #{actual}" unless expected == actual
       end

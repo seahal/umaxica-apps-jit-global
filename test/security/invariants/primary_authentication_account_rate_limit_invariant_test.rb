@@ -11,7 +11,7 @@ module Security
       CONTROLLERS = {
         "app/controllers/auth/app/sign/in/secrets_controller.rb" => ["app", "secret_credential_create_identifier"],
         "app/controllers/auth/com/sign/in/secrets_controller.rb" => ["com", "secret_credential_create_identifier"],
-        "app/controllers/auth/org/sign/in/secrets_controller.rb" => ["org", "secret_credential_create_identifier"],
+        "app/controllers/auth/org/sign/in/secrets_controller.rb" => ["org", "secret_credential_create_actor"],
       }.freeze
 
       test "every secret credential entry point limits attempts by a private identifier digest" do

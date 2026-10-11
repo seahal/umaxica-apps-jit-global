@@ -1,0 +1,72 @@
+---
+name: no-environment-tests
+description: Environment and tooling setup is never covered by Minitest or Vitest. Prove it by running the thing; record the result in evidence/.
+---
+
+# No Test-Suite Coverage for Environment Construction
+
+## Rule
+
+Do not add Minitest or Vitest cases whose subject is the construction of the development or
+operational environment. This is a prohibition, not a preference, and it has no "unless the change
+is risky" escape hatch.
+
+Environment construction means, at minimum:
+
+- adding, configuring, or mounting a third-party dashboard, engine, or Rack app
+- gem, npm, or container dependency changes, and lockfile contents
+- `config/environments/*`, `config/application.rb`, initializer wiring for a tool
+- Host Authorization entries, route host constraints for an operator surface
+- Compose files, devcontainer configuration, Procfiles, network aliases
+- build, bundling, linting, and formatting tool configuration
+- environment variable plumbing for any of the above
+
+When the work is environment construction, the test suite is not the place the result is recorded.
+Run the thing, observe it, and write what you observed into `evidence/`.
+
+## Why
+
+The suite is read as a description of this application's behaviour. Every case in it is a claim
+about what the product does, and its value comes from that being true of every case. Setup tests
+dilute exactly that: a reader scanning `test/security/invariants/` to learn what the authorization
+model guarantees now has to sort real invariants from assertions that a gem was added to the right
+Bundler group.
+
+They are also weak evidence dressed as strong evidence. A test asserting that a dashboard is
+mounted behind a host constraint passes in an environment where the gem is not even loaded — it
+proves the route table looks a certain way under `RAILS_ENV=test`, which is not the environment
+anyone was worried about. The check that would have caught the real failure is reaching the host
+and watching it answer 401.
+
+And they impose a permanent cost for a one-time activity. Setup happens once; the case runs on
+every commit forever, and it breaks on the next upgrade of a gem whose internals it reached into.
+
+## What to do instead
+
+- Run it. Boot the application, open the surface, send the request, watch the failure mode.
+- Record what was actually observed in `evidence/`, following the `evidence/` rules in AGENTS.md:
+  the commands, the identifiers, the status codes, the excerpts. A check that could not be
+  completed is recorded as not completed, with the reason.
+- Put the reasoning where the next reader will be standing: a comment in the configuration file
+  itself, and an ADR when the decision is architectural.
+- If a gem internal was copied into this repository, say so in a comment at the copy site and name
+  what to re-read on upgrade.
+
+## Boundary
+
+This rule is about the *subject* of a test, not about which directory it lives in.
+
+- A behaviour change to this application's own code still needs risk-appropriate tests. That
+  obligation is unchanged, and "it touched a config file" does not exempt it.
+- Existing invariant tests under `test/security/invariants/` stay. Do not extend them to cover a
+  newly added tool, and do not delete one because it looks like setup — several encode genuine
+  security properties of application code.
+- A tool whose output the application depends on at runtime is covered through that dependency, not
+  through the tool. The OpenAPI descriptions are contract-tested because the API must match them,
+  not because Redocly is configured correctly.
+
+## Accepted consequence
+
+Regressions in environment construction are caught by running it, by review, and by the comments
+and ADRs left at the decision sites — not automatically. That trade is deliberate: see
+`adr/no-test-suite-for-environment-construction.md`.

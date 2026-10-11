@@ -21,14 +21,14 @@ class OrganizationMembershipPolicy < ApplicationPolicy
 
     case record
     when PersonaMembership
-      user.is_a?(Client) && membership_belongs_to_current_principal?(Persona, ClientIdentity, :persona_id)
+      user.is_a?(Client) && membership_belongs_to_current_principal?(ClientPersona, ClientIdentity, :persona_id)
     when IndividualMembership
       user.is_a?(Visitor) && membership_belongs_to_current_principal?(Individual, VisitorIdentity, :individual_id)
     when AgentMembership
       user.is_a?(Operator) && membership_belongs_to_current_principal?(Agent, OperatorIdentity, :agent_id)
     when Enterprise
       user.is_a?(Client) && collective_belongs_to_current_principal?(
-        Persona, ClientIdentity, PersonaMembership,
+        ClientPersona, ClientIdentity, PersonaMembership,
         :enterprise_id,
       )
     when Company
@@ -68,7 +68,7 @@ class OrganizationMembershipPolicy < ApplicationPolicy
 
   def account_identity_association(account_class)
     case account_class.name
-    when "Persona" then :client_identity
+    when "ClientPersona" then :client_identity
     when "Individual" then :visitor_identity
     when "Agent" then :operator_identity
     else raise ArgumentError, "unsupported account class: #{account_class.name}"

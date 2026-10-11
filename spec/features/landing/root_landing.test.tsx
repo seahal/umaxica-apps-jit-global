@@ -34,6 +34,39 @@ describe("RootLanding", () => {
     );
   });
 
+  it("renders a server-provided admission action as a POST form", () => {
+    const markup = renderToStaticMarkup(
+      <RootLanding
+        {...props}
+        sign_in={{
+          label: "Sign in",
+          action: "/?ri=jp",
+          method: "post",
+          intent: "sign_in",
+          authenticity_token: "csrf-token",
+        }}
+      />,
+    );
+
+    expect(markup).toContain('<form action="/?ri=jp" method="post">');
+    expect(markup).toContain('name="intent" value="sign_in"');
+    expect(markup).toContain('name="authenticity_token" value="csrf-token"');
+    expect(markup).not.toContain('href="/?ri=jp"');
+  });
+
+  it("does not add optional hidden fields when the action omits them", () => {
+    const markup = renderToStaticMarkup(
+      <RootLanding
+        {...props}
+        sign_in={{ label: "Sign in", action: "/" }}
+      />,
+    );
+
+    expect(markup).toContain('<form action="/" method="post">');
+    expect(markup).not.toContain('name="intent"');
+    expect(markup).not.toContain('name="authenticity_token"');
+  });
+
   it("omits the sign-up link when the surface offers none", () => {
     const markup = renderToStaticMarkup(
       <RootLanding

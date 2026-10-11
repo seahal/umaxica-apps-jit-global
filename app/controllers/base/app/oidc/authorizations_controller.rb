@@ -11,7 +11,7 @@ module Base
 
         def show
           url = initiate_oidc_session!(
-            pt: base_app_dashboard_path(ri: params[:ri].presence),
+            pt: base_app_root_path(ri: params[:ri].presence),
             screen_hint: screen_hint_param,
           )
           redirect_to_oidc_authorization_url(url)
