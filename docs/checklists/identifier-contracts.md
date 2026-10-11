@@ -161,6 +161,12 @@ criterion.
   tests in `test/controllers/base/org/identity/telephones/registrations_controller_test.rb`, binding
   boundary tests in `test/values/contact_registration_otp_delivery_binding_value_test.rb`, and
   actual queued transport guards. Code inspection alone does not prove asynchronous delivery.
+- Before consumer cutover, control old numeric-reference writers and drain their still-valid proof,
+  queued delivery and bounded original-operation receipts through their existing authorized paths.
+  The candidate reference participates in the keyed OTP verifier; rewriting it alone is not a safe
+  proof migration. Do not reissue a public identity on request, rewrite old verifiers without proof,
+  or introduce a weaker legacy-proof fallback. Demonstrate the drain/cutover precondition with
+  synthetic issued proof; merely backfilling source public IDs does not satisfy it.
 - Existing-row operational backfill, NOT NULL cutover and DB immutability remain separately required
   by ID-4/MIG-1; an additive nullable column is not completion of those criteria. Local controller
   PK-based URL/session consumers remain an inventory item under ID-3, not an approved exception.
