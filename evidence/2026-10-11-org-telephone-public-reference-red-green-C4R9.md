@@ -60,3 +60,28 @@ explicitly passes id. Registration session lookup also retains the source id. Th
 consumer inconsistencies require a subsequent scoped Red/Green slice after the running full gate;
 they are not treated as permanent exceptions or accepted completion. The Rails process remains live
 and its result remains pending. No new application edits occurred during this inspection.
+
+## Full gate found an obsolete numeric expectation
+
+The full Rails command exited 1: 15,014 runs, 127,310 assertions, one failure, zero errors/skips,
+1,026.880759 seconds. The sole failing target was TelephoneTest's typed-ceremony issuance assertion
+in `test/models/concerns/telephone_test.rb:28`, which still expected `@telephone.id.to_s`. Actual
+issuance returned the candidate's public identity. The earlier baseline had no failures; this gate
+is not a PASS or evidence of global completion.
+
+The assertion now requires equality with public_id and separately rejects the numeric PK. This is an
+approved ID-3 contract correction, not an assertion deletion or dual-format acceptance. Gate 3 holds
+all new feature editing until the focused set and both full suites have completed successfully. The
+focused recovery set adds the formerly failing concern file to all four prior focused files. Its
+result and the required recovery full gates are not yet claimed.
+
+Focused Gate 3 recovery completed with exit 0: 88 runs, 732 assertions, zero failures/errors/skips,
+6.110964 seconds. The exact command was:
+
+```
+bundle exec rails test test/models/concerns/telephone_test.rb test/operations/telephone_credential_registration_otp_issuer_test.rb test/controllers/base/org/identity/telephones/registrations_controller_test.rb test/models/operator_telephone_test.rb test/values/contact_registration_otp_delivery_binding_value_test.rb
+```
+
+RuboCop checked the corrected concern test: one file, zero offenses, exit 0. Both recovery full
+commands (`bundle exec rails test`, `bun run test`) started on the same owned fleet and dirty
+implementation. Their completion is pending; no next feature editing has begun.
