@@ -35,8 +35,13 @@ exited 0: three files, no offenses. The real
 in the isolated fixture-time database. That observation does not establish production counts or
 cutover readiness. ID-3d and the existing DB workflow link the actual query/test/task.
 
-Gate 2 `bundle exec rails test` and `bun run test` started against this code state. Vitest exited 0:
-99 files, 1,140 tests, 13.42 seconds. Rails remains running; no next feature may begin before its
-result is inspected. No shared/production database, external delivery, application-code commit or
-push occurred. Source NOT NULL, DB immutability, controlled writer/queue drain and final cutover
-remain incomplete.
+Gate 2 `bundle exec rails test` and `bun run test` both completed with exit 0. Rails: 15,025 runs,
+127,442 assertions, zero failures/errors/skips, 961.785611 seconds. Vitest: 99 files, 1,140 tests,
+13.42 seconds. The preceding backfill gate had 15,021 runs and 127,411 assertions; the four new
+inventory tests add 31 assertions in this full run, with no failed-test set. Start HEAD was
+`ff0a5e2e4ba38c6fac77ce9c6eec8218187646df`; finish HEAD was
+`cbac95bce053e2efc3b3019c17881635108a7d29`. Intervening commits persisted only owned documents, not
+application/query/task/test changes. The tested dirty code and owned fleet remained unchanged while
+the gate was pending. Those document commits are not complete implementation snapshots. No
+shared/production database, external delivery, application-code commit or push occurred. Source NOT
+NULL, DB immutability, controlled writer/queue drain and final cutover remain incomplete.
