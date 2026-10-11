@@ -81,6 +81,30 @@ criterion.
   does not authorize new triggers/raw SQL. Complete immutability/bulk regression coverage is
   planned.
 
+## ID-4a — ORG Telephone identity survives bypass writes
+
+- Basis: I04/I07/I08, ID-4 and the explicitly approved one-table exception in
+  [the trigger boundary](../../adr/database-trigger-usage-boundary.md). Scope:
+  `operator_telephones.public_id`, not Telephone reference/state columns or other identifier tables.
+- Given an ORG Telephone with a non-NULL public identity, change it to another string, empty string
+  or NULL through direct SQL, update_columns, update_all or an upsert conflict update. PostgreSQL
+  explicitly rejects the operation with SQLSTATE 23514; the original identity, source facts and
+  references remain unchanged. Recover the failed transaction before checking the persisted state.
+  An unchanged identity assignment and an unrelated permitted state update succeed. No silent
+  rewrite, skipped update, regenerated identity or swallowed exception qualifies.
+- Given a genuinely pre-cutover NULL identity inserted through an admitted legacy/bulk writer, the
+  bounded NULL-only operational backfill assigns a standard identity once and preserves source and
+  ceremony facts. Repeating the backfill leaves that identity unchanged. Do not create this
+  precondition by deleting an already issued identity. NULL insertion is transitional compatibility,
+  not acceptance of final NOT NULL cutover; ID-4/MIG-1 still require verified writer/proof
+  readiness.
+- Check the actual function and attached trigger, exact inventory in
+  [enforcement tests](../../test/models/enforcement_triggers_test.rb), direct-SQL/bulk rejection
+  tests (planned/not yet implemented), and
+  [operational backfill tests](../../test/operations/operator_telephone_public_id_backfill_operation_test.rb).
+  Use only verified run-owned PostgreSQL catalogs. Approval and this criterion do not establish
+  implementation, production application, or protection against intentional administrator bypass.
+
 ## ID-5 — Collision versus business retry
 
 - Basis: I07, I12. Scope: internal new-ID issuance and all writers that retry it.
