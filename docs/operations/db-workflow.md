@@ -104,6 +104,32 @@ recreation or migrations. Unknown arguments fail explicitly. A run-specific Post
 prevents two instances of this rebuild command from operating on the same fleet concurrently; active
 database sessions still prevent rebuild.
 
+The command also acquires the suite's run-specific process lock before boot/catalog checks and
+refuses an active test run. `PARALLEL_WORKERS=1` remains an administrative rebuild precondition, not
+a restriction on ordinary parallel tests. Do not rebuild a fleet while its workers are running.
+
+## Parallel isolated workers
+
+With an existing verified parent manifest, normal Rails tests may use a positive `PARALLEL_WORKERS`
+count. The existing `ParallelTestDatabaseCloner` provisions fresh worker-suffixed copies of the
+twenty normally migrated parent catalogs. It refuses existing worker names rather than adopting or
+force-dropping them. Each worker receives a private creation receipt containing its actual database
+OIDs/owners/comments and verifies both parent and worker identities before establishing connections.
+The framework's default connection is explicitly `primary`; YAML order does not determine it.
+
+The parent retains the process lock through Minitest's exit-time execution and verified worker
+cleanup. Children do not unlock or clean up the parent's resources. Cleanup requires matching
+receipts and inactive connections, drops only those worker databases, and atomically records
+completion. It does not terminate connections, remove shared databases or delete copied HMAC roles.
+Keep receipts under `tmp/` for failed-run diagnosis. If a run was interrupted or names/OIDs changed,
+preserve the resources for review; do not bypass the creation/identity checks or reuse stale copies.
+The existing cleanup entry point can reconcile a proven worker receipt in a verified test process;
+it refuses non-test admission, mismatched objects and reused completed names.
+
+These environment checks do not prove Avatar's real-COMMIT temporal invariants or isolation-level
+concurrency. Those behavior tests must still run with the actual constraints enabled in disposable
+worker catalogs. Static configuration checks and copied schema alone are insufficient.
+
 ## Cluster role creation evidence
 
 Database ownership does not prove PostgreSQL role creation ownership. Before the isolated rebuild

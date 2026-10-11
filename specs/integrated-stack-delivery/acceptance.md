@@ -160,6 +160,18 @@ can establish that a past Red or full gate actually ran.
   [the operational procedure](../../docs/operations/db-workflow.md#cluster-role-creation-evidence).
   Verify both a rejected preflight and repeated owned reconstruction directly; static checks or
   suite success alone do not prove this resource lifecycle or Avatar's separate COMMIT invariants.
+- For a parallel isolated run, each worker uses its own actual creation/OID receipt and verifies its
+  connection targets before executing tests. A receipt for another worker, changed object OID or
+  pre-existing unknown name must not authorize connection or deletion. Parent configurations and the
+  `primary` default remain unchanged. Only the parent cleans up its run-owned worker databases,
+  after connections are inactive; it never force-drops shared resources or removes cluster roles
+  merely because they were copied into a template.
+- While the suite executes, a same-run rebuild request is refused before database mutation. After
+  normal completion, catalog checks find the planned worker names absent and the original parent
+  OIDs/owners/comments intact. Inspect the existing cloner and database-safety adapter, actual
+  forked test output, lock/refusal observations and post-exit catalogs. An interrupted run with
+  incomplete receipts or unverifiable cleanup stays explicitly incomplete; it is not a permanent
+  PASS.
 
 ## MIG-4 — Avatar cutover barrier and forward recovery
 
