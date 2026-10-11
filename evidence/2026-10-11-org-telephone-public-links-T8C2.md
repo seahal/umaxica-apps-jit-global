@@ -38,3 +38,14 @@ Full `bundle exec rails test` and `bun run test` Gate 2 runs started against own
 tests, 13.41 seconds. Rails remains running. New feature editing is held until both results are
 inspected. Existing-row backfill, NOT NULL/DB immutability and registration-session source-PK
 retirement remain open. No production/shared operation, push or external delivery was performed.
+
+## Completed full gate
+
+At documentation HEAD `3912daa088189e9cd237caf62c4e5125e7aad78e`, with the same uncommitted
+implementation, full Rails exited 0: 15,016 runs, 127,373 assertions, zero failures/errors/skips,
+969.087813 seconds. Vitest had exited 0 with 99 files and 1,140 tests, 13.41 seconds. These are the
+actual full commands/fleet recorded above, not selected-file substitutes. The previous successful
+recovery full gate had 15,014 runs and 127,318 assertions; the two additional HTTP cases exercise
+actual public edit/delete links and foreign/malformed lookup denial. No failure target was excluded
+and no test suite was weakened. This closes this slice's periodic gate only; ID-3a backfill/drain,
+DB immutability and global five-contract acceptance remain open.
