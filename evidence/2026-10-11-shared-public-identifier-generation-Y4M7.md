@@ -42,5 +42,20 @@ relative links resolved and the owned synthetic probe was absent; that limited c
 replace the global checker. The document-only commit will not snapshot the dirty implementation.
 
 Both Gate 2 commands started after local checks. Vitest exited 0: 99 files, 1,140 tests, 13.07
-seconds. Rails remains running. No next feature may begin before its result is resolved. No
+seconds. The initial Rails gate subsequently exited 1 after 974.070233 seconds: 15,028 runs, 127,458
+assertions, one failure, zero errors/skips. ArchitectureBaselineTest reported only the resolved
+PublicId ExplicitMethodVisibility offense still present in its generated inventory. This is a new
+gate failure, not accepted as equivalent to the earlier zero-failure baseline.
+
+At HEAD `310b77f7ef9f001371bb2a8c42a897db3411633a`, the existing public generator task
+`bundle exec rake architecture:baseline` regenerated both inventory artifacts. Inspection showed
+exactly one removal in each, the resolved PublicId visibility entry; no allowance was added or
+increased and the Concern inclusion-hook debt remains.
+`bundle exec ruby test/tooling/architecture_baseline_test.rb` then passed 3 runs, 2,748 assertions,
+zero failures/errors/skips, 3.774391 seconds. Both full Gate 3 recovery commands were restarted:
+`bundle exec rails test` against the same owned fleet and `bun run test`. Their results remain
+pending in this update. No next feature may begin before their result is resolved. The later local
+adapter restoration record C8P4 supersedes the earlier knowledge-checker availability observation;
+it does not rewrite that failed run as success. Subsequent owned document commits and unrelated OTP
+documentation changes are present in the worktree; the application state remains dirty. No
 application/test/migration commit, external delivery, production change or push occurred.
