@@ -28,6 +28,12 @@ D-3/D-4/D-10 exceptions; no new SQL/trigger permission is granted here. Follow t
   controller tests. New concrete-model/provisioning coverage is planned; legacy test names are not
   proof.
 
+The public concrete-owner regression in `test/models/avatar_test.rb` follows an Avatar's current
+Enterprise period to its actual organization, with no Persona/Agent Binding required. The primary
+Avatar/Enterprise/period fixtures explicitly describe that ownership and one shared synthetic start
+boundary. This reference establishes a testable valid state; it does not replace the required
+commit-time rejection of ownerless creation or certify all creation writers.
+
 ## AV-2 — Uninterrupted immutable temporal chain
 
 - Basis: A05, D-3/D-4. Given a new Avatar, creation and its first owner period commit together with
