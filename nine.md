@@ -2859,3 +2859,29 @@ acceptance condition complete, authorize real-data purge, or resolve the remaini
 consumer inventory, P10b/P12b Group and writer-controlled cutover, held legacy identifier tables,
 D-11 committed-transaction isolation, host Alloy recreation/runtime verification, privacy-retention
 policy or historical HMAC-role rollback hazard. No independent acceptance investigation was done.
+
+### 16.62 Resume update — remaining owned opaque issuers and collision boundary (P2, 2026-10-12)
+
+Following Sections 5.3 and 14.2, the next ready P2 slice was the source-confirmed owned opaque
+identifier path that still bypassed the shared NanoID issuer. `LogoutTransaction` had been
+generating 22-character URL-safe values directly, and the three realm-specific `EnforcementCase`
+models were generating 15-byte URL-safe values in their shared concern. These are internal
+transaction/policy identities, not provider or protocol secrets. The initial format assertions
+failed before the production edits. The Green change routes both paths through `PublicId.generate`;
+the logout issuer also retries only a collision reported by its named `public_id` unique index, with
+the finite `PublicId::MAX_COLLISION_RETRIES` budget and a fresh transaction for each attempt. Other
+validation or unique failures propagate. Both model boundaries now reject post-creation public-ID
+changes through ordinary updates; no new trigger or raw SQL authority was added.
+
+The final focused collection passed `40 runs, 135 assertions, 0 failures, 0 errors, 0 skips`. The
+current run-owned twenty-database Gate 2 then passed Rails with
+`15146 runs, 128235 assertions, 0 failures, 0 errors, 0 skips` and Vitest with
+`99 files, 1140 tests`. RuboCop, Brakeman, bundler-audit, `bun run check`, syntax, repository
+knowledge and `git diff --check` also passed. Full and focused commands, the dirty worktree revision
+and limits are recorded in [`H4J2`](evidence/2026-10-12-public-id-issuers-H4J2.md).
+
+This closes only the two identified issuer/model boundaries. It does not claim database-level
+immutability for every owned identifier, complete P2/P6 inventory acceptance, the unchecked
+ceremony-purpose and physical-purge matrices, D-11 committed-transaction isolation, P10b/P12b
+operational cutover, retained legacy identifier semantics, host Alloy recreation/runtime
+verification, privacy-retention policy or the user-excluded independent acceptance investigation.

@@ -25,11 +25,11 @@ criterion.
   [delivery criteria](../../specs/integrated-stack-delivery/acceptance.md). Start at `db/` and model
   connection owners. The read-only `identifiers:inventory` task is the catalog starting point: it
   scans the configured writer databases, including model-less queue/storage tables, and records
-  table ownership metadata, primary-key shape, sequence/identity metadata, candidate-name hints,
-  and index access/validity facts without reading application rows. It is evidence for the catalog
-  portion only; semantic ownership classification, producer/consumer mapping, exception review,
-  and all-table acceptance remain separate work. No file-name search or historical migration text
-  proves current types.
+  table ownership metadata, primary-key shape, sequence/identity metadata, candidate-name hints, and
+  index access/validity facts without reading application rows. It is evidence for the catalog
+  portion only; semantic ownership classification, producer/consumer mapping, exception review, and
+  all-table acceptance remain separate work. No file-name search or historical migration text proves
+  current types.
 
 ## ID-2 — Issuance, capacity and ordinary creation
 
@@ -116,9 +116,8 @@ criterion.
 ## ID-4b — Owned preference and Client Passkey identities become required
 
 - Basis: I04/I06/I07/I08, P12a. Scope: `client_preferences.public_id`,
-  `visitor_preferences.public_id`, `operator_preferences.public_id` and
-  `client_passkeys.public_id`; these are owned management identities, not provider credential
-  values or cross-realm identifiers.
+  `visitor_preferences.public_id`, `operator_preferences.public_id` and `client_passkeys.public_id`;
+  these are owned management identities, not provider credential values or cross-realm identifiers.
 - Given the existing rows and confirmed ownership meaning, inventory reports NULL, blank and
   duplicate facts before the transition. The bounded maintenance operation may assign a NanoID-21
   only to an explicitly selected NULL row during the pre-cutover rehearsal; it preserves existing
@@ -131,8 +130,8 @@ criterion.
   checks and nullable metadata. A stale NULL or whitespace value fails the transition; schema DDL
   does not invent or rewrite an identifier.
 - This criterion does not make `webauthn_id`, `external_id`, or `operator_passkeys` owned public
-  identities, and it does not establish full consumer cutover, all-table identifier acceptance,
-  or production/shared-data application.
+  identities, and it does not establish full consumer cutover, all-table identifier acceptance, or
+  production/shared-data application.
 - Check: the explicit model contract in
   [`test/models/public_id_not_null_contract_test.rb`](../../test/models/public_id_not_null_contract_test.rb),
   the NULL-only operation tests in
@@ -147,32 +146,32 @@ criterion.
 - Basis: I09–I11, MIG-1, P12a. Scope: `org_zenith.staff_identity_audit_events.id` and the
   `staff_identity_audits.event_id` reference; this is an identity-preserving conversion of the
   legacy string catalogue key, not a new remote or polymorphic reference.
-- Given an existing string event code and any audit rows referring to it, the bounded additive
-  stage retains the code in `legacy_id`, assigns one bounded bigint in `id_bigint`, and maps every
-  audit row to `event_id_bigint` without changing the original columns or deleting rows. A
-  missing mapping, conflicting mapping, exhausted bigint range or unrelated constraint failure
-  stops explicitly; no guessed event, force-cast, truncation or silent fallback is allowed.
-- After the mapping is complete, the final cutover makes `staff_identity_audit_events.id` a
-  non-null bigint primary key and `staff_identity_audits.event_id` a non-null bigint foreign key
-  to it. The original codes remain required in `legacy_id` and `legacy_event_id`; no temporary
-  mapping columns or old string foreign key remain. Every synthetic event/reference pair keeps the
-  same legacy code and resolves to the same bigint after the cutover. The cutover is staged with
-  `NOT VALID` checks, separate validation, and an explicit reversible down path; it refuses an
-  incomplete or conflicting mapping before changing the key authority.
-- The retained maintenance operation is bounded and idempotent before cutover and an explicit
-  no-op after cutover. A dry run never writes. Repeating either state does not assign a second
-  identity or regenerate a code. The fixed catalogue has no automatic sequence requirement; IDs
-  are supplied by the reviewed mapping rather than cast from the old code.
+- Given an existing string event code and any audit rows referring to it, the bounded additive stage
+  retains the code in `legacy_id`, assigns one bounded bigint in `id_bigint`, and maps every audit
+  row to `event_id_bigint` without changing the original columns or deleting rows. A missing
+  mapping, conflicting mapping, exhausted bigint range or unrelated constraint failure stops
+  explicitly; no guessed event, force-cast, truncation or silent fallback is allowed.
+- After the mapping is complete, the final cutover makes `staff_identity_audit_events.id` a non-null
+  bigint primary key and `staff_identity_audits.event_id` a non-null bigint foreign key to it. The
+  original codes remain required in `legacy_id` and `legacy_event_id`; no temporary mapping columns
+  or old string foreign key remain. Every synthetic event/reference pair keeps the same legacy code
+  and resolves to the same bigint after the cutover. The cutover is staged with `NOT VALID` checks,
+  separate validation, and an explicit reversible down path; it refuses an incomplete or conflicting
+  mapping before changing the key authority.
+- The retained maintenance operation is bounded and idempotent before cutover and an explicit no-op
+  after cutover. A dry run never writes. Repeating either state does not assign a second identity or
+  regenerate a code. The fixed catalogue has no automatic sequence requirement; IDs are supplied by
+  the reviewed mapping rather than cast from the old code.
 - This criterion does not claim application to production/shared rows, complete ID-1 inventory or
-  any unrelated consumer migration. The isolated rehearsal is evidence for the migration
-  mechanics and identity preservation only.
+  any unrelated consumer migration. The isolated rehearsal is evidence for the migration mechanics
+  and identity preservation only.
 - Check: `test/models/staff_identity_audit_event_bigint_transition_test.rb`,
   `test/operations/staff_identity_audit_event_bigint_backfill_operation_test.rb`, migrations
   `20261012085039_convert_staff_identity_audit_events_to_bigint.rb`,
   `20261012100000_cut_over_staff_identity_audit_event_bigint_keys.rb` and
   `20261012100100_validate_staff_identity_audit_event_bigint_foreign_key.rb`, plus the run-owned
-  down/up rehearsal with a synthetic event/reference and PostgreSQL catalog checks. An empty
-  current table alone is not proof; the synthetic pair must be used for the preservation check.
+  down/up rehearsal with a synthetic event/reference and PostgreSQL catalog checks. An empty current
+  table alone is not proof; the synthetic pair must be used for the preservation check.
 
 ## ID-5 — Collision versus business retry
 
@@ -185,8 +184,8 @@ criterion.
   request is governed by its own idempotency contract, not NanoID uniqueness.
 - Check: controlled generator dependency plus real unique constraints, unrelated-constraint failure
   and limit−1/limit/limit+1 attempts where reachable. Start from PublicId tests;
-  named-constraint/side-effect coverage is planned where absent. Large random samples do not prove
-  collision safety.
+  `LogoutTransaction.issue!` and its named-index retry/limit tests are an additional concrete
+  example. Large random samples do not prove collision safety.
 
 ## ID-4d — Setting preference identities have bounded database capacity
 
@@ -225,8 +224,8 @@ criterion.
   isolated paging/ ordering tests; partition cases apply only when present. The catalog starting
   point is `identifiers:inventory`, which reports each index's access method, key/attribute counts,
   predicate, definition, uniqueness and valid/ready/live flags. Sequence checks belong to MIG-1.
-  Coverage of all semantic index consumers and partition behavior remains separate from this
-  catalog report.
+  Coverage of all semantic index consumers and partition behavior remains separate from this catalog
+  report.
 
 ## ID-4e — App and Com principal identities have bounded database capacity
 
@@ -242,27 +241,26 @@ criterion.
   database. Reversing validation restores the unvalidated check, and reversing the additive
   migration removes it. No real-data reset or cross-realm uniqueness is introduced.
 - Check: `test/models/public_id_capacity_contract_test.rb`, `test/models/client_test.rb`,
-  `test/models/visitor_test.rb`, migrations `20261012091000`/`20261012091001`, direct SQL
-  rejection in a savepoint, catalog check expression and isolated down/up rehearsal. This is a
-  scoped capacity result, not all-table identifier acceptance or production/shared-data evidence.
+  `test/models/visitor_test.rb`, migrations `20261012091000`/`20261012091001`, direct SQL rejection
+  in a savepoint, catalog check expression and isolated down/up rehearsal. This is a scoped capacity
+  result, not all-table identifier acceptance or production/shared-data evidence.
 
 ## ID-4f — Classified self-controlled identifiers have bounded database capacity
 
-- Basis: I04/I06/I07, P12a. Scope: the explicitly classified, self-controlled non-secret
-  `public_id` columns in the current P12a capacity slice: `app_zenith` application and enterprise
-  records, `com_zenith` visitor and company records, `org_zenith` agent and bureau records,
-  app/com/org ticket and signal records, the app `members` and legacy logout transaction resource,
-  and Avatar group, Avatar, membership, handle, post and post-version records.
-  The complete table list is the `CAPACITY_TABLES` inventory in
+- Basis: I04/I06/I07, P12a. Scope: the explicitly classified, self-controlled non-secret `public_id`
+  columns in the current P12a capacity slice: `app_zenith` application and enterprise records,
+  `com_zenith` visitor and company records, `org_zenith` agent and bureau records, app/com/org
+  ticket and signal records, the app `members` and legacy logout transaction resource, and Avatar
+  group, Avatar, membership, handle, post and post-version records. The complete table list is the
+  `CAPACITY_TABLES` inventory in
   [`test/models/public_id_capacity_contract_test.rb`](../../test/models/public_id_capacity_contract_test.rb).
   Provider/protocol identifiers, the ORG human-entered operator code, and the two retired legacy
-  tables `app_zenith.legacy_replaced_clients` and
-  `org_zenith.legacy_operator_department_accounts` are outside this criterion until their
-  consumer and retention meaning is resolved. Other unclassified inventory candidates are also
-  outside this criterion.
+  tables `app_zenith.legacy_replaced_clients` and `org_zenith.legacy_operator_department_accounts`
+  are outside this criterion until their consumer and retention meaning is resolved. Other
+  unclassified inventory candidates are also outside this criterion.
 - Given any table in that explicit inventory, a direct SQL or bulk writer that attempts a
-  `public_id` longer than 25 characters is rejected by PostgreSQL after the named database check
-  has been validated. Existing rows and issued identities remain unchanged; no value is truncated,
+  `public_id` longer than 25 characters is rejected by PostgreSQL after the named database check has
+  been validated. Existing rows and issued identities remain unchanged; no value is truncated,
   regenerated, case-converted or made globally unique by this slice.
 - Each owning database uses one additive migration to install its named
   `char_length(public_id) <= 25` checks as `NOT VALID`, followed by a separate validation migration.
@@ -275,11 +273,10 @@ criterion.
   rehearsal. The five concrete model targets also exercise direct oversized SQL writes inside a
   savepoint. The initial 42-table result is recorded in
   [`N9K4`](../../evidence/2026-10-12-public-id-capacity-gate-N9K4.md), and the four-table extension
-  is recorded in
-  [`V2J6`](../../evidence/2026-10-12-public-id-capacity-extension-V2J6.md). This criterion proves
-  only the listed disposable-schema boundary; it does not close the remaining identifier inventory,
-  approve a global type narrowing, validate shared/production rows, or establish the final
-  staff-event bigint cutover.
+  is recorded in [`V2J6`](../../evidence/2026-10-12-public-id-capacity-extension-V2J6.md). This
+  criterion proves only the listed disposable-schema boundary; it does not close the remaining
+  identifier inventory, approve a global type narrowing, validate shared/production rows, or
+  establish the final staff-event bigint cutover.
 
 ## ID-7 — External protocols and issued-value continuity
 

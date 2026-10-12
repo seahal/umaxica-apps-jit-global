@@ -30,13 +30,13 @@ exceptions. The rest of ID-8 remains independently required.
 
 ## ORG Telephone transition
 
-| Table / column                                                               | Meaning and required contract                                                                                                  | Current implementation / transition                                                                                                                                                                                                                                       |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| operator_telephones.id                                                       | Database-local row PK; single bigint                                                                                           | Keep local joins; no new remote/URL authority.                                                                                                                                                                                                                            |
+| Table / column                                                               | Meaning and required contract                                                                                                  | Current implementation / transition                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| operator_telephones.id                                                       | Database-local row PK; single bigint                                                                                           | Keep local joins; no new remote/URL authority.                                                                                                                                                                                                                                                              |
 | operator_telephones.public_id                                                | Owned non-secret resource identity; NanoID-21 issuance, varchar(25) capacity, required/nonblank/unique/immutable after cutover | The additive expansion, approved immutability trigger, and two-step nonblank/NOT NULL migrations are represented in the current schema workflow. The NULL-only operation remains the pre-cutover maintenance path; writer/proof drain and any real-data cutover remain separately controlled and unclaimed. |
-| operator_telephone_ceremony_transactions.telephone_candidate_ref             | Cross-DB reference to the candidate; not an independently generated owned ID or single-column UNIQUE                           | New registration consumers copy public_id. Old canonical decimal PK references are transitional and cannot be rewritten because they are bound into keyed proof. Bounds must preserve explicit old/new contracts; current unbounded storage is not a permanent exception. |
-| operator_telephones.number / number_digest                                   | Encrypted PII and realm/channel keyed lookup material, not public opaque identity                                              | Preserve normalization, realm keys, comparisons and live uniqueness. Do not NanoID-convert or expose them.                                                                                                                                                                |
-| operator_telephone_ceremony_transactions.otp_verifier / otp_receipt_verifier | Secret proof verification material tied to purpose/actor/session/candidate/generation/deadline                                 | Never emit or regenerate as a public identifier. Keep accepted single-use and bounded original-operation receipt semantics.                                                                                                                                               |
+| operator_telephone_ceremony_transactions.telephone_candidate_ref             | Cross-DB reference to the candidate; not an independently generated owned ID or single-column UNIQUE                           | New registration consumers copy public_id. Old canonical decimal PK references are transitional and cannot be rewritten because they are bound into keyed proof. Bounds must preserve explicit old/new contracts; current unbounded storage is not a permanent exception.                                   |
+| operator_telephones.number / number_digest                                   | Encrypted PII and realm/channel keyed lookup material, not public opaque identity                                              | Preserve normalization, realm keys, comparisons and live uniqueness. Do not NanoID-convert or expose them.                                                                                                                                                                                                  |
+| operator_telephone_ceremony_transactions.otp_verifier / otp_receipt_verifier | Secret proof verification material tied to purpose/actor/session/candidate/generation/deadline                                 | Never emit or regenerate as a public identifier. Keep accepted single-use and bounded original-operation receipt semantics.                                                                                                                                                                                 |
 
 All concrete ORG registration producers/consumers are listed in ID-3a. Source-ID backfill,
 proof/receipt drain, queue/writer control and consumer deployment are separate steps in the
@@ -54,16 +54,17 @@ enumerated `PublicIdNullOnlyBackfillOperation` only for a pre-cutover NULL rehea
 creates and updates never repair a missing identity.
 
 Each owning database uses an additive migration that first installs `NOT VALID` checks for
-`public_id IS NOT NULL` and nonblank values, then a separate validation migration changes the
-column metadata to `NOT NULL` and removes both temporary checks. The validation migration is
+`public_id IS NOT NULL` and nonblank values, then a separate validation migration changes the column
+metadata to `NOT NULL` and removes both temporary checks. The validation migration is
 non-transactional because PostgreSQL check validation must not run while writes are blocked by a
 migration transaction. Its reverse path restores both temporary checks before returning the column
-to nullable metadata. The run-owned rehearsal confirmed zero NULL/blank rows, successful
-NULL-only assignment in the disposable pre-cutover state, and successful down/up application.
+to nullable metadata. The run-owned rehearsal confirmed zero NULL/blank rows, successful NULL-only
+assignment in the disposable pre-cutover state, and successful down/up application.
 
 This scoped transition does not claim that all identifier consumers, all public-ID immutability,
 provider credential formats, shared/production data, or the remaining P12a inventory are complete.
-See [ID-4b](../checklists/identifier-contracts.md#id-4b--owned-preference-and-client-passkey-identities-become-required)
+See
+[ID-4b](../checklists/identifier-contracts.md#id-4b--owned-preference-and-client-passkey-identities-become-required)
 for the independently reviewable acceptance conditions.
 
 The three setting-database preference identities now also have an explicit storage-capacity
@@ -72,44 +73,46 @@ retain their unbounded PostgreSQL string representation for this additive transi
 `char_length(public_id) <= 25` checks reject oversized direct or bulk writes. The checks are added
 as `NOT VALID`, validated in separate migrations and retained as database constraints; they do not
 truncate existing values, change the NanoID-21 issuer or authorize a broad narrowing of the other
-unbounded catalog candidates. See [ID-4d](../checklists/identifier-contracts.md#id-4d--setting-preference-identities-have-bounded-database-capacity)
+unbounded catalog candidates. See
+[ID-4d](../checklists/identifier-contracts.md#id-4d--setting-preference-identities-have-bounded-database-capacity)
 for the observable boundary and reversibility evidence.
 
 ## Staff identity audit-event bigint transition
 
-`org_zenith.staff_identity_audit_events` is a fixed identity-audit catalogue whose legacy string
-key was the one cataloged application-owned string primary key found by the P12a inventory. The
+`org_zenith.staff_identity_audit_events` is a fixed identity-audit catalogue whose legacy string key
+was the one cataloged application-owned string primary key found by the P12a inventory. The
 identity-preserving transition is now represented by three explicit stages. The additive migration
-`20261012085039_convert_staff_identity_audit_events_to_bigint.rb` adds `legacy_id`, `id_bigint`
-and `event_id_bigint` with reviewed B-tree indexes. The bounded
+`20261012085039_convert_staff_identity_audit_events_to_bigint.rb` adds `legacy_id`, `id_bigint` and
+`event_id_bigint` with reviewed B-tree indexes. The bounded
 `StaffIdentityAuditEventBigintBackfillOperation` preserves every old code and maps each audit
 reference without guessing or rewriting values.
 
 After complete mapping, `20261012100000_cut_over_staff_identity_audit_event_bigint_keys.rb` swaps
 the event table to a bigint `id` primary key and the audit table to a bigint `event_id` reference.
-The separate validation migration `20261012100100_validate_staff_identity_audit_event_bigint_foreign_key.rb`
-validates the staged checks and foreign key, sets the required columns non-null, and removes only
-the temporary mapping columns. `legacy_id` and `legacy_event_id` remain required correspondence
-values. The old string primary key and foreign key are removed only inside this reviewed cutover;
-the migration refuses an incomplete or conflicting mapping before changing authority.
+The separate validation migration
+`20261012100100_validate_staff_identity_audit_event_bigint_foreign_key.rb` validates the staged
+checks and foreign key, sets the required columns non-null, and removes only the temporary mapping
+columns. `legacy_id` and `legacy_event_id` remain required correspondence values. The old string
+primary key and foreign key are removed only inside this reviewed cutover; the migration refuses an
+incomplete or conflicting mapping before changing authority.
 
-The maintenance operation continues to support the additive state for an explicitly staged
-backfill and returns an explicit, idempotent no-op in the final schema. A fixed reference catalogue
-does not receive a sequence merely because its key is now bigint; the reviewed mapping supplies
-the IDs. The disposable down/up rehearsal includes a synthetic event/reference pair and verifies
-that both the bigint identities and legacy codes survive. No production/shared data, consumer
-cutover outside these two tables, or complete ID-1 inventory is implied.
+The maintenance operation continues to support the additive state for an explicitly staged backfill
+and returns an explicit, idempotent no-op in the final schema. A fixed reference catalogue does not
+receive a sequence merely because its key is now bigint; the reviewed mapping supplies the IDs. The
+disposable down/up rehearsal includes a synthetic event/reference pair and verifies that both the
+bigint identities and legacy codes survive. No production/shared data, consumer cutover outside
+these two tables, or complete ID-1 inventory is implied.
 
 ## Current public-ID capacity inventory
 
 The 2026-10-12 run-owned catalog recheck found 238 `public_id` columns: 183 at `varchar(21)`, 52
 unbounded `varchar` columns, one `varchar(255)` on `app_zenith.clients`, one `varchar(25)` on
-`org_zenith.operator_telephones`, and one `varchar(16)` on `org_zenith.operators`. Aggregate
-values observed in that disposable catalog had no length above 25. This is an inventory fact, not a
+`org_zenith.operator_telephones`, and one `varchar(16)` on `org_zenith.operators`. Aggregate values
+observed in that disposable catalog had no length above 25. This is an inventory fact, not a
 permission to narrow every column: each unbounded column still requires semantic role and consumer
-review, and the migration rules require an explicit safe method before any narrowing. The
-operator's 16-character value is a separate human-entered code contract and is not a NanoID
-capacity defect. See the revision-scoped
+review, and the migration rules require an explicit safe method before any narrowing. The operator's
+16-character value is a separate human-entered code contract and is not a NanoID capacity defect.
+See the revision-scoped
 [`V4D8` evidence](../../evidence/2026-10-12-identifier-capacity-inventory-V4D8.md).
 
 The app and com principal identities are now covered by the same bounded database boundary:
@@ -117,7 +120,8 @@ The app and com principal identities are now covered by the same bounded databas
 columns but reject `char_length(public_id) > 25` through named, validated PostgreSQL checks. The
 checks are additive and identity-preserving; they do not narrow the type, change realm uniqueness,
 alter the ORG human code, or authorize a broad migration across the remaining unbounded candidates.
-See [ID-4e](../checklists/identifier-contracts.md#id-4e--app-and-com-principal-identities-have-bounded-database-capacity)
+See
+[ID-4e](../checklists/identifier-contracts.md#id-4e--app-and-com-principal-identities-have-bounded-database-capacity)
 for the observable contract and migration rehearsal.
 
 The current P12a capacity slice extends that same database boundary to the explicitly classified
@@ -128,8 +132,8 @@ Avatars, group memberships, handles, posts and post versions. Every listed table
 validated `char_length(public_id) <= 25` PostgreSQL check installed through an additive migration
 pair in its owning database. This is a storage ceiling for existing string columns, not permission
 to issue arbitrary short values, a replacement for model validation, or a global type-narrowing
-approval. Provider/protocol IDs, the ORG operator human code, retired `legacy_replaced_clients`
-and `legacy_operator_department_accounts` retain their separate legacy contracts until a semantic,
+approval. Provider/protocol IDs, the ORG operator human code, retired `legacy_replaced_clients` and
+`legacy_operator_department_accounts` retain their separate legacy contracts until a semantic,
 consumer and retention review supports a later slice. The current run-owned catalog has no rows in
 either table, but retained foreign keys still make the tables part of the schema boundary. See
 [ID-4f](../checklists/identifier-contracts.md#id-4f--classified-self-controlled-identifiers-have-bounded-database-capacity)
@@ -176,6 +180,17 @@ are pending capacity/compatibility work, not permanent exceptions or evidence th
 already changed them. The separately named client_chronicles.event_uuid native UUID is not covered
 by these producer mappings and must not be converted on the basis of the shared column name.
 
+`app_ticket.logout_transactions.public_id` and the three realm-specific
+`*_enforcement_cases.public_id` columns are self-controlled, non-secret transaction or policy
+identities. New LogoutTransaction issuance uses `PublicId.generate`, retries only a collision on its
+named public-ID unique index within the shared finite budget, and rejects post-creation identity
+changes through the model update boundary. EnforcementCaseApplicable uses the same issuer for APP,
+COM and ORG cases and rejects post-creation identity changes. Their existing issued values and
+realm-local uniqueness remain intact; protocol secrets, principal references and policy state are
+separate fields. The focused regression coverage is in
+[`test/models/logout_transaction_test.rb`](../../test/models/logout_transaction_test.rb) and
+[`test/models/enforcement_case_public_id_test.rb`](../../test/models/enforcement_case_public_id_test.rb).
+
 Avatar transfer idempotency keys retain the explicitly approved canonical UUID v4/v7 request
 contract in AV-5. That exception does not extend to all internally generated transaction IDs.
 Ceremony transaction/grant/result IDs and OTP generations need their actual purpose, entropy and
@@ -190,7 +205,7 @@ No public_id or uniqueness/index is added merely because the history row exists.
 Maintain explicit categories for permanent external exceptions, bounded compatibility with actual
 exit conditions, unresolved violations and unverified facts. The physical catalog finding for
 staff_identity_audit_events' string PK remains an unresolved violation during the additive mapping
-stage, not an unmanaged-table exception; see the staged transition above.
-Complete all-table ownership, eight-role classification, reference bounds, sequence/partition and
-executable regression coverage before declaring I acceptance complete. These scoped mappings do not
-provide that global evidence.
+stage, not an unmanaged-table exception; see the staged transition above. Complete all-table
+ownership, eight-role classification, reference bounds, sequence/partition and executable regression
+coverage before declaring I acceptance complete. These scoped mappings do not provide that global
+evidence.
