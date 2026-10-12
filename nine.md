@@ -2740,3 +2740,20 @@ local `[CHECKPOINT] .` commit advanced HEAD from `ccceabd05d2e3a8f923ce398046f99
 This remains a local implementation/regression result. It does not close host Alloy runtime
 verification, P10b/P12b cutover, D-11 isolation, held legacy identifier semantics, privacy-retention
 policy or the user-excluded independent acceptance work.
+
+### 16.56 Resume update — first focused check after the required restart reading (2026-10-12)
+
+After rereading the Section 5.3 addition, all of Section 16 and Section 14.2 in that order, the
+first focused public-boundary check was rerun before selecting another implementation slice. Using
+the existing run-owned twenty-writer manifest with four Rails workers, the observability scrubber,
+OTel initializer, Group inventory/backfill operation and Group transition inventory query collection
+passed `19 runs, 73 assertions, 0 failures, 0 errors, 0 skips`. A read-only PostgreSQL probe after
+the run found zero run-owned worker databases and zero active worker sessions. The exact command,
+HEAD and limits are recorded in [`A6M2`](evidence/2026-10-12-restart-focused-minitest-A6M2.md).
+
+This is current implementation evidence only. It does not mark an acceptance condition complete or
+authorize a new production-code slice. The remaining mutations still require the existing boundaries
+for P10b/P12b Group semantics and writer-controlled cutover, the retained legacy identifier tables,
+D-11 committed-transaction isolation, host Alloy recreation/runtime verification, privacy-retention
+policy, or the historical HMAC-role rollback path. No CI, Podman, production, shared destructive
+operation, or independent acceptance investigation was performed.
