@@ -191,6 +191,16 @@ separate fields. The focused regression coverage is in
 [`test/models/logout_transaction_test.rb`](../../test/models/logout_transaction_test.rb) and
 [`test/models/enforcement_case_public_id_test.rb`](../../test/models/enforcement_case_public_id_test.rb).
 
+`OrgNormalSignInTransaction` has a separate session-scoped `public_id` used to bind the ORG Entra
+handoff to the next passkey phase. New values use `PublicId.generate`; the value is an internal
+opaque transaction identity, not an Entra/OIDC provider value, protocol secret, nonce, CSRF token,
+PKCE value or database primary key. Existing serialized sessions remain readable, and the signed
+binding continues to enforce its existing ORG flow and phase contract. The focused boundary is
+covered by
+[`test/controllers/auth/org/in/passkeys_controller_test.rb`](../../test/controllers/auth/org/in/passkeys_controller_test.rb)
+and
+[`test/services/org_normal_sign_in_binding_codec_test.rb`](../../test/services/org_normal_sign_in_binding_codec_test.rb).
+
 Avatar transfer idempotency keys retain the explicitly approved canonical UUID v4/v7 request
 contract in AV-5. That exception does not extend to all internally generated transaction IDs.
 Ceremony transaction/grant/result IDs and OTP generations need their actual purpose, entropy and

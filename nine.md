@@ -2885,3 +2885,29 @@ immutability for every owned identifier, complete P2/P6 inventory acceptance, th
 ceremony-purpose and physical-purge matrices, D-11 committed-transaction isolation, P10b/P12b
 operational cutover, retained legacy identifier semantics, host Alloy recreation/runtime
 verification, privacy-retention policy or the user-excluded independent acceptance investigation.
+
+### 16.63 Resume update — ORG normal sign-in transaction issuer (P2, 2026-10-12)
+
+After the required Section 5.3, Section 16 and Section 14.2 reading order, the next ready P2 slice
+classified the `OrgNormalSignInTransaction` session `public_id` as a self-controlled opaque
+transaction identity. It is placed into the signed ORG Entra-to-passkey binding and is not an
+external provider value, protocol secret, nonce, CSRF token, PKCE value or persistent database
+primary key. The existing session storage, binding validation and Entra authority boundary remain
+unchanged; only new issuance was standardized.
+
+The Red assertion observed the previous 32-character hexadecimal issuer. The smallest Green change
+now calls `PublicId.generate`, producing the repository's NanoID-21 format for new transactions.
+Existing session rows and already-issued bindings remain readable. The focused public-boundary
+collection passed `19 runs, 117 assertions, 0 failures, 0 errors, 0 skips`.
+
+Before selecting another implementation slice, the run-owned twenty-database Rails Gate 2 passed
+`15146 runs, 128226 assertions, 0 failures, 0 errors, 0 skips`; the corresponding Vitest Gate 2
+passed `99` files and `1140` tests. The two changed Ruby files passed targeted RuboCop after a
+format-only correction. No migration, raw SQL, provider-secret change, CI, Podman, production or
+shared destructive operation was used. The exact commands and dirty-worktree limits are recorded in
+`evidence/2026-10-12-org-normal-sign-in-public-id-J7K4.md`.
+
+This is current implementation evidence only. It does not close the complete ceremony-ID and purpose
+matrix, database-level immutability inventory, D-11 committed-transaction isolation, P10b/P12b
+operational cutover, retained legacy identifier semantics, host Alloy runtime verification,
+privacy-retention policy or the user-excluded independent acceptance investigation.
