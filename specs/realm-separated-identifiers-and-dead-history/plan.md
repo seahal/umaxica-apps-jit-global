@@ -36,6 +36,18 @@ configuration commits. No compatibility layer or test weakening. Schema changes 
 generated dumps. Environment construction is checked by execution and recorded in evidence, not
 additional environment tests.
 
+## Current implementation note
+
+The 2026-10-12 implementation slice retired the direct Email OTP adapter and its rollout flags.
+`OtpAdapter.for` now selects the concrete Noticed adapter for APP, COM and ORG Email delivery, with
+no feature-flag or unavailable-store fallback to the former mailer adapter. Existing Noticed,
+ActionMailer, interceptor, encrypted-payload and delivery-job behavior remains the transport
+contract. This slice does not complete the unchecked ceremony-purpose/route matrix, physical
+purge/retention matrix or final documentation and verification item above. Revision-scoped
+implementation evidence is recorded in `evidence/2026-10-12-otp-email-noticed-final-Z4N7.md`; its
+tested code was the dirty worktree at `8bd06dcd8261ed7697e23f1f0eace535254de1b3`, before the
+document-only commit.
+
 ## Verification constraints observed
 
 The normal test runner originally stopped on 14 pre-existing pending migrations; these were applied
