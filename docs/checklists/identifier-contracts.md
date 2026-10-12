@@ -188,7 +188,9 @@ criterion.
   and limit−1/limit/limit+1 attempts where reachable. Start from PublicId tests;
   `LogoutTransaction.issue!` and its named-index retry/limit tests are additional concrete examples;
   the three realm-specific EnforcementCase writers are covered by
-  [`test/models/enforcement_case_public_id_test.rb`](../../test/models/enforcement_case_public_id_test.rb).
+  [`test/models/enforcement_case_public_id_test.rb`](../../test/models/enforcement_case_public_id_test.rb),
+  and the APP TOTP credential management identity is covered by
+  [`test/models/client_totp_credential_public_id_collision_test.rb`](../../test/models/client_totp_credential_public_id_collision_test.rb).
   Large random samples do not prove collision safety.
 
 ## ID-4d — Setting preference identities have bounded database capacity

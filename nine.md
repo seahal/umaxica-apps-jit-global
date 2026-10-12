@@ -3166,3 +3166,35 @@ boundary. It does not close direct-SQL immutability, the complete identifier inv
 committed- transaction isolation, P10b/P12b operational cutover, retained legacy identifier
 semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
 independent acceptance investigation.
+
+### 16.72 Resume update — APP TOTP credential public-ID creation boundary (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next independent
+slice covered only `ClientTotpCredential.public_id`. This is an APP-owned, self-controlled,
+non-secret management identity. It is distinct from the encrypted TOTP secret, OTP counters,
+one-time proof material, provider/authenticator values and the database primary key.
+
+The Red test reproduced the former behavior: the model-specific initialization callback minted an ID
+before the shared `PublicId` concern could record its generated value, so a deterministic unique
+index collision surfaced as validation failure without retry. The smallest Green change removes that
+duplicate initialization issuer and lets the existing concern generate at the validation/create
+boundary. The concern refreshes a generated duplicate before validation and retries a concurrent
+collision only for the named single-column `public_id` unique B-tree index, inside a savepoint and
+within the finite `PublicId::MAX_COLLISION_RETRIES` budget. Caller-supplied values and unrelated
+uniqueness failures are not regenerated; ordinary persisted updates remain immutable. The TOTP
+secret, counters, proof and enrollment authority are unchanged.
+
+The focused APP TOTP credential and shared `PublicId` collection passed
+`27 runs, 54 assertions, 0 failures, 0 errors, 0 skips`; targeted RuboCop passed for the model and
+new test. The run-owned twenty-database Rails Gate 2 passed
+`15163 runs, 128328 assertions, 0 failures, 0 errors, 0 skips` with four workers, and Vitest passed
+`99 files` and `1140 tests`. No migration, raw SQL, trigger, provider/protocol value, cross-realm
+lookup, CI, Podman, production operation, shared destructive operation or remote synchronization was
+used. The exact Red/Green commands, tested HEAD, dirty-worktree scope and verification limits are
+recorded in [`H7N3`](evidence/2026-10-12-client-totp-public-id-boundary-H7N3.md).
+
+This closes only the APP TOTP credential model-level generation, collision and ordinary-update
+boundary. It does not close direct-SQL immutability, the complete identifier inventory, D-11
+committed-transaction isolation, P10b/P12b operational cutover, retained legacy identifier
+semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
+independent acceptance investigation.

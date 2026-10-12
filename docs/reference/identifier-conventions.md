@@ -293,6 +293,16 @@ compatible for unclassified callers. Focused coverage is in
 [`test/operations/identity_totp_enrollment_issuer_test.rb`](../../test/operations/identity_totp_enrollment_issuer_test.rb)
 and the surrounding TOTP ceremony tests; no protocol-secret or cross-surface format was widened.
 
+`client_totp_credentials.public_id` is a separate APP-owned, non-secret management identity. It uses
+the shared `PublicId` creation boundary rather than an identifier-specific initialization callback:
+generated values are refreshed before validation when a preflight lookup finds a duplicate, and a
+concurrent collision is retried only for the named single-column `public_id` B-tree index inside the
+finite savepoint budget. Caller-supplied values and unrelated failures are not regenerated, and
+persisted credential identities reject ordinary model updates. The TOTP secret, OTP counters and
+provider/authenticator values remain separate stateful or protocol contracts. See
+[`test/models/client_totp_credential_public_id_collision_test.rb`](../../test/models/client_totp_credential_public_id_collision_test.rb);
+this does not claim database-level immutability through direct SQL for every owned identifier.
+
 Avatar transfer idempotency keys retain the explicitly approved canonical UUID v4/v7 request
 contract in AV-5. That exception does not extend to all internally generated transaction IDs.
 Ceremony transaction/grant/result IDs and OTP generations need their actual purpose, entropy and
