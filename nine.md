@@ -3198,3 +3198,39 @@ boundary. It does not close direct-SQL immutability, the complete identifier inv
 committed-transaction isolation, P10b/P12b operational cutover, retained legacy identifier
 semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
 independent acceptance investigation.
+
+### 16.73 Resume update — sign-up Email/Telephone transaction references (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next independent
+slice covered only the APP and COM Email/Telephone sign-up transaction issuers and their delivery
+binding readers. These `transaction_id` values are self-controlled, non-secret ceremony identities;
+they remain distinct from OTP `generation`, grant/result identities, actor/session bindings and
+database primary keys. The generic transaction-purpose inventory remains open outside this slice.
+
+The Red run added public issuer assertions and reproduced the previous UUID transaction references:
+`30 runs, 386 assertions, 4 failures, 0 errors, 0 skips`. The smallest Green change now supplies
+`PublicId.generate` (NanoID-21) for newly issued APP/COM sign-up Email and Telephone transactions.
+The delivery binding accepts NanoID-21 or an existing lower-case UUID-v4 transaction reference; the
+OTP `generation` reference remains UUID-v4. A generated transaction collision is retried only for
+the concrete table's named, single-column `transaction_id` unique B-tree index, using a fresh
+reference inside a savepoint and the finite `PublicId::MAX_COLLISION_RETRIES` budget.
+Caller-supplied references and unrelated validation or uniqueness failures propagate. No
+cross-purpose fallback, surface inference, migration, protocol-secret change or session-authority
+change was introduced.
+
+The focused issuer collection passed `34 runs, 502 assertions, 0 failures, 0 errors, 0 skips`; the
+binding-value collection passed `6 runs, 272 assertions, 0 failures, 0 errors, 0 skips`; the broader
+sign-up delivery/transport collection passed
+`114 runs, 2316 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop passed for the eight
+changed Ruby files. The run-owned twenty-database Rails Gate 2 passed
+`15167 runs, 128354 assertions, 0 failures, 0 errors, 0 skips` with four workers, and Vitest passed
+`99 files` and `1140 tests`. Exact commands, tested HEAD, dirty-worktree scope and verification
+limits are recorded in [`R4J8`](evidence/2026-10-12-signup-transaction-references-R4J8.md).
+
+This closes only the APP/COM sign-up transaction-reference generation, bounded legacy reader,
+delivery-binding and collision slice. It does not close the complete ceremony-purpose matrix,
+unclassified transaction/grant/result issuers, database-level immutability for every identifier,
+D-11 committed-transaction isolation, P10b/P12b operational cutover, retained legacy identifier
+semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
+independent acceptance investigation. No CI, Podman, production, shared destructive operation or
+remote synchronization was used.

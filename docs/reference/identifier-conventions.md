@@ -303,6 +303,24 @@ provider/authenticator values remain separate stateful or protocol contracts. Se
 [`test/models/client_totp_credential_public_id_collision_test.rb`](../../test/models/client_totp_credential_public_id_collision_test.rb);
 this does not claim database-level immutability through direct SQL for every owned identifier.
 
+APP/COM Email and Telephone sign-up transaction references are self-controlled, non-secret ceremony
+identities. New issuer rows use `PublicId.generate` (NanoID-21); existing UUID-v4 transaction
+references remain readable at the session and delivery-binding boundaries during the additive
+transition. The delivery binding accepts either the new NanoID-21 transaction reference or the
+legacy UUID-v4 transaction reference, while the OTP `generation` reference remains UUID-v4. A
+generated transaction collision is retried only when the concrete table reports its named,
+single-column `transaction_id` unique B-tree index, inside a savepoint and within the finite shared
+collision budget. Caller-supplied references and unrelated validation or uniqueness errors
+propagate. The transaction reference remains distinct from generation, grant, result, actor, session
+and cross-purpose identifiers; no fallback resolves a reference in another ceremony or surface. See
+[`test/operations/email_sign_up_otp_issuer_test.rb`](../../test/operations/email_sign_up_otp_issuer_test.rb),
+[`test/operations/telephone_sign_up_otp_issuer_test.rb`](../../test/operations/telephone_sign_up_otp_issuer_test.rb),
+[`test/values/sign_up_otp_delivery_binding_value_test.rb`](../../test/values/sign_up_otp_delivery_binding_value_test.rb)
+and
+[`test/values/email_sign_up_otp_delivery_binding_value_test.rb`](../../test/values/email_sign_up_otp_delivery_binding_value_test.rb).
+This scoped transition does not classify other ceremony transaction, grant, result or OTP-generation
+issuers.
+
 Avatar transfer idempotency keys retain the explicitly approved canonical UUID v4/v7 request
 contract in AV-5. That exception does not extend to all internally generated transaction IDs.
 Ceremony transaction/grant/result IDs and OTP generations need their actual purpose, entropy and

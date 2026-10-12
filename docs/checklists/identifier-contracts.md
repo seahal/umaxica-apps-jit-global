@@ -402,3 +402,34 @@ criterion.
   `org_telephone_public_ids:legacy_references` Rake task. The observations are not a cutover permit,
   a distributed snapshot, proof of source reconciliation, writer quiescence or queue drain. Those
   independent prerequisites remain mandatory even when every count is zero.
+
+## ID-3e — Email and Telephone sign-up transaction references
+
+- Basis: I04/I06/I07/I10 and ID-3; scope: APP and COM Email/Telephone sign-up transaction issuance,
+  resend, delayed delivery, session binding and verification. This criterion is separate from the
+  credential-registration and TOTP-enrollment transaction criteria above.
+- Given a newly issued sign-up transaction, its self-controlled, non-secret `transaction_id` is a
+  NanoID-21 generated through the shared public-ID mechanism. Existing UUID-v4 transaction rows
+  remain readable during the bounded transition. The OTP `generation` remains a UUID-v4 one-time
+  proof identity and is not replaced by the transaction reference.
+- A delivery or session binding must match the correct realm, surface, channel, flow, purpose,
+  actor/root binding, transaction reference, generation and expiry. It accepts the explicitly
+  supported NanoID-21 or legacy UUID-v4 transaction form and rejects malformed, missing, stale,
+  wrong-flow, wrong-purpose, wrong-surface or cross-purpose references without a silent lookup
+  fallback. A transaction reference cannot be used as a generation, grant or result identity.
+- When a newly generated transaction collides, only the concrete table's named single-column
+  `transaction_id` unique B-tree collision may be retried. Each retry uses a fresh reference inside
+  a savepoint and the finite shared collision budget. Caller-supplied IDs, unrelated validation or
+  uniqueness failures, and exhausted retries remain explicit failures.
+- Check: `test/operations/email_sign_up_otp_issuer_test.rb`,
+  `test/operations/telephone_sign_up_otp_issuer_test.rb`,
+  `test/values/sign_up_otp_delivery_binding_value_test.rb`,
+  `test/values/email_sign_up_otp_delivery_binding_value_test.rb`,
+  `test/operations/sign_up_otp_delivery_guard_test.rb`,
+  `test/integration/signup_otp_delayed_transport_test.rb` and
+  `test/integration/telephone_sign_up_otp_delivery_test.rb`. Direct inspection must confirm the
+  issuer, binding value and consumer preserve the same purpose/surface boundary; static checks do
+  not prove delayed delivery, concurrent collision recovery or external runtime behavior.
+- This criterion does not classify unexamined sign-up transaction, grant, result or OTP-generation
+  issuers, and it does not authorize a global UUID-to-NanoID rewrite or a cross-realm identifier
+  fallback. Current run evidence is revision-scoped; it is not a permanent PASS for future code.
