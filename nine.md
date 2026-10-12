@@ -2784,3 +2784,12 @@ historical record; it is superseded for the current checked-out commit by the ru
 This closes the current disposable schema-dump comparison only. It does not authorize shared or
 production migration, physical deletion, writer-quiescence cutover, or any of the remaining
 operational/policy holds.
+
+### 16.59 Resume update — stale generic OTP guidance marked historical (2026-10-12)
+
+The two duplicate generic security-design documents contained old identifier-owned HOTP examples
+without a current-contract notice. They now explicitly direct readers to the accepted
+realm-separated ceremony-verifier ADR and mark those examples as historical guidance. This is a
+documentation-only alignment; it does not alter the Email/Telephone implementation or introduce a
+new policy. The pre-commit documentation check and scope are recorded in
+[`R1P6`](evidence/2026-10-12-otp-guidance-doc-sync-R1P6.md).
