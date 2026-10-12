@@ -267,6 +267,18 @@ and
 Other ceremony transaction, grant, result and OTP-generation issuers remain unclassified and must
 not be changed by inference from this slice.
 
+The APP TOTP enrollment child transaction is a separate self-controlled, non-secret ceremony
+identity. `IdentityTotpEnrollmentIssuer` now supplies a NanoID-21 `transaction_id` for new child
+rows while the step-up parent transaction, `grant_jti`, OTP secret/proof, candidate reference and
+result identities retain their existing contracts. The signed grant/result payloads carry the opaque
+transaction value without imposing a UUID format, and the replay store resolves it only in the APP
+TOTP transaction table. A child transaction-ID collision is retried only for that table's named
+unique B-tree index, inside a savepoint and within the finite shared collision budget; other
+validation or uniqueness errors propagate. The generic TOTP transaction factory remains UUID-
+compatible for unclassified callers. Focused coverage is in
+[`test/operations/identity_totp_enrollment_issuer_test.rb`](../../test/operations/identity_totp_enrollment_issuer_test.rb)
+and the surrounding TOTP ceremony tests; no protocol-secret or cross-surface format was widened.
+
 Avatar transfer idempotency keys retain the explicitly approved canonical UUID v4/v7 request
 contract in AV-5. That exception does not extend to all internally generated transaction IDs.
 Ceremony transaction/grant/result IDs and OTP generations need their actual purpose, entropy and

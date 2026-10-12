@@ -3062,3 +3062,40 @@ identifier, D-11 committed-transaction isolation, P10b/P12b operational cutover,
 identifier semantics, host Alloy recreation/runtime verification, privacy-retention policy or the
 user-excluded independent acceptance investigation. No CI, Podman, production, shared destructive
 operation or remote synchronization was used.
+
+### 16.69 Resume update — APP TOTP enrollment child transaction reference (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next
+source-confirmed P2 slice classified only the APP TOTP enrollment child transaction's
+`transaction_id`. It is a self-controlled, non-secret ceremony identity carried through the APP TOTP
+grant/result and replay store. It is distinct from the step-up parent transaction, grant JTI, OTP
+secret/proof, candidate reference, result JTI and database primary key. Other TOTP transaction,
+grant, result and protocol values remain on their existing contracts.
+
+The Red test reached the public enrollment issuer and observed the former UUID child reference. The
+smallest Green change supplies `PublicId.generate` (NanoID-21) explicitly for new child rows while
+leaving the generic TOTP transaction factory UUID-compatible for unclassified callers. The issuer
+accepts existing values and preserves the signed grant/result shape. A child transaction reference
+collision is retried only for the named single-column `transaction_id` unique B-tree index, inside a
+database savepoint with a fresh value and the finite shared collision budget; unrelated validation
+or uniqueness failures propagate. No parent step-up, grant JTI, OTP, candidate, result or
+cross-surface authority changed.
+
+The correctly configured Red collection reported
+`3 runs, 25 assertions, 1 failure, 0 errors, 0 skips`. After implementation and the real
+unique-index collision test, the focused issuer collection passed
+`4 runs, 32 assertions, 0 failures, 0 errors, 0 skips`; the `.rb` TOTP regression collection passed
+`173 runs, 1380 assertions, 0 failures, 0 errors, 0 skips`. The run-owned twenty-database Rails Gate
+2 passed `15151 runs, 128275 assertions, 0 failures, 0 errors, 0 skips` with four workers, and
+Vitest passed `99 files` and `1140 tests`. Targeted RuboCop passed for the three changed Ruby
+implementation/test files. The first attempted broad command included a fixture YAML and was
+discarded before test execution; the recorded TOTP collection uses only `.rb` files. Exact commands,
+the tested HEAD, dirty-worktree scope and verification limits are recorded in
+[`D4R6`](evidence/2026-10-12-totp-enrollment-transaction-issuer-D4R6.md).
+
+This closes only the APP TOTP enrollment child transaction-reference issuer and collision slice. It
+does not close the full ceremony-purpose matrix, other transaction/grant/result issuers,
+database-level immutability for every identifier, D-11 committed-transaction isolation, P10b/P12b
+operational cutover, retained legacy identifier semantics, host Alloy recreation/runtime
+verification, privacy-retention policy or the user-excluded independent acceptance investigation. No
+CI, Podman, production, shared destructive operation or remote synchronization was used.
