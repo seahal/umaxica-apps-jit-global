@@ -184,9 +184,11 @@ the spans buffered during the gap. There is no readiness relationship worth enco
 would only slow every boot.
 
 `OPEN_TELEMETRY` is `"true"` on `core` in `compose.yaml`, because `alloy` is now always there to
-receive. The initializer still gates on it and still defaults to off, because `core` also runs
-outside Compose -- a host `bin/rails`, a CI job, a one-off `podman run` -- where no agent exists and
-an unresolvable `alloy` would otherwise produce a steady trickle of exporter retry warnings.
+receive. The initializer still gates on it: a missing value or explicit `"false"` keeps export off,
+while any non-empty value other than `"true"` or `"false"` fails fast. This preserves the quiet
+default because `core` also runs outside Compose -- a host `bin/rails`, a CI job, a one-off
+`podman run` -- where no agent exists and an unresolvable `alloy` would otherwise produce a steady
+trickle of exporter retry warnings.
 
 Before this, `OPEN_TELEMETRY` was declared in `compose.yaml` but read nowhere, so the SDK
 initialised on every development boot regardless. The initializer now honours the variable.
