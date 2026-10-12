@@ -2831,3 +2831,31 @@ D-11's complete committed-transaction isolation matrix, host Alloy remount/runti
 two retained legacy identifier tables, privacy-retention policy, and the historical HMAC-role
 rollback hazard remain open. No CI, Podman, production, shared destructive operation or remote
 synchronization was used.
+
+### 16.61 Resume update — explicit dead-history destruction boundary (2026-10-12)
+
+After reading the Section 5.3 appended decision, all of Section 16 and Section 14.2 in the required
+order, the next implementation slice addressed the remaining local dead-history destruction
+boundary. The Red tests first required named lifecycle operations and rejected an unmarked persisted
+identifier destroy. The Green change added `purge_with_dead_history!` and
+`destroy_without_dead_history!` to the independent Email and Telephone history concerns, routed the
+two channel purgers through the irreversible operation, and routed ordinary ORG identifier removal
+through the explicit no-history operation. Owner-dependent whole-Identity erasure remains its
+separate contract and does not archive a new row while it removes existing owner histories. No
+schema or migration was added.
+
+The focused history/concurrency tests passed
+`29 runs, 141 assertions, 0 failures, 0 errors, 0 skips`; the broader six-model history, retention,
+controller and social-unlink collection passed
+`181 runs, 918 assertions, 0 failures, 0 errors, 0 skips`. After a named OIDC clock-leeway test was
+rerun successfully following an unrelated intermediate failure, the complete run-owned Rails Gate 2
+passed `15141 runs, 128212 assertions, 0 failures, 0 errors, 0 skips`, and Vitest passed
+`99 files, 1140 tests`. Targeted RuboCop, Brakeman, Ruby syntax, `git diff --check` and repository
+knowledge checks passed. Exact commands, dirty-worktree scope and limits are recorded in
+[`R7K3`](evidence/2026-10-12-dead-history-destroy-boundary-R7K3.md).
+
+This closes only the local explicit destruction boundary. It does not mark the physical-purge
+acceptance condition complete, authorize real-data purge, or resolve the remaining P3d route and
+consumer inventory, P10b/P12b Group and writer-controlled cutover, held legacy identifier tables,
+D-11 committed-transaction isolation, host Alloy recreation/runtime verification, privacy-retention
+policy or historical HMAC-role rollback hazard. No independent acceptance investigation was done.

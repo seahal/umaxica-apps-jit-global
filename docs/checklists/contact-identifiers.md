@@ -82,13 +82,13 @@ deletion, secret rotation or production authority.
   matrix, provider applicability map and real concurrency remain separate checks where absent;
   source alone cannot certify single use. The current ceremony model/operation/integration
   collection passed `418 runs, 6843 assertions, 0 failures, 0 errors, 0 skips`; see
-  [`B7Q5`](../../evidence/2026-10-12-p3d-ceremony-matrix-B7Q5.md). This narrows the executable
-  gap but does not close every provider/credential, realm/purpose concurrency or cross-database
+  [`B7Q5`](../../evidence/2026-10-12-p3d-ceremony-matrix-B7Q5.md). This narrows the executable gap
+  but does not close every provider/credential, realm/purpose concurrency or cross-database
   transport cell. The selected provider, MFA, checkpoint, session-limit, OIDC and Entra public
   boundary collection passed `210 runs, 1831 assertions, 0 failures, 0 errors, 0 skips`; see
-  [`Y5R8`](../../evidence/2026-10-12-p3d-provider-mfa-matrix-Y5R8.md). Applicability and
-  remaining source/transport cells must still be mapped explicitly; live external providers are
-  outside this local verification. The selected independent-connection ceremony,
+  [`Y5R8`](../../evidence/2026-10-12-p3d-provider-mfa-matrix-Y5R8.md). Applicability and remaining
+  source/transport cells must still be mapped explicitly; live external providers are outside this
+  local verification. The selected independent-connection ceremony,
   authentication-session/revocation, TOTP-window and Telephone issuer/verification concurrency
   collection passed `118 runs, 1653 assertions, 0 failures, 0 errors, 0 skips`; see
   [`P6R2`](../../evidence/2026-10-12-p3d-otp-concurrency-matrix-P6R2.md). This narrows the
@@ -115,12 +115,11 @@ deletion, secret rotation or production authority.
   `ignored_columns` alone does not establish physical removal. Exercise the six-model public
   contract in `test/models/otp_failure_retention_test.rb`, then supported issuer/consumer
   regressions. The Email and Telephone public delivery adapters reject retired counter payloads
-  before invoking Noticed or SMS transport; see
-  `test/adapters/otp_email_notifier_adapter_test.rb` and
-  `test/adapters/otp_telephone_adapter_test.rb`. Removing source proof fields/methods leaves every supported
-  issuer/resend/verifier/finalizer usable. A Source commit then Ticket failure does not masquerade
-  as distributed rollback; original receipt/ audit provenance governs retry and cannot authorize
-  another operation.
+  before invoking Noticed or SMS transport; see `test/adapters/otp_email_notifier_adapter_test.rb`
+  and `test/adapters/otp_telephone_adapter_test.rb`. Removing source proof fields/methods leaves
+  every supported issuer/resend/verifier/finalizer usable. A Source commit then Ticket failure does
+  not masquerade as distributed rollback; original receipt/ audit provenance governs retry and
+  cannot authorize another operation.
 - Check current concrete notifier/mailer/worker and caller inventory, synthetic local adapter and
   in-memory export checks (MAIL-2/3), and public stale-delivery/fault tests. The current Email
   Source/Ticket and Step-Up retry fault result is recorded in
@@ -128,23 +127,23 @@ deletion, secret rotation or production authority.
   Source/Ticket journey remains the concrete Telephone counterpart. Complete retirement still
   requires the remaining source/fixture/constraint inventory and any uncovered applicable
   cross-database transport path; documented route evidence is not itself a distributed rollback
-  guarantee. The broader current ceremony/delivery collection passed `418 runs, 6843 assertions,
-  0 failures, 0 errors, 0 skips`; see
-  [`B7Q5`](../../evidence/2026-10-12-p3d-ceremony-matrix-B7Q5.md). It narrows, but does not
-  close, the remaining consumer inventory. The selected provider/MFA/checkpoint/session-limit
-  boundary collection also passed `210 runs, 1831 assertions, 0 failures, 0 errors, 0 skips`; see
+  guarantee. The broader current ceremony/delivery collection passed
+  `418 runs, 6843 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`B7Q5`](../../evidence/2026-10-12-p3d-ceremony-matrix-B7Q5.md). It narrows, but does not close,
+  the remaining consumer inventory. The selected provider/MFA/checkpoint/session-limit boundary
+  collection also passed `210 runs, 1831 assertions, 0 failures, 0 errors, 0 skips`; see
   [`Y5R8`](../../evidence/2026-10-12-p3d-provider-mfa-matrix-Y5R8.md). This does not replace the
   source/fixture/constraint retirement inventory or external transport verification. The selected
-  independent-connection ceremony and transport-consequence collection also passed `118 runs,
-  1653 assertions, 0 failures, 0 errors, 0 skips`; see
-  [`P6R2`](../../evidence/2026-10-12-p3d-otp-concurrency-matrix-P6R2.md). It does not replace
-  the cross-database fault campaign. The current repository-wide source/config/test/migration
-  reference inventory classified 122 matching paths as ceremony-owned fields, deliberate
+  independent-connection ceremony and transport-consequence collection also passed
+  `118 runs, 1653 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`P6R2`](../../evidence/2026-10-12-p3d-otp-concurrency-matrix-P6R2.md). It does not replace the
+  cross-database fault campaign. The current repository-wide source/config/test/migration reference
+  inventory classified 122 matching paths as ceremony-owned fields, deliberate
   rejection/forbidden-key coverage, historical migrations or contract traceability; the current
   disposable catalog has no retired columns or matching live constraint/trigger/function. See
   [`R7M4`](../../evidence/2026-10-12-p3d-proof-reference-inventory-R7M4.md). This classification
-  narrows the retirement inventory but does not replace applicable transport verification or
-  prove that historical migration definitions may be removed.
+  narrows the retirement inventory but does not replace applicable transport verification or prove
+  that historical migration definitions may be removed.
 
 ## CONTACT-6 — Live uniqueness without dead reservations
 
@@ -160,8 +159,8 @@ deletion, secret rotation or production authority.
 - Check actual unique constraints and public concurrency tests; start with
   [purge concurrency](../../test/operations/dead_identifier_purge_concurrency_test.rb). Full
   normalized create/delete matrix for all six models is planned where missing; a model validation is
-  insufficient. The current six-model public model collection passed `126 runs, 405 assertions,
-  0 failures, 0 errors, 0 skips`; see
+  insufficient. The current six-model public model collection passed
+  `126 runs, 405 assertions, 0 failures, 0 errors, 0 skips`; see
   [`T6N4`](../../evidence/2026-10-12-p3e-live-uniqueness-T6N4.md). That collection is current
   evidence, not a claim that every realm/status/concurrency partition is closed.
 
@@ -175,9 +174,12 @@ deletion, secret rotation or production authority.
   one per retry.
 - Six independent models use only id, user_id/visitor_id/staff_id, fingerprint, attached_at,
   detached_at, created_at. No public_id, status, updated_at, raw/encrypted identifier, live digest
-  or source public ID. No shared parent model or Avatar-style live ownership reconstruction.
-  Raw/bulk deletion paths cannot silently bypass the required boundary; callback presence alone does
-  not prove that.
+  or source public ID. No shared parent model or Avatar-style live ownership reconstruction. The
+  implementation exposes separate explicit lifecycle boundaries: irreversible purgers authorize
+  `purge_with_dead_history!`, ordinary identifier removal uses `destroy_without_dead_history!`, and
+  an unmarked persisted destroy is refused. Owner-dependent whole-Identity erasure remains its
+  separate history-deleting contract. Raw/bulk deletion paths cannot silently bypass the required
+  boundary; callback presence alone does not prove that.
 - Check [schema contract](../../test/models/dead_identifier_history_contract_test.rb),
   [destroy tests](../../test/models/dead_identifier_destroy_test.rb),
   [purge tests](../../test/operations/dead_identifier_purge_test.rb) and purge concurrency with
@@ -187,14 +189,13 @@ deletion, secret rotation or production authority.
   trigger or public function still references them; see
   [`U4K6`](../../evidence/2026-10-12-p3d-schema-retirement-U4K6.md). Historical migrations and
   rejection fixtures remain traceability material; this catalog result does not close the full
-  transport/source/fixture/constraint inventory. The current seven-file history/retention
-  collection passed `96 runs, 776 assertions, 0 failures, 0 errors, 0 skips`; see
-  [`V3M7`](../../evidence/2026-10-12-p11a-history-matrix-V3M7.md). It covers the available
-  six-model history schema, visibility, fingerprint, retention, destroy/purge and concurrent
-  purge checks, but does not close the remaining cross-database fault, whole-owner/legal-retention
-  and complete six-model create/purge partition.
-  The integrated history, retention, HMAC and encryption collection passed `110 runs, 1066
-  assertions, 0 failures, 0 errors, 0 skips`; see
+  transport/source/fixture/constraint inventory. The current seven-file history/retention collection
+  passed `96 runs, 776 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`V3M7`](../../evidence/2026-10-12-p11a-history-matrix-V3M7.md). It covers the available six-model
+  history schema, visibility, fingerprint, retention, destroy/purge and concurrent purge checks, but
+  does not close the remaining cross-database fault, whole-owner/legal-retention and complete
+  six-model create/purge partition. The integrated history, retention, HMAC and encryption
+  collection passed `110 runs, 1066 assertions, 0 failures, 0 errors, 0 skips`; see
   [`X7Q4`](../../evidence/2026-10-12-p11a-integrated-matrix-X7Q4.md). This is current focused
   evidence and does not authorize real-data purge or close the remaining source/fixture,
   cross-database, whole-owner/legal-retention or D-11 matrix gaps.
@@ -216,10 +217,10 @@ deletion, secret rotation or production authority.
   fixtures plus cryptographic construction review are evidence; brute-force timing samples do not
   prove anonymity. The current focused history matrix also includes the verifier and repeated-row
   checks; see [`V3M7`](../../evidence/2026-10-12-p11a-history-matrix-V3M7.md). The integrated
-  history, retention, HMAC and encryption collection passed `110 runs, 1066 assertions, 0 failures,
-  0 errors, 0 skips`; see [`X7Q4`](../../evidence/2026-10-12-p11a-integrated-matrix-X7Q4.md).
-  These are current focused results, not proof that every realm/channel maintenance and legal
-  retention partition is complete.
+  history, retention, HMAC and encryption collection passed
+  `110 runs, 1066 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`X7Q4`](../../evidence/2026-10-12-p11a-integrated-matrix-X7Q4.md). These are current focused
+  results, not proof that every realm/channel maintenance and legal retention partition is complete.
 
 ## CONTACT-9 — Internal visibility and privacy lifecycle
 
@@ -239,7 +240,8 @@ deletion, secret rotation or production authority.
   paths and hold/whole-owner tests. The current seven-file history/retention collection passed
   `96 runs, 776 assertions, 0 failures, 0 errors, 0 skips`; see
   [`V3M7`](../../evidence/2026-10-12-p11a-history-matrix-V3M7.md). The integrated history,
-  retention, HMAC and encryption collection passed `110 runs, 1066 assertions, 0 failures, 0
-  errors, 0 skips`; see [`X7Q4`](../../evidence/2026-10-12-p11a-integrated-matrix-X7Q4.md).
-  Planned gaps stay explicit. No application dynamic access or legal policy compliance is certified
-  by the document alone; unknown legal conditions cannot authorize deletion.
+  retention, HMAC and encryption collection passed
+  `110 runs, 1066 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`X7Q4`](../../evidence/2026-10-12-p11a-integrated-matrix-X7Q4.md). Planned gaps stay explicit. No
+  application dynamic access or legal policy compliance is certified by the document alone; unknown
+  legal conditions cannot authorize deletion.
