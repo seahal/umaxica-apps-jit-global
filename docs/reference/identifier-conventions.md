@@ -186,9 +186,11 @@ by these producer mappings and must not be converted on the basis of the shared 
 identities. New LogoutTransaction issuance uses `PublicId.generate`, retries only a collision on its
 named public-ID unique index within the shared finite budget, and rejects post-creation identity
 changes through the model update boundary. EnforcementCaseApplicable uses the same issuer for APP,
-COM and ORG cases and rejects post-creation identity changes. Their existing issued values and
-realm-local uniqueness remain intact; protocol secrets, principal references and policy state are
-separate fields. The focused regression coverage is in
+COM and ORG cases, retries only its named single-column `public_id` unique B-tree collision within
+that finite budget, and rejects post-creation identity changes. Caller-supplied IDs and unrelated
+uniqueness errors are not regenerated. Their existing issued values and realm-local uniqueness
+remain intact; protocol secrets, principal references and policy state are separate fields. The
+focused regression coverage is in
 [`test/models/logout_transaction_test.rb`](../../test/models/logout_transaction_test.rb) and
 [`test/models/enforcement_case_public_id_test.rb`](../../test/models/enforcement_case_public_id_test.rb).
 

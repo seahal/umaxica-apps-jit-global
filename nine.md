@@ -3099,3 +3099,36 @@ database-level immutability for every identifier, D-11 committed-transaction iso
 operational cutover, retained legacy identifier semantics, host Alloy recreation/runtime
 verification, privacy-retention policy or the user-excluded independent acceptance investigation. No
 CI, Podman, production, shared destructive operation or remote synchronization was used.
+
+### 16.70 Resume update — EnforcementCase public-ID collision boundary (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next ready P2
+slice covered only the three realm-local `EnforcementCase.public_id` issuers. These values are
+self-controlled, non-secret policy identities; they are separate from principal references,
+enforcement state, protocol values and database primary keys. Existing values remain unchanged.
+
+The first Red run reproduced the former behavior: an internally generated ID that collided at the
+model validation boundary raised `ActiveRecord::RecordInvalid` instead of entering a bounded
+collision path. The smallest Green change keeps `PublicId.generate` as the sole issuer, assigns
+through both normal validation and validation-disabled creation, and retries only the exact named
+single-column `public_id` unique B-tree collision. Each retry uses a fresh value inside a savepoint
+and the finite `PublicId::MAX_COLLISION_RETRIES` budget. The preflight existence check is only an
+optimization; the database unique index remains the final authority. Caller-supplied IDs, unrelated
+uniqueness errors and exhausted retries propagate explicitly. The existing post-creation
+immutability validation remains in force for all three realms.
+
+The focused EnforcementCase public-ID contract passed
+`5 runs, 16 assertions, 0 failures, 0 errors, 0 skips`; the related model, ordering and trigger
+collection passed `42 runs, 133 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop passed
+for the changed concern and test. The run-owned twenty-database Rails Gate 2 passed
+`15155 runs, 128289 assertions, 0 failures, 0 errors, 0 skips` with four workers, and Vitest passed
+`99 files` and `1140 tests`. No migration, raw SQL, trigger, provider/protocol value, cross-realm
+lookup, CI, Podman, production operation, shared destructive operation or remote synchronization was
+used. The implementation and test are still uncommitted in the shared worktree; the
+document/evidence commit is intentionally separate.
+
+This closes only the EnforcementCase public-ID issuer collision and immutability slice. It does not
+close the complete ceremony-purpose matrix, all-table database immutability, D-11 committed-
+transaction isolation, P10b/P12b operational cutover, retained legacy identifier semantics,
+host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
+independent acceptance investigation.
