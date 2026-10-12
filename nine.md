@@ -3582,3 +3582,47 @@ immutability for every identifier, D-11 committed-transaction isolation, P10b/P1
 cutover, retained legacy identifier semantics, host-Alloy recreation/runtime verification,
 privacy-retention policy or the user-excluded independent acceptance investigation. No CI, Podman,
 production, shared destructive operation or remote synchronization was used.
+
+### 16.84 Resume update — Telephone signup Source/Ticket retry check (P3d, 2026-10-12)
+
+Following Sections 5.3, 16 and 14.2, the next executable P3d gap was the Telephone counterpart to
+the existing Email Source/Ticket fault campaign. The public APP, COM and ORG Telephone signup
+integration collection injected each supported Ticket failure point after source proof work and then
+retried the same browser request. It passed `8 runs, 432 assertions, 0 failures, 0 errors, 0 skips`
+with four workers against the run-owned PostgreSQL manifest. The committed ceremony proof, browser
+binding, flow phase and source failure state remained available for the retry; no distributed
+transaction was claimed.
+
+Evidence is in [`W6Q2`](evidence/2026-10-12-p3d-telephone-source-ticket-retry-W6Q2.md). This is
+current focused evidence for the exercised Telephone signup cells. It does not close every
+Email/Telephone purpose, provider or credential-family applicability cell, the complete
+source/fixture/constraint retirement inventory, D-11's full committed-transaction isolation matrix,
+or external/production transport verification. No application or schema source changed in this
+verification slice, so the current full Rails/Vitest Gate remains the latest behavior gate; any
+subsequent behavior or schema edit must re-establish Gate 2.
+
+### 16.85 Resume update — explicit optional OpenTelemetry toggle and Gate 2 (P1b, 2026-10-12)
+
+The existing Rails-side observability controls were rechecked before the next feature decision. The
+installed `opentelemetry-instrumentation-action_mailer` is version `0.8.1`, and its installed source
+documents `notification_payload_transform`, `process_payload_transform` and `email_address: :omit`,
+matching the existing ActionMailer allowlist. The shared ActionMailer logger remains disabled
+through the Rails public setting; filter boundaries, span scrubber and the Alloy secondary rules
+remain unchanged.
+
+The only source change in this slice is the optional `OPEN_TELEMETRY` branch: missing or explicit
+`false` disables export, explicit `true` enables it, and another non-empty value raises instead of
+silently selecting a deployment mode. This follows the repository environment-variable rule and does
+not alter Compose, host mounts, Alloy reload behavior or production topology.
+
+The focused observability collection passed
+`21 runs, 104 assertions, 0 failures, 0 errors, 0 skips`. The required shared-worktree Gate 2 then
+passed Rails with `15194 runs, 128472 assertions, 0 failures, 0 errors, 0 skips` in 332.937657
+seconds and Vitest with `99 files, 1140 tests`. Exact commands, the tested HEAD and limits are in
+[`O9P4`](evidence/2026-10-12-observability-env-and-gate-O9P4.md).
+
+This closes only the local Rails configuration branch and current focused/full test results. Host
+Compose recreation, effective read-only mounts, Alloy syntax/runtime processing, live external
+sinks, production deployment acceptance and the separate remediation owner/security-review closure
+remain NOT_RUN or open. No CI, Podman, production, shared destructive operation or remote
+synchronization was used.

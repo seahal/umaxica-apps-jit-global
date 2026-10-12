@@ -123,9 +123,11 @@ deletion, secret rotation or production authority.
 - Check current concrete notifier/mailer/worker and caller inventory, synthetic local adapter and
   in-memory export checks (MAIL-2/3), and public stale-delivery/fault tests. The current Email
   Source/Ticket and Step-Up retry fault result is recorded in
-  [`H5W2`](../../evidence/2026-10-12-p3d-source-ticket-fault-H5W2.md); the preceding Telephone
-  Source/Ticket journey remains the concrete Telephone counterpart. Complete retirement still
-  requires the remaining source/fixture/constraint inventory and any uncovered applicable
+  [`H5W2`](../../evidence/2026-10-12-p3d-source-ticket-fault-H5W2.md). The current Telephone signup
+  Source/Ticket fault and same-browser retry collection passed
+  `8 runs, 432 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`W6Q2`](../../evidence/2026-10-12-p3d-telephone-source-ticket-retry-W6Q2.md). Complete retirement
+  still requires the remaining source/fixture/constraint inventory and any uncovered applicable
   cross-database transport path; documented route evidence is not itself a distributed rollback
   guarantee. The broader current ceremony/delivery collection passed
   `418 runs, 6843 assertions, 0 failures, 0 errors, 0 skips`; see

@@ -21,6 +21,21 @@ resolution rather than proceeding with the isolated step-up logging proposal. Th
 handling decision. No external incident submission, production inspection, or runtime logging change
 is claimed by this document.
 
+## Current local implementation note (2026-10-12)
+
+The local Rails configuration now treats `OPEN_TELEMETRY` as an explicit optional toggle: missing or
+`false` disables export, `true` enables it, and another non-empty value raises instead of silently
+selecting a deployment mode. The existing Rails ActionMailer logger policy, ActionMailer
+instrumentation allowlist, span scrubber, filter boundaries and development Alloy secondary rules
+remain in place. The installed ActionMailer instrumentation is version `0.8.1`; its source exposes
+the transform and `email_address: :omit` options used by the initializer.
+
+The focused local collection and current run-owned Rails/Vitest Gate are recorded in
+[`O9P4`](../../evidence/2026-10-12-observability-env-and-gate-O9P4.md). This is implementation
+evidence for the current dirty worktree, not remediation-owner/security-review closure. Host Compose
+recreation, effective read-only mounts, Alloy runtime processing, live external sinks, production
+topology and any historical exposure assessment remain open or unverified.
+
 ## Required work
 
 1. Inventory existing OTP producers and consumers by surface and purpose, including sign-in,

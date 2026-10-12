@@ -23,8 +23,10 @@ older production/Sentry/broader-review obligations: those remain separately owne
   including boundary-similar keys; a regex example is not a substitute for current key inventory.
 - Check [filter tests](../../test/unit/security/filter_parameter_logging_test.rb) and the actual
   filter_parameter_logging initializer. The current test covers the two-sided short-key boundary,
-  including `code_verifier`; re-run it against the current checkout rather than treating this
-  statement as a permanent PASS.
+  including `code_verifier`; the current guarded local collection passed 21 runs and 104 assertions
+  with the related ActionMailer/OTel checks. See
+  [`O9P4`](../../evidence/2026-10-12-observability-env-and-gate-O9P4.md). Re-run it against the
+  current checkout rather than treating this statement as a permanent PASS.
 
 ## MAIL-2 — Standard delivery without raw email application logging
 
@@ -43,9 +45,10 @@ older production/Sentry/broader-review obligations: those remain separately owne
   [the ActionMailer policy test](../../test/unit/security/action_mailer_logging_policy_test.rb),
   existing [surface mailer tests](../../test/mailers/email/surface_mailers_test.rb), and the
   interceptor tests. Perform direct safe boot and synthetic capture; all-surface
-  success/suspension/failure/retry behavior coverage remains a current-checkout investigation,
-  not a permanent PASS.
-  Do not add setup-only Minitest cases or send real mail to prove configuration.
+  success/suspension/failure/retry behavior coverage remains a current-checkout investigation, not a
+  permanent PASS. The current local policy and full-gate result are recorded in
+  [`O9P4`](../../evidence/2026-10-12-observability-env-and-gate-O9P4.md). Do not add setup-only
+  Minitest cases or send real mail to prove configuration.
 
 ## MAIL-3 — Pre-export fixed allowlists
 
@@ -62,11 +65,13 @@ older production/Sentry/broader-review obligations: those remain separately owne
 - Check installed gem source, initializer and actual synthetic in-memory exported attributes;
   [redactor tests](../../test/unit/security/observability_redactor_test.rb) and
   [span scrubber tests](../../test/unit/security/observability_span_scrubber_test.rb) cover their
-  own behavior. The [initializer contract test](../../test/unit/security/opentelemetry_initializer_test.rb)
-  checks the formal options; the development boot evidence also exercised the two transforms
-  against a synthetic payload. Full exported-span capture remains a separate current-checkout
-  check; source config alone cannot establish the dynamic export boundary. No live collector is
-  used.
+  own behavior. The
+  [initializer contract test](../../test/unit/security/opentelemetry_initializer_test.rb) checks the
+  formal options; the development boot evidence also exercised the two transforms against a
+  synthetic payload. Full exported-span capture remains a separate current-checkout check; source
+  config alone cannot establish the dynamic export boundary. No live collector is used. The
+  installed gem/API inspection and guarded local checks are recorded in
+  [`O9P4`](../../evidence/2026-10-12-observability-env-and-gate-O9P4.md).
 
 ## MAIL-4 — Collector secondary defense
 
@@ -80,10 +85,9 @@ older production/Sentry/broader-review obligations: those remain separately owne
 - Check podman/alloy/config.alloy, Compose pin/routing and direct local binary configuration
   validation; static syntax success and synthetic processor behavior are separate observations. The
   current static rules are recorded, but the Alloy/Podman runtime is unavailable in this container,
-  so processor execution is NOT_RUN.
-  Dynamic processor acceptance is NOT_RUN/BLOCKED if no safe local facility exists. No
-  Grafana/Tempo/Loki/SES query or production verification. Do not introduce setup tests or an
-  alternate verification framework.
+  so processor execution is NOT_RUN. Dynamic processor acceptance is NOT_RUN/BLOCKED if no safe
+  local facility exists. No Grafana/Tempo/Loki/SES query or production verification. Do not
+  introduce setup tests or an alternate verification framework.
 
 ## MAIL-5 — Host-managed read-only directory
 
