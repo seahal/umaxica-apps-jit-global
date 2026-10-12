@@ -3234,3 +3234,39 @@ D-11 committed-transaction isolation, P10b/P12b operational cutover, retained le
 semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
 independent acceptance investigation. No CI, Podman, production, shared destructive operation or
 remote synchronization was used.
+
+### 16.74 Resume update — sign-up Email/Telephone grant references (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next independent
+slice extended only the APP/COM Email/Telephone sign-up issuer boundary to its separate `grant_jti`.
+This value is a self-controlled, non-secret grant identity and remains distinct from
+`transaction_id`, OTP `generation`, `result_jti`, actor/session references and provider/protocol
+values. Other ceremony grant issuers remain unclassified outside this slice.
+
+The Red run added NanoID-21 and generated-grant-collision assertions and reproduced the former UUID
+behavior plus the missing retry path: `38 runs, 510 assertions, 8 failures, 0 errors, 0 skips`. The
+smallest Green change now generates `grant_jti` with `PublicId.generate` alongside the transaction
+reference. It retries only the exact named single-column `grant_jti` or `transaction_id` unique
+B-tree collision inside a savepoint and the finite `PublicId::MAX_COLLISION_RETRIES` budget;
+caller-supplied values and unrelated validation/uniqueness failures propagate. Existing UUID-v4
+grant values remain valid opaque claims. The four locale fallback maps now include the missing
+`grant_jti` attribute label so collision validation reports an error rather than failing while
+looking up its label; this does not alter the workflow contract.
+
+The first Green attempt exposed that missing locale label as four errors
+(`38 runs, 506 assertions, 0 failures, 4 errors, 0 skips`). After the label and style corrections,
+the focused issuer collection passed `38 runs, 522 assertions, 0 failures, 0 errors, 0 skips`; the
+broader sign-up delivery/transport collection passed
+`118 runs, 2336 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop passed for the four
+changed Ruby implementation/test files. The run-owned twenty-database Rails Gate 2 passed
+`15171 runs, 128372 assertions, 0 failures, 0 errors, 0 skips` with four workers, and Vitest passed
+`99 files` and `1140 tests`. Exact commands, tested HEAD, dirty-worktree scope, the intermediate
+locale error and verification limits are recorded in
+[`P6T9`](evidence/2026-10-12-signup-grant-references-P6T9.md).
+
+This closes only the APP/COM sign-up grant-reference generation and exact collision boundary. It
+does not close other grant issuers, result identities, the complete ceremony-purpose matrix,
+database-level immutability for every identifier, D-11 committed-transaction isolation, P10b/P12b
+operational cutover, retained legacy identifier semantics, host-Alloy recreation/runtime
+verification, privacy-retention policy or the user-excluded independent acceptance investigation. No
+CI, Podman, production, shared destructive operation or remote synchronization was used.

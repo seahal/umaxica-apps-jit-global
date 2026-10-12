@@ -321,6 +321,17 @@ and
 This scoped transition does not classify other ceremony transaction, grant, result or OTP-generation
 issuers.
 
+The APP/COM sign-up Email and Telephone `grant_jti` is a separate self-controlled, non-secret grant
+identity. New sign-up issuers generate it with `PublicId.generate` (NanoID-21), while existing
+UUID-v4 values remain valid opaque claims for the readers and signed grant/result contracts. A
+generated collision is retried only for the concrete table's named, single-column `grant_jti` unique
+B-tree index, inside a savepoint and within the finite shared collision budget; the same attempt
+also preserves the independent `transaction_id` collision rule. Caller-supplied values and unrelated
+uniqueness failures are not regenerated. `grant_jti` is never substituted for `transaction_id`, OTP
+`generation`, `result_jti`, actor, session or a provider value. The locale fallback labels for this
+validation attribute are part of the existing error-reporting boundary; they do not change the
+ceremony contract.
+
 Avatar transfer idempotency keys retain the explicitly approved canonical UUID v4/v7 request
 contract in AV-5. That exception does not extend to all internally generated transaction IDs.
 Ceremony transaction/grant/result IDs and OTP generations need their actual purpose, entropy and

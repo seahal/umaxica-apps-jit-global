@@ -433,3 +433,28 @@ criterion.
 - This criterion does not classify unexamined sign-up transaction, grant, result or OTP-generation
   issuers, and it does not authorize a global UUID-to-NanoID rewrite or a cross-realm identifier
   fallback. Current run evidence is revision-scoped; it is not a permanent PASS for future code.
+
+## ID-3f — Email and Telephone sign-up grant references
+
+- Basis: I04/I06/I07/I10 and ID-3; scope: APP and COM Email/Telephone sign-up grant issuance, signed
+  grant/result claims, replay validation and delivery/verification handoff. The grant identity is
+  separate from the sign-up transaction, OTP generation and eventual result identity.
+- Given a newly created sign-up transaction, its generated `grant_jti` is a NanoID-21 from the
+  shared public-ID mechanism. Existing UUID-v4 grant values remain accepted as opaque claims; no
+  caller or provider value is reformatted. A grant reference is checked against the same concrete
+  transaction and realm before a grant or result is accepted.
+- A generated `grant_jti` collision may be retried only when the concrete table identifies its
+  named, single-column `grant_jti` unique B-tree index. The retry uses a fresh transaction and grant
+  reference inside a savepoint and the finite shared collision budget. A collision on the separate
+  `transaction_id` index follows its own rule; unrelated validation or uniqueness errors and
+  exhausted retries remain explicit failures.
+- Check: `test/operations/email_sign_up_otp_issuer_test.rb` and
+  `test/operations/telephone_sign_up_otp_issuer_test.rb`, including generated-format and grant/
+  transaction collision cases, plus the sign-up delivery/transport and binding tests listed in
+  ID-3e. Direct inspection must confirm that grant, transaction, generation and result values are
+  not substituted across purposes or surfaces. The locale fallback labels only prevent validation
+  error reporting from failing; they are not an acceptance substitute.
+- This criterion does not classify other sign-up, credential-registration, step-up, passkey, social,
+  TOTP or secret-credential grant issuers, and it does not authorize changing external protocol
+  identifiers. Current evidence is revision-scoped and does not establish complete ID-3 or ID-4
+  acceptance.
