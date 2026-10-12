@@ -484,3 +484,25 @@ criterion.
   must confirm that transaction, grant, generation and proof/session bindings retain their existing
   purpose and realm boundaries. The current evidence is revision-scoped and does not classify every
   other credential-registration grant or result issuer.
+
+## ID-3h — Email recovery and withdrawal reentry references
+
+- Basis: I04/I06/I07/I10 and ID-3; scope: Email reentry OTP issuance and delivery for APP, COM and
+  ORG recovery, plus APP and COM withdrawal. ORG withdrawal remains explicitly unsupported. The
+  transaction and grant references are self-controlled, non-secret ceremony identities; the
+  browser/session reference and OTP generation remain separate UUID-bound contracts.
+- Given an allowed reentry request, a newly created concrete Email ceremony transaction carries a
+  NanoID-21 `transaction_id` and a separate NanoID-21 `grant_jti`. Existing UUID transaction values
+  remain readable during the bounded transition. The binding accepts either transaction form but
+  still requires a UUID OTP generation, preserves the operation (`recovery` or `withdrawal`) and
+  rejects other-purpose or malformed references without fallback.
+- A generated transaction or grant collision may be retried only for the concrete table's named,
+  single-column unique B-tree index, using fresh values inside a savepoint and the finite collision
+  budget. Unrelated validation or uniqueness failures and exhausted retries remain explicit
+  failures. A rejected ORG withdrawal creates no transaction or delivery.
+- Check: `test/operations/email_reentry_otp_issuer_test.rb`,
+  `test/operations/email_reentry_otp_verification_committer_test.rb`,
+  `test/values/email_reentry_otp_delivery_binding_value_test.rb` and
+  `test/notifiers/notify/email_reentry_otp_delivery_test.rb`. The current execution record is
+  [`Q4M8`](../../evidence/2026-10-12-email-reentry-references-Q4M8.md); it is revision-scoped and
+  does not classify other Email/Telephone ceremony issuers.

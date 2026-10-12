@@ -3304,3 +3304,36 @@ issuers, database-level immutability for every identifier, D-11 committed-transa
 P10b/P12b operational cutover, retained legacy identifier semantics, host-Alloy recreation/runtime
 verification, privacy-retention policy or the user-excluded independent acceptance investigation. No
 CI, Podman, production, shared destructive operation or remote synchronization was used.
+
+### 16.76 Resume update — Email recovery and withdrawal reentry references (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next independent
+P2 slice covered Email reentry OTP issuance for APP, COM and ORG recovery and APP/COM withdrawal.
+ORG withdrawal remains an explicit unsupported operation. The new transaction and grant references
+are self-controlled, non-secret ceremony identities; browser/session references and OTP generation
+remain separate UUID-bound contracts.
+
+The Red run first reproduced the former UUID transaction/grant values in the public issuer:
+`7 runs, 52 assertions, 5 failures, 0 errors, 0 skips`. After adding explicit transaction- and
+grant-collision cases, the Red run reported `9 runs, 58 assertions, 7 failures, 0 errors, 0 skips`.
+The smallest Green change now supplies `PublicId.generate` for both new references and retries only
+an exact named single-column `transaction_id` or `grant_jti` unique B-tree collision inside a
+savepoint and the finite `PublicId::MAX_COLLISION_RETRIES` budget. The delivery binding was changed
+to accept NanoID-21 or existing UUID-v4 transaction references while continuing to require UUID OTP
+generation; operation, surface and no-fallback boundaries remain unchanged.
+
+The final issuer/binding collection passed `11 runs, 187 assertions, 0 failures, 0 errors, 0 skips`;
+the broader reentry delivery/verification collection passed
+`22 runs, 313 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop passed for the four
+changed Ruby implementation/test files after one correctable empty-line offense. Gate 2 then ran the
+run-owned twenty-database Rails suite with four workers and passed
+`15175 runs, 128413 assertions, 0 failures, 0 errors, 0 skips`; Vitest passed `99 files` and
+`1140 tests`. Exact commands, tested HEAD, dirty-worktree scope and limits are recorded in
+[`Q4M8`](evidence/2026-10-12-email-reentry-references-Q4M8.md).
+
+This closes only the Email reentry transaction/grant reference and reader boundary. It does not
+close the complete ceremony-purpose matrix, other grant/result issuers, database-level immutability
+for every identifier, D-11 committed-transaction isolation, P10b/P12b operational cutover, retained
+legacy identifier semantics, host-Alloy recreation/runtime verification, privacy-retention policy or
+the user-excluded independent acceptance investigation. No CI, Podman, production, shared
+destructive operation or remote synchronization was used.

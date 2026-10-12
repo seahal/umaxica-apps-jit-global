@@ -295,6 +295,18 @@ and
 the broader issuer and binding tests listed in the preceding paragraph cover the surrounding purpose
 and session boundary.
 
+Email recovery and withdrawal reentry transactions are a separate bounded P2 slice. New APP, COM and
+ORG recovery transactions, and APP/COM withdrawal transactions, receive a NanoID-21 `transaction_id`
+and a separate NanoID-21 `grant_jti` from `PublicId.generate`; the existing ORG withdrawal rejection
+remains in force. The browser/session reference and OTP `generation` remain UUID contracts. The
+delivery binding accepts the new NanoID-21 transaction reference or an existing UUID-v4 transaction
+reference while requiring the UUID generation. Reentry issuers retry only an exact named
+single-column `transaction_id` or `grant_jti` unique B-tree collision inside a savepoint and the
+finite collision budget; unrelated failures propagate. See
+[`test/operations/email_reentry_otp_issuer_test.rb`](../../test/operations/email_reentry_otp_issuer_test.rb)
+and
+[`test/values/email_reentry_otp_delivery_binding_value_test.rb`](../../test/values/email_reentry_otp_delivery_binding_value_test.rb).
+
 The APP TOTP enrollment child transaction is a separate self-controlled, non-secret ceremony
 identity. `IdentityTotpEnrollmentIssuer` now supplies a NanoID-21 `transaction_id` for new child
 rows while the step-up parent transaction, `grant_jti`, OTP secret/proof, candidate reference and
