@@ -2772,3 +2772,15 @@ The first attempt without `PARALLEL_WORKERS` failed closed during application in
 `ConfigurationError`; it made no database change. The corrected run passed. This confirms the
 current inventory guard and does not close the retained legacy identifier review, permanent-ID
 immutability mapping, operational Avatar cutover, or any independent acceptance condition.
+
+### 16.58 Resume update — current schema dump matches the run-owned databases (2026-10-12)
+
+The read-only `db:verify_no_schema_drift` gate was rerun with the same twenty-writer manifest and
+required four-worker guard. It passed with `No schema drift detected in 20 schema dump file(s).` The
+earlier dirty-dump result belonged to the preceding uncommitted migration state and remains a
+historical record; it is superseded for the current checked-out commit by the run in
+[`D4K9`](evidence/2026-10-12-schema-drift-current-D4K9.md).
+
+This closes the current disposable schema-dump comparison only. It does not authorize shared or
+production migration, physical deletion, writer-quiescence cutover, or any of the remaining
+operational/policy holds.

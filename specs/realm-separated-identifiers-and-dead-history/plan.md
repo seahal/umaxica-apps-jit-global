@@ -41,3 +41,8 @@ only to test-prefixed databases on the configured test host. Telephone focused c
 intended uncommitted migration changes as drift. The no-commit constraint remains authoritative; do
 not weaken the verifier or claim a green result. Distinguish generated intended migration effects
 from existing database/schema or PostgreSQL dump-format drift before final reporting.
+
+Current run-owned recheck: on 2026-10-12, the same verifier passed against all twenty configured
+non-replica writer databases and the current tracked dumps. See
+`evidence/2026-10-12-schema-drift-current-D4K9.md`. This does not establish shared or production
+schema application.
