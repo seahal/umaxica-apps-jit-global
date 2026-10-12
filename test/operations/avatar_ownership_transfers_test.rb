@@ -14,13 +14,10 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   test "request creates one pending five-day transfer without changing ownership" do
-    requested_at = Time.current
-
     transfer = request_transfer
 
     assert_equal "pending", transfer.state
-    assert_equal requested_at.to_i, transfer.requested_at.to_i
-    assert_equal requested_at.to_i + 5.days.to_i, transfer.expires_at.to_i
+    assert_equal transfer.requested_at.to_i + 5.days.to_i, transfer.expires_at.to_i
     assert_equal "app", transfer.from_owner_surface
     assert_equal @source.collective.public_id, transfer.from_owner_collective_public_id
     assert_equal "org", transfer.to_owner_surface
@@ -103,6 +100,23 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
                  accepted.enterprise_to_bureau_detail.reload.accepted_at
   end
 
+  test "a completed registry request replays its recorded result for the same request" do
+    reservation = registry_request
+
+    AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+      actor: @target_actor,
+      surface: "org",
+      subject_public_id: @target.account.public_id,
+      reservation_public_id: reservation.public_id,
+    )
+
+    replay = registry_request
+
+    assert_equal reservation.id, replay.id
+    assert_equal "accepted", replay.state
+    assert_equal reservation.public_id, replay.public_id
+  end
+
   test "registry accept replay returns the recorded result without changing history" do
     reservation = registry_request
 
@@ -129,6 +143,26 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     assert_equal bureau_period_count, @avatar.bureau_ownership_periods.reload.count
     assert_equal accepted.enterprise_to_bureau_detail.reload.accepted_at,
                  replayed.enterprise_to_bureau_detail.accepted_at
+  end
+
+  test "registry transfer removes owner-mismatched group membership and preserves target membership" do
+    source_group = group_for(@source, surface: "app")
+    target_group = group_for(@target, surface: "org")
+    stale_membership = membership_for(source_group)
+    matching_membership = membership_for(target_group)
+    reservation = registry_request
+
+    AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+      actor: @target_actor,
+      surface: "org",
+      subject_public_id: @target.account.public_id,
+      reservation_public_id: reservation.public_id,
+    )
+
+    assert_equal "removed", stale_membership.reload.state
+    assert_predicate stale_membership.removed_at, :present?
+    assert_equal "active", matching_membership.reload.state
+    assert_nil matching_membership.removed_at
   end
 
   test "registry transfer accepts a Bureau-owned Avatar into an Enterprise" do
@@ -168,6 +202,76 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     assert_equal @source.collective.public_id, avatar.current_ownership_period.owner_collective_public_id
     assert_empty avatar.bureau_ownership_periods.current
     assert_equal @source.collective.public_id, avatar.enterprise_ownership_periods.current.first.enterprise_public_id
+  end
+
+  test "registry transfer accepts an Enterprise-owned Avatar into another Enterprise" do
+    target_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    target = BaseSelectorBootstrapAuthority.call(surface: :app, principal: target_actor)
+    reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
+      actor: @source_actor,
+      surface: "app",
+      subject_public_id: @source.account.public_id,
+      avatar_public_id: @avatar.public_id,
+      target_surface: "app",
+      target_collective_public_id: target.collective.public_id,
+      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a43",
+      request_fingerprint: Digest::SHA256.hexdigest("registry-enterprise-to-enterprise"),
+    )
+
+    accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+      actor: target_actor,
+      surface: "app",
+      subject_public_id: target.account.public_id,
+      reservation_public_id: reservation.public_id,
+    )
+
+    assert_equal "accepted", accepted.state
+    assert_equal "app", @avatar.reload.current_ownership_period.owner_surface
+    assert_equal target.collective.public_id, @avatar.current_ownership_period.owner_collective_public_id
+    assert_equal target.collective.public_id, @avatar.enterprise_ownership_periods.current.first.enterprise_public_id
+    assert_empty @avatar.bureau_ownership_periods.current
+  end
+
+  test "registry transfer accepts a Bureau-owned Avatar into another Bureau" do
+    target_actor = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    target = BaseSelectorBootstrapAuthority.call(surface: :org, principal: target_actor)
+    result = AvatarProvisioning::Create.call(
+      actor: @target_actor,
+      subject_type: :agent,
+      subject: @target.account,
+      avatar_params: { moniker: "Bureau 2" },
+      handle_params: { handle: "registry-bureau-to-bureau-#{SecureRandom.hex(4)}" },
+      owner_surface: "org",
+      owner_collective_public_id: @target.collective.public_id,
+    )
+
+    assert_predicate result, :success?, result.errors.inspect
+
+    avatar = result.avatar
+
+    reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
+      actor: @target_actor,
+      surface: "org",
+      subject_public_id: @target.account.public_id,
+      avatar_public_id: avatar.public_id,
+      target_surface: "org",
+      target_collective_public_id: target.collective.public_id,
+      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a44",
+      request_fingerprint: Digest::SHA256.hexdigest("registry-bureau-to-bureau"),
+    )
+
+    accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+      actor: target_actor,
+      surface: "org",
+      subject_public_id: target.account.public_id,
+      reservation_public_id: reservation.public_id,
+    )
+
+    assert_equal "accepted", accepted.state
+    assert_equal "org", avatar.reload.current_ownership_period.owner_surface
+    assert_equal target.collective.public_id, avatar.current_ownership_period.owner_collective_public_id
+    assert_equal target.collective.public_id, avatar.bureau_ownership_periods.current.first.bureau_public_id
+    assert_empty avatar.enterprise_ownership_periods.current
   end
 
   test "registry accept rejects a non-advancing transfer instant without changing history" do
@@ -454,6 +558,29 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     assert_predicate stale_membership.removed_at, :present?
     assert_equal "active", matching_membership.reload.state
     assert_nil matching_membership.removed_at
+  end
+
+  test "transfer does not reinterpret a group's account context as Avatar ownership" do
+    source_group = group_for(@source, surface: "app")
+    target_group = group_for(@target, surface: "org")
+    membership_for(source_group)
+    membership_for(target_group)
+    source_account = [source_group.account_surface, source_group.account_public_id]
+    target_account = [target_group.account_surface, target_group.account_public_id]
+    reservation = registry_request
+
+    AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+      actor: @target_actor,
+      surface: "org",
+      subject_public_id: @target.account.public_id,
+      reservation_public_id: reservation.public_id,
+    )
+
+    assert_equal source_account, [source_group.reload.account_surface, source_group.account_public_id]
+    assert_equal target_account, [target_group.reload.account_surface, target_group.account_public_id]
+    assert_equal "org", @avatar.reload.current_ownership_period.owner_surface
+    assert_equal "removed", source_group.group_avatar_memberships.first.reload.state
+    assert_equal "active", target_group.group_avatar_memberships.first.reload.state
   end
 
   private

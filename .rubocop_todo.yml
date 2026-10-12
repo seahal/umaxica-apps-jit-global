@@ -883,7 +883,6 @@ Umaxica/ExplicitMethodVisibility:
     - "app/models/concerns/privacy_request_due_date.rb"
     - "app/models/concerns/privacy_request_state.rb"
     - "app/models/concerns/promotional_email_unsubscribable.rb"
-    - "app/models/concerns/public_id.rb"
     - "app/models/concerns/publishing_entry_record.rb"
     - "app/models/concerns/publishing_entry_revision_record.rb"
     - "app/models/concerns/publishing_family_taxonomy_assignment.rb"

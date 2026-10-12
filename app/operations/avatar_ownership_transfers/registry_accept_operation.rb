@@ -193,6 +193,7 @@ module AvatarOwnershipTransfers
 
     def accept_locked_reservation!(avatar:, observed:, detail:, definition:)
       AvatarRecord.transaction(requires_new: true) do
+        lock_group_rows_before_avatar!(avatar.id)
         locked_avatar = Avatar.lock.find(avatar.id)
         locked = AvatarTransferReservation.lock.find(observed.id)
         locked_detail = definition.fetch(:detail_class).lock.find_by!(transfer_reservation_id: locked.id)
@@ -216,6 +217,12 @@ module AvatarOwnershipTransfers
         open_legacy_period!(locked_avatar, locked_detail, definition, transfer_at)
         close_concrete_period!(source_period, transfer_at)
         open_concrete_period!(locked_avatar, locked_detail, definition, transfer_at)
+        remove_group_memberships_with_different_owner!(
+          avatar: locked_avatar,
+          owner_surface: definition.fetch(:destination_surface),
+          owner_collective_public_id: destination_collective_public_id(locked_detail, definition),
+          at: transfer_at,
+        )
 
         locked_detail.update!(accept_actor_public_id: subject_public_id, accepted_at: transfer_at)
         locked.update!(state: "accepted", completed_at: transfer_at)

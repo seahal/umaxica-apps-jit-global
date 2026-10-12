@@ -54,10 +54,18 @@ module OrgEntraFirstStageHelper
       end
     end
 
+    @org_normal_sign_in_binding = Rack::Utils.parse_nested_query(
+      URI.parse(response.location).query.to_s,
+    ).fetch("fb")
+
     entra_object_id
   ensure
     restore_org_entra_registry!
     OmniAuth.config.test_mode = previous_test_mode
+  end
+
+  def org_normal_sign_in_binding_params
+    @org_normal_sign_in_binding.present? ? { fb: @org_normal_sign_in_binding } : {}
   end
 
   private

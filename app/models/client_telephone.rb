@@ -35,11 +35,6 @@
 #
 
 class ClientTelephone < AppPrincipalRecord
-  # P3d removes identifier-owned proof; ceremony transactions own verification material.
-  self.ignored_columns += %w(
-    otp_private_key otp_counter otp_expires_at sign_up_otp_context credential_registration_otp_context
-  )
-
   include Retainable
   include Telephone
   include TelephoneDeadIdentifierHistory

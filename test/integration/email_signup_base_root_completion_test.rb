@@ -183,7 +183,13 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       assert active_verifier_cleared, "Fresh consumption must remove the active verifier"
       birthdate_uri = URI.parse(auth.response.location)
 
-      assert_withheld("The checkpoint must retain the original signed signup binding") { SignFlowBindingCodec.decode(Rack::Utils.parse_query(birthdate_uri.query).fetch("fb")) == decoded }
+      signup.reload
+      checkpoint_binding = SignFlowBindingCodec.decode(Rack::Utils.parse_query(birthdate_uri.query).fetch("fb"))
+      assert_equal decoded.flow_public_id, checkpoint_binding.flow_public_id
+      assert_equal signup.step, checkpoint_binding.phase
+      assert_equal signup.checkpoint_version, checkpoint_binding.generation
+      assert_equal signup.expires_at.to_i, checkpoint_binding.expires_at
+      assert_not_equal decoded.phase, checkpoint_binding.phase
       auth.get(birthdate_uri.request_uri)
 
       assert_equal 200, auth.response.status

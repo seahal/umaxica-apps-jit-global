@@ -188,7 +188,13 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
         guard = URI.parse(browser.response.location)
 
         assert_equal "/sign/up/guard/telephone", guard.path
-        assert_withheld("Retry must retain its original signed signup flow") { SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard.query).fetch("fb")) == decoded }
+        flow.reload
+        retry_binding = SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard.query).fetch("fb"))
+        assert_equal decoded.flow_public_id, retry_binding.flow_public_id
+        assert_equal flow.step, retry_binding.phase
+        assert_equal flow.checkpoint_version, retry_binding.generation
+        assert_equal flow.expires_at.to_i, retry_binding.expires_at
+        assert_not_equal decoded.phase, retry_binding.phase
         assert_equal flow_class::STATUS_MODEL::CHECKPOINT_PENDING, flow.reload.status_id
         assert flow.requirement_cleared?(:otp), "Retry must clear the OTP checkpoint requirement"
         assert_withheld("Retry must preserve the committed ceremony proof exactly") {

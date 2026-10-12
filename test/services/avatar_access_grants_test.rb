@@ -62,6 +62,36 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
     assert_nil grant.reload.revoked_at
   end
 
+  test "a non-owner cannot issue a grant for the current ownership generation" do
+    other = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+
+    assert_raises(AvatarOwnerMembershipLockService::AuthorizationDenied) do
+      AvatarAccessGrants::IssueOperation.call(
+        ownership_period: @period,
+        subject: @app.account,
+        capability: "avatar.view",
+        granted_by_actor_public_id: other.public_id,
+      )
+    end
+
+    assert_equal 0, AvatarEnterprisePersonaGrant.where(avatar_enterprise_ownership_period_id: @period.id).count
+  end
+
+  test "a member cannot self-authorize additional grants" do
+    @app.account.persona_memberships
+      .find_by!(enterprise: @app.collective)
+      .update!(membership_kind_id: PersonaMembershipKind::MEMBER)
+
+    assert_raises(AvatarOwnerMembershipLockService::AuthorizationDenied) do
+      AvatarAccessGrants::IssueOperation.call(
+        ownership_period: @period,
+        subject: @app.account,
+        capability: "avatar.view",
+        granted_by_actor_public_id: @client.public_id,
+      )
+    end
+  end
+
   test "revocation stops a grant without changing the ownership period" do
     grant = AvatarAccessGrants::IssueOperation.call(
       ownership_period: @period,

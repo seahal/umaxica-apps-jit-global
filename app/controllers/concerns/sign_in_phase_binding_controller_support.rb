@@ -48,7 +48,9 @@ module SignInPhaseBindingControllerSupport
 
   def sign_in_binding_current?(flow, binding)
     flow.class.state_name_for(flow.state_id) == binding.phase &&
-      flow.issued_at.utc.iso8601(6) == binding.generation
+      flow.issued_at.utc.iso8601(6) == binding.generation &&
+      flow.expires_at.to_i == binding.expires_at &&
+      !flow.expired?(flow.class.database_now)
   end
 
   def refuse_sign_in_binding_mismatch!(flow, binding)

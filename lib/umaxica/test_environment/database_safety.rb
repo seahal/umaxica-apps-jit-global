@@ -59,6 +59,39 @@ module Umaxica
         end
       end
 
+      # A worker verifies its own creation receipts after the framework retargets
+      # its configurations, while also retaining the verified parent-fleet boundary.
+      def verify_worker_catalog!(configurations:, worker:, workers:, manifest_path:, environment: ENV)
+        unless configurations.any? && configurations.all? { |configuration| configuration.env_name == "test" }
+          raise ConfigurationError, "isolated worker configurations must belong to test"
+        end
+
+        unless worker.is_a?(Integer) && workers.is_a?(Integer) && worker >= 0 && worker < workers &&
+            workers == Integer(required(environment, "PARALLEL_WORKERS"), 10)
+          raise ConfigurationError, "isolated worker identity is invalid"
+        end
+
+        parent_configurations =
+          configurations.map do |configuration|
+            suffix = "_#{worker}"
+            unless configuration.database.end_with?(suffix)
+              raise ConfigurationError, "worker database suffix does not match worker identity"
+            end
+
+            configuration.dup.tap { |copy| copy._database = configuration.database.delete_suffix(suffix) }
+          end
+        verify!(configurations: parent_configurations, environment:)
+        worker_environment = environment.to_h.merge("POSTGRESQL_ISOLATED_TEST_MANIFEST" => manifest_path)
+        verify_isolated_catalog!(
+          configurations, environment: worker_environment,
+                          expected_host: required(environment, "POSTGRESQL_TEST_HOST"),
+                          expected_port: parse_port(required(environment, "POSTGRESQL_PORT")),
+                          expected_user: required(environment, "POSTGRESQL_USER"),
+                          run_id: required(environment, "POSTGRESQL_ISOLATED_TEST_RUN_ID"),
+        )
+        true
+      end
+
       # Verify the database catalog before a test preparation task mutates any schema. The
       # configuration check above proves that Rails will address test-prefixed names on the
       # expected host; this check proves those names exist on the same PostgreSQL server and that
@@ -223,8 +256,8 @@ module Umaxica
         unless run_id.match?(/\A[0-9]{8}[a-z0-9]{0,12}\z/)
           raise ConfigurationError, "isolated test run id is invalid"
         end
-        unless environment.fetch("PARALLEL_WORKERS") == "1"
-          raise ConfigurationError, "isolated test run requires one worker"
+        unless Integer(required(environment, "PARALLEL_WORKERS"), 10).positive?
+          raise ConfigurationError, "isolated test worker count must be positive"
         end
 
         manifest = load_isolated_manifest!(environment)

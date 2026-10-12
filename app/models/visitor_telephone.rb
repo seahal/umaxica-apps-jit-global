@@ -34,11 +34,6 @@
 #  fk_rails_...  (visitor_telephone_status_id => visitor_telephone_statuses.id)
 #
 class VisitorTelephone < ComPrincipalRecord
-  # P3d removes identifier-owned proof; ceremony transactions own verification material.
-  self.ignored_columns += %w(
-    otp_private_key otp_counter otp_expires_at sign_up_otp_context credential_registration_otp_context
-  )
-
   include Retainable
   include Telephone
   include TelephoneDeadIdentifierHistory

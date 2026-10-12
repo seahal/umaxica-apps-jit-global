@@ -41,7 +41,7 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
     assert Avatar.exists?(avatar.id)
     assert AvatarMoniker.exists?(former_moniker.id)
     assert AvatarMoniker.exists?(current_moniker.id)
-    assert AvatarPurgeDeferral.exists?(avatar_id: avatar.id, reason_code: "retention_policy_pending")
+    assert AvatarPurgeDeferral.exists?(avatar_id: avatar.id, reason_code: "ownership_history")
   end
 
   test "rejects a retention batch size outside the bounded execution range" do

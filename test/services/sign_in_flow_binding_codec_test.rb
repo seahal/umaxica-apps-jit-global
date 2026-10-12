@@ -10,6 +10,7 @@ class SignInFlowBindingCodecTest < ActiveSupport::TestCase
       state_id: ClientSignInFlow.state_id_for("CHECKPOINT_PENDING"),
       issued_at: Time.utc(2026, 10, 10, 11, 0, 0, 123_456),
       updated_at: Time.utc(2026, 10, 10, 12, 0, 0, 123_456),
+      expires_at: Time.utc(2026, 10, 10, 13, 0, 0, 123_456),
     )
   end
 
@@ -26,6 +27,7 @@ class SignInFlowBindingCodecTest < ActiveSupport::TestCase
     assert_equal @flow.public_id, binding.flow_public_id
     assert_equal "CHECKPOINT_PENDING", binding.phase
     assert_equal @flow.issued_at.utc.iso8601(6), binding.generation
+    assert_equal @flow.expires_at.to_i, binding.expires_at
   end
 
   test "does not decode a tampered, expired, or wrong-surface binding" do
@@ -42,7 +44,8 @@ class SignInFlowBindingCodecTest < ActiveSupport::TestCase
           "s" => "org",
           "f" => @flow.public_id,
           "p" => "CHECKPOINT_PENDING",
-          "g" => @flow.issued_at.utc.iso8601(6), },
+          "g" => @flow.issued_at.utc.iso8601(6),
+          "e" => @flow.expires_at.to_i, },
         purpose: "sign_in_flow_binding",
         expires_in: -1.second,
       ),

@@ -64,6 +64,24 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     assert_equal ClientSignInFlowState::PRIMARY_PENDING, flow.reload.state_id
   end
 
+  test "show refuses a binding whose flow has expired without mutating the flow" do
+    flow = ClientSignInFlow.find_by!(
+      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
+    )
+    flow.update!(expires_at: flow.issued_at + 1.second)
+    expired_binding = SignInFlowBindingCodec.encode(
+      flow: flow, surface: "app", phase: "PRIMARY_PENDING",
+    )
+
+    travel_to(flow.expires_at + 1.second) do
+      get auth_app_sign_in_challenge_path(ri: "jp", fb: expired_binding)
+
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
+      assert_equal ClientSignInFlowState::PRIMARY_PENDING, flow.reload.state_id
+    end
+  end
+
   test "a state-changing request bound to this flow but the wrong phase halts the active flow" do
     flow = ClientSignInFlow.find_by!(
       public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,

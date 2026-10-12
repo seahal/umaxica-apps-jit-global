@@ -125,6 +125,7 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     end
 
     assert_predicate binding.reload, :redeemed?
+    passkey_binding = nil
     registry = ExternalAuthentication::ProviderRegistry
     registry.stub(:tenant_id, tenant) do
       registry.stub(:audience, audience) do
@@ -189,6 +190,9 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
           assert_equal "login.microsoftonline.com", URI.parse(captured.fetch(:uri)).host
           assert_predicate captured.fetch(:params).fetch(:code_verifier), :present?
           assert_equal 303, browser.response.status
+          passkey_binding = Rack::Utils.parse_nested_query(
+            URI.parse(browser.response.location).query.to_s,
+          ).fetch("fb")
         end
       end
     end
@@ -196,7 +200,7 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     browser.follow_redirect!
     csrf = Nokogiri::HTML(browser.response.body).at_css('meta[name="csrf-token"]')["content"]
     browser.post(
-      auth_org_sign_in_passkey_options_path(ri: "jp"),
+      auth_org_sign_in_passkey_options_path(fb: passkey_binding, ri: "jp"),
       params: { "cf-turnstile-response" => "synthetic" },
       headers: { "X-CSRF-Token" => csrf, "Origin" => origin, "Sec-Fetch-Site" => "same-origin" }, as: :json,
     )
@@ -209,7 +213,7 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     )
     assert_no_difference("OperatorToken.count") do
       browser.post(
-        auth_org_sign_in_passkey_verification_path(ri: "jp"), params: {
+        auth_org_sign_in_passkey_verification_path(fb: passkey_binding, ri: "jp"), params: {
           challenge_id: options.fetch("challenge_id"), credential: assertion,
         }, headers: { "X-CSRF-Token" => csrf, "Origin" => origin, "Sec-Fetch-Site" => "same-origin" }, as: :json,
       )

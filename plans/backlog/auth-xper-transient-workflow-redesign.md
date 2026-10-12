@@ -37,6 +37,9 @@ The discussion behind this plan is in
 
 Requested by the user on 2026-10-06. Open question; no design is accepted yet. The questions are
 listed in `adr/xper-phase-zero-bootstrap.md` under "Open item before the Preference port: Web Push".
+The same section records the user's 2026-10-11 direction that the stored opt-in is an integer code
+backed by a reference table (`0` no choice recorded, `1` deny, `2` and above allow at a delivery
+level still to be assigned) rather than a boolean.
 
 1. Decide how the Web Push feature should work: what the Experience item represents, who owns the
    opt-in, the push subscription, and delivery, which origin and Service Worker register the

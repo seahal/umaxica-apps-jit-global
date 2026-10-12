@@ -32,7 +32,7 @@ class SignUpStepGateRefusalsTest < ActiveSupport::TestCase
     cycle = ClientSignUpFlow.new(
       public_id: "birthdate-challenge-flow", step: "checkpoint", entry_method: "email",
       status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
-      completed_requirements: { "otp" => { "cleared" => true } },
+      completed_requirements: { "otp" => { "cleared" => true } }, expires_at: 15.minutes.from_now,
     )
     controller = ControllerBoundary.new(
       {}, { AuthIoKeys::Params::FLOW_BINDING => SignFlowBindingCodec.encode(flow: cycle, surface: :app) }, cycle,

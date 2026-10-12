@@ -194,7 +194,9 @@ module Auth
           )
 
           redirect_to(
-            new_auth_org_sign_in_passkey_path(pt: pt, ri: current_region_identifier),
+            new_auth_org_sign_in_passkey_path(
+              pt: pt, ri: current_region_identifier, **org_normal_sign_in_binding_params,
+            ),
             status: :see_other,
           )
         end

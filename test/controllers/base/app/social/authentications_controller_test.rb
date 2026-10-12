@@ -130,6 +130,7 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     )
 
     assert_equal 302, auth.response.status
+    fb = Rack::Utils.parse_query(URI.parse(auth.response.location).query).fetch("fb")
     assert_no_difference("Client.count") do
       auth.patch(
         auth_app_sign_up_check_google_birthdate_path(ri: "jp", fb:),
@@ -286,6 +287,7 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     )
 
     assert_equal 302, auth.response.status
+    fb = Rack::Utils.parse_query(URI.parse(auth.response.location).query).fetch("fb")
     assert_no_difference("Client.count") do
       auth.patch(
         auth_app_sign_up_check_google_birthdate_path(ri: "jp", fb:),
@@ -584,6 +586,7 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     )
 
     assert_equal 302, auth.response.status
+    fb = Rack::Utils.parse_query(URI.parse(auth.response.location).query).fetch("fb")
     assert_no_difference("Client.count") do
       auth.patch(
         auth_app_sign_up_check_google_birthdate_path(ri: "jp", fb:),
@@ -759,6 +762,7 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     )
 
     assert_equal 302, auth.response.status
+    fb = Rack::Utils.parse_query(URI.parse(auth.response.location).query).fetch("fb")
     assert_no_difference("Client.count") do
       auth.patch(
         auth_app_sign_up_check_google_birthdate_path(ri: "jp", fb:),
@@ -910,6 +914,7 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     )
 
     assert_equal 302, auth.response.status
+    fb = Rack::Utils.parse_query(URI.parse(auth.response.location).query).fetch("fb")
     assert_no_difference("Client.count") do
       auth.patch(
         auth_app_sign_up_check_google_birthdate_path(ri: "jp", fb:),
@@ -1075,6 +1080,7 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     )
 
     assert_equal 302, auth.response.status
+    fb = Rack::Utils.parse_query(URI.parse(auth.response.location).query).fetch("fb")
     assert_no_difference("Client.count") do
       auth.patch(
         auth_app_sign_up_check_google_birthdate_path(ri: "jp", fb:),

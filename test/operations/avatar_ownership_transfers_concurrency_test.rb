@@ -9,7 +9,15 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
   self.fixture_table_names = []
   self.use_transactional_tests = false
 
+  TRANSFER_DETAIL_CLASSES = [
+    AvatarEnterpriseToEnterpriseTransferDetail,
+    AvatarEnterpriseToBureauTransferDetail,
+    AvatarBureauToEnterpriseTransferDetail,
+    AvatarBureauToBureauTransferDetail,
+  ].freeze
+
   setup do
+    ParallelTestDatabaseCloner.verify_owned_worker_execution!
     ClientStatus.ensure_defaults!
     ClientVisibility.ensure_defaults!
     ClientIdentityState.ensure_defaults!
@@ -51,49 +59,41 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    @avatar = AvatarTestFactory.create!(
-      moniker: "Transfer race",
-      capability_id: AvatarCapability::NORMAL,
-      active_handle: handle,
-    )
     @handle = handle
-    AvatarOwnershipPeriod.create!(
-      avatar: @avatar,
-      owner_organization_id: @enterprise.public_id,
-      owner_surface: "app",
-      owner_collective_public_id: @enterprise.public_id,
-      avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE,
-      valid_from: Time.current,
-    )
+    AvatarRecord.transaction do
+      @avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
+        moniker: "Transfer race",
+        capability_id: AvatarCapability::NORMAL,
+        active_handle: handle,
+      )
+      AvatarOwnershipPeriod.create!(
+        avatar: @avatar,
+        owner_organization_id: @enterprise.public_id,
+        owner_surface: "app",
+        owner_collective_public_id: @enterprise.public_id,
+        avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE,
+        valid_from: @avatar.created_at,
+      )
+      AvatarEnterpriseOwnershipPeriod.create!(
+        avatar: @avatar,
+        enterprise_public_id: @enterprise.public_id,
+        valid_from: @avatar.created_at,
+      )
+    end
   end
 
   teardown do
-    if @avatar
-      AvatarOwnershipTransfer.where(avatar_id: @avatar.id).delete_all
-      GroupAvatarMembership.where(avatar_id: @avatar.id).delete_all
-      AvatarOwnershipPeriod.where(avatar_id: @avatar.id).delete_all
-      AvatarMoniker.where(avatar_id: @avatar.id).delete_all
-      Avatar.where(id: @avatar.id).delete_all
-    end
-    Handle.where(id: @handle.id).delete_all if @handle
-
-    if @bureau
-      BureauOwnership.where(bureau_id: @bureau.id).delete_all
-      BureauLifecycle.where(bureau_id: @bureau.id).delete_all
-      Bureau.where(id: @bureau.id).delete_all
-    end
+    cleanup_committed_transfer_rows!
+    # Mutable cross-DB membership/unit rows must not outlive fixture-rebuilt principal IDs.
+    PersonaMembership.where(id: @membership.id).delete_all if @membership
     if @unit
       EnterpriseUnitClosure.where(ancestor_id: @unit.id).or(
         EnterpriseUnitClosure.where(descendant_id: @unit.id),
       ).delete_all
-      PersonaMembership.where(id: @membership.id).delete_all if @membership
       EnterpriseUnit.where(id: @unit.id).delete_all
     end
-    if @enterprise
-      EnterpriseOwnership.where(enterprise_id: @enterprise.id).delete_all
-      EnterpriseLifecycle.where(enterprise_id: @enterprise.id).delete_all
-      Enterprise.where(id: @enterprise.id).delete_all
-    end
+    # Synthetic principals must not leak into later whole-family cutover inventories.
     ClientPersonaOwnership.where(client_persona_id: @persona.id).delete_all if @persona
     ClientPersonaLifecycle.where(client_persona_id: @persona.id).delete_all if @persona
     PersonaAssignment.where(persona_id: @persona.id).delete_all if @persona
@@ -103,7 +103,10 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
     Client.where(id: @client.id).delete_all if @client
   end
 
+  # Avatar, organization identities and committed histories use whole-worker cleanup.
+
   test "two independent requests cannot create multiple pending transfers for one Avatar" do
+    assert_equal 1, @avatar.enterprise_ownership_periods.current.count
     avatar_public_id = @avatar.public_id
     client_id = @client.id
     persona_public_id = @persona.public_id
@@ -153,6 +156,62 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
     assert_equal 1, states.count(:created)
     assert_equal 1, states.count { |state| %i(rejected unique_index_rejected).include?(state) }
     assert_equal 1, AvatarOwnershipTransfer.pending.where(avatar_id: @avatar.id).count
+  end
+
+  test "two independent registry requests with one key commit one reservation" do
+    avatar_public_id = @avatar.public_id
+    actor_id = @client.id
+    subject_public_id = @persona.public_id
+    target_public_id = @bureau.public_id
+    idempotency_key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a45"
+    @committed_registry_idempotency_key = idempotency_key
+    request_fingerprint = Digest::SHA256.hexdigest("registry-race")
+    ready = Queue.new
+    start = Queue.new
+
+    ActiveRecord::Base.connection_handler.clear_active_connections!
+    threads =
+      2.times.map do
+        Thread.new do
+          AvatarRecord.connection_pool.with_connection do |connection|
+            backend_pid = connection.select_value("SELECT pg_backend_pid()")
+            ready << backend_pid
+            start.pop
+            reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
+              actor: Client.find(actor_id),
+              surface: "app",
+              subject_public_id: subject_public_id,
+              avatar_public_id: avatar_public_id,
+              target_surface: "org",
+              target_collective_public_id: target_public_id,
+              idempotency_key: idempotency_key,
+              request_fingerprint: request_fingerprint,
+            )
+            [backend_pid, reservation.id]
+          rescue AvatarOwnershipTransfers::InvalidTransfer, ActiveRecord::RecordNotUnique => e
+            [backend_pid, e.class]
+          end
+        end
+      end
+
+    begin
+      pids = Timeout.timeout(5) { 2.times.map { ready.pop } }
+      2.times { start << true }
+      results = Timeout.timeout(15) { threads.map(&:value) }
+    ensure
+      threads.each do |thread|
+        thread.kill if thread.alive?
+        thread.join
+      end
+    end
+
+    assert_equal 2, pids.uniq.length
+    assert_equal 1, results.map(&:last).uniq.length
+    assert_kind_of Integer, results.first.last
+    assert_equal 1, AvatarTransferReservation.where(idempotency_key: idempotency_key).count
+    assert_equal 1, AvatarEnterpriseToBureauTransferDetail.where(
+      transfer_reservation_id: AvatarTransferReservation.find_by!(idempotency_key: idempotency_key).id,
+    ).count
   end
 
   test "group creation waits for a concurrent owner-membership revocation" do
@@ -219,6 +278,24 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
   end
 
   private
+
+  def cleanup_committed_transfer_rows!
+    return unless @avatar
+
+    AvatarRecord.connected_to(role: :writing) do
+      AvatarRecord.transaction(requires_new: true) do
+        reservation_ids = AvatarTransferReservation.where(avatar_id: @avatar.id).pluck(:id)
+        unless reservation_ids.empty?
+          TRANSFER_DETAIL_CLASSES.each do |detail_class|
+            detail_class.where(transfer_reservation_id: reservation_ids).delete_all
+          end
+          AvatarTransferReservation.where(id: reservation_ids).delete_all
+        end
+
+        AvatarOwnershipTransfer.where(avatar_id: @avatar.id).delete_all
+      end
+    end
+  end
 
   def assert_group_creation_waits_for_membership_downgrade(account_surface:, connection_owner:,
                                                            membership_class:, membership:,

@@ -138,6 +138,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
           headers: @headers
 
     assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
     assert_not_nil transaction.reload.otp_consumed_at
     assert_nil transaction.otp_verifier
@@ -299,6 +300,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                       headers: @headers
 
                 assert_response :redirect
+                @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
                 assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
                 assert_not_nil transaction.reload.otp_consumed_at
                 assert_nil transaction.otp_verifier
@@ -380,6 +382,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                       headers: @headers
 
                 assert_response :redirect
+                @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
                 assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
                 assert_not_nil transaction.reload.otp_consumed_at
                 assert_nil transaction.otp_verifier
@@ -459,6 +462,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                       headers: @headers
 
                 assert_response :redirect
+                @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
                 assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
                 assert_not_nil transaction.reload.otp_consumed_at
                 assert_nil transaction.otp_verifier
@@ -538,6 +542,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                       headers: @headers
 
                 assert_response :redirect
+                @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
                 assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
                 assert_not_nil transaction.reload.otp_consumed_at
                 assert_nil transaction.otp_verifier
@@ -682,11 +687,13 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
           headers: @headers
 
     assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
     assert_not_nil transaction.reload.otp_consumed_at
     assert_nil transaction.otp_verifier
     assert_not_nil transaction.otp_receipt_verifier
 
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
   end
 
@@ -793,6 +800,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
             headers: @headers
 
       assert_response :redirect
+      @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
       assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
       assert_not_nil transaction.reload.otp_consumed_at
       assert_nil transaction.otp_verifier
@@ -861,6 +869,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
           headers: @headers
 
     assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
     assert_not_nil transaction.reload.otp_consumed_at
     assert_nil transaction.otp_verifier

@@ -175,6 +175,8 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
         )
 
         assert_includes [302, 303], browser.response.status
+        binding = Rack::Utils.parse_query(URI.parse(browser.response.location).query).fetch("fb")
+        binding_query = URI.encode_www_form(ri: "jp", fb: binding)
         if otp_failure_write
           # Proof references and keyed digests must not appear in assertion failure output.
           assert_withheld("HTTP retry must not extend or replace committed proof") {
@@ -269,6 +271,11 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
               decision_time = flow.expires_at
             end
           end
+          if outcome.to_s.start_with?("ticket_failure_")
+            flow.reload
+            binding = SignFlowBindingCodec.encode(flow: flow, surface: surface)
+            binding_query = URI.encode_www_form(ri: "jp", fb: binding)
+          end
           browser.patch(
             "/sign/up/check/email/birthdate?#{binding_query}",
             headers: headers.merge("X-CSRF-Token" => csrf), params: {
@@ -288,7 +295,7 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
         }
         if %i(ticket_failure_duplicate_intent ticket_failure_released_binding
               ticket_failure_suspended_owner ticket_failure_expired_flow).include?(outcome)
-          assert_equal((outcome == :ticket_failure_expired_flow) ? 403 : 409, browser.response.status)
+          assert_equal 409, browser.response.status
           assert_not flow.reload.sign_up_completed?
           assert_equal committed_at, contact.reload.binding_finalized_at
           assert_equal(

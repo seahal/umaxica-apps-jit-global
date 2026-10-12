@@ -158,6 +158,45 @@ class Base::Org::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     TurnstileVerifierStub.challenge_response = nil
   end
 
+  test "owned Telephone public edit link resolves without exposing its database primary key" do
+    telephone = @operator.staff_telephones.create!(
+      raw_number: "+15558675339", confirm_policy: true, confirm_using_mfa: true,
+    )
+    get base_org_identity_telephones_url(ri: "jp", host: @host), headers: @headers
+
+    assert_response :success
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    entry = props.fetch("entries").find { |item| item.fetch("public_id") == telephone.public_id }
+
+    assert entry
+    link = entry.fetch("edit_link").fetch("href")
+
+    assert_includes link, telephone.public_id
+    get link, headers: @headers
+
+    assert_response :success
+    edit = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+
+    assert_includes edit.fetch("delete").fetch("href"), telephone.public_id
+    assert_equal telephone.number, edit.fetch("number")
+  end
+
+  test "foreign and malformed Telephone references cannot read or delete an owned credential" do
+    foreign = operators(:two).staff_telephones.create!(
+      raw_number: "+15558675338", confirm_policy: true, confirm_using_mfa: true,
+    )
+    [foreign.public_id, foreign.id.to_s, "0", "01", "not-an-id", "a" * 20, "a" * 22].each do |reference|
+      get edit_base_org_identity_telephone_url(reference, ri: "jp", host: @host), headers: @headers
+
+      assert_response :not_found
+      assert_no_difference "OperatorTelephone.count" do
+        delete base_org_identity_telephone_url(reference, ri: "jp", host: @host), headers: @headers
+      end
+      assert_response :not_found
+      assert_equal operators(:two).id, foreign.reload.staff_id
+    end
+  end
+
   test "new renders the registration form and leaves no pending registration in the session" do
     get new_base_org_identity_telephones_registration_url(ri: "jp", host: @host), headers: @headers
 

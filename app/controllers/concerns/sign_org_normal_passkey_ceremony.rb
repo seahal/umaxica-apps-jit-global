@@ -49,6 +49,7 @@ module SignOrgNormalPasskeyCeremony
     )
 
     before_action :require_org_normal_sign_in_transaction!
+    before_action :enforce_org_normal_sign_in_binding!
     before_action :start_minimum_response_budget
     after_action :enforce_minimum_response_budget
   end

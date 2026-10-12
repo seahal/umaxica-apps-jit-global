@@ -100,7 +100,7 @@ class OperatorPreference < OrgPrincipalRecord
   private
 
   def generate_public_id
-    self.public_id = Nanoid.generate(size: 21) if public_id.blank?
+    self.public_id = PublicId.generate if public_id.blank?
   end
 
   # New records get explicit non-consent defaults so a nil never reaches a

@@ -18,6 +18,77 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @operator_token)
   end
 
+  test "registry request transport replays the same operation for a stable idempotency key" do
+    grant_step_up!("avatar_transfer_request")
+    key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a46"
+    headers = base_browser_headers.merge("Idempotency-Key" => key)
+
+    post base_app_avatar_ownership_transfers_url(host: @host, ri: "jp"),
+         params: request_params,
+         headers: headers,
+         as: :json
+
+    assert_response :success
+    first = response.parsed_body
+
+    assert_equal "registry", first.fetch("transfer_kind")
+    assert_equal "pending", first.fetch("status")
+
+    post base_app_avatar_ownership_transfers_url(host: @host, ri: "jp"),
+         params: request_params,
+         headers: headers,
+         as: :json
+
+    assert_response :success
+    second = response.parsed_body
+
+    assert_equal first.fetch("transfer_public_id"), second.fetch("transfer_public_id")
+    assert_equal 1, AvatarTransferReservation.where(idempotency_key: key).count
+  end
+
+  test "registry accept transport completes an explicit registry reservation" do
+    result = AvatarProvisioning::Create.call(
+      actor: @operator,
+      subject_type: :agent,
+      subject: @target.account,
+      avatar_params: { moniker: "Bureau source" },
+      handle_params: { handle: "registry-http-#{SecureRandom.hex(4)}" },
+      owner_surface: "org",
+      owner_collective_public_id: @target.collective.public_id,
+    )
+
+    assert_predicate result, :success?, result.errors.inspect
+
+    reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
+      actor: @operator,
+      surface: "org",
+      subject_public_id: @target.account.public_id,
+      avatar_public_id: result.avatar.public_id,
+      target_surface: "app",
+      target_collective_public_id: @source.collective.public_id,
+      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a47",
+      request_fingerprint: Digest::SHA256.hexdigest("registry-http-accept"),
+    )
+
+    grant_step_up!("avatar_transfer_accept")
+    post base_app_accept_avatar_ownership_transfer_url(
+      reservation.public_id,
+      host: @host,
+      ri: "jp",
+    ),
+         params: { transfer_kind: "registry" },
+         headers: base_browser_headers,
+         as: :json
+
+    assert_response :success
+    body = response.parsed_body
+
+    assert_equal "registry", body.fetch("transfer_kind")
+    assert_equal "accepted", body.fetch("status")
+    assert_equal "app", result.avatar.reload.current_ownership_period.owner_surface
+    assert_equal @source.collective.public_id, result.avatar.current_ownership_period.owner_collective_public_id
+  end
+
   test "request requires its own Step-Up scope and preserves the selected Avatar" do
     selected_avatar_id = @client_token.reload.selected_avatar_public_id
     begin
@@ -1793,6 +1864,76 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   private
+
+  def grant_step_up!(scope)
+    @client_token.update!(
+      last_step_up_at: Time.current,
+      last_step_up_scope: scope,
+      last_step_up_aal: nil,
+      last_step_up_method: "passkey",
+      last_step_up_phishing_resistant: true,
+      last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up-credential",
+      last_step_up_full_reauthentication: false,
+      last_step_up_session_public_id: @client_token.public_id,
+      last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:app",
+    )
+  end
+
+  def base_browser_headers
+    rp_headers = as_user_headers(@client, host: @host, session_public_id: @client_token.public_id)
+    rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+    rp_client = OidcClientRegistry.find!("base-app-ww")
+    rp_key = [rp_client.client_id, rp_token.public_id]
+    @base_browser_rp_credentials ||= {}
+    issue_base_browser_credentials!(rp_headers, rp_token, rp_client, rp_key)
+    access, refresh = @base_browser_rp_credentials.fetch(rp_key)
+    cookie = [
+      rp_headers.fetch("Cookie"),
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access)}",
+      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(refresh)}",
+    ].join("; ")
+    rp_headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
+  end
+
+  def issue_base_browser_credentials!(rp_headers, rp_token, rp_client, rp_key)
+    return if @base_browser_rp_credentials[rp_key] || !rp_token.currently_usable?
+    return if rp_token.device_session_id && ClientRpSession.exists?(
+      device_session_id: rp_token.device_session_id,
+      oidc_client_id: rp_client.client_id,
+      revoked_at: nil,
+    )
+
+    rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+    rp_now = Time.current
+    rp_session = ClientRpSession.create!(
+      client_token: rp_token,
+      oidc_client_id: rp_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: rp_now,
+      refresh_token_expires_at: rp_now + 10.minutes,
+    )
+    rp_access = AuthenticationTokenService.encode(
+      rp_token.user,
+      host: rp_headers.fetch("Host"),
+      resource_type: "client",
+      session_public_id: rp_token.public_id,
+      base_session_public_id: rp_token.public_id,
+      oidc_sid: rp_session.public_id,
+      oidc_jti: rp_session.oidc_jti,
+      expires_at: rp_now + 10.minutes,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_client(rp_client),
+      audiences: [rp_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+      subject: OidcSubject.for(rp_token.user, resource_type: "client"),
+      client_id: rp_client.client_id,
+    )
+    @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+  end
 
   def request_params
     {

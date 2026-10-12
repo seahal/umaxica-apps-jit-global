@@ -70,9 +70,6 @@ class GroupAvatarMembershipPolicyTest < ActiveSupport::TestCase
   end
 
   test "a concrete Avatar grant authorizes a member through the public policy" do
-    @bootstrap.account.persona_memberships
-      .find_by!(enterprise: @bootstrap.collective)
-      .update!(membership_kind_id: PersonaMembershipKind::MEMBER)
     period = @bootstrap.avatar.reload.enterprise_ownership_periods.current.first
     %w(avatar.group.attach avatar.group.manage avatar.group.detach).each do |capability|
       AvatarAccessGrants::IssueOperation.call(
@@ -82,6 +79,10 @@ class GroupAvatarMembershipPolicyTest < ActiveSupport::TestCase
         granted_by_actor_public_id: @user.public_id,
       )
     end
+
+    @bootstrap.account.persona_memberships
+      .find_by!(enterprise: @bootstrap.collective)
+      .update!(membership_kind_id: PersonaMembershipKind::MEMBER)
 
     policy = GroupAvatarMembershipPolicy.new(new_membership(avatar: @bootstrap.avatar), user: @user)
 

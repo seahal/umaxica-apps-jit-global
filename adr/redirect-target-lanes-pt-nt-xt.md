@@ -67,3 +67,10 @@ must go through the `xt` facade.
 
 The implementation adds an audit command and regression tests so new direct parameter redirects and
 new direct `allow_other_host: true` uses fail review.
+
+## Amendment Reference (2026-10-12)
+
+The statement above that Jump-link redirects remain a reviewed external redirect feature is narrowed
+by the "Deprecation of Jump RT External Destinations" amendment in
+`adr/secure-jump-link-redirector.md`: Jump RT external destinations are deprecated for new use, Jump
+RT carries approved first-party cross-origin handoffs, and `xt` owns external website destinations.

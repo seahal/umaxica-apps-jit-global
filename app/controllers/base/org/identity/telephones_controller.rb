@@ -33,7 +33,7 @@ module Base
         end
 
         def edit
-          @staff_telephone = current_operator.staff_telephones.find(params.expect(:id))
+          @staff_telephone = owned_telephone_from_route!
           authorize!(@staff_telephone)
           render inertia: true, props: edit_page_props
         end
@@ -54,7 +54,7 @@ module Base
         end
 
         def destroy
-          telephone = current_operator.staff_telephones.find(params.expect(:id))
+          telephone = owned_telephone_from_route!
           authorize!(telephone)
 
           current_operator.with_lock do
@@ -68,6 +68,21 @@ module Base
         end
 
         private
+
+        def owned_telephone_from_route!
+          reference = params.expect(:id)
+          column =
+            if reference.is_a?(String) && reference.match?(/\A[A-Za-z0-9_-]{21}\z/)
+              :public_id
+            elsif reference.is_a?(String) && reference.match?(/\A[1-9][0-9]{0,18}\z/)
+              # ID-3b: existing numeric URLs remain a bounded migration contract.
+              # Classification is explicit; a failed public lookup never retries by PK.
+              :id
+            else
+              raise ActiveRecord::RecordNotFound
+            end
+          current_operator.staff_telephones.find_by!(column => reference)
+        end
 
         def render_new_failure
           render inertia: "base/org/identity/telephones/new",
@@ -133,7 +148,7 @@ module Base
             number: @staff_telephone.number,
             delete: {
               label: t("sign.org.settings.telephone.index.delete"),
-              href: base_org_identity_telephone_path(@staff_telephone.id, ri: params[:ri]),
+              href: base_org_identity_telephone_path(@staff_telephone, ri: params[:ri]),
               confirm: t("sign.org.settings.telephone.index.delete_confirm"),
             },
             cancel_link: {

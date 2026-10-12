@@ -25,7 +25,8 @@ class TelephoneTest < ActiveSupport::TestCase
     assert_match(/\A[0-9]{6}\z/, @code)
     assert_predicate @transaction.otp_verifier, :present?
     assert_predicate @transaction.otp_generation, :present?
-    assert_equal @telephone.id.to_s, @transaction.telephone_candidate_ref
+    assert_equal @telephone.public_id, @transaction.telephone_candidate_ref
+    assert_not_equal @telephone.id.to_s, @transaction.telephone_candidate_ref
     assert_operator @transaction.otp_expires_at, :<=, @transaction.expires_at
     assert_operator @transaction.otp_expires_at, :>, @transaction.created_at
     assert_equal 0, @telephone.otp_attempts_count

@@ -221,7 +221,14 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     checkpoint_query = Rack::Utils.parse_query(checkpoint.query)
 
     assert_equal "jp", checkpoint_query.fetch("ri")
-    assert_equal bound_flow, SignFlowBindingCodec.decode(checkpoint_query.fetch("fb"))
+    checkpoint_binding = SignFlowBindingCodec.decode(checkpoint_query.fetch("fb"))
+    current_flow = current_sign_up_flow(user_email).reload
+    assert_equal bound_flow.flow_public_id, checkpoint_binding.flow_public_id
+    assert_equal current_flow.public_id, checkpoint_binding.flow_public_id
+    assert_equal current_flow.step, checkpoint_binding.phase
+    assert_equal current_flow.checkpoint_version, checkpoint_binding.generation
+    assert_equal current_flow.expires_at.to_i, checkpoint_binding.expires_at
+    assert_not_equal bound_flow, checkpoint_binding
     assert_nil flash[:notice]
   end
 
@@ -977,7 +984,8 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
           headers: default_headers
 
     # Should redirect directly to the decoded pt destination
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
+    flow = ClientSignUpFlow.find_by!(public_id: SignFlowBindingCodec.decode(flow_binding).flow_public_id)
+    flow_binding = current_sign_up_binding_from_redirect!(SignFlowBindingCodec.decode(flow_binding), flow: flow)
   end
 
   # Transaction Tests for Client Creation
@@ -1028,7 +1036,8 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
           headers: default_headers
 
     # Verify success response
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
+    flow = ClientSignUpFlow.find_by!(public_id: SignFlowBindingCodec.decode(flow_binding).flow_public_id)
+    flow_binding = current_sign_up_binding_from_redirect!(SignFlowBindingCodec.decode(flow_binding), flow: flow)
 
     # Verify Client count unchanged (pending user was updated, not created)
     assert_equal initial_user_count, Client.count
@@ -1092,7 +1101,8 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
           headers: default_headers
 
     # Verify success response
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
+    flow = ClientSignUpFlow.find_by!(public_id: SignFlowBindingCodec.decode(flow_binding).flow_public_id)
+    flow_binding = current_sign_up_binding_from_redirect!(SignFlowBindingCodec.decode(flow_binding), flow: flow)
 
     # Sign-up completion and sign-in audit are delayed until checkpoint finalization.
     assert_equal initial_audit_count, ClientChronicle.count
@@ -1137,7 +1147,8 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
           },
           headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
+    flow = ClientSignUpFlow.find_by!(public_id: SignFlowBindingCodec.decode(flow_binding).flow_public_id)
+    flow_binding = current_sign_up_binding_from_redirect!(SignFlowBindingCodec.decode(flow_binding), flow: flow)
     assert_equal initial_audit_count, ClientChronicle.count
   end
 
@@ -1265,7 +1276,9 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
           params: { user_email: { pass_code: pass_code } },
           headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding)
+    flow = ClientSignUpFlow.find_by!(public_id: SignFlowBindingCodec.decode(flow_binding).flow_public_id)
+    flow_binding = current_sign_up_binding_from_redirect!(SignFlowBindingCodec.decode(flow_binding), flow: flow,
+                                                           path_helper: :auth_app_sign_up_check_email_birthdate_url)
 
     get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
 
@@ -1521,7 +1534,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
           },
           headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
+    flow_binding = current_sign_up_binding_from_redirect!(SignFlowBindingCodec.decode(flow_binding), flow: cycle)
     assert_equal "checkpoint", cycle.reload.step
   end
 
@@ -1560,7 +1573,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
           },
           headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
+    flow_binding = current_sign_up_binding_from_redirect!(SignFlowBindingCodec.decode(flow_binding), flow: cycle)
     assert_nil flash[:notice]
 
     get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
@@ -1607,7 +1620,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
           },
           headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
+    flow_binding = current_sign_up_binding_from_redirect!(SignFlowBindingCodec.decode(flow_binding), flow: cycle)
 
     birthdate_params = {
       requirement: "birthdate",
@@ -1670,6 +1683,8 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
           params: { user_email: { pass_code: pass_code } },
           headers: default_headers
 
+    flow_binding = current_sign_up_binding_from_redirect!(SignFlowBindingCodec.decode(flow_binding), flow: cycle)
+
     get auth_app_sign_up_guard_email_url(ri: "jp"), headers: default_headers
     get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
 
@@ -1715,6 +1730,8 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
           params: { user_email: { pass_code: pass_code } },
           headers: default_headers
+
+    flow_binding = current_sign_up_binding_from_redirect!(SignFlowBindingCodec.decode(flow_binding), flow: cycle)
 
     get auth_app_sign_up_guard_email_url(ri: "jp"), headers: default_headers
     get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
@@ -1770,7 +1787,8 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
           params: { :user_email => { pass_code: pass_code }, "cf-turnstile-response" => "test" },
           headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding)
+    flow_binding = current_sign_up_binding_from_redirect!(SignFlowBindingCodec.decode(flow_binding), flow: cycle,
+                                                          path_helper: :auth_app_sign_up_check_email_birthdate_url)
 
     travel_to Time.zone.local(2024, 2, 29, 12, 0, 0) do
       get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
@@ -2428,6 +2446,25 @@ class Auth::App::Sign::Up::EmailsControllerTest
   PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
+
+  # A phase-bound redirect carries a fresh capability for the phase that was just reached. Keep
+  # the assertions on the public redirect boundary while checking that the token still names the
+  # same flow and now matches its authoritative phase, generation, and expiry.
+  def current_sign_up_binding_from_redirect!(old_binding, flow:, path_helper: :auth_app_sign_up_check_email_birthdate_path)
+    target = URI.parse(response.location)
+    assert_equal URI.parse(public_send(path_helper, ri: "jp")).path, target.path
+    query = Rack::Utils.parse_query(target.query)
+    binding = SignFlowBindingCodec.decode(query.fetch("fb"))
+    current_flow = flow.reload
+
+    assert_equal old_binding.flow_public_id, binding.flow_public_id
+    assert_equal current_flow.public_id, binding.flow_public_id
+    assert_equal current_flow.step, binding.phase
+    assert_equal current_flow.checkpoint_version, binding.generation
+    assert_equal current_flow.expires_at.to_i, binding.expires_at
+    assert_not_equal old_binding, binding
+    query.fetch("fb")
+  end
 
   def configured_host(surface_name)
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host

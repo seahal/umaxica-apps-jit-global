@@ -47,11 +47,7 @@ class GroupAvatarMembershipsTest < ActiveSupport::TestCase
 
   test "concrete Avatar grants authorize a non-owner member for group operations" do
     context = app_context
-    context.fetch(:bootstrap).account.persona_memberships
-      .find_by!(enterprise: context.fetch(:bootstrap).collective)
-      .update!(membership_kind_id: PersonaMembershipKind::MEMBER)
     period = context.fetch(:avatar).reload.enterprise_ownership_periods.current.first
-
     %w(avatar.group.attach avatar.group.manage avatar.group.detach).each do |capability|
       AvatarAccessGrants::IssueOperation.call(
         ownership_period: period,
@@ -60,6 +56,10 @@ class GroupAvatarMembershipsTest < ActiveSupport::TestCase
         granted_by_actor_public_id: context.fetch(:actor).public_id,
       )
     end
+
+    context.fetch(:bootstrap).account.persona_memberships
+      .find_by!(enterprise: context.fetch(:bootstrap).collective)
+      .update!(membership_kind_id: PersonaMembershipKind::MEMBER)
 
     membership = GroupAvatarMemberships::Attach.call(**attach_arguments(context))
     GroupAvatarMemberships::Reorder.call(**authorization_arguments(context).merge(membership: membership), position: 2)

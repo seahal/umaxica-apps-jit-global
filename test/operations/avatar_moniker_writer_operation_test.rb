@@ -132,8 +132,10 @@ end
 
 class AvatarMonikerWriterConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
+  self.fixture_table_names = []
 
   setup do
+    ParallelTestDatabaseCloner.verify_owned_worker_execution!
     AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)
     HandleStatus.ensure_defaults!
     @handle = Handle.create!(
@@ -142,20 +144,26 @@ class AvatarMonikerWriterConcurrencyTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    @avatar = AvatarTestFactory.create!(
-      moniker: "Initial",
-      capability: AvatarCapability.find(AvatarCapability::NORMAL),
-      active_handle: @handle,
-    )
+    organization = Enterprise.create!(name: "Moniker race owner", title: "MonOwner")
+    AvatarRecord.transaction do
+      @avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
+        moniker: "Initial",
+        capability: AvatarCapability.find(AvatarCapability::NORMAL),
+        active_handle: @handle,
+      )
+      AvatarEnterpriseOwnershipPeriod.create!(
+        avatar: @avatar,
+        enterprise_public_id: organization.public_id,
+        valid_from: @avatar.created_at,
+      )
+    end
   end
 
-  teardown do
-    AvatarMoniker.where(avatar_id: @avatar.id).delete_all
-    Avatar.where(id: @avatar.id).delete_all
-    Handle.where(id: @handle.id).delete_all
-  end
+  # Committed histories remain intact until the owned worker database is removed.
 
   test "independent connections serialize concurrent renames without duplicate current rows" do
+    assert_equal 1, @avatar.enterprise_ownership_periods.current.count
     ready = Queue.new
     start = Queue.new
     avatar_id = @avatar.id

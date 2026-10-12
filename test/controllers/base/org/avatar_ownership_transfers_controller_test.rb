@@ -250,6 +250,52 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     end
   end
 
+  test "registry accept transport completes an explicit registry reservation" do
+    source_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    source = BaseSelectorBootstrapAuthority.call(surface: :app, principal: source_client)
+    source.avatar.current_avatar_persona_binding.revoke!(force: true)
+    source_avatar_result = AvatarProvisioning::Create.call(
+      actor: source_client,
+      subject_type: :persona,
+      subject: source.account,
+      avatar_params: { moniker: "Enterprise src" },
+      handle_params: { handle: "registry-org-http-#{SecureRandom.hex(4)}" },
+      owner_surface: "app",
+      owner_collective_public_id: source.collective.public_id,
+    )
+
+    assert_predicate source_avatar_result, :success?, source_avatar_result.errors.inspect
+    reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
+      actor: source_client,
+      surface: "app",
+      subject_public_id: source.account.public_id,
+      avatar_public_id: source_avatar_result.avatar.public_id,
+      target_surface: "org",
+      target_collective_public_id: @source.collective.public_id,
+      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a48",
+      request_fingerprint: Digest::SHA256.hexdigest("registry-org-http-accept"),
+    )
+
+    grant_step_up!("avatar_transfer_accept")
+    post base_org_accept_avatar_ownership_transfer_url(
+      reservation.public_id,
+      host: @host,
+      ri: "jp",
+    ),
+         params: { transfer_kind: "registry" },
+         headers: base_browser_headers,
+         as: :json
+
+    assert_response :success
+    body = response.parsed_body
+
+    assert_equal "registry", body.fetch("transfer_kind")
+    assert_equal "accepted", body.fetch("status")
+    assert_equal "org", source_avatar_result.avatar.reload.current_ownership_period.owner_surface
+    assert_equal @source.collective.public_id,
+                 source_avatar_result.avatar.current_ownership_period.owner_collective_public_id
+  end
+
   private
 
   def select_source_avatar!
@@ -278,5 +324,59 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:org",
     )
+  end
+
+  def base_browser_headers
+    rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @token.public_id)
+    rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+    rp_client = OidcClientRegistry.find!("base-org-ww")
+    rp_key = [rp_client.client_id, rp_token.public_id]
+    @base_browser_rp_credentials ||= {}
+    issue_base_browser_credentials!(rp_headers, rp_token, rp_client, rp_key)
+    access, refresh = @base_browser_rp_credentials.fetch(rp_key)
+    cookie = [
+      rp_headers.fetch("Cookie"),
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access)}",
+      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(refresh)}",
+    ].join("; ")
+    rp_headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
+  end
+
+  def issue_base_browser_credentials!(rp_headers, rp_token, rp_client, rp_key)
+    return if @base_browser_rp_credentials[rp_key] || !rp_token.currently_usable?
+    return if rp_token.device_session_id && OperatorRpSession.exists?(
+      device_session_id: rp_token.device_session_id,
+      oidc_client_id: rp_client.client_id,
+      revoked_at: nil,
+    )
+
+    rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+    rp_now = Time.current
+    rp_session = OperatorRpSession.create!(
+      operator_token: rp_token,
+      oidc_client_id: rp_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: rp_now,
+      refresh_token_expires_at: rp_now + 10.minutes,
+    )
+    rp_access = AuthenticationTokenService.encode(
+      rp_token.staff,
+      host: rp_headers.fetch("Host"),
+      resource_type: "operator",
+      session_public_id: rp_token.public_id,
+      base_session_public_id: rp_token.public_id,
+      oidc_sid: rp_session.public_id,
+      oidc_jti: rp_session.oidc_jti,
+      expires_at: rp_now + 10.minutes,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_client(rp_client),
+      audiences: [rp_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+      subject: OidcSubject.for(rp_token.staff, resource_type: "operator"),
+      client_id: rp_client.client_id,
+    )
+    @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
   end
 end

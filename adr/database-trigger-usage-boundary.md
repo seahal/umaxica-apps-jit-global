@@ -137,6 +137,13 @@ asserts this set exactly:
   one finite close of the open period is permitted, with SQLSTATE `45000`.
 - `avatar_enterprise_ownership_periods_no_truncate` and
   `avatar_bureau_ownership_periods_no_truncate` reject TRUNCATE with SQLSTATE `45000`.
+- `avatar_initial_concrete_owner_required` is a deferred `AFTER INSERT` constraint trigger on
+  `avatars`. It rejects an Avatar whose same-transaction concrete Enterprise/Bureau period set has
+  no row, more than one current row, or a first `valid_from` different from `avatars.created_at`.
+  It raises SQLSTATE `23514` with the named constraint and performs no writes, owner selection,
+  notifications, or audit side effects. `test/models/avatar_concrete_ownership_period_test.rb`
+  proves the direct SQL/real-COMMIT refusal and the absence of the committed Avatar; the reversible
+  migration is `db/avatars_migrate/20261011212119_enforce_avatar_initial_concrete_ownership.rb`.
 - `avatar_transfer_reservations_cardinality` and the four
   `avatar_transfer_detail_{ee,eb,be,bb}_cardinality` deferred constraint triggers require one
   concrete detail of the registry's declared family at commit. They reject orphan or multiple detail
@@ -147,15 +154,42 @@ asserts this set exactly:
   require each concrete detail's source ownership period to belong to the same Avatar as its
   registry reservation. They raise SQLSTATE `23514` and do not rewrite rows or choose an owner.
 
-The ownership-integrity triggers above fire on ownership-period writes, not Avatar-only INSERT. They
-therefore do not yet prove the required rejection of ownerless Avatar creation. A separately
-verified creation guard and writer preparation remain necessary within the existing D-3/D-4
-boundary. Finite start-time protection uses declarative CHECK constraints rather than expanding the
-trigger set. These observations do not relax the approved invariants or authorize additional SQL.
+The ownership-integrity triggers above fire on ownership-period writes, not Avatar-only INSERT. The
+separately attached `avatar_initial_concrete_owner_required` creation guard now covers that Avatar
+boundary and has been verified through a direct SQL real-COMMIT refusal in a run-owned disposable
+catalog. Writer preparation and retained-data cutover remain separate obligations within the
+existing D-3/D-4 boundary. Finite start-time protection uses declarative CHECK constraints rather
+than expanding the trigger set. These observations do not relax the approved invariants or authorize
+additional SQL.
 
 These triggers are created and attached by the same reversible Avatar migrations that create their
 tables. Their execution and direct-SQL rejection are tested against disposable PostgreSQL catalogs;
 no production or shared-database trigger change is authorized by this note.
+
+## Approved Avatar legacy-writer cutover barrier
+
+The Avatar transition uses a singleton `avatar_ownership_cutovers` marker only after an
+independent operational inventory has shown that the concrete ownership reader is complete and
+all legacy writers are quiesced. Before that marker exists, the legacy ownership-period,
+ownership-transfer and Group-ownership-period tables remain writable so the staged migration can
+finish. The marker itself is a logged, finite, singleton row and is immutable after insertion.
+
+Once the marker exists, named BEFORE triggers reject INSERT, UPDATE, DELETE and TRUNCATE on those
+three legacy tables with SQLSTATE `55006` and the `avatar_legacy_owner_write_barrier` constraint
+name. The triggers do not rewrite rows, migrate data, or silently skip a statement. The marker has
+separate mutation and TRUNCATE guards with the same SQLSTATE and the
+`avatar_ownership_cutover_immutable` constraint name. The exact trigger set is asserted by
+`test/models/enforcement_triggers_test.rb`, and
+`test/models/avatar_ownership_cutover_barrier_test.rb` observes the barrier through direct SQL
+after a real marker transition while also proving legacy writes remain possible before it.
+
+The reversible DDL is in
+`db/avatars_migrate/20261011220000_add_avatar_ownership_cutover_barrier.rb`; the follow-up
+`20261011220500_make_avatar_ownership_cutover_logged.rb` repairs Rails test-mode table logging
+without changing applied migration history. Establishing the marker is an explicit operational
+step (`AvatarOwnershipCutoverOperation`) and is never performed automatically by a migration or
+request path. Production cutover, physical legacy-table removal and role-permission changes remain
+outside this implementation.
 
 ## Approved ORG Telephone permanent-identity exception
 

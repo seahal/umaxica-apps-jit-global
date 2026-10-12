@@ -39,6 +39,15 @@ COMMENT ON EXTENSION citext IS 'data type for case-insensitive character strings
 
 
 --
+-- Name: enforce_avatar_initial_concrete_owner(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_avatar_initial_concrete_owner() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ DECLARE period_count integer; current_count integer; first_valid_from timestamptz; BEGIN WITH periods AS ( SELECT valid_from, valid_to FROM avatar_enterprise_ownership_periods WHERE avatar_id = NEW.id UNION ALL SELECT valid_from, valid_to FROM avatar_bureau_ownership_periods WHERE avatar_id = NEW.id ) SELECT count(*), count(*) FILTER (WHERE valid_to = 'infinity'::timestamptz), min(valid_from) INTO period_count, current_count, first_valid_from FROM periods; IF period_count = 0 OR current_count <> 1 OR first_valid_from IS DISTINCT FROM NEW.created_at THEN RAISE EXCEPTION 'Avatar % must be created with one concrete ownership period', NEW.id USING ERRCODE = '23514', CONSTRAINT = 'avatar_initial_concrete_owner_required'; END IF; RETURN NULL; END; $$;
+
+
+--
 -- Name: enforce_avatar_transfer_detail_cardinality(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -72,6 +81,24 @@ CREATE FUNCTION public.enforce_concrete_avatar_ownership_period_integrity() RETU
 CREATE FUNCTION public.guard_concrete_avatar_ownership_period_history() RETURNS trigger
     LANGUAGE plpgsql
     AS $$ BEGIN IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'closed Avatar ownership history is immutable' USING ERRCODE = '45000'; END IF; IF (to_jsonb(OLD) - 'valid_to' - 'updated_at') IS DISTINCT FROM (to_jsonb(NEW) - 'valid_to' - 'updated_at') OR OLD.valid_to <> 'infinity'::timestamptz OR NEW.valid_to <= NEW.valid_from OR NEW.valid_to = 'infinity'::timestamptz THEN RAISE EXCEPTION 'Avatar ownership history may only close its current period once' USING ERRCODE = '45000'; END IF; RETURN NEW; END; $$;
+
+
+--
+-- Name: prevent_avatar_legacy_owner_write(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prevent_avatar_legacy_owner_write() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN IF EXISTS (SELECT 1 FROM avatar_ownership_cutovers WHERE id = 1) THEN RAISE EXCEPTION 'legacy Avatar ownership writes are disabled after cutover' USING ERRCODE = '55006', CONSTRAINT = 'avatar_legacy_owner_write_barrier'; END IF; IF TG_LEVEL = 'STATEMENT' THEN RETURN NULL; END IF; RETURN COALESCE(NEW, OLD); END; $$;
+
+
+--
+-- Name: prevent_avatar_ownership_cutover_mutation(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prevent_avatar_ownership_cutover_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN RAISE EXCEPTION 'Avatar ownership cutover marker is immutable' USING ERRCODE = '55006', CONSTRAINT = 'avatar_ownership_cutover_immutable'; END; $$;
 
 
 --
@@ -259,6 +286,7 @@ CREATE TABLE public.avatar_bureau_ownership_periods (
     valid_to timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_avatar_bureau_ownership_periods_finite_start CHECK (isfinite(valid_from)),
     CONSTRAINT chk_avatar_bureau_ownership_periods_owner_nonblank CHECK ((((bureau_public_id)::text <> ''::text) AND ((bureau_public_id)::text ~ '[^[:space:]]'::text))),
     CONSTRAINT chk_avatar_bureau_ownership_periods_strict_interval CHECK ((valid_from < valid_to))
 );
@@ -402,6 +430,7 @@ CREATE TABLE public.avatar_enterprise_ownership_periods (
     valid_to timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_avatar_enterprise_ownership_periods_finite_start CHECK (isfinite(valid_from)),
     CONSTRAINT chk_avatar_enterprise_ownership_periods_owner_nonblank CHECK ((((enterprise_public_id)::text <> ''::text) AND ((enterprise_public_id)::text ~ '[^[:space:]]'::text))),
     CONSTRAINT chk_avatar_enterprise_ownership_periods_strict_interval CHECK ((valid_from < valid_to))
 );
@@ -908,6 +937,19 @@ CREATE SEQUENCE public.avatar_mutes_id_seq
 --
 
 ALTER SEQUENCE public.avatar_mutes_id_seq OWNED BY public.avatar_mutes.id;
+
+
+--
+-- Name: avatar_ownership_cutovers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.avatar_ownership_cutovers (
+    id bigint NOT NULL,
+    cutover_at timestamp(6) with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_avatar_ownership_cutovers_singleton CHECK (((id = 1) AND isfinite(cutover_at)))
+);
 
 
 --
@@ -2660,6 +2702,14 @@ ALTER TABLE ONLY public.avatar_mutes
 
 
 --
+-- Name: avatar_ownership_cutovers avatar_ownership_cutovers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_ownership_cutovers
+    ADD CONSTRAINT avatar_ownership_cutovers_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: avatar_ownership_periods avatar_ownership_periods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4035,6 +4085,69 @@ CREATE TRIGGER avatar_enterprise_ownership_periods_no_truncate BEFORE TRUNCATE O
 
 
 --
+-- Name: avatar_group_ownership_periods avatar_group_ownership_periods_legacy_truncate_barrier; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_group_ownership_periods_legacy_truncate_barrier BEFORE TRUNCATE ON public.avatar_group_ownership_periods FOR EACH STATEMENT EXECUTE FUNCTION public.prevent_avatar_legacy_owner_write();
+
+
+--
+-- Name: avatar_group_ownership_periods avatar_group_ownership_periods_legacy_write_barrier; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_group_ownership_periods_legacy_write_barrier BEFORE INSERT OR DELETE OR UPDATE ON public.avatar_group_ownership_periods FOR EACH ROW EXECUTE FUNCTION public.prevent_avatar_legacy_owner_write();
+
+
+--
+-- Name: avatars avatar_initial_concrete_owner_required; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_initial_concrete_owner_required AFTER INSERT ON public.avatars DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_avatar_initial_concrete_owner();
+
+
+--
+-- Name: avatar_ownership_cutovers avatar_ownership_cutovers_immutability; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_ownership_cutovers_immutability BEFORE DELETE OR UPDATE ON public.avatar_ownership_cutovers FOR EACH ROW EXECUTE FUNCTION public.prevent_avatar_ownership_cutover_mutation();
+
+
+--
+-- Name: avatar_ownership_cutovers avatar_ownership_cutovers_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_ownership_cutovers_no_truncate BEFORE TRUNCATE ON public.avatar_ownership_cutovers FOR EACH STATEMENT EXECUTE FUNCTION public.prevent_avatar_ownership_cutover_mutation();
+
+
+--
+-- Name: avatar_ownership_periods avatar_ownership_periods_legacy_truncate_barrier; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_ownership_periods_legacy_truncate_barrier BEFORE TRUNCATE ON public.avatar_ownership_periods FOR EACH STATEMENT EXECUTE FUNCTION public.prevent_avatar_legacy_owner_write();
+
+
+--
+-- Name: avatar_ownership_periods avatar_ownership_periods_legacy_write_barrier; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_ownership_periods_legacy_write_barrier BEFORE INSERT OR DELETE OR UPDATE ON public.avatar_ownership_periods FOR EACH ROW EXECUTE FUNCTION public.prevent_avatar_legacy_owner_write();
+
+
+--
+-- Name: avatar_ownership_transfers avatar_ownership_transfers_legacy_truncate_barrier; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_ownership_transfers_legacy_truncate_barrier BEFORE TRUNCATE ON public.avatar_ownership_transfers FOR EACH STATEMENT EXECUTE FUNCTION public.prevent_avatar_legacy_owner_write();
+
+
+--
+-- Name: avatar_ownership_transfers avatar_ownership_transfers_legacy_write_barrier; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_ownership_transfers_legacy_write_barrier BEFORE INSERT OR DELETE OR UPDATE ON public.avatar_ownership_transfers FOR EACH ROW EXECUTE FUNCTION public.prevent_avatar_legacy_owner_write();
+
+
+--
 -- Name: avatar_bureau_to_bureau_transfer_details avatar_transfer_detail_bb_cardinality; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -4607,6 +4720,12 @@ ALTER TABLE ONLY public.client_avatar_deletions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261012130000'),
+('20261011220500'),
+('20261011220000'),
+('20261011212119'),
+('20261011041103'),
+('20261011041046'),
 ('20261010180000'),
 ('20261010170006'),
 ('20261010170005'),

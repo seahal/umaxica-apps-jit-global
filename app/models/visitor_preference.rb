@@ -104,7 +104,7 @@ class VisitorPreference < ComPrincipalRecord
   private
 
   def generate_public_id
-    self.public_id = Nanoid.generate(size: 21) if public_id.blank?
+    self.public_id = PublicId.generate if public_id.blank?
   end
 
   def set_defaults

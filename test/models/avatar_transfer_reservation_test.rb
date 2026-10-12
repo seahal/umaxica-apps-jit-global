@@ -12,6 +12,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
   test "a concrete detail completes one transfer reservation" do
     AvatarRecord.transaction do
       avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
         moniker: "Transfer reg",
         capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
         active_handle: Handle.create!(
@@ -150,6 +151,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
         ),
       )
       second_avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
         moniker: "Foreign source",
         capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
         active_handle: Handle.create!(
@@ -186,6 +188,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
   test "same canonical idempotency request returns the existing reservation" do
     AvatarRecord.transaction do
       avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
         moniker: "Idempotent",
         capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
         active_handle: Handle.create!(
@@ -218,6 +221,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
   test "reservation records the requested instant and five-day expiry" do
     AvatarRecord.transaction do
       avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
         moniker: "Timed registry",
         capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
         active_handle: Handle.create!(handle: "timed-registry-#{SecureRandom.hex(4)}", cooldown_until: Time.current),
@@ -286,6 +290,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
     AvatarRecord.transaction do
       requested_at = Time.utc(2026, 10, 1, 12, 30, 0)
       avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
         moniker: "Expire",
         capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
         active_handle: Handle.create!(handle: "expire-registry-#{SecureRandom.hex(4)}", cooldown_until: Time.current),
@@ -327,6 +332,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
     AvatarRecord.transaction do
       requested_at = Time.utc(2026, 10, 1, 12, 30, 0)
       avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
         moniker: "Expire stale",
         capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
         active_handle: Handle.create!(
@@ -369,6 +375,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
   test "same idempotency key with changed inputs is rejected" do
     AvatarRecord.transaction do
       avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
         moniker: "Changed",
         capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
         active_handle: Handle.create!(
@@ -403,6 +410,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
   test "same idempotency key with a changed source ownership generation is rejected" do
     AvatarRecord.transaction do
       avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
         moniker: "Generation key",
         capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
         active_handle: Handle.create!(
@@ -411,6 +419,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
         ),
       )
       other_avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
         moniker: "Other generation",
         capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
         active_handle: Handle.create!(
@@ -445,22 +454,33 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
   end
 
   test "concurrent same-key requests return one committed reservation" do
-    avatar = AvatarTestFactory.create!(
-      moniker: "Concurrent",
-      capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
-      active_handle: Handle.create!(
-        handle: "concurrent-registry-#{SecureRandom.hex(4)}",
-        cooldown_until: Time.current,
-      ),
-    )
-    source_period = enterprise_period_for(avatar, "enterprise_source_concurrent")
+    ParallelTestDatabaseCloner.verify_owned_worker_execution!
+    organization = Enterprise.create!(name: "Registry race owner", title: "Registry")
+    avatar = nil
+    source_period = nil
+    AvatarRecord.transaction do
+      avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
+        moniker: "Concurrent",
+        capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
+        active_handle: Handle.create!(
+          handle: "concurrent-registry-#{SecureRandom.hex(4)}",
+          cooldown_until: Time.current,
+        ),
+      )
+      source_period = AvatarEnterpriseOwnershipPeriod.create!(
+        avatar: avatar,
+        enterprise_public_id: organization.public_id,
+        valid_from: avatar.created_at,
+      )
+    end
     key = SecureRandom.uuid
     attributes = {
       avatar: avatar,
       operation_kind: "enterprise_to_bureau",
       idempotency_key: key,
       request_fingerprint: Digest::SHA256.hexdigest("concurrent-request"),
-      source_collective_public_id: "enterprise_source_concurrent",
+      source_collective_public_id: organization.public_id,
       destination_collective_public_id: "bureau_destination_concurrent",
       request_actor_public_id: "persona_actor_concurrent",
       source_ownership_period_id: source_period.id,
@@ -492,18 +512,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
   ensure
     threads&.each { |thread| thread.kill if thread.alive? }
     threads&.each(&:join)
-    if avatar
-      AvatarRecord.transaction do
-        reservation_ids = AvatarTransferReservation.where(avatar_id: avatar.id).select(:id)
-        AvatarEnterpriseToEnterpriseTransferDetail.where(transfer_reservation_id: reservation_ids).delete_all
-        AvatarEnterpriseToBureauTransferDetail.where(transfer_reservation_id: reservation_ids).delete_all
-        AvatarBureauToEnterpriseTransferDetail.where(transfer_reservation_id: reservation_ids).delete_all
-        AvatarBureauToBureauTransferDetail.where(transfer_reservation_id: reservation_ids).delete_all
-        AvatarTransferReservation.where(avatar_id: avatar.id).delete_all
-      end
-      # The concrete source period is intentionally retained because closed ownership history
-      # is database-protected and cannot be deleted by test cleanup.
-    end
+    # The owned worker lifecycle removes reservation, detail and ownership history together.
   end
 
   private

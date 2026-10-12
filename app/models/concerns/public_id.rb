@@ -10,6 +10,14 @@ module PublicId
   GENERATION_SIZE = 21
   MAX_COLLISION_RETRIES = 3
 
+  class << self
+    public
+
+    def generate
+      Nanoid.generate(size: GENERATION_SIZE, non_secure: false)
+    end
+  end
+
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_create :generate_public_id
@@ -20,6 +28,8 @@ module PublicId
     validates :public_id, presence: true, length: { maximum: GENERATION_SIZE }, uniqueness: true
   end
 
+  public
+
   def to_param
     public_id
   end
@@ -29,12 +39,11 @@ module PublicId
   def generate_public_id
     return if public_id.present?
 
-    self.public_id = Nanoid.generate(size: GENERATION_SIZE)
+    self.public_id = PublicId.generate
     @public_id_generated_value = public_id
   end
 
   def retry_public_id_collision
-    return yield unless method(:generate_public_id).owner == PublicId
     return yield unless @public_id_generated_value == public_id
 
     public_id_constraints = public_id_unique_constraint_names

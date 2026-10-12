@@ -249,6 +249,10 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       assert_equal "login.microsoftonline.com", URI.parse(captured.fetch(:uri)).host
       assert_withheld("Real token exchange must carry PKCE") { captured.fetch(:params).fetch(:code_verifier).present? }
       assert_equal 303, browser.response.status
+      passkey_binding = Rack::Utils.parse_nested_query(
+        URI.parse(browser.response.location).query.to_s,
+      ).fetch("fb")
+
       assert_equal 0, OperatorToken.where(staff_id: actor.id).count
       assert_withheld { identity.reload.last_authenticated_at.present? }
       browser.get(URI.parse(browser.response.location).request_uri)
@@ -262,7 +266,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
           pending = browser.session.fetch(OrgNormalSignInTransaction::SESSION_KEY)
           travel_to(Time.zone.at(pending.fetch("expires_at")))
           browser.post(
-            auth_org_sign_in_passkey_options_path(ri: "jp"),
+            auth_org_sign_in_passkey_options_path(fb: passkey_binding, ri: "jp"),
             params: { "cf-turnstile-response" => "test" },
             headers: auth_headers.merge("X-CSRF-Token" => csrf), as: :json,
           )
@@ -283,8 +287,9 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         next
       end
       browser.post(
-        auth_org_sign_in_passkey_options_path(ri: "jp"), params: { "cf-turnstile-response" => "test" },
-                                                         headers: auth_headers.merge("X-CSRF-Token" => csrf), as: :json,
+        auth_org_sign_in_passkey_options_path(fb: passkey_binding, ri: "jp"),
+        params: { "cf-turnstile-response" => "test" },
+        headers: auth_headers.merge("X-CSRF-Token" => csrf), as: :json,
       )
 
       assert_equal 200, browser.response.status
@@ -294,7 +299,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         user_present: true, user_verified: true, sign_count: 1,
       )
       browser.post(
-        auth_org_sign_in_passkey_verification_path(ri: "jp"), params: {
+        auth_org_sign_in_passkey_verification_path(fb: passkey_binding, ri: "jp"), params: {
           challenge_id: options.fetch("challenge_id"), credential: assertion,
         }, headers: auth_headers.merge("X-CSRF-Token" => csrf), as: :json,
       )

@@ -17,4 +17,20 @@ namespace :avatar_backfill do
     puts JSON.pretty_generate(result.summary)
     puts "Report written to #{path}"
   end
+
+  desc "Inventory and optionally backfill bounded concrete Avatar ownership periods"
+  task ownership_periods: :environment do
+    raw_ids = ENV.fetch("AVATAR_IDS", "")
+    ids = raw_ids.split(",").filter_map { |value| Integer(value, 10, exception: false) }
+    if ids.empty? || ids.length > AvatarConcreteOwnershipBackfillOperation::BATCH_SIZE
+      abort "AVATAR_IDS must contain 1..#{AvatarConcreteOwnershipBackfillOperation::BATCH_SIZE} positive IDs"
+    end
+    abort "AVATAR_IDS must contain positive IDs" unless ids.all?(&:positive?)
+
+    apply = ENV["APPLY"] == "1"
+    path = ENV.fetch("REPORT", "tmp/avatar_backfill/avatar_ownership_periods.json")
+    result = AvatarConcreteOwnershipBackfillOperation.call(avatar_ids: ids.uniq, apply: apply, output_path: path)
+    puts JSON.pretty_generate(result.summary)
+    puts "Report written to #{path}"
+  end
 end

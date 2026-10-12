@@ -4,9 +4,16 @@
 # policy tests use this factory to exercise the production temporal writer without duplicating
 # setup or reintroducing a test-only application path.
 module AvatarTestFactory
-  def self.create!(moniker:, **attributes)
+  def self.create!(moniker:, create_concrete_owner: true, concrete_owner_public_id: nil, **attributes)
     Avatar.transaction do
       avatar = Avatar.create!(**attributes)
+      if create_concrete_owner
+        AvatarEnterpriseOwnershipPeriod.create!(
+          avatar: avatar,
+          enterprise_public_id: concrete_owner_public_id || "test-owner-#{SecureRandom.alphanumeric(12)}",
+          valid_from: avatar.created_at,
+        )
+      end
       result = AvatarMonikerWriterOperation.call(
         avatar: avatar,
         moniker: moniker,

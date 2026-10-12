@@ -33,6 +33,7 @@ module Auth
           before_action :start_minimum_response_budget
           after_action :enforce_minimum_response_budget
           before_action :require_org_normal_sign_in_transaction!
+          before_action :enforce_org_normal_sign_in_binding!
 
           def new
             render inertia: true, props: passkey_sign_in_props
@@ -58,8 +59,12 @@ module Auth
               title: t("sign.org.authentication.passkey.new.page_title"),
               description: t("sign.org.authentication.passkey.new.description"),
               panel: {
-                options_url: auth_org_sign_in_passkey_options_path(pt: pt, ri: region),
-                verification_url: auth_org_sign_in_passkey_verification_path(pt: pt, ri: region),
+                options_url: auth_org_sign_in_passkey_options_path(
+                  pt: pt, ri: region, **org_normal_sign_in_binding_params,
+                ),
+                verification_url: auth_org_sign_in_passkey_verification_path(
+                  pt: pt, ri: region, **org_normal_sign_in_binding_params,
+                ),
                 region: region.to_s,
                 # The Operator is fixed by the Entra transaction, so the panel
                 # submits no identifier and renders no field for one.

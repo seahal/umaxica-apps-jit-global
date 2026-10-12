@@ -155,4 +155,57 @@ Questions to settle:
 - Credential handling for the VAPID key pair and treatment of subscription endpoints as sensitive
   data.
 
+### Recorded direction: integer-coded opt-in value (2026-10-11)
+
+Status: **user direction for the future design, recorded ahead of implementation**. It fixes one
+property of the stored value and leaves every question above open. It authorizes no table, column,
+migration, cookie, or API.
+
+When the Web Push opt-in is persisted, its value is an integer code backed by a reference table,
+not a boolean:
+
+| Code | Meaning                                                           |
+| ---- | ----------------------------------------------------------------- |
+| `0`  | nothing: no choice recorded; the null-equivalent of this axis     |
+| `1`  | deny: do not use Web Push                                         |
+| `2`+ | allow; the code selects how much is delivered (levels unassigned) |
+
+Reason given by the user: the set of states is expected to grow, and a boolean column would have to
+be replaced, or have further meanings forced into `true`, `false`, and `NULL`, when it does. An
+integer code admits new values without changing the column type or reinterpreting existing rows.
+
+The user amended this direction twice on the same day. The first wording used `0` for deny and `1`
+for allow. The second used `0` for no choice, `1` for deny, `2` for allow, and left `3` upward
+unassigned. Both are superseded by the table above.
+
+Codes from `2` upward are intended to express the extent of delivery the browser accepts, for
+example every notification versus urgent ones only. Which levels exist and which code each takes
+is undecided.
+
+Constraints that follow from the rest of this section:
+
+- The valid codes are rows of a reference table, and the opt-in column references it. The user
+  expects the same treatment for comparable coded values elsewhere.
+- A browser that has made no choice holds a row referencing `0`; it is not represented by a missing
+  row or by `NULL`. This follows the existing Preference option tables, which seed a `NOTHING = 0`
+  row and default the referencing column to it, as `AppPreferenceAdultContentGate` does.
+- `1` is deny by deliberate exception. `AppPreferenceAdultContentGateOption` and its siblings use
+  `1` for approved and `2` for deny; Web Push reverses that so that deny is a single code and every
+  code from `2` upward means allow at some level. Code that reads either table must name the
+  constant and not rely on the number.
+- The code records the stated wish only. Browser notification permission, the existence of a push
+  subscription, and delivery state are separate axes and get separate fields.
+- Codes `0` and `1` keep these meanings once rows exist.
+
+Left open by this direction:
+
+- The names of the table, the column, and the reference table, which the user will decide later.
+  Whether the value belongs to Preference at all is still governed by the
+  [Preference separation](preference-scope-and-browser-persistent-state-separation.md) ADR and the
+  ownership question above.
+- The delivery levels from `2` upward, and whether a higher code always includes everything a lower
+  one delivers. A single code can express nested levels only; if notification categories turn out
+  to be chosen independently of each other, they need their own fields and this code stays a coarse
+  level.
+
 The work is tracked in `plans/backlog/auth-xper-transient-workflow-redesign.md`.

@@ -30,6 +30,11 @@ Current org federated sign-in decision:
 
 Current identity authority decision:
 
+- `adr/email-sign-in-otp-ceremony-binding-and-risk-acceptance.md` — accepted APP/COM Email
+  Sign-In ceremony/continuity binding target, one-time consumption and resend invariants, and
+  limited browser-secret theft/external-mailbox risk acceptances (2026-10-11); conformity is
+  unverified and implementation remains deferred under the Auth workflow freeze.
+
 - `adr/jump-directed-rails-handoff-contract.md` — current same-TLD Jump graph, Auth issuer naming,
   Palm browser/native handoff, development trust prerequisites, and rollout boundaries.
 
@@ -245,6 +250,10 @@ Current request-context decisions:
 - `adr/signed-return-targets-only.md`
 - `adr/redirect-target-lanes-pt-nt-xt.md` — supersedes the deferred return-target naming direction
   in signed-return-targets-only; current redirect target lanes are `pt`, `nt`, and `xt`.
+- `adr/secure-jump-link-redirector.md` — signed Jump `rt` gateway contract; the 2026-10-12 amendment
+  deprecates `dst: "external"` for new use, keeps `dst: "internal"` for approved first-party
+  cross-origin handoffs, and reserves external website navigation for `xt` and the future Away
+  gateway.
 
 Current URL boundary decisions:
 

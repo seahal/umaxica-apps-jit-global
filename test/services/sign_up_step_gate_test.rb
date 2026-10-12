@@ -30,13 +30,17 @@ class SignUpStepGateTest < ActiveSupport::TestCase
     assert_predicate gate, :success?
     assert_equal cycle, gate.ticket
     assert_equal :ok, gate.status
+    binding = SignFlowBindingCodec.decode(controller.params.fetch(AuthIoKeys::Params::FLOW_BINDING))
+    assert_equal cycle.step, binding.phase
+    assert_equal cycle.checkpoint_version, binding.generation
+    assert_equal cycle.expires_at.to_i, binding.expires_at
   end
 
   test "for_show prefers the controller ticket with its signed flow binding when the locator is empty" do
     cycle = ClientSignUpFlow.new(
       public_id: "controller-gate-flow", entry_method: "google", step: "checkpoint",
       status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
-      completed_requirements: {},
+      completed_requirements: {}, expires_at: 15.minutes.from_now,
     )
     controller = ControllerBoundary.new(
       {}, { AuthIoKeys::Params::FLOW_BINDING => SignFlowBindingCodec.encode(flow: cycle, surface: :app) },
@@ -71,5 +75,26 @@ class SignUpStepGateTest < ActiveSupport::TestCase
     assert_equal :refused, gate.status
     assert_equal :flow_binding, gate.refusal
     assert_nil gate.ticket
+  end
+
+  test "for_show refuses a signed binding from an earlier checkpoint generation" do
+    cycle = ClientSignUpFlow.create!(
+      entry_method: "email", step: "checkpoint",
+      status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
+      nonce_digest: ClientSignUpFlow.digest_nonce("stale-checkpoint-binding"),
+      completed_requirements: {},
+    )
+    binding = SignFlowBindingCodec.encode(flow: cycle, surface: :app)
+    cycle.update!(checkpoint_version: cycle.checkpoint_version + 1)
+    controller = ControllerBoundary.new(
+      { auth_app_up_sequence_id: cycle.public_id },
+      { AuthIoKeys::Params::FLOW_BINDING => binding },
+      nil, cycle.public_id,
+    )
+
+    gate = SignUpStepGate.for_show(controller: controller, surface: :app, family: "email", step: :otp)
+
+    assert_equal :refused, gate.status
+    assert_equal :phase, gate.refusal
   end
 end

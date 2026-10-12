@@ -210,7 +210,7 @@ module RpSession
   private
 
   def ensure_public_id
-    self.public_id ||= Nanoid.generate(size: 21)
+    self.public_id ||= PublicId.generate
   end
 
   def default_refresh_token_expires_at(now: nil)

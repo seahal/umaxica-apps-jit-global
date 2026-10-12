@@ -21,6 +21,10 @@ module AvatarOwnershipTransfers
     public
 
     def call
+      validate_idempotency_key!
+      replay = replay_existing_reservation
+      return replay if replay
+
       validate_target!
       avatar = find_avatar!(avatar_public_id)
       observed_owner = current_owner!(avatar)
@@ -79,6 +83,53 @@ module AvatarOwnershipTransfers
       return if collective_exists?(surface: target_surface, public_id: target_collective_public_id)
 
       raise InvalidTransfer, "target collective not found"
+    end
+
+    def validate_idempotency_key!
+      return if idempotency_key.match?(ReservationCreator::IDEMPOTENCY_KEY_PATTERN) &&
+        idempotency_key == idempotency_key.downcase
+
+      raise InvalidTransfer, "idempotency key must be canonical UUID v4 or v7"
+    end
+
+    def existing_reservation
+      AvatarTransferReservation.find_by(idempotency_key: idempotency_key)
+    end
+
+    def replay_existing_reservation
+      existing = existing_reservation
+      return unless existing
+
+      assert_replay_identity!(existing)
+      existing
+    end
+
+    def assert_replay_identity!(reservation)
+      detail = reservation_detail(reservation)
+      destination_attribute =
+        if operation_kind.end_with?("enterprise")
+          :destination_enterprise_public_id
+        else
+          :destination_bureau_public_id
+        end
+      same_request = reservation.request_fingerprint == request_fingerprint &&
+        reservation.operation_kind == operation_kind &&
+        reservation.avatar.public_id == avatar_public_id &&
+        detail.request_actor_public_id == subject_public_id &&
+        detail.public_send(destination_attribute) == target_collective_public_id
+      return if same_request
+
+      raise InvalidTransfer, "idempotency key is already bound to different transfer inputs"
+    end
+
+    def reservation_detail(reservation)
+      case reservation.operation_kind
+      when "enterprise_to_enterprise" then reservation.enterprise_to_enterprise_detail
+      when "enterprise_to_bureau" then reservation.enterprise_to_bureau_detail
+      when "bureau_to_enterprise" then reservation.bureau_to_enterprise_detail
+      when "bureau_to_bureau" then reservation.bureau_to_bureau_detail
+      else raise InvalidTransfer, "unsupported transfer operation kind"
+      end
     end
 
     def assert_owner_unchanged!(current, observed)

@@ -34,6 +34,12 @@ module AvatarOwnershipTransfers
 
     def call
       validate_inputs!
+      AvatarRecord.connected_to(role: :writing) { call_on_writer }
+    end
+
+    private
+
+    def call_on_writer
       attempts = 0
 
       begin
@@ -75,8 +81,6 @@ module AvatarOwnershipTransfers
         retry
       end
     end
-
-    private
 
     attr_reader :avatar, :operation_kind, :idempotency_key, :request_fingerprint,
                 :source_collective_public_id, :destination_collective_public_id,

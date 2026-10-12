@@ -52,6 +52,21 @@ class AvatarTest < ActiveSupport::TestCase
     )
   end
 
+  test "current concrete organization ownership identifies one Enterprise independently of bindings" do
+    avatar = avatars(:one)
+
+    assert_equal 1, avatar.enterprise_ownership_periods.current.count
+    assert_empty avatar.bureau_ownership_periods.current
+    period = avatar.enterprise_ownership_periods.current.sole
+    organization = Enterprise.find_by!(public_id: period.enterprise_public_id)
+
+    assert_equal "AvatarOrg", organization.title
+    assert_equal avatar.created_at, period.valid_from
+    assert_equal Float::INFINITY, period.valid_to
+    assert_nil avatar.avatar_persona_binding
+    assert_nil avatar.avatar_agent_binding
+  end
+
   test "valid avatar creation" do
     avatar = Avatar.new(
       capability: @capability,
@@ -224,32 +239,21 @@ class AvatarTest < ActiveSupport::TestCase
     assert_includes muter.muted_avatars, muted
   end
 
-  test "dependent associations" do
+  test "concrete ownership history prevents Avatar physical deletion" do
     avatar = AvatarTestFactory.create!(
-      moniker: "Dependent Test", capability: @capability, active_handle: @handle,
+      moniker: "Protected Avatar", capability: @capability, active_handle: @handle,
     )
-    user = Client.find_by!(public_id: "one_id")
 
-    # Assignments
-    avatar.avatar_assignments.create!(user_id: user.id, role: "viewer")
-    # Follows
-    other = AvatarTestFactory.create!(moniker: "Other", capability: @capability, active_handle: @handle)
-    avatar.outgoing_follows.create!(followed_avatar: other)
-    avatar.incoming_follows.create!(follower_avatar: other)
-    # Blocks
-    avatar.outgoing_blocks.create!(blocked_avatar: other)
-    # Mutes
-    avatar.outgoing_mutes.create!(muted_avatar: other)
-
-    assert_difference "AvatarAssignment.count", -1 do
-      assert_difference "AvatarFollow.count", -2 do
-        assert_difference "AvatarBlock.count", -1 do
-          assert_difference "AvatarMute.count", -1 do
-            Prosopite.pause { avatar.destroy }
-          end
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        Avatar.transaction(requires_new: true) do
+          Avatar.where(id: avatar.id).delete_all
         end
       end
-    end
+
+    assert_match(/ownership|avatar_enterprise_ownership_periods/i, error.message)
+    assert Avatar.exists?(avatar.id)
+    assert AvatarEnterpriseOwnershipPeriod.exists?(avatar_id: avatar.id)
   end
 
   def create_user_and_status

@@ -97,7 +97,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       complete_org_entra_first_stage!(@staff)
     end
 
-    assert_redirected_to new_auth_org_sign_in_passkey_path(ri: "jp")
+    assert(
+      URI.parse(response.location).query.to_s.split("&").any? { |pair| pair.start_with?("fb=") },
+      "expected the Entra handoff to bind the next passkey page to its sign-in flow",
+    )
+    assert_redirected_to new_auth_org_sign_in_passkey_path(ri: "jp", **org_normal_sign_in_binding_params)
     assert_equal 0, OperatorToken.where(staff_id: @staff.id).count
   end
 
@@ -150,7 +154,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       complete_org_entra_first_stage!(@staff)
     end
 
-    get new_auth_org_sign_in_passkey_url(ri: "jp")
+    get new_auth_org_sign_in_passkey_url(ri: "jp", **org_normal_sign_in_binding_params)
 
     assert_response :success
     assert_equal "auth/org/sign/in/passkeys/new", inertia_component
@@ -160,20 +164,32 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     # The Entra transaction names the operator, so the page asks for no identifier.
     assert_nil panel.fetch("field")
     assert_nil panel.fetch("identifier_param")
-    assert_equal auth_org_sign_in_passkey_options_path(ri: "jp"), panel.fetch("options_url")
-    assert_equal auth_org_sign_in_passkey_verification_path(ri: "jp"), panel.fetch("verification_url")
+    options_uri = URI.parse(panel.fetch("options_url"))
+    verification_uri = URI.parse(panel.fetch("verification_url"))
+
+    assert_equal "/sign/in/passkey/options", options_uri.path
+    assert_equal "/sign/in/passkey/verification", verification_uri.path
+    assert_equal "jp", Rack::Utils.parse_nested_query(options_uri.query).fetch("ri")
+    assert_equal "jp", Rack::Utils.parse_nested_query(verification_uri.query).fetch("ri")
+    assert_equal "org", OrgNormalSignInBindingCodec.decode(
+      Rack::Utils.parse_nested_query(options_uri.query).fetch("fb"),
+    ).surface
+    assert_equal "org", OrgNormalSignInBindingCodec.decode(
+      Rack::Utils.parse_nested_query(verification_uri.query).fetch("fb"),
+    ).surface
     assert_equal "jp", panel.fetch("region")
     assert_nil inertia_props["secret_link"]
   end
 
   test "new sends the operator back to the entry when no entra transaction is pending" do
-    get new_auth_org_sign_in_passkey_url(ri: "jp")
+    get new_auth_org_sign_in_passkey_url(ri: "jp", **org_normal_sign_in_binding_params)
 
     assert_response :bad_request
   end
 
   test "options are refused without a pending entra transaction" do
-    post auth_org_sign_in_passkey_options_url(ri: "jp"), params: { identifier: @staff.public_id }
+    post auth_org_sign_in_passkey_options_url(ri: "jp", **org_normal_sign_in_binding_params),
+         params: { identifier: @staff.public_id }
 
     assert_response :bad_request
     assert_equal I18n.t("errors.messages.invalid_request"), response.body
@@ -181,7 +197,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "verification is refused without a pending entra transaction" do
-    post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: { challenge_id: "anything" }
+    post auth_org_sign_in_passkey_verification_url(ri: "jp", **org_normal_sign_in_binding_params),
+         params: { challenge_id: "anything" }
 
     assert_response :bad_request
     assert_equal I18n.t("errors.messages.invalid_request"), response.body
@@ -238,7 +255,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       complete_org_entra_first_stage!(@staff)
     end
 
-    post auth_org_sign_in_passkey_options_url(ri: "jp"), params: { identifier: other_staff.public_id }
+    post auth_org_sign_in_passkey_options_url(ri: "jp", **org_normal_sign_in_binding_params),
+         params: { identifier: other_staff.public_id }
 
     assert_response :ok
     json = response.parsed_body
@@ -301,7 +319,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       complete_org_entra_first_stage!(@staff)
     end
 
-    post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: { challenge_id: "" }
+    post auth_org_sign_in_passkey_verification_url(ri: "jp", **org_normal_sign_in_binding_params),
+         params: { challenge_id: "" }
 
     assert_response :bad_request
     assert_includes response.body, I18n.t("errors.webauthn.challenge_id_required")
@@ -356,7 +375,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       complete_org_entra_first_stage!(@staff)
     end
 
-    post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: { challenge_id: "invalid_challenge" }
+    post auth_org_sign_in_passkey_verification_url(ri: "jp", **org_normal_sign_in_binding_params),
+         params: { challenge_id: "invalid_challenge" }
 
     assert_response :bad_request
     assert_includes response.body, I18n.t("errors.webauthn.challenge_invalid")
@@ -422,7 +442,10 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     end
 
     begin
-      post(auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id))
+      post(
+        auth_org_sign_in_passkey_verification_url(ri: "jp", **org_normal_sign_in_binding_params),
+        params: verification_params(challenge_id),
+      )
     ensure
       Auth::Org::Sign::In::Passkey::VerificationsController
         .define_method(:consume_passkey_challenge_with_actor!, original_method)
@@ -485,7 +508,9 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     Time.current
 
     post(
-      auth_org_sign_in_passkey_verification_url(ri: "jp", pt: "/settings/passkeys"),
+      auth_org_sign_in_passkey_verification_url(
+        ri: "jp", pt: "/settings/passkeys", **org_normal_sign_in_binding_params,
+      ),
       params: verification_params(challenge_id),
     )
 
@@ -562,13 +587,14 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     end
     challenge_id = issue_challenge!
 
-    post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
+    post auth_org_sign_in_passkey_verification_url(ri: "jp", **org_normal_sign_in_binding_params),
+         params: verification_params(challenge_id)
 
     assert_response :ok
 
     # The credential ceremony is one-shot; the consumed/cleared transaction has
     # no second-stage challenge to replay.
-    post auth_org_sign_in_passkey_options_url(ri: "jp"), params: {}
+    post auth_org_sign_in_passkey_options_url(ri: "jp", **org_normal_sign_in_binding_params), params: {}
 
     assert_response :unprocessable_content
     assert_includes response.headers["Cache-Control"], "no-store"
@@ -637,7 +663,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     )
     tokens_before = OperatorToken.where(staff_id: other_staff.id).count
 
-    post auth_org_sign_in_passkey_verification_url(ri: "jp"),
+    post auth_org_sign_in_passkey_verification_url(ri: "jp", **org_normal_sign_in_binding_params),
          params: verification_params(challenge_id, credential_id: other_passkey.webauthn_id)
 
     assert_response :unauthorized
@@ -695,7 +721,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     end
     challenge_id = issue_challenge!
 
-    post auth_org_sign_in_passkey_verification_url(ri: "jp"),
+    post auth_org_sign_in_passkey_verification_url(ri: "jp", **org_normal_sign_in_binding_params),
          params: verification_params(
            challenge_id,
            credential_id: Base64.urlsafe_encode64("unknown_credential", padding: false),
@@ -761,7 +787,10 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     end
 
     begin
-      post(auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id))
+      post(
+        auth_org_sign_in_passkey_verification_url(ri: "jp", **org_normal_sign_in_binding_params),
+        params: verification_params(challenge_id),
+      )
     ensure
       Auth::Org::Sign::In::Passkey::VerificationsController.define_method(:perform_passkey_sign_in, original_method)
     end
@@ -821,7 +850,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     end
     challenge_id = issue_challenge!
 
-    post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
+    post auth_org_sign_in_passkey_verification_url(ri: "jp", **org_normal_sign_in_binding_params),
+         params: verification_params(challenge_id)
 
     assert_response :ok
     assert_equal "ok", response.parsed_body["status"]
@@ -913,7 +943,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     end
     challenge_id = issue_challenge!
 
-    post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
+    post auth_org_sign_in_passkey_verification_url(ri: "jp", **org_normal_sign_in_binding_params),
+         params: verification_params(challenge_id)
 
     assert_response :ok
     json = response.parsed_body
@@ -1000,7 +1031,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     end
     challenge_id = issue_challenge!
 
-    post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: {
+    post auth_org_sign_in_passkey_verification_url(ri: "jp", **org_normal_sign_in_binding_params), params: {
       challenge_id: challenge_id,
       credential: { invalid: "payload" },
     }
@@ -1012,7 +1043,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   private
 
   def issue_challenge!
-    post(auth_org_sign_in_passkey_options_url(ri: "jp"), params: {})
+    post(auth_org_sign_in_passkey_options_url(ri: "jp", **org_normal_sign_in_binding_params), params: {})
 
     assert_response :ok
     @challenge = response.parsed_body.fetch("options").fetch("challenge")

@@ -14,7 +14,7 @@ class SignInFlowBindingCodec
   MAX_LENGTH = 768
   TTL = 15.minutes
 
-  Binding = Data.define(:kind, :surface, :flow_public_id, :phase, :generation)
+  Binding = Data.define(:kind, :surface, :flow_public_id, :phase, :generation, :expires_at)
 
   private_constant :VERIFIER_NAME, :PURPOSE, :KIND, :MAX_LENGTH, :TTL
 
@@ -25,6 +25,7 @@ class SignInFlowBindingCodec
       normalized_surface = checked_surface(surface)
       normalized_phase = checked_phase(flow, phase)
       generation = generation_for(flow)
+      expires_at = expiry_for(flow)
 
       Rails.application.message_verifier(VERIFIER_NAME).generate(
         {
@@ -33,6 +34,7 @@ class SignInFlowBindingCodec
           "f" => flow.public_id.to_s,
           "p" => normalized_phase,
           "g" => generation,
+          "e" => expires_at,
         },
         purpose: PURPOSE,
         expires_in: TTL,
@@ -48,6 +50,7 @@ class SignInFlowBindingCodec
       return nil unless payload["f"].is_a?(String) && payload["f"].present?
       return nil unless payload["p"].is_a?(String) && payload["p"].present?
       return nil unless payload["g"].is_a?(String) && payload["g"].present?
+      return nil unless positive_integer?(payload["e"])
 
       Binding.new(
         kind: payload["k"],
@@ -55,6 +58,7 @@ class SignInFlowBindingCodec
         flow_public_id: payload["f"],
         phase: payload["p"],
         generation: payload["g"],
+        expires_at: payload["e"].to_i,
       )
     rescue ActiveSupport::MessageVerifier::InvalidSignature
       nil
@@ -67,6 +71,22 @@ class SignInFlowBindingCodec
       timestamp.utc.iso8601(6)
     end
     private :generation_for
+
+    def expiry_for(flow)
+      timestamp = flow.expires_at
+      raise ArgumentError, "sign-in flow expiry is required" unless timestamp.respond_to?(:to_i)
+
+      value = timestamp.to_i
+      raise ArgumentError, "sign-in flow expiry must be positive" unless value.positive?
+
+      value
+    end
+    private :expiry_for
+
+    def positive_integer?(value)
+      value.is_a?(Integer) ? value.positive? : value.to_s.match?(/\A[1-9][0-9]*\z/)
+    end
+    private :positive_integer?
 
     def checked_surface(surface)
       normalized = surface.to_s

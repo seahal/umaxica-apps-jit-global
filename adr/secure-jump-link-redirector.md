@@ -68,3 +68,51 @@ equals its `iss` (`x-jump-error: invalid_request`); it mediates cross-origin nav
   records.
 - Tests must assert the absence of app-hosted Jump routes and legacy JumpLink models, and must cover
   issuer/audience/purpose/TTL validation for `rt`.
+
+## Amendment: Deprecation of Jump RT External Destinations (2026-10-12)
+
+**Status: Accepted — Deprecated for new use**
+
+### Decision
+
+`JumpRtIssuer.call(..., dst: "external")` is deprecated. New application code MUST NOT issue Jump RT
+tokens with `dst: "external"`.
+
+The same restriction applies to `CommonRedirect#redirect_to_jump_url` and any wrapper that issues an
+equivalent external-destination Jump token.
+
+`dst: "internal"` remains supported for approved first-party cross-origin handoffs governed by
+`adr/jump-directed-rails-handoff-contract.md`.
+
+### Responsibility Boundaries
+
+- `pt`: Same-origin internal path targets.
+- `nt`: Registered internal navigation targets.
+- Jump RT: Approved first-party cross-origin handoffs.
+- `xt`: External website destinations, intended to use the future `away.umaxica.net` gateway.
+
+An origin difference alone does not classify a trusted first-party handoff as `xt`.
+
+### Compatibility and Migration
+
+The deprecated API remains available temporarily for compatibility. This decision does not
+immediately remove the `"external"` enum value or alter existing runtime behavior.
+
+Existing consumers must be inventoried before removal.
+
+New callers MUST NOT use the deprecated mode. Until the Away contract is implemented, unsupported
+outbound XT requests must fail closed rather than fall back to Jump external mode.
+
+### Future Away Integration
+
+External website navigation will be handled through the planned isolated `away.umaxica.net`
+boundary; the direction is tracked in `plans/backlog/xt-away-external-navigation-gateway.md`.
+
+The token format, issuer, audience, destination authorization, validation, and migration contract
+require a separate design decision before implementation.
+
+### Scope
+
+This amendment changes the architectural contract only.
+
+No Rails, Jump, or Away runtime behavior is changed by this decision.

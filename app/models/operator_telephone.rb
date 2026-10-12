@@ -29,9 +29,8 @@
 #
 
 class OperatorTelephone < OrgPrincipalRecord
-  # P3d removes identifier-owned proof; ceremony transactions own verification material.
-  self.ignored_columns += %w(otp_private_key otp_counter otp_expires_at)
-
+  # Issued public IDs are also protected by operator_telephones_public_id_immutability;
+  # the scoped DB exception is owned by adr/database-trigger-usage-boundary.md.
   include PublicId
   include Telephone
   include TelephoneDeadIdentifierHistory

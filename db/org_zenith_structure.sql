@@ -72,7 +72,16 @@ CREATE FUNCTION public.check_staff_identity_telephones_limit() RETURNS trigger
 CREATE FUNCTION public.enforce_operator_rotation_audit() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_org_email_hmac_definer_c788995d3604' AND NEW.channel = 'email') OR (current_user = 'umaxica_org_telephone_hmac_definer_c788995d3604' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_org_email_hmac_definer_5046d930f410' AND NEW.channel = 'email') OR (current_user = 'umaxica_org_telephone_hmac_definer_5046d930f410' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
+
+
+--
+-- Name: prevent_operator_telephone_public_id_mutation(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prevent_operator_telephone_public_id_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN IF OLD.public_id IS NOT NULL AND NEW.public_id IS DISTINCT FROM OLD.public_id THEN RAISE EXCEPTION 'operator telephone public identity cannot be changed' USING ERRCODE = '23514', CONSTRAINT = 'operator_telephones_public_id_immutable'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -82,7 +91,7 @@ CREATE FUNCTION public.enforce_operator_rotation_audit() RETURNS trigger
 CREATE FUNCTION public.rotate_operator_emails_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_email_hmac_definer_c788995d3604' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.operator_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_email_hmac_definer_5046d930f410' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.operator_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 --
@@ -92,7 +101,7 @@ CREATE FUNCTION public.rotate_operator_emails_hmac(p_record_id bigint, p_new_dig
 CREATE FUNCTION public.rotate_operator_telephones_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_telephone_hmac_definer_c788995d3604' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.operator_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_telephone_hmac_definer_5046d930f410' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.operator_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 SET default_tablespace = '';
@@ -2786,8 +2795,16 @@ CREATE TABLE public.operator_telephones (
     updated_at timestamp(6) with time zone NOT NULL,
     staff_identity_telephone_status_id bigint DEFAULT 0 NOT NULL,
     number_digest character varying,
-    otp_last_sent_at timestamp(6) with time zone
+    otp_last_sent_at timestamp(6) with time zone,
+    public_id character varying(25)
 );
+
+
+--
+-- Name: COLUMN operator_telephones.public_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.operator_telephones.public_id IS 'Permanent identity; operator_telephones_public_id_immutability rejects issued-ID changes. See adr/database-trigger-usage-boundary.md.';
 
 
 --
@@ -5106,6 +5123,14 @@ ALTER TABLE ONLY public.operator_telephones
 
 
 --
+-- Name: operator_telephones operator_telephones_public_id_nonblank; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE public.operator_telephones
+    ADD CONSTRAINT operator_telephones_public_id_nonblank CHECK (((public_id IS NULL) OR ((public_id)::text !~ '^[[:space:]]*$'::text))) NOT VALID;
+
+
+--
 -- Name: operator_visibilities operator_visibilities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6364,6 +6389,13 @@ CREATE UNIQUE INDEX index_operator_telephones_on_number_digest ON public.operato
 
 
 --
+-- Name: index_operator_telephones_on_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_operator_telephones_on_public_id ON public.operator_telephones USING btree (public_id);
+
+
+--
 -- Name: index_operator_telephones_on_staff_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6676,6 +6708,13 @@ CREATE UNIQUE INDEX operator_rotation_operation ON public.operator_identifier_ro
 --
 
 CREATE TRIGGER operator_rotation_audit_guard BEFORE INSERT OR UPDATE ON public.operator_identifier_rotation_audits FOR EACH ROW EXECUTE FUNCTION public.enforce_operator_rotation_audit();
+
+
+--
+-- Name: operator_telephones operator_telephones_public_id_immutability; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER operator_telephones_public_id_immutability BEFORE UPDATE OF public_id ON public.operator_telephones FOR EACH ROW EXECUTE FUNCTION public.prevent_operator_telephone_public_id_mutation();
 
 
 --
@@ -7629,6 +7668,8 @@ ALTER TABLE ONLY public.operator_secret_credentials
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261011024019'),
+('20261011002402'),
 ('20261010230350'),
 ('20261008025009'),
 ('20261007224316'),

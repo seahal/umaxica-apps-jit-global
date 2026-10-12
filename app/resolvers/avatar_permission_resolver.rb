@@ -11,6 +11,7 @@ class AvatarPermissionResolver
     avatar.group.manage
     avatar.group.attach
     avatar.group.detach
+    avatar.grant.manage
     avatar.transfer.request
     avatar.transfer.accept
     avatar.transfer.cancel

@@ -233,7 +233,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
       end
       complete_org_entra_first_stage!(@staff)
     end
-    post auth_org_sign_in_passkey_options_url(ri: "jp"), params: {}
+    post auth_org_sign_in_passkey_options_url(ri: "jp", **org_normal_sign_in_binding_params), params: {}
 
     assert_response :ok
     normal_challenge_id = response.parsed_body.fetch("challenge_id")
@@ -296,7 +296,9 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
       complete_org_entra_first_stage!(@staff)
     end
 
-    post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: verification_params(emergency_challenge_id)
+    post auth_org_sign_in_passkey_verification_url(
+      ri: "jp", **org_normal_sign_in_binding_params,
+    ), params: verification_params(emergency_challenge_id)
 
     assert_response :bad_request
     assert_includes response.body, I18n.t("errors.webauthn.challenge_invalid")

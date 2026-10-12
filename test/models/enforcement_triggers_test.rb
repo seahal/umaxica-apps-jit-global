@@ -8,6 +8,23 @@ require "test_helper"
 # callback tests prove nothing about the trigger and do not satisfy this
 # requirement -- every test below uses delete_all or raw SQL.
 class EnforcementTriggersTest < ActiveSupport::TestCase
+  test "trigger inventory in org zenith preserves rotation and the approved Telephone identity guard" do
+    triggers =
+      OrgZenithRecord.connected_to(role: :writing) do
+        OperatorTelephone.lease_connection.select_values(
+          "SELECT t.tgname FROM pg_trigger t " \
+          "JOIN pg_class c ON c.oid = t.tgrelid " \
+          "JOIN pg_namespace n ON n.oid = c.relnamespace " \
+          "WHERE n.nspname = 'public' AND NOT t.tgisinternal ORDER BY t.tgname",
+        )
+      end
+
+    assert_equal(
+      %w(operator_rotation_audit_guard operator_telephones_public_id_immutability), triggers,
+      "adr/database-trigger-usage-boundary.md",
+    )
+  end
+
   test "trigger inventory in app_zenith matches the expected set exactly" do
     triggers =
       ActiveRecord::Base.connected_to(role: :writing) do
@@ -46,6 +63,11 @@ class EnforcementTriggersTest < ActiveSupport::TestCase
         avatar_bureau_ownership_periods_immutability avatar_bureau_ownership_periods_integrity
         avatar_bureau_ownership_periods_no_truncate avatar_enterprise_ownership_periods_immutability
         avatar_enterprise_ownership_periods_integrity avatar_enterprise_ownership_periods_no_truncate
+        avatar_group_ownership_periods_legacy_truncate_barrier avatar_group_ownership_periods_legacy_write_barrier
+        avatar_initial_concrete_owner_required
+        avatar_ownership_cutovers_immutability avatar_ownership_cutovers_no_truncate
+        avatar_ownership_periods_legacy_truncate_barrier avatar_ownership_periods_legacy_write_barrier
+        avatar_ownership_transfers_legacy_truncate_barrier avatar_ownership_transfers_legacy_write_barrier
         avatar_transfer_detail_bb_cardinality avatar_transfer_detail_bb_source_period_avatar_integrity
         avatar_transfer_detail_be_cardinality avatar_transfer_detail_be_source_period_avatar_integrity
         avatar_transfer_detail_eb_cardinality avatar_transfer_detail_eb_source_period_avatar_integrity

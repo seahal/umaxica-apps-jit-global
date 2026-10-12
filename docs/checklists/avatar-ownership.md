@@ -32,7 +32,13 @@ The public concrete-owner regression in `test/models/avatar_test.rb` follows an 
 Enterprise period to its actual organization, with no Persona/Agent Binding required. The primary
 Avatar/Enterprise/period fixtures explicitly describe that ownership and one shared synthetic start
 boundary. This reference establishes a testable valid state; it does not replace the required
-commit-time rejection of ownerless creation or certify all creation writers.
+commit-time rejection of ownerless creation or certify all creation writers. The deferred
+`avatar_initial_concrete_owner_required` constraint trigger now rejects a direct Avatar-only INSERT
+at COMMIT with SQLSTATE `23514`; the regression is exercised through an independent PostgreSQL
+connection in `test/models/avatar_concrete_ownership_period_test.rb`. The trigger checks that the
+same transaction has exactly one current concrete period whose first `valid_from` equals the
+Avatar's `created_at`; it does not choose an owner or rewrite data. This closes the Avatar INSERT
+boundary while the remaining writer/cutover and cross-isolation acceptance stays open.
 
 ## AV-2 — Uninterrupted immutable temporal chain
 
@@ -48,17 +54,23 @@ commit-time rejection of ownerless creation or certify all creation writers.
   models are explicit, and `test/models/avatar_concrete_ownership_period_test.rb` exercises these
   paths against the disposable database. New app/org provisioning is covered by
   `test/services/avatar_provisioning/create_test.rb` and the transfer provisioning regression.
-  Transfer registry integration, independent-connection MVCC coverage, and full four-direction
-  concrete period transition behavior remain unestablished.
+  Transfer registry integration and full four-direction concrete period transition behavior remain
+  unestablished.
 - Attempt missing owner, equal/reversed/nonfinite start, cross-family overlap/gap, duplicate current
   periods and closed-history update/delete/truncate through SQL: DB rejects invalid commit
   explicitly, leaving prior history unchanged. Do not invent historical timestamps or rely only on
   model validation, partial current uniqueness or per-table exclusions.
 - Check actual constraints/deferred triggers and real COMMIT in a new disposable catalog (MIG-3).
   Period-row checks have local tests, but their firing scope is not universal Avatar creation
-  protection. A committed Avatar-only INSERT has been observed to bypass the existing period-table
-  triggers; AV-1/AV-2 acceptance remains incomplete until creation writers/fixtures are prepared and
-  a commit-time creation guard is proven. The accepted contract is unchanged.
+  protection. The deferred `avatar_initial_concrete_owner_required` trigger added by
+  `db/avatars_migrate/20261011212119_enforce_avatar_initial_concrete_ownership.rb` now rejects a
+  committed Avatar-only INSERT at the Avatar boundary with SQLSTATE `23514` and leaves no row.
+  The regression is exercised through direct SQL and a real COMMIT in the disposable database.
+  This closes the missing-owner creation subcondition. The same test file now also performs raw-SQL
+  real commits for an accepted adjacent chain, a rejected gap and a rejected cross-family overlap,
+  and leaves the original history unchanged after each rejected commit. AV-1/AV-2 acceptance
+  remains incomplete for full transfer and cutover conditions described below. The accepted
+  ownership contract is unchanged.
 - Finite starts are independently enforced by validated CHECK constraints introduced through
   `db/avatars_migrate/20261011041046_add_finite_concrete_avatar_ownership_period_starts.rb` and
   `db/avatars_migrate/20261011041103_validate_finite_concrete_avatar_ownership_period_starts.rb`. A
@@ -78,11 +90,21 @@ commit-time rejection of ownerless creation or certify all creation writers.
   for concurrency, not become owner authority. No audit/notification/business side effects, silent
   correction, recursion/lock-upgrade bug or trigger disabling. Existing trigger inventory includes
   actual objects.
-- Check isolated real transactions, direct SQL firing and dump/rebuild. Start at
-  [concurrency tests](../../test/operations/avatar_ownership_transfers_concurrency_test.rb) and
-  [trigger tests](../../test/models/enforcement_triggers_test.rb); new concrete/MVCC coverage is
-  planned. Approximately twenty draft triggers is not a required count. Block runtime acceptance
-  without isolation.
+- The registry request race is exercised with two independent Avatar-DB connections in
+  `test/operations/avatar_ownership_transfers_concurrency_test.rb`, and the concrete-period test
+  now exercises two independent backend PIDs at READ COMMITTED, REPEATABLE READ and SERIALIZABLE.
+  The trigger/concrete-period selection passed `22 runs, 79 assertions, 0 failures, 0 errors`, and
+  the affected transfer/inventory selection passed `30 runs, 165 assertions, 0 failures, 0 errors`
+  on the run-owned disposable fleet. The recurring Rails gate then completed with `15060 runs,
+  127731 assertions, 1 failure, 0 errors`; the only failure was the unrelated Acme terminology
+  inventory check described in the [P7 evidence](../../evidence/2026-10-12-avatar-p7-concurrency-7K4M.md).
+  These results prove deterministic period refusal and history preservation for this P7 slice, not
+  the complete ownership-acceptance race, transfer cutover or dump/restore acceptance. Start at the [concurrency tests](../../test/operations/avatar_ownership_transfers_concurrency_test.rb),
+  [concrete-period tests](../../test/models/avatar_concrete_ownership_period_test.rb) and
+  [trigger tests](../../test/models/enforcement_triggers_test.rb). Approximately twenty draft
+  triggers is not a required count. The same run's no-delete database/role preflight also verified
+  20 disposable databases and 12 scoped HMAC roles after receipt-verified cleanup of stale worker
+  clones. Block runtime acceptance without isolation.
 
 ## AV-4 — Global registry and concrete transfer cardinality
 
@@ -109,10 +131,30 @@ commit-time rejection of ownerless creation or certify all creation writers.
 - `test/models/avatar_transfer_reservation_test.rb` covers direct-SQL cardinality, source-period
   Avatar mismatch, pending/key uniqueness, same-request replay, changed-input refusal, and two
   independent committed connections racing on one key. The exact trigger inventory is asserted by
-  `test/models/enforcement_triggers_test.rb`. Existing Request/Accept/Cancel transports still use
-  the legacy transfer table; their writer cutover, four-direction period transition, five-day
-  expiry, authority/generation rechecks, and retry result mapping remain unestablished until the
-  later P12b transition.
+  `test/models/enforcement_triggers_test.rb`. Registry Request/Accept/Cancel operation coverage now
+  exercises all four concrete directions, recorded-result replay, expiry and period-generation
+  checks in `test/operations/avatar_ownership_transfers_test.rb`. The legacy transport remains
+  available for keyless callers; the additive app/org transport branch is selected only by an
+  explicit Idempotency-Key on create and `transfer_kind=registry` on accept/cancel. Authenticated
+  app and org public-controller acceptance coverage now exists (`10 runs, 45 assertions` and
+  `3 runs, 24 assertions`, respectively); writer cutover for all existing callers and the
+  complete P12b transition remain unestablished.
+- P12b now has an independently reviewable, bounded transition path:
+  `AvatarOwnershipTransitionInventoryQuery` classifies legacy/concrete ownership rows without
+  writing them, `AvatarConcreteOwnershipBackfillOperation` offers dry-run and idempotent bounded
+  apply for only unambiguous rows, and `AvatarOwnershipCutoverOperation` establishes an explicit
+  singleton marker only after inventory readiness and an explicit writer-quiescence assertion.
+  The marker's `id bigint` is also the actual PostgreSQL primary key through
+  `db/avatars_migrate/20261012130000_promote_avatar_ownership_cutover_key.rb`; the singleton check
+  and immutable marker triggers remain unchanged.
+  The reversible barrier migration
+  `db/avatars_migrate/20261011220000_add_avatar_ownership_cutover_barrier.rb` plus its logged-table
+  repair `20261011220500_make_avatar_ownership_cutover_logged.rb` rejects legacy period, transfer,
+  and Group-period INSERT/UPDATE/DELETE/TRUNCATE after the marker, while allowing those writes
+  before it. Direct-SQL barrier and trigger-inventory tests pass against the owned disposable
+  PostgreSQL fleet. The marker has not been established in a shared or production database, and
+  this implementation does not claim that operational backfill, consumer quiescence, or final
+  read cutover has occurred.
 
 ## AV-5 — Stable-key API and recorded-result retry
 
@@ -125,12 +167,19 @@ commit-time rejection of ownerless creation or certify all creation writers.
   guarantee; per-request random server keys are not client idempotency. Registry public IDs remain
   NanoID. Cancelled/expired operations never revive. Permission to read an original result does not
   authorize executing a new transfer.
+- The operation boundary now validates canonical lowercase UUID v4/v7 keys and returns the same
+  reservation for an unchanged request after acceptance without creating another detail or period.
+  The public app/org controllers have an additive transport branch that passes the key and exposes
+  the registry kind explicitly; no implicit lookup fallback is used. Authenticated app create/replay
+  and app/org accept tests cover the explicit branch, but do not prove every initiator/authority
+  replay case or every client migration.
 - Check public transport and all four concurrent families, original caller inventory/exit
   conditions, key format partitions/length boundaries and authorized/unauthorized replay. Start at
   [app controller tests](../../test/controllers/base/app/avatar_ownership_transfers_controller_test.rb)
   and
   [org controller tests](../../test/controllers/base/org/avatar_ownership_transfers_controller_test.rb).
-  UUID/registry transition coverage is planned where absent.
+  The remaining HTTP create/cancel matrix, initiator/authority replay cases and client-transition
+  coverage are planned where absent.
 
 ## AV-6 — Transfer acceptance is one local transition
 
@@ -143,6 +192,12 @@ commit-time rejection of ownerless creation or certify all creation writers.
   (before/at/after) or non-increasing clock leaves history unchanged. Lock order is consistent
   across Group/Avatar writers and acquired facts are revalidated; no claimed Zenith/Avatar
   atomicity.
+- Registry operation tests now demonstrate successful app→app, app→org, org→app and org→org
+  period transitions, non-advancing-instant refusal, expiry boundaries, generation checks, group
+  membership consequence and recorded-result replay. The operation locks Group rows before the
+  Avatar row and commits local period/detail state together. The explicit app/org accept transport
+  is covered; independent-connection lock/serialization behavior, failure injection between writes,
+  and the legacy-writer cutover are still required before AV-6 is complete.
 - Check actual operation/controller and concurrency tests with failures between writes, lock waits
   and recorded-result retry. Full concrete implementation evidence is planned; current model
   validation or a successful sequential transfer alone cannot establish the contract.
@@ -162,10 +217,16 @@ commit-time rejection of ownerless creation or certify all creation writers.
   and `avatar_bureau_agent_grants`), bounded capability and revocation constraints,
   `AvatarAccessGrants::IssueOperation`, and `AvatarAccessGrantResolver`. `AvatarPermissionResolver`
   consults a matching current-period Grant only when an Avatar is supplied; existing
-  organization-management authority remains a separate membership decision.
+  organization-management authority remains a separate membership decision. Grant issuance itself
+  requires the concrete app `Client` or org `Operator` named by the request to hold the explicit
+  `avatar.grant.manage` owner authority for the current collective; a foreign or non-owner actor is
+  refused before a Grant row is inserted. The authority check is locked with the owner membership
+  and the concrete ownership period is rechecked before insertion.
   `test/services/avatar_access_grants_test.rb`, `test/resolvers/avatar_permission_resolver_test.rb`,
-  and the transfer regression cover the implemented public behavior (`24 runs, 132 assertions` in
-  the latest focused run).
+  `test/policies/group_avatar_membership_policy_test.rb`, and
+  `test/services/group_avatar_memberships_test.rb` cover the implemented public behavior; the
+  revision-scoped execution record is
+  [`evidence/2026-10-12-avatar-p10a-grant-authority-4R7N.md`](../../evidence/2026-10-12-avatar-p10a-grant-authority-4R7N.md).
 - Check resolver/policy/provisioning public behavior, N:M positives and denial cases plus direct DB
   integrity. The legacy Binding meaning remains unchanged. The Request/Accept/Cancel transport still
   has to cut over to the registry and concrete period generations before the complete O1→O2→O1
@@ -189,13 +250,16 @@ commit-time rejection of ownerless creation or certify all creation writers.
   exact decision, not PASS, a guessed conversion or NOT_APPLICABLE.
 - Check Group policies/resolvers/provisioning and
   [existing Group period tests](../../test/models/avatar_group_ownership_period_test.rb), then
-  planned concrete Group and transfer consequence tests. This hold affects P10b/P12b, not
+  concrete Group and transfer consequence tests. The registry acceptance regression in
+  `test/operations/avatar_ownership_transfers_test.rb` now proves that an ownership transfer
+  removes an owner-mismatched membership while preserving each Group's independent
+  `account_surface`/`account_public_id` context and a target-matched membership. This hold affects P10b/P12b, not
   independent Grants or identifier history. Current `GroupManagement::Create` and
   `AvatarGroupPolicy` compare/filter selected subject account separately from owning collective; the
   app Avatar controller resolves that account as `ClientPersona`. The owning specification records
   these concrete observations. Account identity must not be replaced by owner identity. These
   observations do not establish data reconciliation, a concrete account relationship, migrated
-  consumers, or passing transfer consequences; those remain required for this criterion.
+  consumers, or the full four-direction cutover; those remain required for this criterion.
 
 ## AV-9 — Observable retention deferral
 

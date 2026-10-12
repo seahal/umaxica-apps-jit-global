@@ -23,8 +23,13 @@ criterion.
 - Check: actual PostgreSQL catalog plus generated schema and model inventory; isolated migration and
   reference-preservation exercise under MIG-1 in the
   [delivery criteria](../../specs/integrated-stack-delivery/acceptance.md). Start at `db/` and model
-  connection owners. Comprehensive introspection coverage is planned/not yet established by this
-  document; no file-name search or historical migration text proves current types.
+  connection owners. The read-only `identifiers:inventory` task is the catalog starting point: it
+  scans the configured writer databases, including model-less queue/storage tables, and records
+  table ownership metadata, primary-key shape, sequence/identity metadata, candidate-name hints,
+  and index access/validity facts without reading application rows. It is evidence for the catalog
+  portion only; semantic ownership classification, producer/consumer mapping, exception review,
+  and all-table acceptance remain separate work. No file-name search or historical migration text
+  proves current types.
 
 ## ID-2 — Issuance, capacity and ordinary creation
 
@@ -136,9 +141,11 @@ criterion.
   single-PK contract.
 - For paging/time order, IDs do not claim business time/commit order; safe existing keyset
   tie-breakers and opaque cursor continuity remain. Check real catalog/query predicates and bounded
-  isolated paging/ ordering tests; partition cases apply only when present. Sequence checks belong
-  to MIG-1. Coverage of all indexes/partitions is planned, not established by reading schema text
-  alone.
+  isolated paging/ ordering tests; partition cases apply only when present. The catalog starting
+  point is `identifiers:inventory`, which reports each index's access method, key/attribute counts,
+  predicate, definition, uniqueness and valid/ready/live flags. Sequence checks belong to MIG-1.
+  Coverage of all semantic index consumers and partition behavior remains separate from this
+  catalog report.
 
 ## ID-7 — External protocols and issued-value continuity
 

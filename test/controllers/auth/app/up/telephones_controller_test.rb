@@ -550,8 +550,12 @@ module Auth::App::Up
       assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), guard_target.host
       assert_equal URI.parse(auth_app_sign_up_guard_telephone_path(ri: "jp")).path, guard_target.path
       assert_equal "jp", Rack::Utils.parse_query(guard_target.query).fetch("ri")
-      assert_equal original_binding,
-                   SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard_target.query).fetch("fb"))
+      guard_binding = SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard_target.query).fetch("fb"))
+      cycle = ClientSignUpFlow.find_by!(public_id: original_binding.flow_public_id)
+      assert_equal original_binding.flow_public_id, guard_binding.flow_public_id
+      assert_equal cycle.reload.step, guard_binding.phase
+      assert_equal cycle.checkpoint_version, guard_binding.generation
+      assert_equal cycle.expires_at.to_i, guard_binding.expires_at
 
       telephone.reload
       cycle = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
@@ -615,8 +619,12 @@ module Auth::App::Up
       assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), guard_target.host
       assert_equal URI.parse(auth_app_sign_up_guard_telephone_path(ri: "jp")).path, guard_target.path
       assert_equal "jp", Rack::Utils.parse_query(guard_target.query).fetch("ri")
-      assert_equal original_binding,
-                   SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard_target.query).fetch("fb"))
+      guard_binding = SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard_target.query).fetch("fb"))
+      current_flow = ClientSignUpFlow.find_by!(public_id: original_binding.flow_public_id).reload
+      assert_equal current_flow.public_id, guard_binding.flow_public_id
+      assert_equal current_flow.step, guard_binding.phase
+      assert_equal current_flow.checkpoint_version, guard_binding.generation
+      assert_equal current_flow.expires_at.to_i, guard_binding.expires_at
 
       # The telephone must stay UNVERIFIED_WITH_SIGN_UP so an abandoned cycle
       # stays collectable by the pending-signup cleanup (no number lock).
@@ -690,8 +698,12 @@ module Auth::App::Up
       assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), guard_target.host
       assert_equal URI.parse(auth_app_sign_up_guard_telephone_path(ri: "jp")).path, guard_target.path
       assert_equal "jp", Rack::Utils.parse_query(guard_target.query).fetch("ri")
-      assert_equal original_binding,
-                   SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard_target.query).fetch("fb"))
+      guard_binding = SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard_target.query).fetch("fb"))
+      current_flow = ClientSignUpFlow.find_by!(public_id: original_binding.flow_public_id).reload
+      assert_equal current_flow.public_id, guard_binding.flow_public_id
+      assert_equal current_flow.step, guard_binding.phase
+      assert_equal current_flow.checkpoint_version, guard_binding.generation
+      assert_equal current_flow.expires_at.to_i, guard_binding.expires_at
       assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY].presence
       assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, user.reload.status_id
 
@@ -701,7 +713,7 @@ module Auth::App::Up
       passkey_target = URI.parse(response.location)
 
       assert_equal URI.parse(auth_app_sign_up_check_telephone_passkey_path(ri: "jp")).path, passkey_target.path
-      assert_equal original_binding,
+      assert_equal guard_binding,
                    SignFlowBindingCodec.decode(Rack::Utils.parse_query(passkey_target.query).fetch("fb"))
 
       get passkey_target.request_uri
@@ -712,7 +724,7 @@ module Auth::App::Up
       begin_url = URI.parse(page_props.fetch("begin_url"))
 
       assert_equal passkey_target.path, begin_url.path
-      assert_equal original_binding,
+      assert_equal guard_binding,
                    SignFlowBindingCodec.decode(Rack::Utils.parse_query(begin_url.query).fetch("fb"))
     end
 

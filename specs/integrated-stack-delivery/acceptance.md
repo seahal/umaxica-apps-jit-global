@@ -150,8 +150,13 @@ can establish that a past Red or full gate actually ran.
 - Cleanup removes only that verified disposable database. No trigger suppression or DROP/TRUNCATE
   against shared developer/test data. Without verified isolation/privileges report BLOCKED, not a
   substitute successful mock. A required full-gate outage also invokes PROC-4.
-- Check harness identity/ownership guards and actual creation/transactions/cleanup evidence. Full
-  new concrete isolated acceptance is planned; existing concurrency tests need applicability review.
+- Check harness identity/ownership guards and actual creation/transactions/cleanup evidence. The
+  current P7 slice has independently reviewable concrete-period evidence in
+  [the P7 record](../../evidence/2026-10-12-avatar-p7-concurrency-7K4M.md): adjacent real COMMIT,
+  gap/overlap refusal, ownerless-creation refusal, direct-SQL history protection, and two backend
+  PIDs racing at READ COMMITTED, REPEATABLE READ and SERIALIZABLE. This does not close the complete
+  MIG-3 criterion: transfer failure injection, full registry/ownership cutover, dump/restore and
+  run-owned role lifecycle verification remain separately required.
 - When rebuilding a run-owned fleet that created cluster-wide HMAC roles, a mismatched creation
   record, role OID, authority, membership or foreign dependency must refuse cleanup before database
   drop. A successful rebuild preserves fresh creation records and OIDs, so a subsequent rebuild can
@@ -160,6 +165,13 @@ can establish that a past Red or full gate actually ran.
   [the operational procedure](../../docs/operations/db-workflow.md#cluster-role-creation-evidence).
   Verify both a rejected preflight and repeated owned reconstruction directly; static checks or
   suite success alone do not prove this resource lifecycle or Avatar's separate COMMIT invariants.
+  In the current run, the no-delete `--verify-only` preflight initially refused because the COM
+  email HMAC definer role was also depended on by stale `_2`/`_3` worker clones from an earlier
+  four-worker run. Read-only receipt/catalog checks proved those clones were owned by this run and
+  inactive; the existing cloner cleanup removed only those disposable databases under the run lock.
+  A repeated no-delete preflight then reported `Verified 20 disposable databases and 12 scoped HMAC
+  roles`. No role, parent database or shared resource was removed or adopted. The initial refusal
+  and its safe resolution are recorded in the [P7 evidence](../../evidence/2026-10-12-avatar-p7-concurrency-7K4M.md).
 - For a parallel isolated run, each worker uses its own actual creation/OID receipt and verifies its
   connection targets before executing tests. A receipt for another worker, changed object OID or
   pre-existing unknown name must not authorize connection or deletion. Parent configurations and the

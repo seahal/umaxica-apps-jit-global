@@ -152,7 +152,7 @@ class ClientTotpCredential < AppPrincipalRecord
   def generate_public_id_if_blank
     return unless has_attribute?(:public_id)
 
-    self.public_id = Nanoid.generate(size: 21) if self[:public_id].blank?
+    self.public_id = PublicId.generate if self[:public_id].blank?
   end
 
   def generate_private_key_if_blank

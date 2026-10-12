@@ -11,6 +11,7 @@ class AvatarRetentionPurgeTest < ActiveJob::TestCase
   test "ownership history defers Avatar purge idempotently" do
     AvatarRecord.transaction do
       avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
         moniker: "Retain ownership",
         capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
         active_handle: Handle.create!(
@@ -43,41 +44,50 @@ class AvatarRetentionPurgeTest < ActiveJob::TestCase
     end
   end
 
-  test "Avatar without concrete ownership history is deferred while deletion policy is unresolved" do
-    AvatarRecord.transaction do
-      handle = Handle.create!(handle: "pending-retention-#{SecureRandom.hex(4)}", cooldown_until: Time.current)
-      avatar = Avatar.create!(
-        capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
-        active_handle: handle,
-      )
-      avatar.update_columns(purge_eligible_at: 1.hour.ago)
+  test "a newly created Avatar without concrete ownership is rejected before retention" do
+    handle = Handle.create!(handle: "pending-retention-#{SecureRandom.hex(4)}", cooldown_until: Time.current)
+    capability = AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)
+    lifecycle_state = AvatarLifecycleState.find_by!(key: "active")
+    public_id = PublicId.generate
+    timestamp = Time.current
+    raw_connection = AvatarRecord.connection.raw_connection
+    raw_connection.exec("BEGIN")
+    raw_connection.exec_params(
+      "INSERT INTO avatars (public_id, active_handle_id, capability_id, lifecycle_state_id, created_at, updated_at) " \
+      "VALUES ($1, $2, $3, $4, $5, $5)",
+      [public_id, handle.id, capability.id, lifecycle_state.id, timestamp],
+    )
+    error = assert_raises(PG::CheckViolation) { raw_connection.exec("COMMIT") }
+    raw_connection.exec("ROLLBACK") unless raw_connection.transaction_status == PG::PQTRANS_IDLE
 
-      RetentionPurgeJob.perform_now
-
-      assert Avatar.exists?(avatar.id)
-      assert Handle.exists?(handle.id)
-      deferral = AvatarPurgeDeferral.find_by!(avatar_id: avatar.id, reason_code: "retention_policy_pending")
-
-      assert_equal 1, deferral.attempt_count
-
-      RetentionPurgeJob.perform_now
-
-      assert Avatar.exists?(avatar.id)
-      assert_equal 1, AvatarPurgeDeferral.where(avatar_id: avatar.id, reason_code: "retention_policy_pending").count
-      assert_equal 2, deferral.reload.attempt_count
-      raise ActiveRecord::Rollback
-    end
+    assert_equal "23514", error.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "avatar_initial_concrete_owner_required",
+                 error.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+    assert_not Avatar.exists?(active_handle_id: handle.id)
   end
 
   test "concurrent ownership deferrals converge on one row" do
-    avatar = AvatarTestFactory.create!(
-      moniker: "Concurrent hold",
-      capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
-      active_handle: Handle.create!(
-        handle: "concurrent-retention-#{SecureRandom.hex(4)}",
-        cooldown_until: Time.current,
-      ),
-    )
+    ParallelTestDatabaseCloner.verify_owned_worker_execution!
+    organization = Enterprise.create!(name: "Retention race owner", title: "RetOwner")
+    avatar = nil
+    AvatarRecord.transaction do
+      avatar = AvatarTestFactory.create!(
+        create_concrete_owner: false,
+        moniker: "Concurrent hold",
+        capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
+        active_handle: Handle.create!(
+          handle: "concurrent-retention-#{SecureRandom.hex(4)}",
+          cooldown_until: Time.current,
+        ),
+      )
+      AvatarEnterpriseOwnershipPeriod.create!(
+        avatar: avatar,
+        enterprise_public_id: organization.public_id,
+        valid_from: avatar.created_at,
+      )
+    end
+
+    assert_equal 1, avatar.enterprise_ownership_periods.current.count
     ready = Queue.new
     release = Queue.new
     outcomes = Queue.new
@@ -108,7 +118,6 @@ class AvatarRetentionPurgeTest < ActiveJob::TestCase
     assert_equal 2, AvatarPurgeDeferral.find(results.first).attempt_count
   ensure
     threads&.each { |thread| thread.join if thread.alive? }
-    AvatarPurgeDeferral.where(avatar_id: avatar&.id).delete_all if avatar&.id
-    avatar&.destroy! if avatar&.persisted? && Avatar.exists?(avatar.id)
+    # The owned worker lifecycle removes committed deferrals and history together.
   end
 end

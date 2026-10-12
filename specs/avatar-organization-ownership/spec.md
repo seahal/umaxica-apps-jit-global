@@ -51,7 +51,11 @@ do not certify the remaining cutover.
 - **D-5:** explicit lifecycle-aware concrete N:M access Grants are required. Exclusive Bindings
   retain their separate meaning; adding period IDs to Bindings alone is rejected. Grants bind the
   issuing ownership generation and cannot reactivate after O1→O2→O1. Organization management
-  authority remains separate from Avatar-use authorization. Persistence polymorphism is forbidden.
+  authority remains separate from Avatar-use authorization. A Grant issuer must be the concrete
+  app `Client` or org `Operator` holding the explicit `avatar.grant.manage` owner authority for the
+  current collective; a subject's use Grant cannot be used to mint further Grants. Persistence
+  polymorphism is forbidden. This records the implemented authorization boundary, not a new
+  organization-management permission model.
 - **D-6:** use observable, idempotent purge deferrals. No physical Avatar or ownership-history
   deletion is authorized in this implementation, including an Avatar without concrete history.
   Personal-data deletion/anonymization/retention policy remains a separate unresolved decision;

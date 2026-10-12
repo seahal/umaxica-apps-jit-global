@@ -162,18 +162,25 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     end
 
     assert_equal 303, auth_browser.response.status
+    passkey_binding = Rack::Utils.parse_nested_query(
+      URI.parse(auth_browser.response.location).query.to_s,
+    ).fetch("fb")
+
     assert_not_nil identity.reload.last_authenticated_at
     assert_equal 0, OperatorToken.where(staff_id: operator.id).count
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
-    auth_browser.post(auth_org_sign_in_passkey_options_path, params: { "cf-turnstile-response" => "t", :ri => "jp" })
+    auth_browser.post(
+      auth_org_sign_in_passkey_options_path(fb: passkey_binding, ri: "jp"),
+      params: { "cf-turnstile-response" => "t" },
+    )
 
     assert_equal 200, auth_browser.response.status
     options = auth_browser.response.parsed_body
     assertion = fake.get(challenge: options.fetch("options").fetch("challenge"), user_verified: true, sign_count: 2)
     auth_browser.post(
-      auth_org_sign_in_passkey_verification_path,
-      params: { credential: assertion, challenge_id: options.fetch("challenge_id"), ri: "jp" }, as: :json,
+      auth_org_sign_in_passkey_verification_path(fb: passkey_binding, ri: "jp"),
+      params: { credential: assertion, challenge_id: options.fetch("challenge_id") }, as: :json,
     )
 
     assert_equal 200, auth_browser.response.status

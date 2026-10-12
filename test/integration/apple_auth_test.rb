@@ -232,6 +232,8 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
             },
             headers: browser_headers.merge(@callback_headers),
           )
+          assert_response :redirect
+          flow2_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
           patch(
             ((flow2_provider == "google") ? sign_app_sign_up_check_google_birthdate_url(
@@ -1025,6 +1027,8 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
             },
             headers: browser_headers.merge(@callback_headers),
           )
+          assert_response :redirect
+          flow10_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
           patch(
             ((flow10_provider == "google") ? sign_app_sign_up_check_google_birthdate_url(
@@ -1444,6 +1448,8 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
             },
             headers: browser_headers.merge(@callback_headers),
           )
+          assert_response :redirect
+          flow14_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
           patch(
             ((flow14_provider == "google") ? sign_app_sign_up_check_google_birthdate_url(
@@ -1880,6 +1886,8 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
             },
             headers: browser_headers.merge(@callback_headers),
           )
+          assert_response :redirect
+          flow18_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
           patch(
             ((flow18_provider == "google") ? sign_app_sign_up_check_google_birthdate_url(

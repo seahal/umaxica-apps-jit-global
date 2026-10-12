@@ -118,7 +118,10 @@ class SignUpStepGate
 
     ticket = current_ticket
     return refusal(:no_active_flow) unless ticket
-    return refusal(:flow_binding) unless mode == :entry || bound_to?(ticket)
+
+    binding = binding_for_request
+    return refusal(:flow_binding) unless mode == :entry || instance_bound_to?(ticket, binding)
+    return refusal(:flow_binding) unless mode == :entry || binding_fresh?(ticket, binding)
 
     registry = SignUpRequirementRegistry.for_ticket(ticket, surface: surface)
     return failure("family does not match ticket") unless registry.entry_method == family
@@ -127,6 +130,8 @@ class SignUpStepGate
 
     current_step = self.class.current_step_for(ticket, registry)
     return context(ticket, registry, current_step: current_step) if mode == :entry
+    return refusal(:phase, ticket: ticket, registry: registry, current_step: current_step) unless
+      phase_bound_to?(ticket, binding)
     return failure("step does not belong to ticket") unless registry.requirement?(step)
     if committed_email_finalization_retry?(ticket, registry, current_step)
       return context(ticket, registry, current_step: current_step)
@@ -180,15 +185,33 @@ class SignUpStepGate
     end
   end
 
-  # The request must name the flow instance the session locator resolves. A page rendered for an
-  # earlier flow, a request with no binding, and a binding minted for another surface all fail
-  # here, before any phase comparison, so they can never be attributed to the current flow.
-  def bound_to?(ticket)
-    binding = SignFlowBindingCodec.decode(controller.params[AuthIoKeys::Params::FLOW_BINDING])
+  # The request must name the same flow instance that the session locator resolves. A page rendered
+  # for an earlier flow, a request with no binding, and a binding minted for another surface fail
+  # here and are never attributed to the current flow.
+  def binding_for_request
+    SignFlowBindingCodec.decode(controller.params[AuthIoKeys::Params::FLOW_BINDING])
+  end
+
+  def instance_bound_to?(ticket, binding)
     return false unless binding
 
     binding.kind == "sign_up" && binding.surface == surface.to_s &&
       ActiveSupport::SecurityUtils.secure_compare(binding.flow_public_id, ticket.public_id.to_s)
+  end
+
+  def binding_fresh?(ticket, binding)
+    binding && binding.expires_at > ticket.class.database_now.to_i
+  end
+
+  # A binding for this exact flow can still be stale: the authoritative phase or checkpoint
+  # generation may have advanced after the page was rendered. That is a phase violation, so a
+  # state-changing request may halt this flow while an old flow instance can never halt its
+  # replacement.
+  def phase_bound_to?(ticket, binding)
+    return false unless binding
+
+    binding.phase == ticket.step.to_s && binding.generation == ticket.checkpoint_version &&
+      ticket.expires_at.to_i.positive?
   end
 
   def unusable_ticket?(ticket)
