@@ -2962,3 +2962,29 @@ committed-transaction isolation, P10b/P12b operational cutover, retained legacy 
 semantics, host Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
 independent acceptance investigation. No CI, Podman, production, shared destructive operation or
 remote synchronization was used.
+
+### 16.66 Resume update — SocialAuth link-intent flow issuer (P2, 2026-10-12)
+
+The next source-confirmed P2 slice classified `SocialAuth`'s `social_auth_flow_id` as a
+self-controlled, opaque link-intent correlation identity stored in the Rails session. It is not the
+OAuth `state`, provider value, nonce, PKCE verifier, CSRF token, protocol secret, database primary
+key or public API identifier. The Red assertion decoded the session cookie through the public social
+link integration boundary and observed the previous 32-character hexadecimal issuer. The smallest
+Green change now uses `PublicId.generate` for newly created link intents while preserving the
+existing session key, TTL, provider binding, callback-state validation, link authorization and
+clear-on-completion behavior. The OAuth callback `state` and Apple nonce remain on their existing
+security-specific issuers.
+
+The focused SocialAuth link/unlink collection passed
+`29 runs, 138 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop inspected the changed
+concern and integration tests with no offenses. The run-owned Rails Gate 2 then passed
+`15146 runs, 128226 assertions, 0 failures, 0 errors, 0 skips`, and Vitest passed `99` files and
+`1140` tests. Exact commands, the tested HEAD, dirty-worktree scope and verification limits are
+recorded in [`S6N4`](evidence/2026-10-12-social-auth-flow-issuer-S6N4.md).
+
+This closes only the SocialAuth link-intent issuer boundary. It does not close the complete
+OAuth/OIDC, provider-callback, ceremony transaction/grant/result or protocol-secret inventory,
+database-level immutability inventory, D-11 committed-transaction isolation, P10b/P12b operational
+cutover, retained legacy identifier semantics, host Alloy recreation/runtime verification,
+privacy-retention policy or the user-excluded independent acceptance investigation. No CI, Podman,
+production, shared destructive operation or remote synchronization was used.

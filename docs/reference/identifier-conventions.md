@@ -215,6 +215,13 @@ session-issuance fields remain authoritative, and the public APP challenge bound
 format contract in
 [`test/controllers/auth/app/in/challenges_controller_test.rb`](../../test/controllers/auth/app/in/challenges_controller_test.rb).
 
+`SocialAuth` stores `social_auth_flow_id` as a separate session-scoped link-intent correlation
+identity. New link intents use `PublicId.generate`; the value is not the OAuth `state`, provider
+value, Apple nonce, PKCE verifier, CSRF token, protocol secret, database primary key or public API
+reference. The existing intent, provider, TTL, callback-state, authorization and cleanup contracts
+remain authoritative. The public SocialAuth link integration boundary covers the NanoID-21 format in
+[`test/integration/social_auth_link_test.rb`](../../test/integration/social_auth_link_test.rb).
+
 Avatar transfer idempotency keys retain the explicitly approved canonical UUID v4/v7 request
 contract in AV-5. That exception does not extend to all internally generated transaction IDs.
 Ceremony transaction/grant/result IDs and OTP generations need their actual purpose, entropy and
