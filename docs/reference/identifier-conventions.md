@@ -77,6 +77,18 @@ unbounded catalog candidates. See
 [ID-4d](../checklists/identifier-contracts.md#id-4d--setting-preference-identities-have-bounded-database-capacity)
 for the observable boundary and reversibility evidence.
 
+The three setting preference models now include the shared `PublicId` creation boundary. New
+identities continue to use NanoID-21; a generated value found by the preflight lookup is replaced
+before validation, and a concurrent collision is retried only for the named single-column
+`public_id` B-tree index within the finite shared budget and a savepoint. Caller-supplied values and
+unrelated uniqueness failures are not regenerated, and persisted preference identities reject
+ordinary model updates. Existing preference values are not rewritten. Focused coverage is in
+[`test/models/preference_public_id_collision_test.rb`](../../test/models/preference_public_id_collision_test.rb)
+and the shared concern contract remains in
+[`test/models/concerns/public_id_test.rb`](../../test/models/concerns/public_id_test.rb). This is
+model-level protection; it does not close the separate ID-4 requirement for database-enforced
+immutability through direct SQL or every owned identifier.
+
 ## Staff identity audit-event bigint transition
 
 `org_zenith.staff_identity_audit_events` is a fixed identity-audit catalogue whose legacy string key

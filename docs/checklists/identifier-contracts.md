@@ -136,10 +136,12 @@ criterion.
   [`test/models/public_id_not_null_contract_test.rb`](../../test/models/public_id_not_null_contract_test.rb),
   the NULL-only operation tests in
   [`test/operations/public_id_null_only_backfill_operation_test.rb`](../../test/operations/public_id_null_only_backfill_operation_test.rb),
-  focused preference/passkey model tests, the six P12a migrations, and a fresh isolated schema
-  reconstruction plus down/up rehearsal. Direct catalog checks must distinguish current nullable
-  state, temporary checks and final `attnotnull`; do not treat a generated schema file alone as a
-  clean migration proof.
+  focused preference/passkey model tests, the preference collision/immutability boundary in
+  [`test/models/preference_public_id_collision_test.rb`](../../test/models/preference_public_id_collision_test.rb),
+  the six P12a migrations, and a fresh isolated schema reconstruction plus down/up rehearsal. Direct
+  catalog checks must distinguish current nullable state, temporary checks and final `attnotnull`;
+  do not treat a generated schema file alone as a clean migration proof. The model boundary does not
+  replace the direct-SQL/database-enforcement portion of ID-4.
 
 ## ID-4c — Staff identity audit-event keys have an identity-preserving bigint cutover
 

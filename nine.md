@@ -3132,3 +3132,37 @@ close the complete ceremony-purpose matrix, all-table database immutability, D-1
 transaction isolation, P10b/P12b operational cutover, retained legacy identifier semantics,
 host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
 independent acceptance investigation.
+
+### 16.71 Resume update — realm preference public-ID creation boundary (P2/P12a, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next independent
+slice covered the owned management identities in `ClientPreference`, `VisitorPreference` and
+`OperatorPreference`. These `public_id` values are realm-local, self-controlled, non-secret
+preference identities; they are distinct from email/telephone identifiers, provider credential
+values, user/visitor/operator identity and database primary keys. Existing values and the existing
+P12a capacity migrations remain unchanged.
+
+The Red test reproduced a validation-time duplicate when the shared generator returned an existing
+preference ID. The smallest Green change makes the three models use the existing `PublicId` concern
+and adds its generated-value preflight refresh before validation. The concern already supplies the
+database savepoint retry for a collision on the exact named single-column `public_id` unique B-tree
+index, bounded by `PublicId::MAX_COLLISION_RETRIES`; the database remains the final authority.
+Caller-supplied values and unrelated uniqueness failures are not regenerated. Normal creation,
+validation-disabled creation and ordinary post-creation model updates are covered; existing values
+are not rewritten. This is model-level identity protection and does not claim direct-SQL/database
+immutability for every owned identifier.
+
+The focused preference collision and shared Concern contract passed
+`9 runs, 30 assertions, 0 failures, 0 errors, 0 skips`; the related APP/COM/ORG preference and
+capacity suites passed `90 runs, 260 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop
+passed for the four Ruby models, shared Concern and new test. The run-owned twenty-database Rails
+Gate 2 passed `15158 runs, 128306 assertions, 0 failures, 0 errors, 0 skips` with four workers, and
+Vitest passed `99 files` and `1140 tests`. No migration, raw SQL, trigger, provider/protocol value,
+cross-realm lookup, CI, Podman, production operation, shared destructive operation or remote
+synchronization was used.
+
+This closes only the realm preference model-level generation, collision and ordinary-update
+boundary. It does not close direct-SQL immutability, the complete identifier inventory, D-11
+committed- transaction isolation, P10b/P12b operational cutover, retained legacy identifier
+semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
+independent acceptance investigation.
