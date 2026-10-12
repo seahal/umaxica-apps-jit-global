@@ -222,6 +222,30 @@ reference. The existing intent, provider, TTL, callback-state, authorization and
 remain authoritative. The public SocialAuth link integration boundary covers the NanoID-21 format in
 [`test/integration/social_auth_link_test.rb`](../../test/integration/social_auth_link_test.rb).
 
+Identity ceremony candidates use purpose-specific reference contracts. The TOTP enrollment
+candidate, secret-credential candidate, and concrete APP/COM/ORG passkey candidates are
+self-controlled, non-secret opaque references; new rows use `PublicId.generate` (NanoID-21), while
+their existing unique B-tree indexes remain the database authority. The shared creation boundary
+performs normal model validation, permits only the named `ref` uniqueness collision to reach the
+database retry path, and retries that constraint only within `PublicId::MAX_COLLISION_RETRIES`.
+Other validation or uniqueness failures propagate to the owning ceremony contract. Existing rows are
+not rewritten and no migration, trigger or raw SQL was added. Focused coverage is in
+[`test/services/identity/totp_ceremony_contract_test.rb`](../../test/services/identity/totp_ceremony_contract_test.rb),
+[`test/services/identity/secret_credential_ceremony_contract_test.rb`](../../test/services/identity/secret_credential_ceremony_contract_test.rb),
+[`test/operations/identity_passkey_registration_committers_test.rb`](../../test/operations/identity_passkey_registration_committers_test.rb)
+and
+[`test/operations/identity_totp_enrollment_issuer_test.rb`](../../test/operations/identity_totp_enrollment_issuer_test.rb).
+
+`IdentitySocialCeremonyCandidate.ref` remains a UUID v4 capability reference. The APP social-link
+completion form sends this value to a controller that intentionally accepts only the existing
+`AuthAdmissionBinding::REFERENCE_PATTERN`; widening that shared capability boundary merely to
+standardize a stored value would change an established browser security contract. The social
+candidate is therefore an explicit protocol/capability exception, not evidence that its existing
+UUID rows should be rewritten. The contract is covered by
+[`test/services/identity/social_ceremony_contract_test.rb`](../../test/services/identity/social_ceremony_contract_test.rb)
+and the end-to-end link boundary in
+[`test/integration/social_auth_link_test.rb`](../../test/integration/social_auth_link_test.rb).
+
 Avatar transfer idempotency keys retain the explicitly approved canonical UUID v4/v7 request
 contract in AV-5. That exception does not extend to all internally generated transaction IDs.
 Ceremony transaction/grant/result IDs and OTP generations need their actual purpose, entropy and

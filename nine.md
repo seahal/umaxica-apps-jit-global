@@ -2988,3 +2988,38 @@ database-level immutability inventory, D-11 committed-transaction isolation, P10
 cutover, retained legacy identifier semantics, host Alloy recreation/runtime verification,
 privacy-retention policy or the user-excluded independent acceptance investigation. No CI, Podman,
 production, shared destructive operation or remote synchronization was used.
+
+### 16.67 Resume update — identity ceremony candidate references (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next ready P2
+slice traced the concrete consumers of the remaining identity ceremony candidate `ref` values. TOTP
+enrollment, secret-credential and APP/COM/ORG passkey candidate references are self-controlled,
+non-secret opaque values with unique B-tree indexes and no external format authority. Their new
+issuers now use `PublicId.generate` (NanoID-21). A shared creation boundary retains normal model
+validation, allows only a `ref`-only uniqueness collision to reach the database constraint, and
+retries only the named `ref` index within the finite `PublicId::MAX_COLLISION_RETRIES` budget. Other
+validation and uniqueness errors are not regenerated. Existing rows and all purpose-specific
+secrets, transaction IDs, WebAuthn values and protocol references remain unchanged.
+
+The source review found that `IdentitySocialCeremonyCandidate.ref` is different: APP social-link
+completion renders it into a browser form, and the receiver deliberately accepts only the existing
+UUID-v4 `AuthAdmissionBinding::REFERENCE_PATTERN`. It remains on that capability contract; the
+shared UUID boundary was not widened and no fallback was added. The first attempted NanoID change
+was rejected by the public integration tests with HTTP 400, then reverted before the Green run.
+
+The initial candidate-format tests were Red on the former UUID issuers. After the scoped production
+change and the named-collision test, the candidate/refusal collection passed
+`51 runs, 533 assertions, 0 failures, 0 errors, 0 skips`; the affected SocialAuth app/completion
+collection passed `40 runs, 328 assertions, 0 failures, 0 errors, 0 skips`. The run-owned Rails Gate
+2 passed `15147 runs, 128249 assertions, 0 failures, 0 errors, 0 skips` with four workers, and
+Vitest passed `99 files` and `1140 tests`. Targeted RuboCop and `git diff --check` passed. Exact
+commands, the tested HEAD, dirty-worktree scope and verification limits are recorded in
+[`T5Q8`](evidence/2026-10-12-identity-candidate-ref-issuer-T5Q8.md).
+
+This closes only the three self-controlled candidate-ref issuer boundaries and their collision
+handling. It does not close the full ceremony-purpose matrix, the SocialAuth protocol/capability
+exception inventory, database-level immutability for every identifier, D-11 committed-transaction
+isolation, P10b/P12b operational cutover, retained legacy identifier semantics, host Alloy
+recreation/runtime verification, privacy-retention policy or the user-excluded independent
+acceptance investigation. No migration, CI, Podman, production, shared destructive operation or
+remote synchronization was used.
