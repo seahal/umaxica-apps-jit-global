@@ -29,9 +29,12 @@ extension; decision record: `adr/realm-separated-identifiers-and-dead-history.md
       recommendations; all focused controller/ceremony/model/security checks, full Rails tests,
       RuboCop and required invariant harnesses pass; final schema verification disposition recorded.
 
-No commit/push/PR, worktree, production or external-service mutation. No compatibility layer or test
-weakening. Schema changes use migrations and generated dumps. Environment construction is checked by
-execution and recorded in evidence, not additional environment tests.
+No push/PR, worktree, production or external-service mutation. The integrated nine.md instruction
+permits narrow local commits for nine.md, durable acceptance/evidence documents and the minimum
+required indexes; that exception does not authorize application-code, migration or unrelated
+configuration commits. No compatibility layer or test weakening. Schema changes use migrations and
+generated dumps. Environment construction is checked by execution and recorded in evidence, not
+additional environment tests.
 
 ## Verification constraints observed
 
