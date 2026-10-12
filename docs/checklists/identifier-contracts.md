@@ -506,3 +506,27 @@ criterion.
   `test/notifiers/notify/email_reentry_otp_delivery_test.rb`. The current execution record is
   [`Q4M8`](../../evidence/2026-10-12-email-reentry-references-Q4M8.md); it is revision-scoped and
   does not classify other Email/Telephone ceremony issuers.
+
+## ID-3i — Secret Credential ceremony transaction and grant references
+
+- Basis: I04/I06/I07/I10 and ID-3; scope: APP, COM and ORG Secret Credential ceremony transaction
+  creation, signed grant binding, replay lookup and result handoff. `transaction_id` and `grant_jti`
+  are self-controlled, non-secret ceremony identities; `result_jti`, credential candidate refs,
+  secret material and actor/session references remain separate contracts.
+- Given a newly created Secret Credential ceremony transaction, a generated `transaction_id` and
+  `grant_jti` are separate NanoID-21 values from the shared public-ID mechanism. Explicitly supplied
+  values remain explicit inputs; this criterion does not reformat existing rows or classify the
+  result identity.
+- A generated collision may be retried only for the concrete table's named, single-column
+  `transaction_id` or `grant_jti` unique B-tree index. Each retry uses fresh generated values inside
+  a savepoint and the finite shared collision budget. Caller-supplied values, unrelated validation
+  or uniqueness failures and exhausted retries remain explicit failures; no cross-surface or
+  cross-purpose lookup fallback is permitted.
+- Check: `test/services/identity_secret_credential_ceremony_replay_store_test.rb` and the related
+  Secret Credential contract, result-issuer, final-committer, consumer and purger tests listed in
+  the execution evidence. Direct inspection must confirm that the three concrete transaction models
+  retain their surface binding and that transaction, grant, result and candidate references are not
+  substituted. Static checks do not prove concurrent committed collision behavior.
+- This criterion does not classify Secret Credential `result_jti`, the underlying permanent secret
+  credential identity, provider/protocol values or other ceremony transaction/grant issuers. Current
+  evidence is revision-scoped and is not a permanent PASS for future code.

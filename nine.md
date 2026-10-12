@@ -3337,3 +3337,36 @@ for every identifier, D-11 committed-transaction isolation, P10b/P12b operationa
 legacy identifier semantics, host-Alloy recreation/runtime verification, privacy-retention policy or
 the user-excluded independent acceptance investigation. No CI, Podman, production, shared
 destructive operation or remote synchronization was used.
+
+### 16.77 Resume update — Secret Credential ceremony transaction and grant references (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next independent
+P2 slice covered only the APP, COM and ORG Secret Credential ceremony transaction creation boundary.
+The concrete `transaction_id` and `grant_jti` values are self-controlled, non-secret ceremony
+identities; `result_jti`, candidate references, secret material and actor/session references remain
+separate contracts. Other result and ceremony issuers remain outside this slice.
+
+The Red run added public replay-store/model assertions and reproduced the former UUID generation
+plus missing collision recovery: `7 runs, 16 assertions, 5 failures, 0 errors, 0 skips`. The
+smallest Green change now makes `SecretCredentialCeremonyTransactionable.create_transaction!`
+generate a separate `PublicId.generate` value for each missing reference. It retries only an exact
+named single-column `transaction_id` or `grant_jti` unique B-tree collision inside a savepoint and
+the finite `PublicId::MAX_COLLISION_RETRIES` budget. Explicit inputs, unrelated validation or
+uniqueness failures and exhausted retries remain explicit failures; no result identity, secret,
+surface or purpose fallback was added.
+
+The focused replay-store collection passed `7 runs, 27 assertions, 0 failures, 0 errors, 0 skips`.
+The related Secret Credential contract, result-issuer, final-committer, consumer and purger
+collection passed `50 runs, 313 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop passed
+for the concern and replay-store test. Gate 2 then ran the run-owned twenty-database Rails suite
+with four workers and passed `15180 runs, 128432 assertions, 0 failures, 0 errors, 0 skips`; Vitest
+passed `99 files` and `1140 tests`. Exact commands, tested HEAD, dirty-worktree scope and limits are
+recorded in [`S7L2`](evidence/2026-10-12-secret-credential-references-S7L2.md).
+
+This closes only generated Secret Credential ceremony transaction/grant references and their exact
+collision boundary. It does not close Secret Credential `result_jti`, the permanent credential
+identity, other unclassified ceremony issuers, database-level immutability for every identifier,
+D-11 committed-transaction isolation, P10b/P12b operational cutover, retained legacy identifier
+semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
+independent acceptance investigation. No CI, Podman, production, shared destructive operation or
+remote synchronization was used.
