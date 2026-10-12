@@ -3270,3 +3270,37 @@ database-level immutability for every identifier, D-11 committed-transaction iso
 operational cutover, retained legacy identifier semantics, host-Alloy recreation/runtime
 verification, privacy-retention policy or the user-excluded independent acceptance investigation. No
 CI, Podman, production, shared destructive operation or remote synchronization was used.
+
+### 16.75 Resume update — credential-registration Email/Telephone grant references (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next independent
+P2 slice covered only the APP, COM and ORG Email/Telephone credential-registration `grant_jti`
+issuers. This is a self-controlled, non-secret grant identity distinct from the transaction
+reference, OTP generation, result identities, actor/session references and provider/protocol values.
+Existing UUID-v4 grant values remain opaque and readable; no other ceremony grant or result issuer
+was inferred from this slice.
+
+The Red run reached the public Email and Telephone registration issuers and reproduced the former
+UUID grant values plus the missing generated-grant collision path:
+`20 runs, 191 assertions, 7 failures, 0 errors, 0 skips`. The smallest Green change now generates
+`grant_jti` with `PublicId.generate` alongside each new transaction reference. It retries only an
+exact named single-column `grant_jti` or `transaction_id` unique B-tree collision inside a database
+savepoint and the finite `PublicId::MAX_COLLISION_RETRIES` budget; caller-supplied values and
+unrelated validation or uniqueness failures propagate. Transaction, grant, generation and
+proof/session purpose bindings remain separate.
+
+The focused issuer collection passed `20 runs, 248 assertions, 0 failures, 0 errors, 0 skips`. The
+broader issuer/binding collection passed `37 runs, 745 assertions, 0 failures, 0 errors, 0 skips`.
+Targeted RuboCop passed for the four changed Ruby implementation/test files. Gate 2 then ran the
+run-owned twenty-database Rails suite with four workers and passed
+`15173 runs, 128384 assertions, 0 failures, 0 errors, 0 skips`; Vitest passed `99 files` and
+`1140 tests`. The Rails run emitted existing Flipper/OmniAuth diagnostic output but no test
+failures. Exact commands, tested HEAD, dirty-worktree scope and limits are recorded in
+[`T3K7`](evidence/2026-10-12-credential-registration-grant-references-T3K7.md).
+
+This closes only the credential-registration Email/Telephone grant-reference generation and exact
+collision boundary. It does not close the complete ceremony-purpose matrix, other grant/result
+issuers, database-level immutability for every identifier, D-11 committed-transaction isolation,
+P10b/P12b operational cutover, retained legacy identifier semantics, host-Alloy recreation/runtime
+verification, privacy-retention policy or the user-excluded independent acceptance investigation. No
+CI, Podman, production, shared destructive operation or remote synchronization was used.

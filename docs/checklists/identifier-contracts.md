@@ -458,3 +458,29 @@ criterion.
   TOTP or secret-credential grant issuers, and it does not authorize changing external protocol
   identifiers. Current evidence is revision-scoped and does not establish complete ID-3 or ID-4
   acceptance.
+
+## ID-3g — Credential-registration Email and Telephone grant references
+
+- Basis: I04/I06/I07/I10 and ID-3; scope: APP, COM and ORG Email/Telephone credential-registration
+  transaction issuance and its grant-bound proof handoff. The `grant_jti` is a self-controlled,
+  non-secret grant identity separate from `transaction_id`, OTP `generation`, result identities,
+  actor/session references and provider or protocol values.
+- Given a newly issued credential-registration transaction, its generated `grant_jti` is a NanoID-21
+  from the shared public-ID mechanism. Existing UUID-v4 grant values remain opaque and readable
+  where the current contract permits them; they are not reformatted. The grant remains bound to the
+  concrete realm, channel, transaction, actor, candidate and purpose, and cannot be substituted for
+  a transaction, generation or result reference.
+- A generated collision may be retried only for the concrete table's named, single-column
+  `grant_jti` or `transaction_id` unique B-tree index. Each retry uses fresh generated references
+  inside a database savepoint and the finite shared collision budget. Caller-supplied values,
+  unrelated validation or uniqueness errors and exhausted retries remain explicit failures; no
+  cross-purpose or cross-surface fallback is permitted.
+- Check: `test/operations/email_credential_registration_otp_issuer_test.rb`,
+  `test/operations/telephone_credential_registration_otp_issuer_test.rb`,
+  `test/operations/contact_registration_otp_issuer_test.rb`,
+  `test/values/credential_registration_otp_session_value_test.rb`,
+  `test/values/contact_registration_otp_delivery_binding_value_test.rb` and
+  `test/values/email_credential_registration_otp_delivery_binding_value_test.rb`. Direct inspection
+  must confirm that transaction, grant, generation and proof/session bindings retain their existing
+  purpose and realm boundaries. The current evidence is revision-scoped and does not classify every
+  other credential-registration grant or result issuer.

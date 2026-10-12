@@ -281,6 +281,20 @@ and
 Other ceremony transaction, grant, result and OTP-generation issuers remain unclassified and must
 not be changed by inference from this slice.
 
+Credential-registration Email and Telephone issuers also assign a separate `grant_jti` for each new
+transaction. This is a self-controlled, non-secret grant identity, not a transaction, generation,
+result, actor/session or protocol identity. New APP, COM and ORG values use `PublicId.generate`
+(NanoID-21); existing UUID-v4 grant values remain opaque and readable under their current contract.
+The issuers retry only an exact named single-column `grant_jti` or `transaction_id` unique B-tree
+collision, inside a database savepoint and within the finite `PublicId::MAX_COLLISION_RETRIES`
+budget. Unrelated validation or uniqueness failures propagate, and no cross-purpose or cross-surface
+lookup fallback is introduced. Focused coverage is in
+[`test/operations/email_credential_registration_otp_issuer_test.rb`](../../test/operations/email_credential_registration_otp_issuer_test.rb)
+and
+[`test/operations/telephone_credential_registration_otp_issuer_test.rb`](../../test/operations/telephone_credential_registration_otp_issuer_test.rb);
+the broader issuer and binding tests listed in the preceding paragraph cover the surrounding purpose
+and session boundary.
+
 The APP TOTP enrollment child transaction is a separate self-controlled, non-secret ceremony
 identity. `IdentityTotpEnrollmentIssuer` now supplies a NanoID-21 `transaction_id` for new child
 rows while the step-up parent transaction, `grant_jti`, OTP secret/proof, candidate reference and
