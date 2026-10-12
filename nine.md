@@ -2936,3 +2936,29 @@ committed-transaction isolation, P10b/P12b operational cutover, retained legacy 
 semantics, host Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
 independent acceptance investigation. No CI, Podman, production, shared destructive operation or
 remote synchronization was used.
+
+### 16.65 Resume update — pending-MFA session issuer (P2, 2026-10-12)
+
+The next ready P2 slice classified the `set_pending_mfa!` session `public_id` as a self-controlled,
+opaque pending-MFA workflow identity. It is held in the Rails session and is not a provider value,
+protocol secret, CSRF token, PKCE value, database primary key or public API identifier. The Red
+assertion reached this behavior through the APP challenge HTTP boundary and observed the previous
+32-character hexadecimal issuer. The smallest Green change now uses `PublicId.generate` for newly
+created pending-MFA payloads while retaining the existing actor, surface, expiry, primary-method and
+authentication-boundary fields. No database, migration, raw SQL or session-issuance authority
+boundary changed.
+
+The focused APP challenge/TOTP/passkey collection passed
+`39 runs, 665 assertions, 0 failures, 0 errors, 0 skips`. The shared-authentication change then
+passed the run-owned Rails Gate 2 with
+`15146 runs, 128224 assertions, 0 failures, 0 errors, 0 skips`, and Vitest passed
+`99 files, 1140 tests`. Targeted RuboCop and `git diff --check` passed. The exact Red/Green
+commands, current HEAD, dirty-worktree scope and verification limits are recorded in
+[`M3P7`](evidence/2026-10-12-pending-mfa-session-issuer-M3P7.md).
+
+This closes only the pending-MFA session issuer boundary. It does not close the complete ceremony
+transaction/grant/result purpose matrix, database-level immutability inventory, D-11
+committed-transaction isolation, P10b/P12b operational cutover, retained legacy identifier
+semantics, host Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
+independent acceptance investigation. No CI, Podman, production, shared destructive operation or
+remote synchronization was used.

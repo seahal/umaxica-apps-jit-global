@@ -208,6 +208,13 @@ session payloads remain readable through the compatibility reader. The public `s
 covered by
 [`test/services/sign_in/sequence_carrier_test.rb`](../../test/services/sign_in/sequence_carrier_test.rb).
 
+The pending-MFA payload created by `AuthenticationBase#set_pending_mfa!` has its own session-scoped
+workflow `public_id`. New payloads use `PublicId.generate`; the value is not a provider/protocol
+value, secret, database primary key or public API reference. The existing actor, surface, expiry and
+session-issuance fields remain authoritative, and the public APP challenge boundary covers the
+format contract in
+[`test/controllers/auth/app/in/challenges_controller_test.rb`](../../test/controllers/auth/app/in/challenges_controller_test.rb).
+
 Avatar transfer idempotency keys retain the explicitly approved canonical UUID v4/v7 request
 contract in AV-5. That exception does not extend to all internally generated transaction IDs.
 Ceremony transaction/grant/result IDs and OTP generations need their actual purpose, entropy and
