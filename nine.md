@@ -3510,3 +3510,39 @@ D-11 committed-transaction isolation, P10b/P12b operational cutover, retained le
 semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
 independent acceptance investigation. No CI, Podman, production, shared destructive operation or
 remote synchronization was used.
+
+### 16.82 Resume update — Email ceremony transaction references (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next independent
+P2 slice covered the concrete APP, COM and ORG Email ceremony transaction factory, the public Email
+Verification Protocol challenge issuer and their replay, finalization, result, purge, delivery and
+integration consumers. `transaction_id` and `grant_jti` are self-controlled, non-secret ceremony
+identities. EVP nonce/token material, OTP generations, result identities, candidate values and
+actor/session references remain separate contracts.
+
+The Red run reached the public Email transaction boundary and reproduced the former UUID generation
+plus missing generated-collision recovery: `12 runs, 237 assertions, 3 failures, 0 errors, 0 skips`.
+The smallest Green change now makes `EmailCeremonyTransactionable.create_transaction!` generate
+separate NanoID-21 `transaction_id` and `grant_jti` values. It retries only an exact named
+single-column `transaction_id` or `grant_jti` unique B-tree collision inside a savepoint and the
+finite `PublicId::MAX_COLLISION_RETRIES` budget. Explicit inputs, unrelated validation or uniqueness
+failures and exhausted retries remain explicit; no surface, purpose, proof or delivery fallback was
+added.
+
+The focused Email factory and EVP challenge collection passed
+`36 runs, 351 assertions, 0 failures, 0 errors, 0 skips`. The related Email contract, replay,
+finalization, result, purge, delivery and integration collection passed
+`149 runs, 1453 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop passed for the concern
+and transaction tests after alignment-only correction. Gate 2 then ran the run-owned twenty-database
+Rails suite with four workers and passed
+`15191 runs, 128471 assertions, 0 failures, 0 errors, 0 skips`; Vitest passed `99 files` and
+`1140 tests`. Exact commands, tested HEAD, dirty-worktree scope and verification limits are recorded
+in [`N4Q6`](evidence/2026-10-12-email-ceremony-references-N4Q6.md).
+
+This closes only generated Email ceremony transaction/grant references and their exact collision
+boundary. It does not close Telephone ceremony references, OTP proof retirement, OTP generation or
+EVP protocol values, other unclassified ceremony issuers, database-level immutability for every
+identifier, D-11 committed-transaction isolation, P10b/P12b operational cutover, retained legacy
+identifier semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the
+user-excluded independent acceptance investigation. No CI, Podman, production, shared destructive
+operation or remote synchronization was used.

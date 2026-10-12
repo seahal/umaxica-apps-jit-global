@@ -630,3 +630,31 @@ criterion.
 - This criterion does not classify WebAuthn credential IDs, challenge/client-data values, RP
   identifiers, result identities, protocol/session values or other unclassified ceremony issuers.
   Current evidence is revision-scoped and is not a permanent PASS for future code.
+
+## ID-3n — Email ceremony transaction references
+
+- Basis: I04/I06/I07/I10 and ID-3; scope: the concrete APP, COM and ORG Email ceremony transaction
+  models, the Email Verification Protocol challenge factory, replay/finalization/result/purge
+  consumers and the related delivery paths. `transaction_id` and `grant_jti` are self-controlled,
+  non-secret ceremony identities; EVP nonce/token material, OTP generations, result identities,
+  candidate values and actor/session references retain separate contracts.
+- Given a newly created Email ceremony transaction through `EmailCeremonyTransactionable` or the
+  public EVP challenge factory, generated `transaction_id` and `grant_jti` are separate NanoID-21
+  values from the shared public-ID mechanism. Existing opaque transaction and grant values remain
+  readable. Surface, operation, actor/session binding, candidate/digest fields, EVP state and expiry
+  remain authoritative; no challenge, token, generation or result value is substituted for either
+  reference.
+- A generated collision may be retried only for the concrete table's named, single-column
+  `transaction_id` or `grant_jti` unique B-tree index. Each retry uses fresh generated values inside
+  a savepoint and the finite shared collision budget. Caller-supplied values, unrelated validation
+  or uniqueness failures and exhausted retries remain explicit failures; no cross-surface,
+  cross-purpose or proof fallback is permitted.
+- Check: `test/models/concerns/ceremony_transactionable_test.rb`,
+  `test/models/email_verification_challengeable_test.rb` and the Email ceremony contract,
+  replay-store, final-committer, result-issuer, purger, delivery and integration tests selected for
+  this slice. Direct inspection must confirm that EVP nonce/token verification and the existing
+  delivery/session boundaries remain separate. Static checks do not prove concurrent committed
+  collision behavior or external delivery behavior.
+- This criterion does not classify OTP `generation`, EVP nonce/token digests, result identities,
+  candidate or provider values, protocol/session identifiers or other unclassified ceremony issuers.
+  Current evidence is revision-scoped and is not a permanent PASS for future code.

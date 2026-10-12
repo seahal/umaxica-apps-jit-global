@@ -369,6 +369,21 @@ WebAuthn fallback; the existing challenge/protocol writer remains the HTTP autho
 and the related Passkey replay-store, contract, result, final-commit, purge, registration and
 authorization tests.
 
+Email ceremony transaction rows use the same bounded distinction for the concrete APP, COM and ORG
+factory boundary. New rows created through `EmailCeremonyTransactionable.create_transaction!` and
+the public `EmailVerificationChallengeable.issue_evp_challenge!` path receive separate NanoID-21
+`transaction_id` and `grant_jti` values; existing opaque values remain readable. Surface, operation,
+actor/session binding, candidate/digest fields, EVP outcome and expiry remain authoritative, while
+EVP nonce/token material, OTP generation, result identities and delivery/session values retain their
+own contracts. Creation retries only an exact named single-column `transaction_id` or `grant_jti`
+unique B-tree collision inside a savepoint and the finite `PublicId::MAX_COLLISION_RETRIES` budget.
+Caller-supplied values and unrelated failures propagate without cross-surface, cross-purpose or
+proof fallback. See
+[`test/models/concerns/ceremony_transactionable_test.rb`](../../test/models/concerns/ceremony_transactionable_test.rb),
+[`test/models/email_verification_challengeable_test.rb`](../../test/models/email_verification_challengeable_test.rb)
+and the related Email ceremony contract, replay, finalization, result, purge, delivery and
+integration tests.
+
 The APP TOTP enrollment child transaction is a separate self-controlled, non-secret ceremony
 identity. `IdentityTotpEnrollmentIssuer` now supplies a NanoID-21 `transaction_id` for new child
 rows while the step-up parent transaction, `grant_jti`, OTP secret/proof, candidate reference and
