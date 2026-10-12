@@ -2757,3 +2757,18 @@ for P10b/P12b Group semantics and writer-controlled cutover, the retained legacy
 D-11 committed-transaction isolation, host Alloy recreation/runtime verification, privacy-retention
 policy, or the historical HMAC-role rollback path. No CI, Podman, production, shared destructive
 operation, or independent acceptance investigation was performed.
+
+### 16.57 Resume update — current identifier catalog after the focused check (2026-10-12)
+
+The read-only `identifiers:inventory` task was rerun with the required four-worker manifest guard
+after the focused check. It scanned 20 configured writer connections and 892 tables. Each connection
+reported zero missing or composite primary keys, zero Hash indexes, zero invalid indexes and zero
+unready indexes. The only two non-bigint primary keys reported per connection are the Rails-owned
+`schema_migrations` and `ar_internal_metadata` tables; this catalog result does not replace semantic
+owner/consumer classification. The exact command and the ignored report path are in
+[`C3N8`](evidence/2026-10-12-restart-identifier-inventory-C3N8.md).
+
+The first attempt without `PARALLEL_WORKERS` failed closed during application initialization with
+`ConfigurationError`; it made no database change. The corrected run passed. This confirms the
+current inventory guard and does not close the retained legacy identifier review, permanent-ID
+immutability mapping, operational Avatar cutover, or any independent acceptance condition.
