@@ -3546,3 +3546,39 @@ identifier, D-11 committed-transaction isolation, P10b/P12b operational cutover,
 identifier semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the
 user-excluded independent acceptance investigation. No CI, Podman, production, shared destructive
 operation or remote synchronization was used.
+
+### 16.83 Resume update — Telephone ceremony transaction references (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next independent
+P2 slice covered the concrete APP, COM and ORG Telephone ceremony transaction factory and its typed
+replay, result, finalization, purge, OTP issuer, delivery and integration consumers.
+`transaction_id` and `grant_jti` are self-controlled, non-secret ceremony identities. Telephone OTP
+generations, delivery/proof material, result identities, candidate values and actor/session
+references remain separate contracts; the legacy value-object defaults remain unclassified.
+
+The Red run reached the public Telephone transaction boundary and reproduced the former UUID
+generation plus missing generated-collision recovery:
+`15 runs, 246 assertions, 3 failures, 0 errors, 0 skips`. The smallest Green change now makes
+`TelephoneCeremonyTransactionable.create_transaction!` generate separate NanoID-21 `transaction_id`
+and `grant_jti` values. It retries only an exact named single-column `transaction_id` or `grant_jti`
+unique B-tree collision inside a savepoint and the finite `PublicId::MAX_COLLISION_RETRIES` budget.
+Explicit inputs, unrelated validation or uniqueness failures and exhausted retries remain explicit;
+no surface, purpose, proof, delivery or protocol fallback was added.
+
+The focused Telephone factory and coverage collection passed
+`18 runs, 273 assertions, 0 failures, 0 errors, 0 skips`. The related Telephone contract, replay,
+finalization, result, purge, OTP issuer, delivery and integration collection passed
+`199 runs, 2296 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop passed for the concern
+and transaction tests after alignment-only correction. Gate 2 then ran the run-owned twenty-database
+Rails suite with four workers and passed
+`15194 runs, 128472 assertions, 0 failures, 0 errors, 0 skips`; Vitest passed `99 files` and
+`1140 tests`. Exact commands, tested HEAD, dirty-worktree scope and verification limits are recorded
+in [`O5R7`](evidence/2026-10-12-telephone-ceremony-references-O5R7.md).
+
+This closes only generated Telephone ceremony transaction/grant references and their exact collision
+boundary. It does not close the legacy value-object defaults, Telephone OTP generation or
+delivery/proof values, result identities, other unclassified ceremony issuers, database-level
+immutability for every identifier, D-11 committed-transaction isolation, P10b/P12b operational
+cutover, retained legacy identifier semantics, host-Alloy recreation/runtime verification,
+privacy-retention policy or the user-excluded independent acceptance investigation. No CI, Podman,
+production, shared destructive operation or remote synchronization was used.

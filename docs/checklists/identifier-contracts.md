@@ -658,3 +658,30 @@ criterion.
 - This criterion does not classify OTP `generation`, EVP nonce/token digests, result identities,
   candidate or provider values, protocol/session identifiers or other unclassified ceremony issuers.
   Current evidence is revision-scoped and is not a permanent PASS for future code.
+
+## ID-3o — Telephone ceremony transaction references
+
+- Basis: I04/I06/I07/I10 and ID-3; scope: the concrete APP, COM and ORG Telephone ceremony
+  transaction models, the typed replay store and their result/finalization/purge consumers.
+  `transaction_id` and `grant_jti` are self-controlled, non-secret ceremony identities; telephone
+  OTP generations, delivery/proof values, result identities, candidate values and actor/session
+  references retain separate contracts.
+- Given a newly created Telephone ceremony transaction through `TelephoneCeremonyTransactionable`,
+  generated `transaction_id` and `grant_jti` are separate NanoID-21 values from the shared public-ID
+  mechanism. Existing opaque values remain readable. Surface, operation, actor/session binding,
+  candidate/digest fields and expiry remain authoritative; no OTP generation, result, delivery or
+  protocol value is substituted for either reference.
+- A generated collision may be retried only for the concrete table's named, single-column
+  `transaction_id` or `grant_jti` unique B-tree index. Each retry uses fresh generated values inside
+  a savepoint and the finite shared collision budget. Caller-supplied values, unrelated validation
+  or uniqueness failures and exhausted retries remain explicit failures; no cross-surface,
+  cross-purpose or proof fallback is permitted.
+- Check: `test/models/concerns/ceremony_transactionable_test.rb`,
+  `test/services/identity_telephone_ceremony_transaction_coverage_test.rb` and the Telephone
+  contract, replay-store, finalization, result, purge, OTP issuer, delivery and integration tests
+  selected for this slice. Direct inspection must confirm that the existing Telephone delivery and
+  proof/session boundaries remain separate. Static checks do not prove concurrent committed
+  collision behavior or live SMS delivery behavior.
+- This criterion does not classify Telephone OTP generation, delivery/proof values, result
+  identities, protocol/session identifiers, the legacy value-object defaults or other unclassified
+  ceremony issuers. Current evidence is revision-scoped and is not a permanent PASS for future code.
