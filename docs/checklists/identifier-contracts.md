@@ -603,3 +603,30 @@ criterion.
 - This criterion does not classify OIDC `state`, `nonce`, PKCE, login challenges, provider/client
   identifiers, protocol `jti`/`sid` values or other unclassified transaction and result issuers.
   Current evidence is revision-scoped and is not a permanent PASS for future code.
+
+## ID-3m — Passkey ceremony transaction references
+
+- Basis: I04/I06/I07/I10 and ID-3; scope: the concrete APP, COM and ORG Passkey ceremony transaction
+  models, their replay/result/purge consumers and the public transaction factory. `transaction_id`
+  and `grant_jti` are self-controlled, non-secret ceremony identities. Relying-party identifiers and
+  origins, credential-candidate references, WebAuthn challenges/results, credential identities and
+  protocol values retain separate contracts.
+- Given a newly created Passkey ceremony transaction through the public factory, generated
+  `transaction_id` and `grant_jti` are separate NanoID-21 values from the shared public-ID
+  mechanism. Existing opaque values remain readable. The factory preserves the concrete surface,
+  actor/session binding, operation, relying-party configuration, candidate data and expiry; it does
+  not substitute a challenge, credential identifier or protocol value for either reference.
+- A generated collision may be retried only for the concrete table's named, single-column
+  `transaction_id` or `grant_jti` unique B-tree index. Each retry uses fresh generated values inside
+  a savepoint and the finite shared collision budget. Caller-supplied values, unrelated validation
+  or uniqueness failures and exhausted retries remain explicit failures; no cross-surface,
+  cross-purpose or WebAuthn fallback is permitted.
+- Check: `test/models/concerns/ceremony_transactionable_test.rb` and the related Passkey
+  replay-store, contract, result-issuer, final-committer, purger, registration-committer,
+  authorization and numeric-date tests selected for this slice. Direct inspection must confirm that
+  the existing WebAuthn challenge/protocol boundary and concrete surface bindings remain
+  authoritative. Static checks do not prove concurrent committed collision behavior or live
+  authenticator behavior.
+- This criterion does not classify WebAuthn credential IDs, challenge/client-data values, RP
+  identifiers, result identities, protocol/session values or other unclassified ceremony issuers.
+  Current evidence is revision-scoped and is not a permanent PASS for future code.

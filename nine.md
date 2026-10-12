@@ -3474,3 +3474,39 @@ identifier, D-11 committed-transaction isolation, P10b/P12b operational cutover,
 identifier semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the
 user-excluded independent acceptance investigation. No CI, Podman, production, shared destructive
 operation or remote synchronization was used.
+
+### 16.81 Resume update — Passkey ceremony transaction references (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next independent
+P2 slice covered the concrete APP, COM and ORG Passkey ceremony transaction factory and its replay,
+result, final-commit, purge, registration and authorization consumers. `transaction_id` and
+`grant_jti` are self-controlled, non-secret ceremony identities. Relying-party identifiers and
+origins, credential-candidate references, WebAuthn challenge/client-data/result values, credential
+identities and other protocol/session values remain separate contracts; the existing
+challenge/protocol writer remains the HTTP authority.
+
+The Red run reached the public Passkey transaction boundary and reproduced the former UUID
+generation plus missing generated-collision recovery:
+`9 runs, 228 assertions, 3 failures, 0 errors, 0 skips`. The smallest Green change now makes
+`PasskeyCeremonyTransactionable.create_transaction!` generate separate NanoID-21 `transaction_id`
+and `grant_jti` values. It retries only an exact named single-column `transaction_id` or `grant_jti`
+unique B-tree collision inside a savepoint and the finite `PublicId::MAX_COLLISION_RETRIES` budget.
+Explicit inputs, unrelated validation or uniqueness failures and exhausted retries remain explicit;
+no surface, purpose, WebAuthn or protocol fallback was added.
+
+The focused Passkey transaction collection passed
+`9 runs, 233 assertions, 0 failures, 0 errors, 0 skips`. The related Passkey replay-store, contract,
+result-issuer, final-committer, purger, registration-committer, authorization and numeric-date
+collection passed `65 runs, 644 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop passed
+for the concern and test. Gate 2 then ran the run-owned twenty-database Rails suite with four
+workers and passed `15188 runs, 128470 assertions, 0 failures, 0 errors, 0 skips`; Vitest passed
+`99 files` and `1140 tests`. Exact commands, tested HEAD, dirty-worktree scope and verification
+limits are recorded in [`M3P5`](evidence/2026-10-12-passkey-ceremony-references-M3P5.md).
+
+This closes only generated Passkey ceremony transaction/grant references and their exact collision
+boundary. It does not close WebAuthn credential IDs or challenge/protocol values, Passkey result
+identities, other unclassified ceremony issuers, database-level immutability for every identifier,
+D-11 committed-transaction isolation, P10b/P12b operational cutover, retained legacy identifier
+semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
+independent acceptance investigation. No CI, Podman, production, shared destructive operation or
+remote synchronization was used.

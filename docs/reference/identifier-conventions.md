@@ -355,6 +355,20 @@ cross-surface or protocol fallback. See
 [`test/models/concerns/oidc_authorization_transactionable_test.rb`](../../test/models/concerns/oidc_authorization_transactionable_test.rb)
 and the related coordinator, admission, token-exchange, purge and OIDC integration tests.
 
+Passkey ceremony transaction rows use the same bounded distinction for the concrete APP, COM and ORG
+factory boundary. New rows created through `PasskeyCeremonyTransactionable.create_transaction!`
+receive separate NanoID-21 `transaction_id` and `grant_jti` values; existing opaque values remain
+readable. Surface, actor/session binding, operation, relying-party ID/origin, credential-candidate
+references and expiry remain part of the transaction contract, while WebAuthn challenges, client
+data, credential identities, result values and other protocol material retain their own contracts.
+Creation retries only an exact named single-column `transaction_id` or `grant_jti` unique B-tree
+collision inside a savepoint and the finite `PublicId::MAX_COLLISION_RETRIES` budget.
+Caller-supplied values and unrelated failures propagate without cross-surface, cross-purpose or
+WebAuthn fallback; the existing challenge/protocol writer remains the HTTP authority. See
+[`test/models/concerns/ceremony_transactionable_test.rb`](../../test/models/concerns/ceremony_transactionable_test.rb)
+and the related Passkey replay-store, contract, result, final-commit, purge, registration and
+authorization tests.
+
 The APP TOTP enrollment child transaction is a separate self-controlled, non-secret ceremony
 identity. `IdentityTotpEnrollmentIssuer` now supplies a NanoID-21 `transaction_id` for new child
 rows while the step-up parent transaction, `grant_jti`, OTP secret/proof, candidate reference and
