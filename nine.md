@@ -3370,3 +3370,37 @@ D-11 committed-transaction isolation, P10b/P12b operational cutover, retained le
 semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
 independent acceptance investigation. No CI, Podman, production, shared destructive operation or
 remote synchronization was used.
+
+### 16.78 Resume update — Social ceremony transaction and grant references (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next independent
+P2 slice covered only the APP Social ceremony transaction creation boundary used by
+`IdentitySocialCeremonyGrantIssuer`. The internally generated `transaction_id` and `grant_jti` are
+self-controlled, non-secret ceremony identities; provider subject values, OAuth/OIDC state,
+candidate capability references and result identities remain separate contracts.
+
+The Red run strengthened the public transaction concern assertions and added transaction- and
+grant-collision cases, reproducing the former UUID generation and missing retry path:
+`5 runs, 18 assertions, 3 failures, 0 errors, 0 skips`. The smallest Green change now makes
+`SocialCeremonyTransactionable.create_transaction!` generate separate `PublicId.generate` values for
+missing references. It retries only an exact named single-column `transaction_id` or `grant_jti`
+unique B-tree collision inside a savepoint and the finite `PublicId::MAX_COLLISION_RETRIES` budget.
+Explicit values, provider subject/candidate values, unrelated validation or uniqueness failures and
+exhausted retries remain explicit; no OAuth/provider or cross-purpose fallback was added.
+
+The focused Social transaction collection passed
+`5 runs, 37 assertions, 0 failures, 0 errors, 0 skips`. The related Social contract, result-issuer,
+consumer and integration collection passed `69 runs, 400 assertions, 0 failures, 0 errors, 0 skips`.
+Targeted RuboCop passed for the concern and test. Gate 2 then ran the run-owned twenty-database
+Rails suite with four workers and passed
+`15182 runs, 128433 assertions, 0 failures, 0 errors, 0 skips`; Vitest passed `99 files` and
+`1140 tests`. Exact commands, tested HEAD, dirty-worktree scope and limits are recorded in
+[`H5N6`](evidence/2026-10-12-social-ceremony-references-H5N6.md).
+
+This closes only generated Social ceremony transaction/grant references and their exact collision
+boundary. It does not close Social `result_jti`, provider subject values, candidate capability
+references, permanent external-identity identifiers, other unclassified ceremony issuers,
+database-level immutability for every identifier, D-11 committed-transaction isolation, P10b/P12b
+operational cutover, retained legacy identifier semantics, host-Alloy recreation/runtime
+verification, privacy-retention policy or the user-excluded independent acceptance investigation. No
+CI, Podman, production, shared destructive operation or remote synchronization was used.

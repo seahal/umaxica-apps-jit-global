@@ -530,3 +530,26 @@ criterion.
 - This criterion does not classify Secret Credential `result_jti`, the underlying permanent secret
   credential identity, provider/protocol values or other ceremony transaction/grant issuers. Current
   evidence is revision-scoped and is not a permanent PASS for future code.
+
+## ID-3j — Social ceremony transaction and grant references
+
+- Basis: I04/I06/I07/I10 and ID-3; scope: the APP Social ceremony grant issuer, signed grant/result
+  binding, provider callback handoff and replay transaction. Provider subject values, OAuth/OIDC
+  state, candidate capability references and result identities remain separate contracts.
+- Given a newly issued Social ceremony grant, the internally generated `transaction_id` and
+  `grant_jti` are separate NanoID-21 values from the shared public-ID mechanism. Provider-managed
+  subject identifiers and the explicit candidate capability reference are not reformatted or used as
+  the transaction or grant identity.
+- A generated collision may be retried only for the concrete table's named, single-column
+  `transaction_id` or `grant_jti` unique B-tree index. Each retry uses fresh generated values inside
+  a savepoint and the finite shared collision budget. Caller-supplied values, unrelated validation
+  or uniqueness failures and exhausted retries remain explicit failures; no provider, surface or
+  purpose fallback is permitted.
+- Check: `test/models/concerns/social_ceremony_transactionable_test.rb`, the Social ceremony
+  contract, result-issuer, consumer and transaction integration tests. Direct inspection must
+  confirm that provider subject binding, verified callback validation and result consumption retain
+  their existing trust boundaries. Static checks do not prove concurrent committed collision
+  behavior or live provider behavior.
+- This criterion does not classify Social `result_jti`, provider subject values, candidate `ref`,
+  OAuth/OIDC state, permanent external-identity identifiers or other ceremony issuers. Current
+  evidence is revision-scoped and is not a permanent PASS for future code.
