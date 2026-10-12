@@ -3023,3 +3023,42 @@ isolation, P10b/P12b operational cutover, retained legacy identifier semantics, 
 recreation/runtime verification, privacy-retention policy or the user-excluded independent
 acceptance investigation. No migration, CI, Podman, production, shared destructive operation or
 remote synchronization was used.
+
+### 16.68 Resume update — credential-registration transaction references (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next
+source-confirmed P2 slice covered only the six concrete Email/Telephone credential-registration
+transaction issuers. These `transaction_id` values are self-controlled, non-secret ceremony
+identities bound into the surface/channel session value and delivery path. They are distinct from
+OTP `generation`, grant and result identities, provider/protocol values and database primary keys.
+The generic ceremony transaction defaults for other purposes remain untouched pending their own
+purpose and consumer classification.
+
+The Red tests observed UUID transaction references and rejected NanoID references at the session and
+delivery-binding boundaries. The smallest Green change now supplies `PublicId.generate` (NanoID-21)
+explicitly for new credential-registration Email and Telephone transactions. Existing UUID-v4
+references remain accepted for reads and bindings; OTP generation remains UUID-v4. A transaction-ID
+collision is retried only when the concrete table reports its named, single-column unique B-tree
+index. Each retry runs inside a database savepoint with a fresh reference and the finite shared
+collision budget; unrelated validation or uniqueness errors propagate. No migration, raw SQL,
+provider-secret, session authority or cross-surface fallback changed. Missing generic
+`transaction_id` attribute labels exposed by the collision boundary were added to the existing
+locale fallback maps without changing user-facing workflow semantics.
+
+The initial correctly configured Red collection reported
+`33 runs, 488 assertions, 8 failures, 3 errors, 0 skips`. After the implementation and savepoint
+collision tests, the focused collection passed
+`35 runs, 729 assertions, 0 failures, 0 errors, 0 skips`; the broader credential-registration
+collection passed `531 runs, 8643 assertions, 0 failures, 0 errors, 0 skips`. The run-owned
+twenty-database Rails Gate 2 then passed
+`15150 runs, 128278 assertions, 0 failures, 0 errors, 0 skips` with four workers, and Vitest passed
+`99 files` and `1140 tests`. Targeted RuboCop passed for all eleven changed Ruby files. Exact
+commands, the tested HEAD, dirty-worktree scope and verification limits are recorded in
+[`C7P4`](evidence/2026-10-12-credential-registration-transaction-issuer-C7P4.md).
+
+This closes only the credential-registration transaction-reference issuer and compatibility slice.
+It does not close the complete ceremony-purpose matrix, database-level immutability for every
+identifier, D-11 committed-transaction isolation, P10b/P12b operational cutover, retained legacy
+identifier semantics, host Alloy recreation/runtime verification, privacy-retention policy or the
+user-excluded independent acceptance investigation. No CI, Podman, production, shared destructive
+operation or remote synchronization was used.
