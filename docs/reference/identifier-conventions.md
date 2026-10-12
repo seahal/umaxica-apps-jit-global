@@ -201,6 +201,13 @@ covered by
 and
 [`test/services/org_normal_sign_in_binding_codec_test.rb`](../../test/services/org_normal_sign_in_binding_codec_test.rb).
 
+`SignInSequenceCarrier` stores a separate surface-scoped workflow `id` in the Rails session. New
+sequence starts use `PublicId.generate`; this value is an internal workflow identity and is not a
+provider/protocol value, secret, database primary key or public API reference. Existing UUID-valued
+session payloads remain readable through the compatibility reader. The public `start!` boundary is
+covered by
+[`test/services/sign_in/sequence_carrier_test.rb`](../../test/services/sign_in/sequence_carrier_test.rb).
+
 Avatar transfer idempotency keys retain the explicitly approved canonical UUID v4/v7 request
 contract in AV-5. That exception does not extend to all internally generated transaction IDs.
 Ceremony transaction/grant/result IDs and OTP generations need their actual purpose, entropy and

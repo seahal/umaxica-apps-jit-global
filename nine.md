@@ -2911,3 +2911,28 @@ This is current implementation evidence only. It does not close the complete cer
 matrix, database-level immutability inventory, D-11 committed-transaction isolation, P10b/P12b
 operational cutover, retained legacy identifier semantics, host Alloy runtime verification,
 privacy-retention policy or the user-excluded independent acceptance investigation.
+
+### 16.64 Resume update — shared sign-in sequence issuer (P2, 2026-10-12)
+
+The next ready P2 slice classified the `SignInSequenceCarrier` session `id` as a self-controlled,
+opaque workflow identity. It is stored inside the surface-scoped Rails session payload and is not a
+provider value, protocol secret, CSRF token, PKCE value, database primary key or external API
+identifier. The Red assertion observed the former UUID issuer through the public `start!` boundary.
+The smallest Green change now uses `PublicId.generate` for newly started sequences while retaining
+the existing session shape, surface partitioning, terminal-state behavior and compatibility read of
+older serialized payloads. No database, migration, raw SQL, provider-secret or authentication
+authority boundary changed.
+
+The focused sequence and adjacent checkpoint collection passed
+`29 runs, 68 assertions, 0 failures, 0 errors, 0 skips`. After that local Green, the run-owned Rails
+Gate 2 passed `15146 runs, 128238 assertions, 0 failures, 0 errors, 0 skips`, and Vitest passed
+`99 files, 1140 tests`. Targeted RuboCop and `git diff --check` also passed. The exact Red/Green
+commands, current HEAD, dirty-worktree scope and verification limits are recorded in
+[`K8L2`](evidence/2026-10-12-sign-in-sequence-issuer-K8L2.md).
+
+This closes only the shared session-sequence issuer boundary. It does not close the complete
+ceremony transaction/grant/result purpose matrix, database-level immutability inventory, D-11
+committed-transaction isolation, P10b/P12b operational cutover, retained legacy identifier
+semantics, host Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
+independent acceptance investigation. No CI, Podman, production, shared destructive operation or
+remote synchronization was used.
