@@ -2793,3 +2793,41 @@ realm-separated ceremony-verifier ADR and mark those examples as historical guid
 documentation-only alignment; it does not alter the Email/Telephone implementation or introduce a
 new policy. The pre-commit documentation check and scope are recorded in
 [`R1P6`](evidence/2026-10-12-otp-guidance-doc-sync-R1P6.md).
+
+### 16.60 Resume update — retired OTP email fallback removed (2026-10-12)
+
+After the required Section 5.3, Section 16 and Section 14.2 reading, the next implementation slice
+removed the retired direct `OtpEmailAdapter` and `OtpEmailNotifierRollout` path. The production
+`OtpAdapter.for` boundary now selects the concrete Noticed adapter for Email in each of the APP, COM
+and ORG surfaces without a feature flag or silent fallback. The existing ActionMailer, Noticed,
+interceptor, delivery-job and surface ownership contracts remain in place; this change does not
+redesign mail delivery or OTP generation. The former rollout and direct-adapter tests were removed
+or rewritten as final-path characterization and boundary tests, and the static architecture baseline
+was regenerated through its repository task after the deleted files caused one initial baseline
+failure.
+
+The first focused TDD check changed the adapter expectations before production code and failed with
+four assertions because the old adapter was still returned. The smallest production change then made
+the three Email selections explicit and the focused adapter test passed with
+`10 runs, 12 assertions, 0 failures, 0 errors, 0 skips`. The broader adapter/security collection
+passed with `41 runs, 367 assertions, 0 failures, 0 errors, 0 skips`; the affected
+controller/integration collection passed with
+`123 runs, 2,963 assertions, 0 failures, 0 errors, 0 skips`.
+
+The first full Rails Gate 2 run found one static architecture-baseline failure listing the two
+deleted files. After `bin/rails architecture:baseline`, its contract test passed with
+`3 runs, 2,742 assertions, 0 failures, 0 errors, 0 skips`. The rerun of the complete owned
+disposable writer scope with four workers passed with
+`15,134 runs, 128,192 assertions, 0 failures, 0 errors, 0 skips` in 329.978810 seconds. The
+corresponding `bun run test` passed `99` files and `1,140` tests in 12.93 seconds. A read-only
+PostgreSQL catalog check found the twenty run-owned parent databases and zero active worker
+sessions. Static checks also passed: RuboCop inspected 5,377 files with no offenses, Brakeman
+reported zero warnings/errors, bundler-audit reported no vulnerabilities, `bun run check` succeeded,
+the repository knowledge check passed, and `git diff --check` passed.
+
+This is current implementation evidence only, not an independent acceptance decision. The user
+excluded acceptance-test work remains unclaimed. P10b/P12b Group semantics and operational cutover,
+D-11's complete committed-transaction isolation matrix, host Alloy remount/runtime verification, the
+two retained legacy identifier tables, privacy-retention policy, and the historical HMAC-role
+rollback hazard remain open. No CI, Podman, production, shared destructive operation or remote
+synchronization was used.
