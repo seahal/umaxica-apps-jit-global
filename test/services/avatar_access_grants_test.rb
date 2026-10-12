@@ -17,6 +17,7 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
       subject: @app.account,
       capability: "avatar.view",
       granted_by_actor_public_id: @client.public_id,
+      granting_subject_public_id: @app.account.public_id,
     )
 
     assert_instance_of AvatarEnterprisePersonaGrant, grant
@@ -35,6 +36,7 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
       subject: @app.account,
       capability: "avatar.view",
       granted_by_actor_public_id: @client.public_id,
+      granting_subject_public_id: @app.account.public_id,
     )
     transition_at = @period.valid_from + 1.second
     @period.update!(valid_to: transition_at)
@@ -57,6 +59,7 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
         subject: @app.account,
         capability: "avatar.update",
         granted_by_actor_public_id: @client.public_id,
+        granting_subject_public_id: @app.account.public_id,
       )
     end
     assert_nil grant.reload.revoked_at
@@ -71,6 +74,7 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
         subject: @app.account,
         capability: "avatar.view",
         granted_by_actor_public_id: other.public_id,
+        granting_subject_public_id: @app.account.public_id,
       )
     end
 
@@ -88,6 +92,7 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
         subject: @app.account,
         capability: "avatar.view",
         granted_by_actor_public_id: @client.public_id,
+        granting_subject_public_id: @app.account.public_id,
       )
     end
   end
@@ -98,6 +103,7 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
       subject: @app.account,
       capability: "avatar.view",
       granted_by_actor_public_id: @client.public_id,
+      granting_subject_public_id: @app.account.public_id,
     )
     grant.update!(revoked_at: Time.current)
 
@@ -132,6 +138,7 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
       subject: org.account,
       capability: "avatar.view",
       granted_by_actor_public_id: operator.public_id,
+      granting_subject_public_id: org.account.public_id,
     )
 
     assert_instance_of AvatarBureauAgentGrant, grant
@@ -167,5 +174,32 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
     assert_not_includes columns, "subject_type"
     assert_not_includes columns, "owner_type"
     assert_not_includes columns, "ownership_period_type"
+  end
+
+  test "an owner can grant a current generation to another concrete member" do
+    recipient_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    recipient = BaseSelectorBootstrapAuthority.call(surface: :app, principal: recipient_actor)
+    CollectiveMembership::Grant.call(
+      account: recipient.account,
+      collective: @app.collective,
+      unit: @app.collective.root_units.first,
+      kind_id: PersonaMembershipKind::MEMBER,
+    )
+
+    grant = AvatarAccessGrants::IssueOperation.call(
+      ownership_period: @period,
+      subject: recipient.account,
+      capability: "avatar.view",
+      granted_by_actor_public_id: @client.public_id,
+      granting_subject_public_id: @app.account.public_id,
+    )
+
+    assert_equal recipient.account.public_id, grant.persona_public_id
+    assert AvatarAccessGrantResolver.call(
+      avatar: @app.avatar,
+      ownership_period: @period,
+      subject: recipient.account,
+      capability: "avatar.view",
+    )
   end
 end

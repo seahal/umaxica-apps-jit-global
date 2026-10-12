@@ -55,7 +55,10 @@ class TestEnvironmentEdgeContractTest < ActiveSupport::TestCase
     error =
       assert_raises(Umaxica::TestEnvironment::ConfigurationError) do
         Umaxica::TestEnvironment::DatabaseSafety.prepare_database_names!(
-          manifest: { test_databases: ["test_primary_db"] },
+          manifest: {
+            test_databases: ["test_primary_db"],
+            writable_test_databases: ["test_primary_db"],
+          },
           environment: { "POSTGRESQL_TEST_PREPARE_DATABASES" => " , " },
         )
       end

@@ -222,9 +222,10 @@ ActionMailer telemetry is an explicit pre-export allowlist. With the installed A
 instrumentation, delivery spans retain only the non-secret mailer attribute and process spans
 retain only the mailer and action. Addresses, subject, arguments, body, MIME, OTPs, tokens and
 unknown future payload keys are excluded before the exporter. The Rails span scrubber remains a
-secondary in-process control, and the development Alloy processor remains a second downstream
-deletion boundary. This local policy does not assert that a production collector or retention
-topology exists.
+secondary in-process control: every `email.*` span attribute other than `email.x_mailer`, and
+every `args` attribute, is removed if it reaches that boundary. The development Alloy processor
+remains a second downstream deletion boundary. This local policy does not assert that a production
+collector or retention topology exists.
 
 ## Layer 2: Audit And Security Events
 

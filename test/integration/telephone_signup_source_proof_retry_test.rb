@@ -190,6 +190,7 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
         assert_equal "/sign/up/guard/telephone", guard.path
         flow.reload
         retry_binding = SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard.query).fetch("fb"))
+
         assert_equal decoded.flow_public_id, retry_binding.flow_public_id
         assert_equal flow.step, retry_binding.phase
         assert_equal flow.checkpoint_version, retry_binding.generation

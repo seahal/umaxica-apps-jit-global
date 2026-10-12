@@ -216,6 +216,7 @@ CREATE TABLE public.app_enforcement_appeals (
     redacted_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT app_enforcement_appeals_public_id_max_length CHECK ((char_length((public_id)::text) <= 25)),
     CONSTRAINT chk_app_enforcement_appeals_state CHECK (((state)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'approved'::character varying, 'rejected'::character varying, 'redacted'::character varying])::text[])))
 );
 
@@ -527,7 +528,8 @@ CREATE TABLE public.client_accounts (
     public_id character varying DEFAULT ''::character varying NOT NULL,
     user_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT client_accounts_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -989,7 +991,8 @@ CREATE TABLE public.client_identities (
     last_authenticated_at timestamp(6) with time zone,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT client_identities_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -1434,7 +1437,7 @@ CREATE TABLE public.client_passkeys (
     last_used_at timestamp(6) with time zone,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    public_id character varying(21),
+    public_id character varying(21) NOT NULL,
     aaguid uuid,
     transports jsonb,
     backup_eligible boolean,
@@ -1619,7 +1622,8 @@ CREATE TABLE public.client_persona_ownership_transfer_requests (
     CONSTRAINT chk_client_persona_transfer_requests_distinct_parties CHECK ((source_client_id <> destination_client_id)),
     CONSTRAINT chk_client_persona_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_client_persona_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_client_persona_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
+    CONSTRAINT chk_client_persona_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[]))),
+    CONSTRAINT client_persona_ownership_transfer_requests_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -2419,7 +2423,7 @@ CREATE TABLE public.client_preferences (
     region character varying DEFAULT 'jp'::character varying NOT NULL,
     timezone character varying DEFAULT 'Asia/Tokyo'::character varying NOT NULL,
     theme character varying DEFAULT 'sy'::character varying NOT NULL,
-    public_id character varying(21),
+    public_id character varying(21) NOT NULL,
     currency character varying DEFAULT 'jpy'::character varying NOT NULL,
     date_format character varying DEFAULT 'iso'::character varying NOT NULL,
     time_format character varying DEFAULT '24'::character varying NOT NULL,
@@ -2696,7 +2700,8 @@ CREATE TABLE public.client_profiles (
     updated_at timestamp(6) with time zone NOT NULL,
     user_id bigint,
     client_status_id bigint DEFAULT 0 NOT NULL,
-    status_id bigint DEFAULT 0 NOT NULL
+    status_id bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT client_profiles_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -3396,7 +3401,8 @@ CREATE TABLE public.clients (
     CONSTRAINT chk_clients_access_state CHECK (((access_state)::text = ANY ((ARRAY['enabled'::character varying, 'admin_locked'::character varying])::text[]))),
     CONSTRAINT chk_clients_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY ((ARRAY['abuse'::character varying, 'security_incident'::character varying, 'chargeback'::character varying, 'terms_violation'::character varying, 'support_request'::character varying, 'legal_hold'::character varying, 'operator_error_recovery'::character varying, 'other'::character varying])::text[])))),
     CONSTRAINT chk_clients_birthdate_length CHECK (((birthdate IS NULL) OR (char_length(birthdate) <= 1000))),
-    CONSTRAINT chk_users_retention_order CHECK ((discard_at <= purge_eligible_at))
+    CONSTRAINT chk_users_retention_order CHECK ((discard_at <= purge_eligible_at)),
+    CONSTRAINT clients_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -3432,7 +3438,8 @@ CREATE TABLE public.core_app_client_bridges (
     host character varying DEFAULT 'jpx.umaxica.app'::character varying NOT NULL,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT core_app_client_bridges_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -3609,7 +3616,8 @@ CREATE TABLE public.enterprise_ownership_transfer_requests (
     CONSTRAINT chk_enterprise_transfer_requests_distinct_parties CHECK ((source_client_id <> destination_client_id)),
     CONSTRAINT chk_enterprise_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_enterprise_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_enterprise_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
+    CONSTRAINT chk_enterprise_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[]))),
+    CONSTRAINT enterprise_ownership_transfer_requests_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -3713,7 +3721,8 @@ CREATE TABLE public.enterprise_units (
     name character varying DEFAULT ''::character varying NOT NULL,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT enterprise_units_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -3779,7 +3788,8 @@ CREATE TABLE public.enterprises (
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    title character varying NOT NULL
+    title character varying NOT NULL,
+    CONSTRAINT enterprises_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -3948,7 +3958,8 @@ CREATE TABLE public.members (
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    CONSTRAINT members_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -3983,7 +3994,8 @@ CREATE TABLE public.persona_assignments (
     assigned_at timestamp(6) with time zone NOT NULL,
     revoked_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT persona_assignments_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -4146,7 +4158,8 @@ CREATE TABLE public.personas (
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    title character varying NOT NULL
+    title character varying NOT NULL,
+    CONSTRAINT personas_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -9412,6 +9425,14 @@ ALTER TABLE ONLY public.client_preference_timezones
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261012093100'),
+('20261012093000'),
+('20261012092100'),
+('20261012092000'),
+('20261012091001'),
+('20261012091000'),
+('20261012083823'),
+('20261012083817'),
 ('20261010232748'),
 ('20261010230339'),
 ('20261009211717'),

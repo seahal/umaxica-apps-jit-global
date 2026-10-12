@@ -88,7 +88,7 @@ class OperatorPreference < OrgPrincipalRecord
   validates :functional, inclusion: { in: [true, false] }
   validates :performant, inclusion: { in: [true, false] }
   validates :targetable, inclusion: { in: [true, false] }
-  validates :public_id, length: { maximum: 21 }, uniqueness: true, allow_blank: true
+  validates :public_id, presence: true, length: { maximum: 21 }, uniqueness: true
 
   after_initialize :set_defaults
   before_validation :generate_public_id, on: :create

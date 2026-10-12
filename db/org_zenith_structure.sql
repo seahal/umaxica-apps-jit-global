@@ -72,7 +72,7 @@ CREATE FUNCTION public.check_staff_identity_telephones_limit() RETURNS trigger
 CREATE FUNCTION public.enforce_operator_rotation_audit() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_org_email_hmac_definer_5046d930f410' AND NEW.channel = 'email') OR (current_user = 'umaxica_org_telephone_hmac_definer_5046d930f410' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_org_email_hmac_definer_c788995d3604' AND NEW.channel = 'email') OR (current_user = 'umaxica_org_telephone_hmac_definer_c788995d3604' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -91,7 +91,7 @@ CREATE FUNCTION public.prevent_operator_telephone_public_id_mutation() RETURNS t
 CREATE FUNCTION public.rotate_operator_emails_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_email_hmac_definer_5046d930f410' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.operator_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_email_hmac_definer_c788995d3604' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.operator_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 --
@@ -101,7 +101,7 @@ CREATE FUNCTION public.rotate_operator_emails_hmac(p_record_id bigint, p_new_dig
 CREATE FUNCTION public.rotate_operator_telephones_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_telephone_hmac_definer_5046d930f410' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.operator_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_telephone_hmac_definer_c788995d3604' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.operator_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 SET default_tablespace = '';
@@ -152,7 +152,8 @@ CREATE TABLE public.agent_assignments (
     assigned_at timestamp(6) with time zone NOT NULL,
     revoked_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT agent_assignments_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -422,6 +423,7 @@ CREATE TABLE public.agent_ownership_transfer_requests (
     invalidated_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT agent_ownership_transfer_requests_public_id_max_length CHECK ((char_length((public_id)::text) <= 25)),
     CONSTRAINT chk_agent_transfer_requests_distinct_parties CHECK ((source_operator_id <> destination_operator_id)),
     CONSTRAINT chk_agent_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_agent_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
@@ -558,7 +560,8 @@ CREATE TABLE public.agents (
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    title character varying NOT NULL
+    title character varying NOT NULL,
+    CONSTRAINT agents_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -744,6 +747,7 @@ CREATE TABLE public.bureau_ownership_transfer_requests (
     invalidated_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT bureau_ownership_transfer_requests_public_id_max_length CHECK ((char_length((public_id)::text) <= 25)),
     CONSTRAINT chk_bureau_transfer_requests_distinct_parties CHECK ((source_operator_id <> destination_operator_id)),
     CONSTRAINT chk_bureau_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_bureau_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
@@ -851,7 +855,8 @@ CREATE TABLE public.bureau_units (
     name character varying DEFAULT ''::character varying NOT NULL,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT bureau_units_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -917,7 +922,8 @@ CREATE TABLE public.bureaus (
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    title character varying NOT NULL
+    title character varying NOT NULL,
+    CONSTRAINT bureaus_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -953,7 +959,8 @@ CREATE TABLE public.core_org_operator_bridges (
     host character varying DEFAULT 'jpx.umaxica.org'::character varying NOT NULL,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT core_org_operator_bridges_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -1144,7 +1151,8 @@ CREATE TABLE public.operator_accounts (
     public_id character varying DEFAULT ''::character varying NOT NULL,
     staff_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT operator_accounts_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -1605,7 +1613,8 @@ CREATE TABLE public.operator_identities (
     last_authenticated_at timestamp(6) with time zone,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT operator_identities_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -2547,7 +2556,7 @@ CREATE TABLE public.operator_preferences (
     theme character varying DEFAULT 'sy'::character varying NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    public_id character varying(21),
+    public_id character varying(21) NOT NULL,
     currency character varying DEFAULT 'jpy'::character varying NOT NULL,
     date_format character varying DEFAULT 'iso'::character varying NOT NULL,
     time_format character varying DEFAULT '24'::character varying NOT NULL,
@@ -2796,7 +2805,7 @@ CREATE TABLE public.operator_telephones (
     staff_identity_telephone_status_id bigint DEFAULT 0 NOT NULL,
     number_digest character varying,
     otp_last_sent_at timestamp(6) with time zone,
-    public_id character varying(25)
+    public_id character varying(25) NOT NULL
 );
 
 
@@ -2927,7 +2936,8 @@ CREATE TABLE public.operator_workspace_accounts (
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    status_id bigint DEFAULT 0 NOT NULL
+    status_id bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT operator_workspace_accounts_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -3026,7 +3036,8 @@ CREATE TABLE public.org_enforcement_appeals (
     redacted_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_org_enforcement_appeals_state CHECK (((state)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'approved'::character varying, 'rejected'::character varying, 'redacted'::character varying])::text[])))
+    CONSTRAINT chk_org_enforcement_appeals_state CHECK (((state)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'approved'::character varying, 'rejected'::character varying, 'redacted'::character varying])::text[]))),
+    CONSTRAINT org_enforcement_appeals_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -3454,7 +3465,8 @@ CREATE TABLE public.schema_migrations (
 --
 
 CREATE TABLE public.staff_identity_audit_events (
-    id character varying NOT NULL
+    legacy_id character varying NOT NULL,
+    id bigint NOT NULL
 );
 
 
@@ -3465,14 +3477,15 @@ CREATE TABLE public.staff_identity_audit_events (
 CREATE TABLE public.staff_identity_audits (
     id bigint NOT NULL,
     staff_id bigint NOT NULL,
-    event_id character varying NOT NULL,
+    legacy_event_id character varying NOT NULL,
     "timestamp" timestamp(6) with time zone,
     ip_address character varying,
     actor_id bigint,
     actor_type character varying,
     previous_value text,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    event_id bigint NOT NULL
 );
 
 
@@ -5123,14 +5136,6 @@ ALTER TABLE ONLY public.operator_telephones
 
 
 --
--- Name: operator_telephones operator_telephones_public_id_nonblank; Type: CHECK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE public.operator_telephones
-    ADD CONSTRAINT operator_telephones_public_id_nonblank CHECK (((public_id IS NULL) OR ((public_id)::text !~ '^[[:space:]]*$'::text))) NOT VALID;
-
-
---
 -- Name: operator_visibilities operator_visibilities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6641,6 +6646,20 @@ CREATE INDEX index_role_assignments_on_user_id ON public.role_assignments USING 
 
 
 --
+-- Name: index_staff_identity_audit_events_on_legacy_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_staff_identity_audit_events_on_legacy_id ON public.staff_identity_audit_events USING btree (legacy_id);
+
+
+--
+-- Name: index_staff_identity_audits_on_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_staff_identity_audits_on_event_id ON public.staff_identity_audits USING btree (event_id);
+
+
+--
 -- Name: index_staff_identity_audits_on_staff_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7454,14 +7473,6 @@ ALTER TABLE ONLY public.bureau_ownerships
 
 
 --
--- Name: staff_identity_audits fk_rails_ce4872192d; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.staff_identity_audits
-    ADD CONSTRAINT fk_rails_ce4872192d FOREIGN KEY (event_id) REFERENCES public.staff_identity_audit_events(id);
-
-
---
 -- Name: operators fk_rails_cfd2f37948; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7590,6 +7601,14 @@ ALTER TABLE ONLY public.agent_memberships
 
 
 --
+-- Name: staff_identity_audits fk_staff_identity_audits_event_id_bigint; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_identity_audits
+    ADD CONSTRAINT fk_staff_identity_audits_event_id_bigint FOREIGN KEY (event_id) REFERENCES public.staff_identity_audit_events(id);
+
+
+--
 -- Name: operator_preference_languages fk_staff_preference_languages_on_option_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7668,6 +7687,15 @@ ALTER TABLE ONLY public.operator_secret_credentials
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261012100100'),
+('20261012100000'),
+('20261012092102'),
+('20261012092002'),
+('20261012085039'),
+('20261012083823'),
+('20261012083817'),
+('20261012081301'),
+('20261012081257'),
 ('20261011024019'),
 ('20261011002402'),
 ('20261010230350'),

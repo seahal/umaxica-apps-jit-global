@@ -281,6 +281,12 @@ class Avatar < AvatarRecord
 
   public
 
+  # Runtime ownership authority is selected by the verified cutover marker. The association
+  # reflection remains available for legacy inventory and joins before cutover.
+  def current_ownership_period
+    AvatarOwnershipPeriodSource.current_for(self)
+  end
+
   # Opaque cache key for the stored image. It changes when the Avatar or its stored file
   # changes, so a Persona switch never reuses the previous Avatar's cached image.
   def image_cache_key

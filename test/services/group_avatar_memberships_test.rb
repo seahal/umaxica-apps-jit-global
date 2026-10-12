@@ -54,6 +54,7 @@ class GroupAvatarMembershipsTest < ActiveSupport::TestCase
         subject: context.fetch(:bootstrap).account,
         capability: capability,
         granted_by_actor_public_id: context.fetch(:actor).public_id,
+        granting_subject_public_id: context.fetch(:bootstrap).account.public_id,
       )
     end
 

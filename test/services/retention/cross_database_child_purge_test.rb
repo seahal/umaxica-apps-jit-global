@@ -35,6 +35,34 @@ module Retention
              "chronicle (audit) must be retained across actor purge"
     end
 
+    test "client purge retries the remaining database after a partial failure" do
+      user = Client.create!(public_id: "cdp_partial_#{SecureRandom.hex(4)}", status_id: ClientStatus::ACTIVE)
+      notification = ClientNotificationRecord.create!(client: user)
+
+      capability = AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)
+      handle = Handle.create!(handle: "CdpPartial-#{SecureRandom.hex(4)}", cooldown_until: Time.current)
+      avatar = AvatarTestFactory.create!(moniker: "CdpPartial", capability: capability, active_handle: handle)
+      assignment = avatar.avatar_assignments.create!(user: user, role: "owner")
+
+      AvatarAssignment.stub(
+        :where,
+        ->(*) { raise ActiveRecord::StatementInvalid, "synthetic child database failure" },
+      ) do
+        assert_raises(ActiveRecord::StatementInvalid) do
+          RetentionCrossDatabaseChildPurge.call(actor: user)
+        end
+      end
+
+      assert_not ClientNotificationRecord.exists?(notification.id)
+      assert AvatarAssignment.exists?(assignment.id)
+
+      RetentionCrossDatabaseChildPurge.call(actor: user)
+
+      assert_not ClientNotificationRecord.exists?(notification.id)
+      assert_not AvatarAssignment.exists?(assignment.id)
+      assert_nothing_raised { RetentionCrossDatabaseChildPurge.call(actor: user) }
+    end
+
     test "is a no-op for unknown actor types" do
       assert_nothing_raised do
         RetentionCrossDatabaseChildPurge.call(actor: Object.new)

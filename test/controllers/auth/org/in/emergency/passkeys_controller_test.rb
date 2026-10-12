@@ -80,7 +80,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
   end
 
   test "the entry page is identifier-first and says what the resulting session cannot do" do
-    get new_auth_org_sign_in_emergency_passkey_url(ri: "jp")
+    get new_auth_org_sign_in_emergency_passkey_url(ri: "jp", **org_emergency_binding_params)
 
     assert_response :success
     assert_equal "auth/org/sign/in/emergency/passkeys/new", inertia_component
@@ -89,13 +89,20 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
 
     assert_equal "identifier", panel.fetch("identifier_param")
     assert_equal 16, panel.fetch("field").fetch("min_length")
-    assert_equal(
-      auth_org_sign_in_emergency_passkey_options_path(ri: "jp"),
-      panel.fetch("options_url"),
+    options_uri = URI.parse(panel.fetch("options_url"))
+    verification_uri = URI.parse(panel.fetch("verification_url"))
+
+    assert_equal "/sign/in/emergency/passkey/options", options_uri.path
+    assert_equal "/sign/in/emergency/passkey/verification", verification_uri.path
+    assert_equal "jp", Rack::Utils.parse_nested_query(options_uri.query).fetch("ri")
+    assert_equal "jp", Rack::Utils.parse_nested_query(verification_uri.query).fetch("ri")
+    assert_predicate(
+      SignInFlowBindingCodec.decode(Rack::Utils.parse_nested_query(options_uri.query).fetch("fb")),
+      :present?,
     )
-    assert_equal(
-      auth_org_sign_in_emergency_passkey_verification_path(ri: "jp"),
-      panel.fetch("verification_url"),
+    assert_predicate(
+      SignInFlowBindingCodec.decode(Rack::Utils.parse_nested_query(verification_uri.query).fetch("fb")),
+      :present?,
     )
     assert_equal(
       I18n.t("sign.org.authentication.emergency.passkey.new.restricted_mode_notice"),
@@ -116,7 +123,9 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
 
     Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_org_sign_in_emergency_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
+      post auth_org_sign_in_emergency_passkey_verification_url(
+        ri: "jp", **org_emergency_binding_params,
+      ), params: verification_params(challenge_id)
     end
 
     assert_response :ok
@@ -134,7 +143,9 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
 
     Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_org_sign_in_emergency_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
+      post auth_org_sign_in_emergency_passkey_verification_url(
+        ri: "jp", **org_emergency_binding_params,
+      ), params: verification_params(challenge_id)
     end
 
     get response.parsed_body.fetch("redirect_url")
@@ -238,7 +249,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     assert_response :ok
     normal_challenge_id = response.parsed_body.fetch("challenge_id")
 
-    post auth_org_sign_in_emergency_passkey_verification_url(ri: "jp"),
+    post auth_org_sign_in_emergency_passkey_verification_url(ri: "jp", **org_emergency_binding_params),
          params: verification_params(normal_challenge_id)
 
     assert_response :bad_request
@@ -308,7 +319,9 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
   test "an operator who may not sign in is refused without becoming distinguishable at the options step" do
     @staff.reload.update!(status_id: OperatorStatus::ACTIVE, withdrawn_at: Time.current)
 
-    post auth_org_sign_in_emergency_passkey_options_url(ri: "jp"), params: { identifier: @staff.public_id }
+    post auth_org_sign_in_emergency_passkey_options_url(
+      ri: "jp", **org_emergency_binding_params,
+    ), params: { identifier: @staff.public_id }
 
     assert_response :ok
     assert_equal(
@@ -321,7 +334,9 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
 
     Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_org_sign_in_emergency_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
+      post auth_org_sign_in_emergency_passkey_verification_url(
+        ri: "jp", **org_emergency_binding_params,
+      ), params: verification_params(challenge_id)
     end
 
     assert_response :unauthorized
@@ -334,7 +349,9 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
 
     Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_org_sign_in_emergency_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
+      post auth_org_sign_in_emergency_passkey_verification_url(
+        ri: "jp", **org_emergency_binding_params,
+      ), params: verification_params(challenge_id)
     end
 
     assert_response :unauthorized
@@ -356,7 +373,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     staff = operators(:one)
     headers = as_staff_headers(staff, host: ENV.fetch("PUBLIC_AUTH_STAFF_URL"))
 
-    post auth_org_sign_in_emergency_passkey_options_url(ri: "jp"),
+    post auth_org_sign_in_emergency_passkey_options_url(ri: "jp", **org_emergency_binding_params),
          params: { identifier: staff.public_id }, headers: headers
 
     assert_response :forbidden
@@ -367,8 +384,15 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
 
   private
 
+  def org_emergency_binding_params
+    { fb: SignInFlowBindingCodec.encode(flow: @flow, surface: "org", phase: "PRIMARY_PENDING") }
+  end
+
   def issue_emergency_challenge!
-    post(auth_org_sign_in_emergency_passkey_options_url(ri: "jp"), params: { identifier: @staff.public_id })
+    post(
+      auth_org_sign_in_emergency_passkey_options_url(ri: "jp", **org_emergency_binding_params),
+      params: { identifier: @staff.public_id },
+    )
 
     assert_response :ok
     response.parsed_body.fetch("challenge_id")

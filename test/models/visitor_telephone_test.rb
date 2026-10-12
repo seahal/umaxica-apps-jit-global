@@ -12,9 +12,7 @@
 #  number                      :string           default(""), not null
 #  number_digest               :string
 #  otp_attempts_count          :integer          default(0), not null
-#  otp_counter                 :text             default(""), not null
-#  otp_expires_at              :datetime         default(-Infinity), not null
-#  otp_private_key             :string           default(""), not null
+#  otp_last_sent_at            :datetime
 #  purge_eligible_at                   :datetime         default(Infinity), not null
 #  created_at                  :datetime         not null
 #  updated_at                  :datetime         not null

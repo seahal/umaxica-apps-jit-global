@@ -23,13 +23,9 @@ class AvatarPolicy < ApplicationPolicy
     collective_public_id = Actor.selection.collective_public_id
     next relation.none unless permission_for_selected_collective?("avatar.view")
 
-    relation
-      .joins(:current_ownership_period, :lifecycle_state)
+    AvatarOwnershipPeriodSource
+      .relation_for(relation.joins(:lifecycle_state), surface: surface, collective_public_id: collective_public_id)
       .where(
-        avatar_ownership_periods: {
-          owner_surface: surface,
-          owner_collective_public_id: collective_public_id,
-        },
         avatar_lifecycle_states: { key: "active" },
       )
       .where("avatars.discard_at > ?", Time.current)

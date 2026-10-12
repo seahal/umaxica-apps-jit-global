@@ -102,4 +102,28 @@ class ObservabilitySpanScrubberTest < ActiveSupport::TestCase
     assert_equal ObservabilityRedactor::REDACTED, span.attributes["x-custom-authorization"]
     assert_equal ObservabilityRedactor::REDACTED, span.attributes["my-cookie-value"]
   end
+
+  test "scrub redacts ActionMailer attributes that must not reach a trace" do
+    span = MutableSpan.new(
+      "email.subject" => "Your one-time verification code is 123456",
+      "email.to.address" => "person@example.com",
+      "email.body" => "Your code is 123456",
+      "args" => [{ "otp_code" => "123456" }],
+    )
+
+    _ = ObservabilitySpanScrubber.scrub(span)
+
+    assert_equal ObservabilityRedactor::REDACTED, span.attributes["email.subject"]
+    assert_equal ObservabilityRedactor::REDACTED, span.attributes["email.to.address"]
+    assert_equal ObservabilityRedactor::REDACTED, span.attributes["email.body"]
+    assert_equal ObservabilityRedactor::REDACTED, span.attributes["args"]
+  end
+
+  test "scrub preserves the explicitly allowed ActionMailer mailer attribute" do
+    span = MutableSpan.new("email.x_mailer" => "Email::App::OtpMailer")
+
+    _ = ObservabilitySpanScrubber.scrub(span)
+
+    assert_equal "Email::App::OtpMailer", span.attributes["email.x_mailer"]
+  end
 end

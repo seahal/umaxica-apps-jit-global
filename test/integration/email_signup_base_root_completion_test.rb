@@ -185,6 +185,7 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
 
       signup.reload
       checkpoint_binding = SignFlowBindingCodec.decode(Rack::Utils.parse_query(birthdate_uri.query).fetch("fb"))
+
       assert_equal decoded.flow_public_id, checkpoint_binding.flow_public_id
       assert_equal signup.step, checkpoint_binding.phase
       assert_equal signup.checkpoint_version, checkpoint_binding.generation

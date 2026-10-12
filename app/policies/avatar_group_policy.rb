@@ -29,16 +29,18 @@ class AvatarGroupPolicy < ApplicationPolicy
     collective_public_id = selection.collective_public_id
     next relation.none unless selected_owner_permission?("avatar.group.manage")
 
-    relation
-      .joins(:current_ownership_period)
+    owner_group_ids = AvatarGroupOwnershipPeriodSource.current
       .where(
-        account_surface: surface,
-        account_public_id: account_public_id,
-        avatar_group_ownership_periods: {
-          owner_surface: surface,
-          owner_collective_public_id: collective_public_id,
-        },
+        owner_surface: surface,
+        owner_collective_public_id: collective_public_id,
       )
+      .select(:avatar_group_id)
+
+    relation.where(
+      account_surface: surface,
+      account_public_id: account_public_id,
+      id: owner_group_ids,
+    )
   end
 
   private

@@ -108,36 +108,23 @@ module AvatarProvisioning
     end
 
     def create_ownership_period!(avatar)
-      AvatarOwnershipStatus.find_or_create_by!(id: AvatarOwnershipStatus::ACTIVE)
-      AvatarOwnershipPeriod.create!(
+      AvatarOwnershipPeriodSource.create!(
         avatar: avatar,
-        owner_organization_id: owner_collective_public_id,
         owner_surface: owner_surface,
         owner_collective_public_id: owner_collective_public_id,
-        avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE,
-        valid_from: Time.current,
-      )
-      create_concrete_ownership_period!(avatar)
-    end
-
-    def create_concrete_ownership_period!(avatar)
-      attributes = {
-        avatar: avatar,
         valid_from: avatar.created_at,
-      }
+      )
+      return unless AvatarOwnershipPeriodSource.legacy?
+
+      # Before cutover the concrete copy is retained for backfill/reconciliation, while the
+      # legacy table remains authoritative. After cutover the source selector has already written
+      # the concrete table and no legacy row is allowed to be created.
+      attributes = { avatar: avatar, valid_from: avatar.created_at }
       case owner_surface
       when "app"
-        AvatarEnterpriseOwnershipPeriod.create!(
-          **attributes,
-          enterprise_public_id: owner_collective_public_id,
-        )
+        AvatarEnterpriseOwnershipPeriod.create!(**attributes, enterprise_public_id: owner_collective_public_id)
       when "org"
-        AvatarBureauOwnershipPeriod.create!(
-          **attributes,
-          bureau_public_id: owner_collective_public_id,
-        )
-      else
-        raise ArgumentError, "unsupported concrete owner surface: #{owner_surface.inspect}"
+        AvatarBureauOwnershipPeriod.create!(**attributes, bureau_public_id: owner_collective_public_id)
       end
     end
 

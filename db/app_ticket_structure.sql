@@ -90,7 +90,8 @@ CREATE TABLE public.acme_logout_transactions (
     failed_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    workflow character varying DEFAULT 'legacy'::character varying NOT NULL
+    workflow character varying DEFAULT 'legacy'::character varying NOT NULL,
+    CONSTRAINT acme_logout_transactions_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -1821,7 +1822,8 @@ CREATE TABLE public.logout_transactions (
     failure_code character varying,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT logout_transactions_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -4258,6 +4260,10 @@ ALTER TABLE ONLY public.client_tokens
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261012093101'),
+('20261012093001'),
+('20261012092103'),
+('20261012092003'),
 ('20261008150716'),
 ('20261008145850'),
 ('20261008094435'),

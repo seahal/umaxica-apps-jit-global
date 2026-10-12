@@ -130,6 +130,7 @@ class Auth::Com::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
           headers: default_headers
 
     @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
     assert_redirected_to auth_com_sign_up_guard_telephone_url(ri: "jp", fb: @flow_binding)
 
     cycle = current_sign_up_flow

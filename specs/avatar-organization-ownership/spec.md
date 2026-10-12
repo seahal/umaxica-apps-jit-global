@@ -223,26 +223,36 @@ Audit baseline: branch `feature`, commit `809ed57629f03052ba311c8c953f4aa682c93e
 
 ### D-9. Conversion of existing data is a task, not a migration
 
-- Finding: the development database has zero rows in every ownership table. The shared test database
-  holds one fixture Avatar with no ownership period. Production has not been inspected.
-- Design: schema migrations only add structures. A read-only inventory task and a separate
-  conversion task move rows from the legacy tables into the concrete tables. The conversion stops,
-  without guessing, on a missing owner reference, a status that disagrees with the period, an
-  overlapping or gapped timeline, an Avatar with no period, or a pending legacy transfer.
-- Consequence: between the schema migration and the conversion, a legacy Avatar without a concrete
-  period cannot receive a new binding or transfer. The cutover therefore needs a write pause.
-- Decisions needed: approve running the conversion as an operator task; production inventory and
-  cutover remain separately approved steps.
+- Historical finding: the development database had zero rows in every ownership table and the
+  shared test database held one fixture Avatar without an ownership period. Production was not
+  inspected. This observation is not current-data evidence.
+- Current design: schema migrations add structures; read-only inventory and bounded, resumable
+  conversion tasks copy only unambiguous legacy chains. Missing owners, invented dates, malformed
+  intervals, conflicting rows and pending transfers remain manual-review outcomes. Production
+  inventory and cutover still require separate approval.
+- The Group transition inventory additionally refuses a chain with a non-creation initial boundary,
+  more than one open period, or any gap between adjacent periods. The bounded Group backfill never
+  invents a boundary and never establishes the cutover marker.
 
 ### D-10. Legacy structures remain until Phase G
 
 - Tables `avatar_ownership_periods`, `avatar_ownership_statuses`, `avatar_ownership_transfers`,
   `avatar_group_ownership_periods`, and columns `avatars.owner_organization_id` and
-  `avatar_ownership_periods.owner_organization_id` stay in the database. Their Ruby models are
-  removed in Phase D, so no application path reads or writes them.
-- Nothing at the database level blocks direct SQL writes to the legacy tables after cutover.
-- Decision needed: whether to add write-rejecting triggers on the legacy tables at cutover, or to
-  rely on the removal of the models until the tables are dropped.
+  `avatar_ownership_periods.owner_organization_id` stay in the database. The current staged
+  implementation keeps the legacy Group period as the pre-cutover source, copies it through an
+  explicit bounded operational backfill into `avatar_group_concrete_ownership_periods`, and
+  selects the concrete source only after the verified cutover marker. The legacy models are not an
+  alternative authority after that marker.
+- The named database barrier rejects direct INSERT, UPDATE, DELETE and TRUNCATE on the legacy
+  ownership, transfer and Group-period tables after cutover. No automatic table removal occurs.
+- The concrete Group period table has its own deferred chain and immutable-history triggers; the
+  source selector does not fall back to legacy rows after cutover.
+- Public app/org registry transfer admission is explicitly phase-gated by the verified
+  `AvatarOwnershipCutover` marker. Before that marker, an explicit `Idempotency-Key` create or a
+  `transfer_kind=registry` Accept/Cancel request is refused before registry mutation; the existing
+  keyless transport remains available during the staged transition. After the marker, the public
+  registry branch may reach the concrete-period operation. This is a named cutover boundary, not a
+  generic feature flag, silent fallback, or second ownership authority.
 
 ### D-11. Test-suite consequences
 
@@ -250,34 +260,32 @@ Audit baseline: branch `feature`, commit `809ed57629f03052ba311c8c953f4aa682c93e
   disables triggers while loading fixtures, so existing tests that create an Avatar without an owner
   keep passing. The new invariants are therefore verified only by non-transactional tests on
   independent connections.
-- Those tests cannot delete the ownership history they create. Cleanup needs
-  `session_replication_role = replica` in test code, or the rows are left in the test database.
-- Decision needed: which of the two cleanup approaches is acceptable.
+- Those tests use run-owned disposable PostgreSQL databases and are cleaned only through the
+  existing receipt-verified fleet lifecycle. Shared-database trigger suppression and destructive
+  cleanup remain prohibited.
 
 ### Historical draft disposition
 
 Six migration drafts are preserved under `specs/avatar-organization-ownership/migration-drafts/`,
-outside Rails migration discovery. Four are generator stubs. Their contents have not changed during
-the authentication acceptance repair. They were moved because test preparation was discovering and
-attempting to apply this unfinished feature despite the pause recorded above.
+outside Rails migration discovery. They remain historical source material and must not be restored
+under `db/avatars_migrate/` or recorded as new migration versions. The table below records the
+successor, abandonment reason where applicable, and the migration-history evidence currently
+available. The current run-owned `20261010p8b` Avatar parent catalog was queried read-only: none of
+the six draft versions is present there. The earlier acceptance record remains authoritative for
+the fact that `20261009180016` was applied in an older disposable catalog before the next draft was
+rejected; that catalog is not reset or dropped by this source repair.
 
-| File                                                                      | State                |
-| ------------------------------------------------------------------------- | -------------------- |
-| `20261009180016_add_avatar_ownership_write_lock_counters.rb`              | written              |
-| `20261009180021_create_avatar_concrete_ownership_periods.rb`              | written              |
-| `20261009180026_create_avatar_group_concrete_ownership_periods.rb`        | empty generator stub |
-| `20261009180032_create_avatar_concrete_ownership_transfers.rb`            | empty generator stub |
-| `20261009180037_validate_avatar_binding_ownership_period_foreign_keys.rb` | empty generator stub |
-| `20261009180042_create_avatar_purge_deferrals.rb`                         | empty generator stub |
+| Draft file                                                               | Final disposition / successor                                                                                                                | Migration-history observation                                                                                                  |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `20261009180016_add_avatar_ownership_write_lock_counters.rb`             | Superseded by `20261010130000_create_concrete_avatar_ownership_periods.rb`, which uses the reviewed `avatars.ownership_integrity_version`; the original Avatar/Group counter shape was not carried forward. | Recorded in the earlier disposable acceptance catalog per the historical run record; absent from the current `20261010p8b` parent. |
+| `20261009180021_create_avatar_concrete_ownership_periods.rb`             | Superseded by `20261010130000_create_concrete_avatar_ownership_periods.rb`, `20261010130002_harden_concrete_avatar_ownership_period_immutability.rb`, `20261011041046_add_finite_concrete_avatar_ownership_period_starts.rb`, `20261011041103_validate_finite_concrete_avatar_ownership_period_starts.rb`, and `20261011212119_enforce_avatar_initial_concrete_ownership.rb`. Its Binding-period fields were rejected with the D-5 Binding-as-Grant design. | The historical run was rejected before this draft was recorded; absent from the current `20261010p8b` parent. |
+| `20261009180026_create_avatar_group_concrete_ownership_periods.rb`       | Superseded by `20261012130001_create_avatar_group_concrete_ownership_periods.rb`, the reviewed concrete Group-period schema and trigger set.       | No entry observed in the current `20261010p8b` parent; no historical application is recorded. |
+| `20261009180032_create_avatar_concrete_ownership_transfers.rb`           | Superseded by `20261010150000_create_avatar_transfer_reservations.rb` and its `20261010170000`–`20261010180000` lifecycle, source-period and integrity migrations. The approved registry plus four concrete detail tables replaced the empty stub. | No entry observed in the current `20261010p8b` parent; no historical application is recorded. |
+| `20261009180037_validate_avatar_binding_ownership_period_foreign_keys.rb` | Abandoned. The empty validation stub belonged to the rejected Binding-period design; no replacement FK is required for the approved concrete Grant/registry architecture. | No entry observed in the current `20261010p8b` parent; no historical application is recorded. |
+| `20261009180042_create_avatar_purge_deferrals.rb`                         | Superseded by `20261010140000_create_avatar_purge_deferrals.rb`, which defines the observable, idempotent deferral record and constraints. | No entry observed in the current `20261010p8b` parent; no historical application is recorded. |
 
-The historical audit required restoring these drafts to `db/avatars_migrate/` only after decisions
-were approved, all six migrations are complete, and their production safety has been reviewed. In
-particular, indexes on existing binding tables need concurrent creation, and trigger DDL needs the
-explicit approval described in D-3. Empty stubs must never be recorded as applied migrations.
-
-The authentication acceptance run attempted these drafts on its verified disposable test catalog:
-the write-lock-counter migration applied, and the ownership-period migration was rejected by
-`strong_migrations` at its non-concurrent binding index. That catalog is not a clean reconstruction
-baseline. A new disposable catalog is required for subsequent empty-database migration acceptance;
-the old catalog must not be rolled back or dropped as part of this source-file repair. No shared or
-production database migration was performed by this repair.
+These drafts stay tracked and quarantined so their provenance remains reviewable. Any future
+reconstruction uses the successor migrations in `db/avatars_migrate/` on a newly verified disposable
+catalog. Empty stubs must never be recorded as applied migrations, and the old catalog described
+above must not be rolled back or dropped as part of this source-file repair. No shared or production
+database migration was performed by this repair.

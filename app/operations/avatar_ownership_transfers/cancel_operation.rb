@@ -12,6 +12,7 @@ module AvatarOwnershipTransfers
     end
 
     def call
+      reject_legacy_transfer_after_cutover!
       observed_transfer = find_transfer!(transfer_public_id)
       unless observed_transfer.from_owner_surface == surface
         raise Unauthorized, "transfer source surface does not match the authenticated surface"
@@ -71,6 +72,12 @@ module AvatarOwnershipTransfers
       return if attributes.all? { |attribute| locked.public_send(attribute) == observed.public_send(attribute) }
 
       raise InvalidTransfer, "ownership transfer identity changed"
+    end
+
+    def reject_legacy_transfer_after_cutover!
+      return unless AvatarOwnershipCutover.established?
+
+      raise InvalidTransfer, "legacy Avatar transfer operations are unavailable after cutover"
     end
   end
 end

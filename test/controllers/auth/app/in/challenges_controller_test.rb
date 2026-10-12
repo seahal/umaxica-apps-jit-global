@@ -57,9 +57,27 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
       public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
     )
 
-    get auth_app_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
+    translation_called = false
+    original_translate = I18n.method(:t)
+
+    I18n.stub(
+      :t,
+      ->(key, *args, **options) {
+        unless key == "errors.messages.phase_violation_refused"
+          next original_translate.call(key, *args, **options)
+        end
+
+        translation_called = true
+
+        assert_equal :ja, options.fetch(:locale)
+        "戻るはだめです"
+      },
+    ) do
+      get auth_app_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
+    end
 
     assert_response :conflict
+    assert translation_called
     assert_equal "戻るはだめです", response.body
     assert_equal ClientSignInFlowState::PRIMARY_PENDING, flow.reload.state_id
   end

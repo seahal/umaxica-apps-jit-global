@@ -1,21 +1,21 @@
 stateDiagram-v2
-    %% CURRENT implementation; sources and guards in transition inventory.
-    state "OTP expired/cleared (derived)" as inactive
-    state "otp_active? true (derived)" as active
-    state "locked? true (derived)" as locked
-    [*] --> inactive
-    inactive --> active: store_otp
-    active --> active: store_otp reissue
-    active --> locked: increment_attempts! threshold
-    locked --> active: lockout clock elapsed
-    active --> inactive: OTP deadline elapsed / clear_otp
-    locked --> inactive: clear_otp reset_attempts true
-    note right of inactive
-        The channel policy is independent of the other channel.
-        Issuance and window expiry preserve failure counts.
-        Issuance timing uses otp_last_sent_at, never created_at.
-        Labels are overlapping predicates, not an enum.
-        store_otp preserves an active lock.
-        clear_otp(false) can leave a locked expired OTP.
-        Authenticated confirmation also checks the EmailOtpVerificationFailureBudget destination counter.
+    %% Derived Email policy predicates for Operator records; the canonical ceremony axis is
+    %% idp-sign-up-otp-challenge or idp-credential-registration-otp-challenge.
+    state "No active Email lock" as available
+    state "Email lockout active" as locked
+    [*] --> available
+    available --> available: wrong code below threshold / EmailOtpPolicy#increment_attempts!
+    available --> locked: wrong code reaches MAX / lockout deadline recorded
+    locked --> locked: comparison, resend, expiry or cancellation / failure count preserved
+    locked --> available: lockout and attempt-window predicates become false
+    available --> available: issuance records otp_last_sent_at / failure count preserved
+    note right of available
+        This is a derived channel-policy axis, not a persisted OTP workflow enum.
+        Email policy is independent from Telephone policy.
+        Failure counts survive issuance, replacement, expiry and cancellation.
+        Only successful ceremony proof consumption may reset the channel failure state.
+        The six-digit verifier is owned by the bound ceremony transaction; no identifier
+        HOTP secret, counter or identifier-owned proof lifecycle exists.
+        Candidate owner, Ticket, browser, purpose, generation and expiry are checked by
+        the concrete ceremony issuer/verifier/finalizer paths.
     end note

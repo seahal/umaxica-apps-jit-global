@@ -1,5 +1,12 @@
 # Current transition inventory
 
+The six per-record Email/Telephone OTP sections in the historical inventory below retain the
+pre-ceremony Source-HOTP transition rows for traceability. They are not current runtime authority:
+`store_otp`, `get_otp`, `clear_otp`, identifier-owned HOTP secrets and counters were retired. The
+current derived channel policies are `EmailOtpPolicy` and `TelephoneOtpPolicy`; current proof and
+delivery axes are the canonical ceremony diagrams listed in `docs/mermaid/README.md`. Do not use
+the historical rows to infer a writer, a shared stateful policy or a current database column.
+
 ## Sign-flow expiry refusal transaction ownership
 
 `FlowBase` validates terminal absorption before TTL and requested source state. An overdue
@@ -2590,8 +2597,9 @@ explicit scope at each consuming operation. The historical diagram name denotes 
 candidate/flow/browser recreations, not a shared Email/Telephone policy implementation. The removed
 `SignOtpCeremony` and `CommonOtp` are not current owners. Tests:
 `test/models/channel_otp_verification_failure_budget_test.rb`,
-`test/models/otp_verification_failure_budget_test.rb` and `test/services/sign_otp_ceremony_test.rb`
-(the last filename is historical; its cases use independent current APIs). Public sign-in
+`test/models/otp_verification_failure_budget_test.rb` and
+`test/operations/email_sign_up_otp_verification_committer_test.rb` (independent current APIs).
+Public sign-in
 integration coverage is in `test/controllers/auth/app/in/emails_controller_test.rb` and
 `test/controllers/auth/com/in/emails_controller_test.rb`; complete lifecycle/timing parity remains
 open.
@@ -2639,22 +2647,22 @@ Implementation: `EmailOtpPolicy`. Storage: `client_emails` /
 Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window expiry;
 only explicit successful consumption can reset them. The channel policy is independent. Both
 channels use the explicit issuance timestamp; older created-at/window-reset descriptions below are
-superseded by this correction. Ceremony ownership migration remains in progress.
+superseded by this correction. Ceremony-owned proof is implemented in the runtime; remaining acceptance work is route, fixture and constraint evidence.
 
 Sources: `app/models/concerns/email_otp_policy.rb`, `app/models/client_email.rb`,
-`app/models/concerns/email.rb`, `app/services/sign_otp_ceremony.rb`,
-`app/controllers/concerns/common_otp.rb`.
+`app/models/concerns/email.rb`, `app/operations/email_sign_up_otp_issuer.rb`,
+`app/models/client_email_ceremony_transaction.rb`.
 
-Tests read: `test/models/concerns/otp_lockable_test.rb`, `test/services/sign_otp_ceremony_test.rb`.
+Tests read: `test/models/otp_failure_retention_test.rb`, `test/operations/contact_registration_otp_verification_committer_test.rb`.
 
 | Transition ID             | Mutation kind         | From     | Event / Trigger                  | To       | Guard                                              | Side effect                               | Source file                         | Confidence |
 | ------------------------- | --------------------- | -------- | -------------------------------- | -------- | -------------------------------------------------- | ----------------------------------------- | ----------------------------------- | ---------- |
-| idp-client-email-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-client-email-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-client-email-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-client-email-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-client-email-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-client-email-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/otp_lockable.rb | CONFIRMED  |
+| idp-client-email-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-client-email-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-client-email-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-client-email-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-client-email-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-client-email-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
 
 This historical Source-HOTP axis is superseded by independent Email/Telephone ceremony OTP axes.
 Current browser issuance, verification, delivery and resend use typed ceremony generation and keyed
@@ -2678,22 +2686,22 @@ Implementation: `TelephoneOtpPolicy`. Storage: `client_telephones` /
 Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window expiry;
 only explicit successful consumption can reset them. The channel policy is independent. Both
 channels use the explicit issuance timestamp; older created-at/window-reset descriptions below are
-superseded by this correction. Ceremony ownership migration remains in progress.
+superseded by this correction. Ceremony-owned proof is implemented in the runtime; remaining acceptance work is route, fixture and constraint evidence.
 
 Sources: `app/models/concerns/telephone_otp_policy.rb`, `app/models/client_telephone.rb`,
-`app/models/concerns/telephone.rb`, `app/services/sign_otp_ceremony.rb`,
-`app/controllers/concerns/common_otp.rb`.
+`app/models/concerns/telephone.rb`, `app/operations/telephone_sign_up_otp_issuer.rb`,
+`app/models/client_telephone_ceremony_transaction.rb`.
 
-Tests read: `test/models/concerns/otp_lockable_test.rb`, `test/services/sign_otp_ceremony_test.rb`.
+Tests read: `test/models/otp_failure_retention_test.rb`, `test/operations/contact_registration_otp_verification_committer_test.rb`.
 
 | Transition ID                 | Mutation kind         | From     | Event / Trigger                  | To       | Guard                                              | Side effect                               | Source file                         | Confidence |
 | ----------------------------- | --------------------- | -------- | -------------------------------- | -------- | -------------------------------------------------- | ----------------------------------------- | ----------------------------------- | ---------- |
-| idp-client-telephone-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-client-telephone-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-client-telephone-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-client-telephone-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-client-telephone-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-client-telephone-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/otp_lockable.rb | CONFIRMED  |
+| idp-client-telephone-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-client-telephone-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-client-telephone-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-client-telephone-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-client-telephone-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-client-telephone-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
 
 This historical Source-HOTP axis is superseded by independent Email/Telephone ceremony OTP axes.
 Current browser issuance, verification, delivery and resend use typed ceremony generation and keyed
@@ -2795,22 +2803,22 @@ Implementation: `EmailOtpPolicy`. Storage: `visitor_emails` /
 Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window expiry;
 only explicit successful consumption can reset them. The channel policy is independent. Both
 channels use the explicit issuance timestamp; older created-at/window-reset descriptions below are
-superseded by this correction. Ceremony ownership migration remains in progress.
+superseded by this correction. Ceremony-owned proof is implemented in the runtime; remaining acceptance work is route, fixture and constraint evidence.
 
 Sources: `app/models/concerns/email_otp_policy.rb`, `app/models/visitor_email.rb`,
-`app/models/concerns/email.rb`, `app/services/sign_otp_ceremony.rb`,
-`app/controllers/concerns/common_otp.rb`.
+`app/models/concerns/email.rb`, `app/operations/email_sign_up_otp_issuer.rb`,
+`app/models/visitor_email_ceremony_transaction.rb`.
 
-Tests read: `test/models/concerns/otp_lockable_test.rb`, `test/services/sign_otp_ceremony_test.rb`.
+Tests read: `test/models/otp_failure_retention_test.rb`, `test/operations/contact_registration_otp_verification_committer_test.rb`.
 
 | Transition ID              | Mutation kind         | From     | Event / Trigger                  | To       | Guard                                              | Side effect                               | Source file                         | Confidence |
 | -------------------------- | --------------------- | -------- | -------------------------------- | -------- | -------------------------------------------------- | ----------------------------------------- | ----------------------------------- | ---------- |
-| idp-visitor-email-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-visitor-email-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-visitor-email-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-visitor-email-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-visitor-email-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-visitor-email-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/otp_lockable.rb | CONFIRMED  |
+| idp-visitor-email-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-visitor-email-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-visitor-email-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-visitor-email-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-visitor-email-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-visitor-email-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
 
 This historical Source-HOTP axis is superseded by independent Email/Telephone ceremony OTP axes.
 Current browser issuance, verification, delivery and resend use typed ceremony generation and keyed
@@ -2834,22 +2842,22 @@ Implementation: `TelephoneOtpPolicy`. Storage: `visitor_telephones` /
 Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window expiry;
 only explicit successful consumption can reset them. The channel policy is independent. Both
 channels use the explicit issuance timestamp; older created-at/window-reset descriptions below are
-superseded by this correction. Ceremony ownership migration remains in progress.
+superseded by this correction. Ceremony-owned proof is implemented in the runtime; remaining acceptance work is route, fixture and constraint evidence.
 
 Sources: `app/models/concerns/telephone_otp_policy.rb`, `app/models/visitor_telephone.rb`,
-`app/models/concerns/telephone.rb`, `app/services/sign_otp_ceremony.rb`,
-`app/controllers/concerns/common_otp.rb`.
+`app/models/concerns/telephone.rb`, `app/operations/telephone_sign_up_otp_issuer.rb`,
+`app/models/visitor_telephone_ceremony_transaction.rb`.
 
-Tests read: `test/models/concerns/otp_lockable_test.rb`, `test/services/sign_otp_ceremony_test.rb`.
+Tests read: `test/models/otp_failure_retention_test.rb`, `test/operations/contact_registration_otp_verification_committer_test.rb`.
 
 | Transition ID                  | Mutation kind         | From     | Event / Trigger                  | To       | Guard                                              | Side effect                               | Source file                         | Confidence |
 | ------------------------------ | --------------------- | -------- | -------------------------------- | -------- | -------------------------------------------------- | ----------------------------------------- | ----------------------------------- | ---------- |
-| idp-visitor-telephone-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-visitor-telephone-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-visitor-telephone-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-visitor-telephone-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-visitor-telephone-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-visitor-telephone-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/otp_lockable.rb | CONFIRMED  |
+| idp-visitor-telephone-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-visitor-telephone-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-visitor-telephone-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-visitor-telephone-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-visitor-telephone-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-visitor-telephone-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
 
 This historical Source-HOTP axis is superseded by independent Email/Telephone ceremony OTP axes.
 Current browser issuance, verification, delivery and resend use typed ceremony generation and keyed
@@ -2940,22 +2948,22 @@ Implementation: `EmailOtpPolicy`. Storage: `operator_emails` /
 Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window expiry;
 only explicit successful consumption can reset them. The channel policy is independent. Both
 channels use the explicit issuance timestamp; older created-at/window-reset descriptions below are
-superseded by this correction. Ceremony ownership migration remains in progress.
+superseded by this correction. Ceremony-owned proof is implemented in the runtime; remaining acceptance work is route, fixture and constraint evidence.
 
 Sources: `app/models/concerns/email_otp_policy.rb`, `app/models/operator_email.rb`,
-`app/models/concerns/email.rb`, `app/services/sign_otp_ceremony.rb`,
-`app/controllers/concerns/common_otp.rb`.
+`app/models/concerns/email.rb`, `app/operations/email_sign_up_otp_issuer.rb`,
+`app/models/operator_email_ceremony_transaction.rb`.
 
-Tests read: `test/models/concerns/otp_lockable_test.rb`, `test/services/sign_otp_ceremony_test.rb`.
+Tests read: `test/models/otp_failure_retention_test.rb`, `test/operations/contact_registration_otp_verification_committer_test.rb`.
 
 | Transition ID               | Mutation kind         | From     | Event / Trigger                  | To       | Guard                                              | Side effect                               | Source file                         | Confidence |
 | --------------------------- | --------------------- | -------- | -------------------------------- | -------- | -------------------------------------------------- | ----------------------------------------- | ----------------------------------- | ---------- |
-| idp-operator-email-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-operator-email-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-operator-email-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-operator-email-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-operator-email-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-operator-email-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/otp_lockable.rb | CONFIRMED  |
+| idp-operator-email-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-operator-email-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-operator-email-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-operator-email-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-operator-email-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
+| idp-operator-email-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/email_otp_policy.rb | SUPERSEDED |
 
 This historical Source-HOTP axis is superseded by independent Email/Telephone ceremony OTP axes.
 Current browser issuance, verification, delivery and resend use typed ceremony generation and keyed
@@ -2975,22 +2983,22 @@ Implementation: `TelephoneOtpPolicy`. Storage: `operator_telephones` /
 Current-contract correction (2026-10-07): failure counts survive issuance and attempt-window expiry;
 only explicit successful consumption can reset them. The channel policy is independent. Both
 channels use the explicit issuance timestamp; older created-at/window-reset descriptions below are
-superseded by this correction. Ceremony ownership migration remains in progress.
+superseded by this correction. Ceremony-owned proof is implemented in the runtime; remaining acceptance work is route, fixture and constraint evidence.
 
 Sources: `app/models/concerns/telephone_otp_policy.rb`, `app/models/operator_telephone.rb`,
-`app/models/concerns/telephone.rb`, `app/services/sign_otp_ceremony.rb`,
-`app/controllers/concerns/common_otp.rb`.
+`app/models/concerns/telephone.rb`, `app/operations/telephone_sign_up_otp_issuer.rb`,
+`app/models/operator_telephone_ceremony_transaction.rb`.
 
-Tests read: `test/models/concerns/otp_lockable_test.rb`, `test/services/sign_otp_ceremony_test.rb`.
+Tests read: `test/models/otp_failure_retention_test.rb`, `test/operations/contact_registration_otp_verification_committer_test.rb`.
 
 | Transition ID                   | Mutation kind         | From     | Event / Trigger                  | To       | Guard                                              | Side effect                               | Source file                         | Confidence |
 | ------------------------------- | --------------------- | -------- | -------------------------------- | -------- | -------------------------------------------------- | ----------------------------------------- | ----------------------------------- | ---------- |
-| idp-operator-telephone-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-operator-telephone-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-operator-telephone-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-operator-telephone-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-operator-telephone-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/otp_lockable.rb | CONFIRMED  |
-| idp-operator-telephone-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/otp_lockable.rb | CONFIRMED  |
+| idp-operator-telephone-otp:T001 | DOCUMENTED_TRANSITION | inactive | store_otp                        | active   | Finite future expiry; not actively locked          | OTP columns; email sent timestamp         | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-operator-telephone-otp:T002 | DOCUMENTED_TRANSITION | active   | store_otp reissue                | active   | No own cooldown/source guard; callers apply policy | Replace OTP generation data               | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-operator-telephone-otp:T003 | DOCUMENTED_TRANSITION | active   | increment_attempts! threshold    | locked   | attempts >=5 in 15m window; row lock               | locked_at = DB now+15m; validation bypass | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-operator-telephone-otp:T004 | DOCUMENTED_TRANSITION | locked   | lockout clock elapsed            | active   | OTP deadline still future and lock predicate false | No write; conditional derived edge        | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-operator-telephone-otp:T005 | DOCUMENTED_TRANSITION | active   | OTP deadline elapsed / clear_otp | inactive | Deadline <=now or clear_otp caller                 | Clock no write; clear uses -infinity      | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
+| idp-operator-telephone-otp:T006 | DOCUMENTED_TRANSITION | locked   | clear_otp reset_attempts true    | inactive | Public method no lock guard                        | Reset lock/counter/expiry                 | app/models/concerns/telephone_otp_policy.rb | SUPERSEDED |
 
 This historical Source-HOTP axis is superseded by independent Email/Telephone ceremony OTP axes.
 Current browser issuance, verification, delivery and resend use typed ceremony generation and keyed

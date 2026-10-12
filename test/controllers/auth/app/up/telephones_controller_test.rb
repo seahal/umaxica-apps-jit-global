@@ -552,6 +552,7 @@ module Auth::App::Up
       assert_equal "jp", Rack::Utils.parse_query(guard_target.query).fetch("ri")
       guard_binding = SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard_target.query).fetch("fb"))
       cycle = ClientSignUpFlow.find_by!(public_id: original_binding.flow_public_id)
+
       assert_equal original_binding.flow_public_id, guard_binding.flow_public_id
       assert_equal cycle.reload.step, guard_binding.phase
       assert_equal cycle.checkpoint_version, guard_binding.generation
@@ -621,6 +622,7 @@ module Auth::App::Up
       assert_equal "jp", Rack::Utils.parse_query(guard_target.query).fetch("ri")
       guard_binding = SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard_target.query).fetch("fb"))
       current_flow = ClientSignUpFlow.find_by!(public_id: original_binding.flow_public_id).reload
+
       assert_equal current_flow.public_id, guard_binding.flow_public_id
       assert_equal current_flow.step, guard_binding.phase
       assert_equal current_flow.checkpoint_version, guard_binding.generation
@@ -700,6 +702,7 @@ module Auth::App::Up
       assert_equal "jp", Rack::Utils.parse_query(guard_target.query).fetch("ri")
       guard_binding = SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard_target.query).fetch("fb"))
       current_flow = ClientSignUpFlow.find_by!(public_id: original_binding.flow_public_id).reload
+
       assert_equal current_flow.public_id, guard_binding.flow_public_id
       assert_equal current_flow.step, guard_binding.phase
       assert_equal current_flow.checkpoint_version, guard_binding.generation

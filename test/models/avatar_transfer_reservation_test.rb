@@ -9,6 +9,18 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
   self.fixture_table_names = []
 
+  teardown do
+    next unless @committed_registry_idempotency_key
+
+    AvatarRecord.transaction(requires_new: true) do
+      reservation = AvatarTransferReservation.find_by(idempotency_key: @committed_registry_idempotency_key)
+      if reservation
+        AvatarEnterpriseToBureauTransferDetail.where(transfer_reservation_id: reservation.id).delete_all
+        AvatarTransferReservation.where(id: reservation.id).delete_all
+      end
+    end
+  end
+
   test "a concrete detail completes one transfer reservation" do
     AvatarRecord.transaction do
       avatar = AvatarTestFactory.create!(
@@ -475,6 +487,7 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
       )
     end
     key = SecureRandom.uuid
+    @committed_registry_idempotency_key = key
     attributes = {
       avatar: avatar,
       operation_kind: "enterprise_to_bureau",
@@ -512,7 +525,6 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
   ensure
     threads&.each { |thread| thread.kill if thread.alive? }
     threads&.each(&:join)
-    # The owned worker lifecycle removes reservation, detail and ownership history together.
   end
 
   private

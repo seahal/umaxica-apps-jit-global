@@ -20,19 +20,20 @@ class AvatarAccessGrantResolver < ApplicationService
   public
 
   def call
-    return false unless avatar.is_a?(Avatar) && ownership_period.respond_to?(:avatar_id)
-    return false unless ownership_period.avatar_id == avatar.id
-    return false unless ownership_period.current?
-
     grant_class, period_column, subject_column = GRANT_CLASSES[ownership_period.class.name]
     return false unless grant_class
+
+    return false unless avatar.is_a?(Avatar) && ownership_period.respond_to?(:avatar_id)
+
+    current_period = ownership_period.class.current.find_by(id: ownership_period.id)
+    return false unless current_period && current_period.avatar_id == avatar.id
 
     expected_subject = ownership_period.is_a?(AvatarEnterpriseOwnershipPeriod) ? ClientPersona : Agent
     return false unless subject.is_a?(expected_subject) && subject.public_id.present?
     return false if capability.blank?
 
     grant_class.active.effective_at(at).exists?(
-      period_column => ownership_period.id,
+      period_column => current_period.id,
       subject_column => subject.public_id,
       :capability => capability,
     )

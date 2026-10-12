@@ -16,7 +16,7 @@ module GroupAvatarMemberships
 
     def call
       observed_membership = GroupAvatarMembership.find(membership.id)
-      observed_group_owner = AvatarGroupOwnershipPeriod.current.find_by!(
+      observed_group_owner = AvatarGroupOwnershipPeriodSource.current.find_by!(
         avatar_group_id: observed_membership.avatar_group_id,
       )
       unless observed_group_owner.owner_surface == surface
@@ -64,7 +64,7 @@ module GroupAvatarMemberships
         raise AuthorizationDenied, "group account scope does not match actor context"
       end
 
-      owner = AvatarGroupOwnershipPeriod.current.lock.find_by(avatar_group_id: group.id)
+      owner = AvatarGroupOwnershipPeriodSource.current.lock.find_by(avatar_group_id: group.id)
       raise ArgumentError, "current group owner missing" unless owner && owner.owner_surface == surface
       unless [owner.owner_surface, owner.owner_collective_public_id] ==
           [observed_group_owner.owner_surface, observed_group_owner.owner_collective_public_id]

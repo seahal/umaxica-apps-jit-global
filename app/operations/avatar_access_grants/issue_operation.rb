@@ -9,12 +9,14 @@ module AvatarAccessGrants
     }.freeze
 
     def initialize(ownership_period:, subject:, capability:, granted_by_actor_public_id:,
+                   granting_subject_public_id:,
                    granted_at: Avatar.database_now)
       super()
       @ownership_period = ownership_period
       @subject = subject
       @capability = capability.to_s
       @granted_by_actor_public_id = granted_by_actor_public_id.to_s
+      @granting_subject_public_id = granting_subject_public_id.to_s
       @granted_at = granted_at
     end
 
@@ -46,7 +48,8 @@ module AvatarAccessGrants
 
     private
 
-    attr_reader :ownership_period, :subject, :capability, :granted_by_actor_public_id, :granted_at
+    attr_reader :ownership_period, :subject, :capability, :granted_by_actor_public_id,
+                :granting_subject_public_id, :granted_at
 
     def validate_inputs!
       unless GRANT_CLASSES.key?(ownership_period.class.name)
@@ -58,6 +61,7 @@ module AvatarAccessGrants
       raise ArgumentError, "subject public id is required" if subject.public_id.blank?
       raise ArgumentError, "capability is required" if capability.blank?
       raise ArgumentError, "granting actor public id is required" if granted_by_actor_public_id.blank?
+      raise ArgumentError, "granting subject public id is required" if granting_subject_public_id.blank?
       raise ArgumentError, "granted_at is required" if granted_at.blank?
     end
 
@@ -97,7 +101,7 @@ module AvatarAccessGrants
       AvatarOwnerMembershipLockService.call(
         actor: granting_actor,
         surface: authority_surface,
-        subject_public_id: subject.public_id,
+        subject_public_id: granting_subject_public_id,
         owner_collective_public_id: ownership_collective_public_id,
         permission: "avatar.grant.manage",
         avatar: ownership_period.avatar,

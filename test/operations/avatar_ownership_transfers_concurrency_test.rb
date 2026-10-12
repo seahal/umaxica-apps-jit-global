@@ -165,7 +165,12 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
     target_public_id = @bureau.public_id
     idempotency_key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a45"
     @committed_registry_idempotency_key = idempotency_key
-    request_fingerprint = Digest::SHA256.hexdigest("registry-race")
+    request_fingerprint = Digest::SHA256.hexdigest(
+      [
+        "avatar_transfer", "app", @client.public_id, subject_public_id,
+        avatar_public_id, "org", target_public_id,
+      ].join("\0"),
+    )
     ready = Queue.new
     start = Queue.new
 

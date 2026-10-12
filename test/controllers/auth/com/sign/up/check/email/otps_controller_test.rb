@@ -347,6 +347,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
 
     assert_response :redirect
     @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
     assert_redirected_to auth_com_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
     assert_equal VisitorEmailStatus::VERIFIED_WITH_SIGN_UP, visitor_email.reload.visitor_email_status_id
     assert_equal VisitorSignUpFlowStatus::CHECKPOINT_PENDING, cycle.reload.status_id

@@ -59,7 +59,9 @@ The installed `opentelemetry-instrumentation-action_mailer` version is 0.8.1. It
 are configured allowlist-first: delivery spans retain only `email.x_mailer`, and process spans
 retain only `mailer` and `action`. Subject, addresses, arguments, body, MIME and future unknown
 keys are excluded before export. `ObservabilityRedactor` and `ObservabilitySpanScrubber` remain
-secondary controls.
+secondary controls. The in-process span scrubber also treats every `email.*` attribute except the
+explicitly allowed `email.x_mailer`, and every `args` attribute, as sensitive if an instrumentation
+regression bypasses the ActionMailer transform.
 
 The development Alloy configuration adds a secondary deletion rule for ActionMailer subject,
 address, body/MIME, arguments, OTP and token-shaped attributes. The existing read-only Compose

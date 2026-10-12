@@ -17,6 +17,7 @@ module AvatarOwnershipTransfers
     end
 
     def call
+      reject_legacy_transfer_after_cutover!
       validate_target!
       avatar = find_avatar!(avatar_public_id)
       observed_owner = current_owner!(avatar)
@@ -75,6 +76,12 @@ module AvatarOwnershipTransfers
       return if collective_exists?(surface: target_surface, public_id: target_collective_public_id)
 
       raise InvalidTransfer, "target collective not found"
+    end
+
+    def reject_legacy_transfer_after_cutover!
+      return unless AvatarOwnershipCutover.established?
+
+      raise InvalidTransfer, "legacy Avatar transfer operations are unavailable after cutover"
     end
 
     def assert_owner_unchanged!(current, observed)

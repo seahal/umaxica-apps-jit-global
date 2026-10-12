@@ -77,6 +77,7 @@ class GroupAvatarMembershipPolicyTest < ActiveSupport::TestCase
         subject: @bootstrap.account,
         capability: capability,
         granted_by_actor_public_id: @user.public_id,
+        granting_subject_public_id: @bootstrap.account.public_id,
       )
     end
 

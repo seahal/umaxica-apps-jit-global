@@ -100,6 +100,7 @@ class AvatarPermissionResolverTest < ActiveSupport::TestCase
       subject: @app.account,
       capability: "avatar.view",
       granted_by_actor_public_id: @client.public_id,
+      granting_subject_public_id: @app.account.public_id,
     )
 
     membership = @app.account.persona_memberships.find_by!(enterprise: @app.collective)

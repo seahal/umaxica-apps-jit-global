@@ -13,12 +13,29 @@ class AvatarGroup < AvatarRecord
            class_name: "AvatarGroupOwnershipPeriod",
            dependent: :restrict_with_error,
            inverse_of: :avatar_group
+  has_many :concrete_ownership_periods,
+           class_name: "AvatarGroupConcreteOwnershipPeriod",
+           dependent: :restrict_with_error,
+           inverse_of: :avatar_group
   # The full ownership_periods association owns retention; this view adds no deletion callback.
   has_one :current_ownership_period,
           -> { where("valid_to = 'infinity'::timestamp with time zone") },
           class_name: "AvatarGroupOwnershipPeriod",
           dependent: nil,
           inverse_of: :avatar_group
+
+  # These readers are intentionally explicit because the concrete table becomes authoritative only
+  # after AvatarOwnershipCutover is established. The association reflections above remain
+  # available for migration inspection and legacy reads, while runtime authority is selected here.
+  public
+
+  def ownership_periods
+    AvatarGroupOwnershipPeriodSource.all_for(self)
+  end
+
+  def current_ownership_period
+    AvatarGroupOwnershipPeriodSource.current_for(self)
+  end
 
   validates :account_surface, inclusion: { in: ACCOUNT_SURFACES }
   validates :account_public_id, presence: true

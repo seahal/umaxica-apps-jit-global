@@ -51,10 +51,7 @@ module Base
             permission: "avatar.update",
           ) do
             Avatar.transaction do
-              current_owner = AvatarOwnershipPeriod.current
-                .where(avatar_id: avatar.id, avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE)
-                .lock
-                .first || raise(ActiveRecord::RecordNotFound, "Avatar has no current active owner")
+              current_owner = AvatarOwnershipPeriodSource.current_for(avatar, lock: true)
               unless [current_owner.owner_surface, current_owner.owner_collective_public_id] ==
                   [observed_owner.owner_surface, observed_owner.owner_collective_public_id]
                 raise AvatarOwnerMembershipLockService::AuthorizationDenied,

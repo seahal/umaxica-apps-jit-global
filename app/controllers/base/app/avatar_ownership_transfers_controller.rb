@@ -15,6 +15,7 @@ module Base
 
       def create
         authorize!(AvatarOwnershipTransfer, to: :create?)
+        ensure_registry_admission_available! if registry_request?
         transfer =
           with_locked_step_up("avatar_transfer_request") do
             if registry_request?
@@ -52,6 +53,7 @@ module Base
         transfer = registry_transfer? ? find_registry_reservation! : find_transfer!
         authorize!(transfer, to: :accept?, with: AvatarTransferReservationPolicy) if registry_transfer?
         authorize!(transfer, to: :accept?) unless registry_transfer?
+        ensure_registry_admission_available! if registry_transfer?
         accepted =
           with_locked_step_up("avatar_transfer_accept") do
             if registry_transfer?
@@ -85,6 +87,7 @@ module Base
         transfer = registry_transfer? ? find_registry_reservation! : find_transfer!
         authorize!(transfer, to: :cancel?, with: AvatarTransferReservationPolicy) if registry_transfer?
         authorize!(transfer, to: :cancel?) unless registry_transfer?
+        ensure_registry_admission_available! if registry_transfer?
         cancelled =
           with_locked_step_up("avatar_transfer_cancel") do
             if registry_transfer?
@@ -150,6 +153,13 @@ module Base
 
       def registry_request?
         !idempotency_key.nil?
+      end
+
+      def ensure_registry_admission_available!
+        return if AvatarOwnershipCutover.established?
+
+        raise AvatarOwnershipTransfers::InvalidTransfer,
+              "registry transfer admission requires the verified Avatar ownership cutover"
       end
 
       def idempotency_key

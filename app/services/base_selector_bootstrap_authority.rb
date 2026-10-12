@@ -301,13 +301,11 @@ class BaseSelectorBootstrapAuthority
       raise AvatarProvisioning::Create::Unauthorized, "avatar.update permission required"
     end
 
-    existing_avatar = Avatar
-      .joins(:current_ownership_period)
-      .where(
-        avatar_ownership_periods: {
-          owner_surface: config.surface.to_s,
-          owner_collective_public_id: collective.public_id,
-        },
+    existing_avatar = AvatarOwnershipPeriodSource
+      .relation_for(
+        Avatar.all,
+        surface: config.surface.to_s,
+        collective_public_id: collective.public_id,
       )
       .order(:created_at, :id)
       .first
@@ -327,13 +325,11 @@ class BaseSelectorBootstrapAuthority
 
     result.avatar
   rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
-    Avatar
-      .joins(:current_ownership_period)
-      .where(
-        avatar_ownership_periods: {
-          owner_surface: config.surface.to_s,
-          owner_collective_public_id: collective.public_id,
-        },
+    AvatarOwnershipPeriodSource
+      .relation_for(
+        Avatar.all,
+        surface: config.surface.to_s,
+        collective_public_id: collective.public_id,
       )
       .order(:created_at, :id)
       .first || raise

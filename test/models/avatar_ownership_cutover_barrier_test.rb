@@ -23,14 +23,10 @@ class AvatarOwnershipCutoverBarrierTest < ActiveSupport::TestCase
 
       assert_not AvatarOwnershipCutover.established?
 
-      result = AvatarOwnershipCutoverOperation.call(
-        avatar_ids: [@avatar.id],
-        writer_quiesced: true,
-        apply: true,
+      AvatarOwnershipCutover.create!(
+        id: AvatarOwnershipCutover::CUTOVER_ID,
         cutover_at: Time.utc(2030, 1, 1),
       )
-
-      assert_equal "established", result.status
       persistence = AvatarRecord.connection.select_value(<<~SQL.squish)
         SELECT relpersistence
         FROM pg_class
@@ -49,10 +45,8 @@ class AvatarOwnershipCutoverBarrierTest < ActiveSupport::TestCase
 
   test "cutover marker cannot be changed or truncated through direct SQL" do
     within_avatar_rollback do
-      AvatarOwnershipCutoverOperation.call(
-        avatar_ids: [@avatar.id],
-        writer_quiesced: true,
-        apply: true,
+      AvatarOwnershipCutover.create!(
+        id: AvatarOwnershipCutover::CUTOVER_ID,
         cutover_at: Time.utc(2030, 1, 1),
       )
 
@@ -95,6 +89,14 @@ class AvatarOwnershipCutoverBarrierTest < ActiveSupport::TestCase
       owner_surface: "app",
       owner_collective_public_id: @bootstrap.collective.public_id,
       valid_from: Time.current,
+    )
+    legacy_period = group.ownership_periods.order(:id).last
+    AvatarGroupConcreteOwnershipPeriod.create!(
+      avatar_group: group,
+      owner_surface: legacy_period.owner_surface,
+      owner_collective_public_id: legacy_period.owner_collective_public_id,
+      valid_from: legacy_period.valid_from,
+      valid_to: legacy_period.valid_to,
     )
     group
   end

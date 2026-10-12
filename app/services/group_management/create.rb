@@ -19,7 +19,7 @@ module GroupManagement
     end
 
     def call
-      unless AvatarGroupOwnershipPeriod::OWNER_SURFACES.include?(owner_surface) &&
+      unless AvatarGroupConcreteOwnershipPeriod::OWNER_SURFACES.include?(owner_surface) &&
           account_surface == owner_surface && account_public_id.present? &&
           account_public_id == subject_public_id
         raise ArgumentError, "group account context is invalid"
@@ -41,11 +41,11 @@ module GroupManagement
             description: description,
             state: "active",
           )
-          AvatarGroupOwnershipPeriod.create!(
+          AvatarGroupOwnershipPeriodSource.create!(
             avatar_group: group,
             owner_surface: owner_surface,
             owner_collective_public_id: owner_collective_public_id,
-            valid_from: Time.current,
+            valid_from: group.created_at,
           )
           group
         end

@@ -437,6 +437,7 @@ module Auth::App::Up
                 flow: fv5018, previous_binding: @signup_flow_binding,
                 expected_path: auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"),
               )
+
               assert fv5018.reload.requirement_cleared?(:passkey)
             end
 
@@ -541,6 +542,7 @@ module Auth::App::Up
                 flow: fv5005, previous_binding: @signup_flow_binding,
                 expected_path: auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"),
               )
+
               assert fv5007.reload.requirement_cleared?(:passkey)
             end
 
@@ -629,6 +631,7 @@ module Auth::App::Up
           flow: fv5000, previous_binding: @signup_flow_binding,
           expected_path: auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"),
         )
+
         assert fv5000.reload.requirement_cleared?(:passkey)
       end
 
@@ -725,18 +728,11 @@ module Auth::App::Up
         },
       )
 
-      guard_uri = response.redirect? ? URI.parse(response.location) : nil
-      guard_binding = guard_uri && SignFlowBindingCodec.decode(Rack::Utils.parse_query(guard_uri.query).fetch("fb"))
-      current_flow = current_sign_up_flow(telephone).reload
-      expected_guard_path = URI.parse(auth_app_sign_up_guard_telephone_path(ri: "jp")).path
-      guard_matches = response.redirect? && guard_uri.path == expected_guard_path &&
-        guard_binding&.flow_public_id == current_flow.public_id &&
-        guard_binding.phase == current_flow.step &&
-        guard_binding.generation == current_flow.checkpoint_version &&
-        guard_binding.expires_at == current_flow.expires_at.to_i
-
-      assert guard_matches, "OTP completion must redirect with its current signed flow binding"
-      @signup_flow_binding = Rack::Utils.parse_query(guard_uri.query).fetch("fb")
+      assert_response :redirect, "OTP completion must redirect with its current signed flow binding"
+      @signup_flow_binding = refresh_sign_up_flow_binding_from_redirect!(
+        flow: current_sign_up_flow(telephone), previous_binding: @signup_flow_binding,
+        expected_path: auth_app_sign_up_guard_telephone_path(ri: "jp"),
+      )
 
       get(auth_app_sign_up_guard_telephone_url(ri: "jp", fb: @signup_flow_binding))
 
@@ -759,6 +755,7 @@ module Auth::App::Up
 
     def refresh_sign_up_flow_binding_from_redirect!(flow:, previous_binding:, expected_path:)
       target = URI.parse(response.location)
+
       assert_equal URI.parse(expected_path).path, target.path
       raw_binding = Rack::Utils.parse_query(target.query).fetch("fb")
       binding = SignFlowBindingCodec.decode(raw_binding)

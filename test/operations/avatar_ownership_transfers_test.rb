@@ -35,7 +35,7 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
       target_surface: "org",
       target_collective_public_id: @target.collective.public_id,
       idempotency_key: key,
-      request_fingerprint: Digest::SHA256.hexdigest("registry-request"),
+      request_fingerprint: registry_request_fingerprint,
     }
 
     first = AvatarOwnershipTransfers::RegistryRequestOperation.call(**attributes)
@@ -49,7 +49,44 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
                  first.enterprise_to_bureau_detail.source_ownership_period_id
     assert_equal @source.collective.public_id, first.enterprise_to_bureau_detail.source_enterprise_public_id
     assert_equal @target.collective.public_id, first.enterprise_to_bureau_detail.destination_bureau_public_id
+    assert_equal @source_actor.public_id, first.enterprise_to_bureau_detail.request_actor_public_id
     assert_equal 1, AvatarTransferReservation.where(id: first.id).count
+  end
+
+  test "registry idempotency key is bound to the authenticated initiator" do
+    reservation = registry_request
+    other_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+
+    assert_raises(AvatarOwnershipTransfers::InvalidTransfer) do
+      AvatarOwnershipTransfers::RegistryRequestOperation.call(
+        actor: other_actor,
+        surface: "app",
+        subject_public_id: @source.account.public_id,
+        avatar_public_id: @avatar.public_id,
+        target_surface: "org",
+        target_collective_public_id: @target.collective.public_id,
+        idempotency_key: reservation.idempotency_key,
+        request_fingerprint: registry_request_fingerprint,
+      )
+    end
+  end
+
+  test "registry request rejects a caller supplied fingerprint that is not derived from the request" do
+    key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a46"
+    assert_raises(AvatarOwnershipTransfers::InvalidTransfer) do
+      AvatarOwnershipTransfers::RegistryRequestOperation.call(
+        actor: @source_actor,
+        surface: "app",
+        subject_public_id: @source.account.public_id,
+        avatar_public_id: @avatar.public_id,
+        target_surface: "org",
+        target_collective_public_id: @target.collective.public_id,
+        idempotency_key: key,
+        request_fingerprint: Digest::SHA256.hexdigest("attacker-controlled-input"),
+      )
+    end
+
+    assert_not AvatarTransferReservation.exists?(idempotency_key: key)
   end
 
   test "source owner cancels a pending registry reservation without changing ownership" do
@@ -98,6 +135,55 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
                  @avatar.bureau_ownership_periods.current.first.bureau_public_id
     assert_equal accepted.completed_at,
                  accepted.enterprise_to_bureau_detail.reload.accepted_at
+    assert_equal @target_actor.public_id, accepted.enterprise_to_bureau_detail.accept_actor_public_id
+    assert_equal @target_actor.public_id,
+                 @avatar.bureau_ownership_periods.current.first.transferred_by_actor_public_id
+  end
+
+  test "registry acceptance after cutover writes only the concrete ownership source" do
+    # This slice commits through the Avatar connection, which is intentionally outside the
+    # ordinary fixture transaction. Build a private source actor/avatar so a pending reservation
+    # from another committed test cannot make the one-pending-per-Avatar invariant collide here.
+    source_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    source = BaseSelectorBootstrapAuthority.call(surface: :app, principal: source_actor)
+    avatar = source.avatar
+
+    AvatarRecord.transaction(joinable: false) do
+      reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
+        actor: source_actor,
+        surface: "app",
+        subject_public_id: source.account.public_id,
+        avatar_public_id: avatar.public_id,
+        target_surface: "org",
+        target_collective_public_id: @target.collective.public_id,
+        idempotency_key: SecureRandom.uuid,
+        request_fingerprint: registry_request_fingerprint(
+          actor: source_actor,
+          subject_public_id: source.account.public_id,
+          avatar_public_id: avatar.public_id,
+          target_collective_public_id: @target.collective.public_id,
+        ),
+      )
+      legacy_period_count = avatar.avatar_ownership_periods.count
+
+      AvatarOwnershipCutover.create!(
+        id: AvatarOwnershipCutover::CUTOVER_ID,
+        cutover_at: Time.utc(2030, 1, 1),
+      )
+
+      accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+        actor: @target_actor,
+        surface: "org",
+        subject_public_id: @target.account.public_id,
+        reservation_public_id: reservation.public_id,
+      )
+
+      assert_equal "accepted", accepted.state
+      assert_equal legacy_period_count, avatar.avatar_ownership_periods.reload.count
+      assert_equal "org", avatar.current_ownership_period.owner_surface
+      assert_equal @target.collective.public_id, avatar.current_ownership_period.owner_collective_public_id
+      raise ActiveRecord::Rollback
+    end
   end
 
   test "a completed registry request replays its recorded result for the same request" do
@@ -187,7 +273,11 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
       target_surface: "app",
       target_collective_public_id: @source.collective.public_id,
       idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a40",
-      request_fingerprint: Digest::SHA256.hexdigest("registry-bureau-to-enterprise"),
+      request_fingerprint: registry_request_fingerprint(
+        actor: @target_actor, surface: "org", subject_public_id: @target.account.public_id,
+        avatar_public_id: avatar.public_id, target_surface: "app",
+        target_collective_public_id: @source.collective.public_id,
+      ),
     )
 
     accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
@@ -215,7 +305,11 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
       target_surface: "app",
       target_collective_public_id: target.collective.public_id,
       idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a43",
-      request_fingerprint: Digest::SHA256.hexdigest("registry-enterprise-to-enterprise"),
+      request_fingerprint: registry_request_fingerprint(
+        actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+        avatar_public_id: @avatar.public_id, target_surface: "app",
+        target_collective_public_id: target.collective.public_id,
+      ),
     )
 
     accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
@@ -230,6 +324,90 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     assert_equal target.collective.public_id, @avatar.current_ownership_period.owner_collective_public_id
     assert_equal target.collective.public_id, @avatar.enterprise_ownership_periods.current.first.enterprise_public_id
     assert_empty @avatar.bureau_ownership_periods.current
+  end
+
+  test "returning to the original owner does not reactivate its historical grant" do
+    original_period = @avatar.enterprise_ownership_periods.current.first
+    historical_grant = AvatarAccessGrants::IssueOperation.call(
+      ownership_period: original_period,
+      subject: @source.account,
+      capability: "avatar.view",
+      granted_by_actor_public_id: @source_actor.public_id,
+      granting_subject_public_id: @source.account.public_id,
+    )
+
+    assert AvatarAccessGrantResolver.call(
+      avatar: @avatar,
+      ownership_period: original_period,
+      subject: @source.account,
+      capability: "avatar.view",
+    )
+
+    to_bureau = registry_request
+    AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+      actor: @target_actor,
+      surface: "org",
+      subject_public_id: @target.account.public_id,
+      reservation_public_id: to_bureau.public_id,
+    )
+
+    back_to_enterprise = AvatarOwnershipTransfers::RegistryRequestOperation.call(
+      actor: @target_actor,
+      surface: "org",
+      subject_public_id: @target.account.public_id,
+      avatar_public_id: @avatar.public_id,
+      target_surface: "app",
+      target_collective_public_id: @source.collective.public_id,
+      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a45",
+      request_fingerprint: registry_request_fingerprint(
+        actor: @target_actor,
+        surface: "org",
+        subject_public_id: @target.account.public_id,
+        avatar_public_id: @avatar.public_id,
+        target_surface: "app",
+        target_collective_public_id: @source.collective.public_id,
+      ),
+    )
+
+    AvatarOwnershipTransfers::RegistryAcceptOperation.call(
+      actor: @source_actor,
+      surface: "app",
+      subject_public_id: @source.account.public_id,
+      reservation_public_id: back_to_enterprise.public_id,
+    )
+
+    current_period = @avatar.reload.enterprise_ownership_periods.current.first
+
+    assert_not_equal original_period.id, current_period.id
+    assert_not AvatarAccessGrantResolver.call(
+      avatar: @avatar,
+      ownership_period: original_period,
+      subject: @source.account,
+      capability: "avatar.view",
+    )
+    assert_not AvatarAccessGrantResolver.call(
+      avatar: @avatar,
+      ownership_period: current_period,
+      subject: @source.account,
+      capability: "avatar.view",
+    )
+    assert_nil historical_grant.reload.revoked_at
+
+    fresh_grant = AvatarAccessGrants::IssueOperation.call(
+      ownership_period: current_period,
+      subject: @source.account,
+      capability: "avatar.view",
+      granted_by_actor_public_id: @source_actor.public_id,
+      granting_subject_public_id: @source.account.public_id,
+    )
+
+    assert AvatarAccessGrantResolver.call(
+      avatar: @avatar,
+      ownership_period: current_period,
+      subject: @source.account,
+      capability: "avatar.view",
+    )
+    assert_not_equal historical_grant.id, fresh_grant.id
   end
 
   test "registry transfer accepts a Bureau-owned Avatar into another Bureau" do
@@ -257,7 +435,11 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
       target_surface: "org",
       target_collective_public_id: target.collective.public_id,
       idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a44",
-      request_fingerprint: Digest::SHA256.hexdigest("registry-bureau-to-bureau"),
+      request_fingerprint: registry_request_fingerprint(
+        actor: @target_actor, surface: "org", subject_public_id: @target.account.public_id,
+        avatar_public_id: avatar.public_id, target_surface: "org",
+        target_collective_public_id: target.collective.public_id,
+      ),
     )
 
     accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
@@ -605,7 +787,18 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
       target_surface: "org",
       target_collective_public_id: @target.collective.public_id,
       idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a39",
-      request_fingerprint: Digest::SHA256.hexdigest("registry-cancel"),
+      request_fingerprint: registry_request_fingerprint,
+    )
+  end
+
+  def registry_request_fingerprint(actor: @source_actor, surface: "app", subject_public_id: @source.account.public_id,
+                                   avatar_public_id: @avatar.public_id, target_surface: "org",
+                                   target_collective_public_id: @target.collective.public_id)
+    Digest::SHA256.hexdigest(
+      [
+        "avatar_transfer", surface, actor.public_id, subject_public_id, avatar_public_id,
+        target_surface, target_collective_public_id,
+      ].join("\0"),
     )
   end
 

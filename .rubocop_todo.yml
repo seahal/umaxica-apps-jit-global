@@ -798,7 +798,6 @@ Umaxica/ExplicitMethodVisibility:
     - "app/models/application_record.rb"
     - "app/models/area_occurrence_status.rb"
     - "app/models/avatar.rb"
-    - "app/models/avatar_group.rb"
     - "app/models/avatar_group_ownership_period.rb"
     - "app/models/avatar_ownership_period.rb"
     - "app/models/bureau.rb"

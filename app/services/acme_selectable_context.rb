@@ -122,15 +122,13 @@ module AcmeSelectableContext
     )
     avatars =
       if authorized
-        Avatar
-          .joins(:current_ownership_period, :lifecycle_state)
-          .where(
-            avatar_ownership_periods: {
-              owner_surface: config.surface.to_s,
-              owner_collective_public_id: collective.public_id,
-            },
-            avatar_lifecycle_states: { key: "active" },
+        AvatarOwnershipPeriodSource
+          .relation_for(
+            Avatar.joins(:lifecycle_state),
+            surface: config.surface.to_s,
+            collective_public_id: collective.public_id,
           )
+          .where(avatar_lifecycle_states: { key: "active" })
           .where("avatars.discard_at > ?", Time.current)
           .distinct
           .order(:created_at, :id)
@@ -182,15 +180,15 @@ module AcmeSelectableContext
     return false unless authorized
 
     connection_owner(Avatar).connected_to(role: :writing) do
-      Avatar
-        .joins(:current_ownership_period, :lifecycle_state)
+      AvatarOwnershipPeriodSource
+        .relation_for(
+          Avatar.joins(:lifecycle_state),
+          surface: config.surface.to_s,
+          collective_public_id: public_ids[:organization_public_id],
+        )
         .lock
         .where(public_id: public_ids[:avatar_public_id])
         .where(
-          avatar_ownership_periods: {
-            owner_surface: config.surface.to_s,
-            owner_collective_public_id: public_ids[:organization_public_id],
-          },
           avatar_lifecycle_states: { key: "active" },
         )
         .exists?(["avatars.discard_at > ?", Time.current])

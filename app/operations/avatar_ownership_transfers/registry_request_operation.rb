@@ -22,6 +22,7 @@ module AvatarOwnershipTransfers
 
     def call
       validate_idempotency_key!
+      validate_request_fingerprint!
       replay = replay_existing_reservation
       return replay if replay
 
@@ -62,7 +63,7 @@ module AvatarOwnershipTransfers
             request_fingerprint: request_fingerprint,
             source_collective_public_id: owner.owner_collective_public_id,
             destination_collective_public_id: target_collective_public_id,
-            request_actor_public_id: subject_public_id,
+            request_actor_public_id: authorized_initiator_public_id,
             source_ownership_period_id: concrete_owner.id,
             requested_at: requested_at,
           )
@@ -77,6 +78,13 @@ module AvatarOwnershipTransfers
                 :target_surface, :target_collective_public_id, :idempotency_key,
                 :request_fingerprint, :requested_at
 
+    def authorized_initiator_public_id
+      public_id = actor.respond_to?(:public_id) ? actor.public_id.to_s : ""
+      return public_id if public_id.present?
+
+      raise InvalidTransfer, "authorized transfer initiator is missing"
+    end
+
     def validate_target!
       raise InvalidTransfer, "unsupported target surface" unless OWNER_DATA.key?(target_surface)
       raise InvalidTransfer, "target collective public id is required" if target_collective_public_id.blank?
@@ -90,6 +98,24 @@ module AvatarOwnershipTransfers
         idempotency_key == idempotency_key.downcase
 
       raise InvalidTransfer, "idempotency key must be canonical UUID v4 or v7"
+    end
+
+    def validate_request_fingerprint!
+      expected = Digest::SHA256.hexdigest(
+        [
+          "avatar_transfer",
+          surface,
+          authorized_initiator_public_id,
+          subject_public_id,
+          avatar_public_id,
+          target_surface,
+          target_collective_public_id,
+        ].join("\0"),
+      )
+      return if request_fingerprint.bytesize == expected.bytesize &&
+        ActiveSupport::SecurityUtils.secure_compare(request_fingerprint, expected)
+
+      raise InvalidTransfer, "request fingerprint does not match transfer inputs"
     end
 
     def existing_reservation
@@ -115,7 +141,7 @@ module AvatarOwnershipTransfers
       same_request = reservation.request_fingerprint == request_fingerprint &&
         reservation.operation_kind == operation_kind &&
         reservation.avatar.public_id == avatar_public_id &&
-        detail.request_actor_public_id == subject_public_id &&
+        detail.request_actor_public_id == authorized_initiator_public_id &&
         detail.public_send(destination_attribute) == target_collective_public_id
       return if same_request
 

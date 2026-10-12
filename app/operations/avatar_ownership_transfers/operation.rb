@@ -35,13 +35,15 @@ module AvatarOwnershipTransfers
     end
 
     def current_owner!(avatar, lock: false)
-      relation = AvatarOwnershipPeriod.current
-        .where(avatar_id: avatar.id, avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE)
-      relation = relation.lock if lock
-      relation.first || raise(InvalidTransfer, "Avatar has no current active owner")
+      AvatarOwnershipPeriodSource.current_for(avatar, lock: lock)
+    rescue AvatarOwnershipPeriodSource::InvalidState => e
+      raise InvalidTransfer, e.message
     end
 
     def concrete_current_owner!(avatar, lock: false)
+      return AvatarOwnershipPeriodSource.current_for(avatar, lock: lock) unless
+        AvatarOwnershipPeriodSource.legacy?
+
       relations = [
         AvatarEnterpriseOwnershipPeriod.current.where(avatar_id: avatar.id),
         AvatarBureauOwnershipPeriod.current.where(avatar_id: avatar.id),
@@ -53,11 +55,9 @@ module AvatarOwnershipTransfers
     end
 
     def concrete_period_class_for(surface)
-      case surface.to_s
-      when "app" then AvatarEnterpriseOwnershipPeriod
-      when "org" then AvatarBureauOwnershipPeriod
-      else raise InvalidTransfer, "unsupported concrete ownership surface"
-      end
+      AvatarOwnershipPeriodSource.concrete_period_class_for(surface)
+    rescue AvatarOwnershipPeriodSource::InvalidState => e
+      raise InvalidTransfer, e.message
     end
 
     def assert_eligible_avatar!(avatar)
@@ -95,7 +95,7 @@ module AvatarOwnershipTransfers
         .order(:avatar_group_id, :id)
         .lock
         .to_a
-      group_owners = AvatarGroupOwnershipPeriod.current
+      group_owners = AvatarGroupOwnershipPeriodSource.current
         .where(avatar_group_id: memberships.map(&:avatar_group_id))
         .index_by(&:avatar_group_id)
 

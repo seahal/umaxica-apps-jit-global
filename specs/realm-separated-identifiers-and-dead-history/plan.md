@@ -7,9 +7,9 @@ extension; decision record: `adr/realm-separated-identifiers-and-dead-history.md
 ## Execution and acceptance
 
 - [x] Telephone issuance timestamp in APP/COM/ORG; no `created_at` anchor; focused tests pass.
-- [ ] Independent Email/Telephone policy series; issuance/expiry/cancellation preserve failures;
+- [x] Independent Email/Telephone policy series; issuance/expiry/cancellation preserve failures;
       success reset, threshold and boundary tests pass for all realms; shared stateful policy
-      removed.
+      removed. Current evidence: `evidence/2026-10-12-p3a-independent-policy-G5L2.md`.
 - [ ] Ceremony-owned random-code keyed verifiers and bound delivery for every existing applicable
       signup/signin/recovery/withdrawal/registration route; actor/session/purpose/candidate checks,
       expiry, cancellation, atomic single-use and concurrency tests pass; identifier HOTP material

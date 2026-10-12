@@ -15,7 +15,12 @@ class AvatarOwnershipTransitionInventoryQuery
   Result =
     Data.define(:summary, :details) do
       def ready?
-        details.all? { |detail| READY_CLASSIFICATIONS.include?(detail.fetch(:classification)) }
+        details.length == summary.fetch(:avatars_requested) &&
+          details.all? { |detail| READY_CLASSIFICATIONS.include?(detail.fetch(:classification)) }
+      end
+
+      def selection_complete?
+        summary.fetch(:selection_complete)
       end
 
       def blocking?
@@ -42,6 +47,13 @@ class AvatarOwnershipTransitionInventoryQuery
         end
       end
 
+      total_avatar_count =
+        if ids.nil?
+          details.length
+        else
+          AvatarRecord.connected_to(role: :writing) { Avatar.count }
+        end
+
       classifications =
         details.each_with_object(Hash.new(0)) do |detail, counts|
           counts[detail.fetch(:classification)] += 1
@@ -49,9 +61,12 @@ class AvatarOwnershipTransitionInventoryQuery
 
       Result.new(
         summary: {
+          avatars_requested: ids&.length || details.length,
           avatars_scanned: details.length,
+          selection_complete: details.length == total_avatar_count,
           classifications: classifications.sort.to_h,
-          ready: details.all? { |detail| READY_CLASSIFICATIONS.include?(detail.fetch(:classification)) },
+          ready: details.length == (ids&.length || details.length) &&
+            details.all? { |detail| READY_CLASSIFICATIONS.include?(detail.fetch(:classification)) },
         }.freeze,
         details: details.freeze,
       )

@@ -81,7 +81,7 @@ module Base
       end
 
       def set_group
-        @group = AvatarGroup.includes(:current_ownership_period).find_by!(public_id: params.expect(:id))
+        @group = AvatarGroup.find_by!(public_id: params.expect(:id))
       end
 
       def group_params

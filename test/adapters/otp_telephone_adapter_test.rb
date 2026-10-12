@@ -38,6 +38,32 @@ class OtpTelephoneAdapterTest < ActiveSupport::TestCase
     assert_empty delivered
   end
 
+  test "deliver rejects retired HOTP counter payloads before transport" do
+    record = Object.new
+    record.define_singleton_method(:number) { "+819012345678" }
+    delivered = []
+
+    OutboundSms.stub(:deliver_later, ->(**kwargs) { delivered << kwargs }) do
+      assert_raises(ArgumentError) do
+        OtpTelephoneAdapter.new.deliver(
+          record: record,
+          otp_code: "111111",
+          sign_up_otp_counter: "4",
+        )
+      end
+
+      assert_raises(ArgumentError) do
+        OtpTelephoneAdapter.new.deliver(
+          record: record,
+          otp_code: "222222",
+          contact_otp_counter: "5",
+        )
+      end
+    end
+
+    assert_empty delivered
+  end
+
   test "deliver uses localized verification payload when requested" do
     record = Object.new
     record.define_singleton_method(:number) { "+819012345678" }

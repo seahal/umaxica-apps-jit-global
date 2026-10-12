@@ -73,7 +73,7 @@ module AvatarOwnershipTransfers
           reservation
         end
       rescue ActiveRecord::RecordNotUnique => e
-        raise unless idempotency_constraint?(e)
+        raise unless retryable_reservation_constraint?(e)
 
         attempts += 1
         raise if attempts >= MAX_IDEMPOTENCY_RACE_RETRIES
@@ -135,10 +135,16 @@ module AvatarOwnershipTransfers
       pending.update!(state: "expired", completed_at: requested_at)
     end
 
-    def idempotency_constraint?(error)
+    def retryable_reservation_constraint?(error)
+      %w(
+        idx_avatar_transfer_reservations_idempotency
+        idx_avatar_transfer_reservations_one_pending_avatar
+      ).include?(constraint_name(error))
+    end
+
+    def constraint_name(error)
       result = error.cause&.result
-      result && result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME) ==
-        "idx_avatar_transfer_reservations_idempotency"
+      result&.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
     end
   end
 end

@@ -189,11 +189,18 @@ module ParallelTestDatabaseCloner
 
       return
     end
+    if rows.ntuples.zero?
+      verify_no_isolated_worker_sessions!(admin, names)
+
+      # The test parent can drop the databases and lose the final receipt write if the process is
+      # interrupted immediately afterward. The run-owned receipt and an empty catalog make that
+      # cleanup idempotently observable without guessing ownership or issuing another DROP.
+      receipt["cleanup_completed"] = true
+      persist_isolated_worker_receipt!(real_path, receipt)
+      return
+    end
     verify_isolated_worker_cleanup_rows!(rows, receipt, parent)
-    sessions = admin.exec_params(
-      "SELECT 1 FROM pg_stat_activity WHERE datname = ANY($1::text[])", ["{#{names.join(",")}}"],
-    )
-    raise RuntimeError, "isolated workers still have active connections; cleanup refused" unless sessions.ntuples.zero?
+    verify_no_isolated_worker_sessions!(admin, names)
 
     names.each { |name| admin.exec("DROP DATABASE #{admin.quote_ident(name)}") }
     receipt["cleanup_completed"] = true
@@ -222,6 +229,15 @@ module ParallelTestDatabaseCloner
     File.atomic_write(path, Rails.root.join("tmp")) do |file|
       file.write(JSON.pretty_generate(receipt))
     end
+  end
+
+  def verify_no_isolated_worker_sessions!(admin, names)
+    sessions = admin.exec_params(
+      "SELECT 1 FROM pg_stat_activity WHERE datname = ANY($1::text[])", ["{#{names.join(",")}}"],
+    )
+    return if sessions.ntuples.zero?
+
+    raise RuntimeError, "isolated workers still have active connections; cleanup refused"
   end
 
   def verify_isolated_worker_cleanup_rows!(rows, receipt, parent)

@@ -74,9 +74,26 @@ deletion, secret rotation or production authority.
   fresh success, a new failure reset, renewed freshness or a sliding deadline. Stale phase admission
   cannot be bypassed with a receipt. Independent Step-Up Email stays session-bound and separate.
 - Check six concrete ceremony models, independent issuer/verifier/finalizer series and their actual
-  public tests; inspect realm ADR paths and `test/operations/` for current consumers. Full
-  purpose/realm matrix and real concurrency are planned where absent; source alone cannot certify
-  single use.
+  public tests; inspect realm ADR paths and `test/operations/` for current consumers. The current
+  public route collection covers Email/Telephone sign-up, Email sign-in, App/Com/Org sign-in and
+  passkey entry, Org Entra guards, App/Org social sessions, sign-in isolation, sign-up completion,
+  verification, delayed transport and withdrawal reentry; its current result is recorded in
+  [`H2N6`](../../evidence/2026-10-12-p3d-public-route-matrix-H2N6.md). The full purpose/realm
+  matrix, provider applicability map and real concurrency remain separate checks where absent;
+  source alone cannot certify single use. The current ceremony model/operation/integration
+  collection passed `418 runs, 6843 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`B7Q5`](../../evidence/2026-10-12-p3d-ceremony-matrix-B7Q5.md). This narrows the executable
+  gap but does not close every provider/credential, realm/purpose concurrency or cross-database
+  transport cell. The selected provider, MFA, checkpoint, session-limit, OIDC and Entra public
+  boundary collection passed `210 runs, 1831 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`Y5R8`](../../evidence/2026-10-12-p3d-provider-mfa-matrix-Y5R8.md). Applicability and
+  remaining source/transport cells must still be mapped explicitly; live external providers are
+  outside this local verification. The selected independent-connection ceremony,
+  authentication-session/revocation, TOTP-window and Telephone issuer/verification concurrency
+  collection passed `118 runs, 1653 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`P6R2`](../../evidence/2026-10-12-p3d-otp-concurrency-matrix-P6R2.md). This narrows the
+  concurrency gap for the exercised cells but does not close every purpose/realm/provider
+  applicability partition or the remaining source/fixture/constraint and cross-database inventory.
 
 ## CONTACT-5 — Bound transport and legacy retirement
 
@@ -97,13 +114,37 @@ deletion, secret rotation or production authority.
   silently destroying proof facts. Inspect PostgreSQL catalogs as well as public model attributes:
   `ignored_columns` alone does not establish physical removal. Exercise the six-model public
   contract in `test/models/otp_failure_retention_test.rb`, then supported issuer/consumer
-  regressions. Removing source proof fields/methods leaves every supported
+  regressions. The Email and Telephone public delivery adapters reject retired counter payloads
+  before invoking Noticed or SMS transport; see
+  `test/adapters/otp_email_notifier_adapter_test.rb` and
+  `test/adapters/otp_telephone_adapter_test.rb`. Removing source proof fields/methods leaves every supported
   issuer/resend/verifier/finalizer usable. A Source commit then Ticket failure does not masquerade
   as distributed rollback; original receipt/ audit provenance governs retry and cannot authorize
   another operation.
 - Check current concrete notifier/mailer/worker and caller inventory, synthetic local adapter and
-  in-memory export checks (MAIL-2/3), and public stale-delivery/fault tests. Complete retirement and
-  cross-DB fault coverage remain planned until actual references/results replace the inventory gaps.
+  in-memory export checks (MAIL-2/3), and public stale-delivery/fault tests. The current Email
+  Source/Ticket and Step-Up retry fault result is recorded in
+  [`H5W2`](../../evidence/2026-10-12-p3d-source-ticket-fault-H5W2.md); the preceding Telephone
+  Source/Ticket journey remains the concrete Telephone counterpart. Complete retirement still
+  requires the remaining source/fixture/constraint inventory and any uncovered applicable
+  cross-database transport path; documented route evidence is not itself a distributed rollback
+  guarantee. The broader current ceremony/delivery collection passed `418 runs, 6843 assertions,
+  0 failures, 0 errors, 0 skips`; see
+  [`B7Q5`](../../evidence/2026-10-12-p3d-ceremony-matrix-B7Q5.md). It narrows, but does not
+  close, the remaining consumer inventory. The selected provider/MFA/checkpoint/session-limit
+  boundary collection also passed `210 runs, 1831 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`Y5R8`](../../evidence/2026-10-12-p3d-provider-mfa-matrix-Y5R8.md). This does not replace the
+  source/fixture/constraint retirement inventory or external transport verification. The selected
+  independent-connection ceremony and transport-consequence collection also passed `118 runs,
+  1653 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`P6R2`](../../evidence/2026-10-12-p3d-otp-concurrency-matrix-P6R2.md). It does not replace
+  the cross-database fault campaign. The current repository-wide source/config/test/migration
+  reference inventory classified 122 matching paths as ceremony-owned fields, deliberate
+  rejection/forbidden-key coverage, historical migrations or contract traceability; the current
+  disposable catalog has no retired columns or matching live constraint/trigger/function. See
+  [`R7M4`](../../evidence/2026-10-12-p3d-proof-reference-inventory-R7M4.md). This classification
+  narrows the retirement inventory but does not replace applicable transport verification or
+  prove that historical migration definitions may be removed.
 
 ## CONTACT-6 — Live uniqueness without dead reservations
 
@@ -119,7 +160,10 @@ deletion, secret rotation or production authority.
 - Check actual unique constraints and public concurrency tests; start with
   [purge concurrency](../../test/operations/dead_identifier_purge_concurrency_test.rb). Full
   normalized create/delete matrix for all six models is planned where missing; a model validation is
-  insufficient.
+  insufficient. The current six-model public model collection passed `126 runs, 405 assertions,
+  0 failures, 0 errors, 0 skips`; see
+  [`T6N4`](../../evidence/2026-10-12-p3e-live-uniqueness-T6N4.md). That collection is current
+  evidence, not a claim that every realm/status/concurrency partition is closed.
 
 ## CONTACT-7 — Minimal irreversible history and atomic purge
 
@@ -138,7 +182,22 @@ deletion, secret rotation or production authority.
   [destroy tests](../../test/models/dead_identifier_destroy_test.rb),
   [purge tests](../../test/operations/dead_identifier_purge_test.rb) and purge concurrency with
   actual PostgreSQL rollback/commit. Model-less/source paths must also be accounted for; no
-  real-data purge.
+  real-data purge. The six identifier table catalogs in the current disposable rehearsal have no
+  retired identifier-owned OTP columns or source-proof contexts, and no constraint, non-internal
+  trigger or public function still references them; see
+  [`U4K6`](../../evidence/2026-10-12-p3d-schema-retirement-U4K6.md). Historical migrations and
+  rejection fixtures remain traceability material; this catalog result does not close the full
+  transport/source/fixture/constraint inventory. The current seven-file history/retention
+  collection passed `96 runs, 776 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`V3M7`](../../evidence/2026-10-12-p11a-history-matrix-V3M7.md). It covers the available
+  six-model history schema, visibility, fingerprint, retention, destroy/purge and concurrent
+  purge checks, but does not close the remaining cross-database fault, whole-owner/legal-retention
+  and complete six-model create/purge partition.
+  The integrated history, retention, HMAC and encryption collection passed `110 runs, 1066
+  assertions, 0 failures, 0 errors, 0 skips`; see
+  [`X7Q4`](../../evidence/2026-10-12-p11a-integrated-matrix-X7Q4.md). This is current focused
+  evidence and does not authorize real-data purge or close the remaining source/fixture,
+  cross-database, whole-owner/legal-retention or D-11 matrix gaps.
 
 ## CONTACT-8 — Fingerprint cryptography and repeated history
 
@@ -155,7 +214,12 @@ deletion, secret rotation or production authority.
   [fingerprint verifier tests](../../test/lib/identifier_history_fingerprint_verifier_test.rb),
   actual schema, matching callers and current Argon2 source/cost configuration. Tests of known
   fixtures plus cryptographic construction review are evidence; brute-force timing samples do not
-  prove anonymity.
+  prove anonymity. The current focused history matrix also includes the verifier and repeated-row
+  checks; see [`V3M7`](../../evidence/2026-10-12-p11a-history-matrix-V3M7.md). The integrated
+  history, retention, HMAC and encryption collection passed `110 runs, 1066 assertions, 0 failures,
+  0 errors, 0 skips`; see [`X7Q4`](../../evidence/2026-10-12-p11a-integrated-matrix-X7Q4.md).
+  These are current focused results, not proof that every realm/channel maintenance and legal
+  retention partition is complete.
 
 ## CONTACT-9 — Internal visibility and privacy lifecycle
 
@@ -172,6 +236,10 @@ deletion, secret rotation or production authority.
 - Check
   [visibility invariant](../../test/security/invariants/dead_identifier_history_visibility_invariant_test.rb),
   [retention tests](../../test/jobs/dead_identifier_retention_test.rb), routes/serializers/export
-  paths and hold/whole-owner tests. Planned gaps stay explicit. No application dynamic access or
-  legal policy compliance is certified by the document alone; unknown legal conditions cannot
-  authorize deletion.
+  paths and hold/whole-owner tests. The current seven-file history/retention collection passed
+  `96 runs, 776 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`V3M7`](../../evidence/2026-10-12-p11a-history-matrix-V3M7.md). The integrated history,
+  retention, HMAC and encryption collection passed `110 runs, 1066 assertions, 0 failures, 0
+  errors, 0 skips`; see [`X7Q4`](../../evidence/2026-10-12-p11a-integrated-matrix-X7Q4.md).
+  Planned gaps stay explicit. No application dynamic access or legal policy compliance is certified
+  by the document alone; unknown legal conditions cannot authorize deletion.

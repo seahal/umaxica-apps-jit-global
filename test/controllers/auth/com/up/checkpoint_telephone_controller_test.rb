@@ -124,6 +124,7 @@ class AuthComUpCheckpointTelephoneControllerTest < ActionDispatch::IntegrationTe
           params: { visitor_telephone: { pass_code: code } }, headers: @headers
 
     @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
     assert_redirected_to auth_com_sign_up_guard_telephone_url(ri: "jp", fb: @flow_binding)
     cycle = VisitorSignUpFlow.order(:id).find_by!(
       principal_id: telephone.visitor_id, pending_contact_type: "telephone", pending_contact_id: telephone.id,
@@ -322,6 +323,7 @@ class AuthComUpCheckpointTelephoneControllerTest < ActionDispatch::IntegrationTe
     @flow_binding = Rack::Utils.parse_query(redirect_target.query).fetch("fb")
     redirect_uri = redirect_target.path
     redirect_uri += "?#{redirect_target.query}" if redirect_target.query.present?
+
     assert_equal auth_com_sign_up_check_telephone_birthdate_path(ri: "jp", fb: @flow_binding), redirect_uri
   end
 end

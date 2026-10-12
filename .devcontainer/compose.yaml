@@ -106,7 +106,7 @@ services:
         target: "/home/global/workspace/podman/alloy"
         read_only: true
         bind:
-          selinux: Z
+          selinux: z
       - type: bind
         source: "./.github"
         target: "/home/global/workspace/.github"

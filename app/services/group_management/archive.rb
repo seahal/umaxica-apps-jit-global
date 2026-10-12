@@ -15,7 +15,7 @@ module GroupManagement
     end
 
     def call
-      observed_owner = AvatarGroupOwnershipPeriod.current.find_by!(avatar_group_id: group.id)
+      observed_owner = AvatarGroupOwnershipPeriodSource.current.find_by!(avatar_group_id: group.id)
       unless observed_owner.owner_surface == surface
         raise AuthorizationDenied, "group owner surface does not match actor surface"
       end
@@ -49,7 +49,7 @@ module GroupManagement
         raise AuthorizationDenied, "group account scope does not match actor context"
       end
 
-      owner = AvatarGroupOwnershipPeriod.current.lock.find_by(avatar_group_id: locked_group.id)
+      owner = AvatarGroupOwnershipPeriodSource.current.lock.find_by(avatar_group_id: locked_group.id)
       raise AuthorizationDenied, "current group owner missing" unless owner && owner.owner_surface == surface
       return if [owner.owner_surface, owner.owner_collective_public_id] ==
         [observed_owner.owner_surface, observed_owner.owner_collective_public_id]

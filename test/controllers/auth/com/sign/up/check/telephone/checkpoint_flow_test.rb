@@ -118,6 +118,7 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     )
 
     @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
     assert_redirected_to auth_com_sign_up_guard_telephone_url(ri: "jp", fb: @flow_binding)
 
     get(auth_com_sign_up_guard_telephone_url(ri: "jp", fb: @flow_binding), headers: default_headers)
@@ -169,6 +170,7 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     @flow_binding = Rack::Utils.parse_query(redirect_target.query).fetch("fb")
     redirect_uri = redirect_target.path
     redirect_uri += "?#{redirect_target.query}" if redirect_target.query.present?
+
     assert_equal auth_com_sign_up_check_telephone_birthdate_path(ri: "jp", fb: @flow_binding), redirect_uri
   end
 

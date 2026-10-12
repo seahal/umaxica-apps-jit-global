@@ -153,6 +153,14 @@ asserts this set exactly:
   `avatar_transfer_detail_{ee,eb,be,bb}_source_period_avatar_integrity` deferred constraint triggers
   require each concrete detail's source ownership period to belong to the same Avatar as its
   registry reservation. They raise SQLSTATE `23514` and do not rewrite rows or choose an owner.
+- `avatar_group_concrete_ownership_periods_integrity` is a deferred row trigger for INSERT/UPDATE/
+  DELETE on the staged concrete Group ownership-period table. It locks the Group row and rejects
+  an ownerless, multiply-current, gapped or non-creation-aligned concrete chain with SQLSTATE
+  `23514`. `avatar_group_concrete_ownership_periods_immutability` rejects deletion and owner/start
+  mutation while permitting one finite close of the current period with SQLSTATE `45000`, and
+  `avatar_group_concrete_ownership_periods_no_truncate` rejects TRUNCATE with SQLSTATE `45000`.
+  These triggers protect only the new concrete table; the legacy Group table remains writable until
+  the explicit Avatar cutover marker and is protected by the existing named legacy barrier.
 
 The ownership-integrity triggers above fire on ownership-period writes, not Avatar-only INSERT. The
 separately attached `avatar_initial_concrete_owner_required` creation guard now covers that Avatar

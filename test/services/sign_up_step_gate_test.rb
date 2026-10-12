@@ -31,6 +31,7 @@ class SignUpStepGateTest < ActiveSupport::TestCase
     assert_equal cycle, gate.ticket
     assert_equal :ok, gate.status
     binding = SignFlowBindingCodec.decode(controller.params.fetch(AuthIoKeys::Params::FLOW_BINDING))
+
     assert_equal cycle.step, binding.phase
     assert_equal cycle.checkpoint_version, binding.generation
     assert_equal cycle.expires_at.to_i, binding.expires_at

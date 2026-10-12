@@ -39,6 +39,15 @@ COMMENT ON EXTENSION citext IS 'data type for case-insensitive character strings
 
 
 --
+-- Name: enforce_avatar_group_concrete_ownership_period_integrity(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_avatar_group_concrete_ownership_period_integrity() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ DECLARE target_group_id bigint := COALESCE(NEW.avatar_group_id, OLD.avatar_group_id); group_created_at timestamptz; period_count integer; current_count integer; first_valid_from timestamptz; has_gap boolean; BEGIN SELECT created_at INTO group_created_at FROM avatar_groups WHERE id = target_group_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'avatar group % does not exist for concrete ownership integrity', target_group_id USING ERRCODE = '23503'; END IF; WITH ordered AS ( SELECT valid_from, valid_to, lag(valid_to) OVER (ORDER BY valid_from, valid_to) AS previous_to FROM avatar_group_concrete_ownership_periods WHERE avatar_group_id = target_group_id ) SELECT count(*), count(*) FILTER (WHERE valid_to = 'infinity'::timestamptz), min(valid_from), bool_or(previous_to IS NOT NULL AND valid_from <> previous_to) INTO period_count, current_count, first_valid_from, has_gap FROM ordered; IF period_count = 0 OR current_count <> 1 THEN RAISE EXCEPTION 'avatar group % must have exactly one current concrete ownership period', target_group_id USING ERRCODE = '23514'; END IF; IF first_valid_from <> group_created_at OR COALESCE(has_gap, false) THEN RAISE EXCEPTION 'avatar group % concrete ownership periods must form one uninterrupted chain', target_group_id USING ERRCODE = '23514'; END IF; RETURN NULL; END; $$;
+
+
+--
 -- Name: enforce_avatar_initial_concrete_owner(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -75,6 +84,15 @@ CREATE FUNCTION public.enforce_concrete_avatar_ownership_period_integrity() RETU
 
 
 --
+-- Name: guard_avatar_group_concrete_ownership_period_history(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.guard_avatar_group_concrete_ownership_period_history() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'closed Avatar Group ownership history is immutable' USING ERRCODE = '45000'; END IF; IF OLD.avatar_group_id IS DISTINCT FROM NEW.avatar_group_id OR OLD.owner_surface IS DISTINCT FROM NEW.owner_surface OR OLD.owner_collective_public_id IS DISTINCT FROM NEW.owner_collective_public_id OR OLD.valid_from IS DISTINCT FROM NEW.valid_from OR OLD.valid_to <> 'infinity'::timestamptz OR NEW.valid_to <= NEW.valid_from OR NEW.valid_to = 'infinity'::timestamptz THEN RAISE EXCEPTION 'Avatar Group ownership history may only close its current period once' USING ERRCODE = '45000'; END IF; RETURN NEW; END; $$;
+
+
+--
 -- Name: guard_concrete_avatar_ownership_period_history(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -99,6 +117,15 @@ CREATE FUNCTION public.prevent_avatar_legacy_owner_write() RETURNS trigger
 CREATE FUNCTION public.prevent_avatar_ownership_cutover_mutation() RETURNS trigger
     LANGUAGE plpgsql
     AS $$ BEGIN RAISE EXCEPTION 'Avatar ownership cutover marker is immutable' USING ERRCODE = '55006', CONSTRAINT = 'avatar_ownership_cutover_immutable'; END; $$;
+
+
+--
+-- Name: reject_avatar_group_concrete_ownership_period_truncate(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reject_avatar_group_concrete_ownership_period_truncate() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN RAISE EXCEPTION 'Avatar Group ownership history cannot be truncated' USING ERRCODE = '45000'; END; $$;
 
 
 --
@@ -609,6 +636,44 @@ ALTER SEQUENCE public.avatar_follows_id_seq OWNED BY public.avatar_follows.id;
 
 
 --
+-- Name: avatar_group_concrete_ownership_periods; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.avatar_group_concrete_ownership_periods (
+    id bigint NOT NULL,
+    avatar_group_id bigint NOT NULL,
+    owner_surface character varying NOT NULL,
+    owner_collective_public_id character varying(255) NOT NULL,
+    valid_from timestamp(6) with time zone NOT NULL,
+    valid_to timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_avatar_group_concrete_ownership_periods_owner_collective CHECK ((((owner_collective_public_id)::text <> ''::text) AND ((owner_collective_public_id)::text ~ '[^[:space:]]'::text))),
+    CONSTRAINT chk_avatar_group_concrete_ownership_periods_owner_surface CHECK (((owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[]))),
+    CONSTRAINT chk_avatar_group_concrete_ownership_periods_valid_interval CHECK ((isfinite(valid_from) AND (valid_from < valid_to)))
+);
+
+
+--
+-- Name: avatar_group_concrete_ownership_periods_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.avatar_group_concrete_ownership_periods_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: avatar_group_concrete_ownership_periods_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.avatar_group_concrete_ownership_periods_id_seq OWNED BY public.avatar_group_concrete_ownership_periods.id;
+
+
+--
 -- Name: avatar_group_ownership_periods; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -661,6 +726,7 @@ CREATE TABLE public.avatar_groups (
     archived_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT avatar_groups_public_id_max_length CHECK ((char_length((public_id)::text) <= 25)),
     CONSTRAINT chk_avatar_groups_account_surface CHECK (((account_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying, 'com'::character varying])::text[]))),
     CONSTRAINT chk_avatar_groups_archive_state CHECK ((((state)::text = 'archived'::text) = (archived_at IS NOT NULL))),
     CONSTRAINT chk_avatar_groups_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'archived'::character varying])::text[])))
@@ -1302,6 +1368,7 @@ CREATE TABLE public.avatars (
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
     lifecycle_state_id bigint NOT NULL,
     ownership_integrity_version bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT avatars_public_id_max_length CHECK ((char_length((public_id)::text) <= 25)),
     CONSTRAINT chk_avatars_capability_id_positive CHECK ((capability_id >= 0))
 );
 
@@ -1568,7 +1635,8 @@ CREATE TABLE public.group_avatar_memberships (
     CONSTRAINT chk_group_avatar_memberships_removed_after_assigned CHECK (((removed_at IS NULL) OR (removed_at >= assigned_at))),
     CONSTRAINT chk_group_avatar_memberships_removed_state CHECK ((((state)::text = 'removed'::text) = (removed_at IS NOT NULL))),
     CONSTRAINT chk_group_avatar_memberships_role CHECK (((role)::text = 'member'::text)),
-    CONSTRAINT chk_group_avatar_memberships_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'removed'::character varying])::text[])))
+    CONSTRAINT chk_group_avatar_memberships_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'removed'::character varying])::text[]))),
+    CONSTRAINT group_avatar_memberships_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -1697,7 +1765,8 @@ CREATE TABLE public.handles (
     is_system boolean DEFAULT false NOT NULL,
     public_id character varying NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_handles_handle_status_id_positive CHECK (((handle_status_id IS NULL) OR (handle_status_id >= 0)))
+    CONSTRAINT chk_handles_handle_status_id_positive CHECK (((handle_status_id IS NULL) OR (handle_status_id >= 0))),
+    CONSTRAINT handles_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -2055,7 +2124,8 @@ CREATE TABLE public.post_versions (
     redirect_url character varying,
     response_mode character varying NOT NULL,
     title character varying,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT post_versions_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -2093,7 +2163,8 @@ CREATE TABLE public.posts (
     published_at timestamp with time zone,
     published_by_actor_id bigint,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_posts_post_status_id_positive CHECK (((post_status_id IS NULL) OR (post_status_id >= 0)))
+    CONSTRAINT chk_posts_post_status_id_positive CHECK (((post_status_id IS NULL) OR (post_status_id >= 0))),
+    CONSTRAINT posts_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -2214,6 +2285,13 @@ ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details ALTER C
 --
 
 ALTER TABLE ONLY public.avatar_follows ALTER COLUMN id SET DEFAULT nextval('public.avatar_follows_id_seq'::regclass);
+
+
+--
+-- Name: avatar_group_concrete_ownership_periods id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_group_concrete_ownership_periods ALTER COLUMN id SET DEFAULT nextval('public.avatar_group_concrete_ownership_periods_id_seq'::regclass);
 
 
 --
@@ -2630,6 +2708,14 @@ ALTER TABLE ONLY public.avatar_follows
 
 
 --
+-- Name: avatar_group_concrete_ownership_periods avatar_group_concrete_ownership_periods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_group_concrete_ownership_periods
+    ADD CONSTRAINT avatar_group_concrete_ownership_periods_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: avatar_group_ownership_periods avatar_group_ownership_periods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2859,6 +2945,14 @@ ALTER TABLE ONLY public.avatar_bureau_ownership_periods
 
 ALTER TABLE ONLY public.avatar_enterprise_ownership_periods
     ADD CONSTRAINT excl_avatar_enterprise_ownership_periods_non_overlapping EXCLUDE USING gist (avatar_id WITH =, tstzrange(valid_from, valid_to, '[)'::text) WITH &&);
+
+
+--
+-- Name: avatar_group_concrete_ownership_periods excl_avatar_group_concrete_ownership_periods_no_overlap; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_group_concrete_ownership_periods
+    ADD CONSTRAINT excl_avatar_group_concrete_ownership_periods_no_overlap EXCLUDE USING gist (avatar_group_id WITH =, tstzrange(valid_from, valid_to, '[)'::text) WITH &&);
 
 
 --
@@ -3144,6 +3238,27 @@ CREATE INDEX idx_avatar_enterprise_persona_grants_period ON public.avatar_enterp
 --
 
 CREATE UNIQUE INDEX idx_avatar_enterprise_persona_grants_public_id ON public.avatar_enterprise_persona_grants USING btree (public_id);
+
+
+--
+-- Name: idx_avatar_group_concrete_ownership_periods_current_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_avatar_group_concrete_ownership_periods_current_owner ON public.avatar_group_concrete_ownership_periods USING btree (owner_surface, owner_collective_public_id) WHERE (valid_to = 'infinity'::timestamp with time zone);
+
+
+--
+-- Name: idx_avatar_group_concrete_ownership_periods_group; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_avatar_group_concrete_ownership_periods_group ON public.avatar_group_concrete_ownership_periods USING btree (avatar_group_id);
+
+
+--
+-- Name: idx_avatar_group_concrete_ownership_periods_one_current; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_avatar_group_concrete_ownership_periods_one_current ON public.avatar_group_concrete_ownership_periods USING btree (avatar_group_id) WHERE (valid_to = 'infinity'::timestamp with time zone);
 
 
 --
@@ -4085,6 +4200,27 @@ CREATE TRIGGER avatar_enterprise_ownership_periods_no_truncate BEFORE TRUNCATE O
 
 
 --
+-- Name: avatar_group_concrete_ownership_periods avatar_group_concrete_ownership_periods_immutability; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_group_concrete_ownership_periods_immutability BEFORE DELETE OR UPDATE ON public.avatar_group_concrete_ownership_periods FOR EACH ROW EXECUTE FUNCTION public.guard_avatar_group_concrete_ownership_period_history();
+
+
+--
+-- Name: avatar_group_concrete_ownership_periods avatar_group_concrete_ownership_periods_integrity; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER avatar_group_concrete_ownership_periods_integrity AFTER INSERT OR DELETE OR UPDATE ON public.avatar_group_concrete_ownership_periods DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.enforce_avatar_group_concrete_ownership_period_integrity();
+
+
+--
+-- Name: avatar_group_concrete_ownership_periods avatar_group_concrete_ownership_periods_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER avatar_group_concrete_ownership_periods_no_truncate BEFORE TRUNCATE ON public.avatar_group_concrete_ownership_periods FOR EACH STATEMENT EXECUTE FUNCTION public.reject_avatar_group_concrete_ownership_period_truncate();
+
+
+--
 -- Name: avatar_group_ownership_periods avatar_group_ownership_periods_legacy_truncate_barrier; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -4239,6 +4375,14 @@ ALTER TABLE ONLY public.avatar_lifecycle_events
 
 ALTER TABLE ONLY public.handle_assignments
     ADD CONSTRAINT fk_rails_091cd3dea0 FOREIGN KEY (avatar_id) REFERENCES public.avatars(id);
+
+
+--
+-- Name: avatar_group_concrete_ownership_periods fk_rails_09557b4b45; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_group_concrete_ownership_periods
+    ADD CONSTRAINT fk_rails_09557b4b45 FOREIGN KEY (avatar_group_id) REFERENCES public.avatar_groups(id) ON DELETE RESTRICT;
 
 
 --
@@ -4720,7 +4864,12 @@ ALTER TABLE ONLY public.client_avatar_deletions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261012130001'),
 ('20261012130000'),
+('20261012093102'),
+('20261012093002'),
+('20261012092107'),
+('20261012092007'),
 ('20261011220500'),
 ('20261011220000'),
 ('20261011212119'),

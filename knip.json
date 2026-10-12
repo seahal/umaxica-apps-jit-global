@@ -1,8 +1,14 @@
 {
   "$schema": "./node_modules/knip/schema.json",
-  "entry": ["src/entrypoints/**/*.{ts,tsx}", "gait/**/*.{test,spec}.{ts,tsx}", "e2e/**/*.spec.ts"],
+  "entry": [
+    "src/entrypoints/**/*.{ts,tsx}",
+    "gait/**/*.{test,spec}.{ts,tsx}",
+    "e2e/**/*.spec.ts",
+    "e2e/presentation.vite.config.ts"
+  ],
   "project": ["src/**/*.{ts,tsx}", "gait/**/*.{ts,tsx}", "e2e/**/*.ts"],
   "ignore": ["src/types/**"],
+  "ignoreUnresolved": ["bin/rails"],
   "ignoreDependencies": [
     "tailwindcss",
     "tailwindcss-react-aria-components",

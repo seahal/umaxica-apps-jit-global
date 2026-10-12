@@ -5,6 +5,34 @@ require "test_helper"
 class OtpFailureRetentionTest < ActiveSupport::TestCase
   fixtures :clients, :client_statuses, :operators, :operator_statuses
 
+  RETIRED_IDENTIFIER_COLUMNS = %w(
+    otp_private_key otp_counter otp_expires_at
+  ).freeze
+
+  RETIRED_APP_COM_CONTEXT_COLUMNS = %w(
+    sign_up_otp_context credential_registration_otp_context
+  ).freeze
+
+  test "retired identifier proof columns are absent from the PostgreSQL schema" do
+    [ClientEmail, ClientTelephone, VisitorEmail, VisitorTelephone, OperatorEmail, OperatorTelephone].each do |model|
+      model.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+        columns = connection.columns(model.table_name).map(&:name)
+
+        assert_empty(
+          RETIRED_IDENTIFIER_COLUMNS & columns,
+          "#{model.table_name} still exposes retired identifier proof columns",
+        )
+
+        next if [OperatorEmail, OperatorTelephone].include?(model)
+
+        assert_empty(
+          RETIRED_APP_COM_CONTEXT_COLUMNS & columns,
+          "#{model.table_name} still exposes retired source proof context columns",
+        )
+      end
+    end
+  end
+
   [ClientEmail, VisitorEmail, OperatorEmail, ClientTelephone, VisitorTelephone, OperatorTelephone].each do |model|
     test "#{model.name} does not expose identifier-owned HOTP lifecycle methods or stored proof fields" do
       record = model.new

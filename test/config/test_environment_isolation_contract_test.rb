@@ -166,7 +166,10 @@ class TestEnvironmentIsolationContractTest < ActiveSupport::TestCase
   end
 
   test "database preparation requires an explicit verified migration scope" do
-    manifest = { test_databases: ["test_primary_db", "test_app_db"] }
+    manifest = {
+      test_databases: ["test_primary_db", "test_app_db"],
+      writable_test_databases: ["test_primary_db", "test_app_db"],
+    }
 
     assert_raises(Umaxica::TestEnvironment::ConfigurationError) do
       Umaxica::TestEnvironment::DatabaseSafety.prepare_database_names!(
@@ -175,11 +178,20 @@ class TestEnvironmentIsolationContractTest < ActiveSupport::TestCase
       )
     end
 
-    assert_equal ["test_primary_db"],
+    assert_equal ["test_app_db", "test_primary_db"],
                  Umaxica::TestEnvironment::DatabaseSafety.prepare_database_names!(
                    manifest:,
-                   environment: { "POSTGRESQL_TEST_PREPARE_DATABASES" => "test_primary_db" },
+                   environment: { "POSTGRESQL_TEST_PREPARE_DATABASES" => "test_app_db,test_primary_db" },
                  )
+
+    error =
+      assert_raises(Umaxica::TestEnvironment::ConfigurationError) do
+        Umaxica::TestEnvironment::DatabaseSafety.prepare_database_names!(
+          manifest:,
+          environment: { "POSTGRESQL_TEST_PREPARE_DATABASES" => "test_primary_db" },
+        )
+      end
+    assert_match(/does not cover every verified test database/, error.message)
 
     error =
       assert_raises(Umaxica::TestEnvironment::ConfigurationError) do
@@ -195,7 +207,11 @@ class TestEnvironmentIsolationContractTest < ActiveSupport::TestCase
     ci = Rails.root.join("config/ci.rb").read
 
     assert_includes ci, "POSTGRESQL_TEST_PREPARE_DATABASES="
-    assert_includes ci, "test_primary_db,test_app_ticket_db,test_com_ticket_db,test_org_ticket_db "
+    assert_includes ci, "test_primary_db,test_publishing_db,test_app_zenith_db,test_com_zenith_db,"
+    assert_includes ci, "test_org_zenith_db,test_app_setting_db,test_com_setting_db,test_org_setting_db,"
+    assert_includes ci, "test_app_ticket_db,test_com_ticket_db,test_org_ticket_db,test_app_signal_db,"
+    assert_includes ci, "test_com_signal_db,test_org_signal_db,test_avatar_db,test_chronicle_db,"
+    assert_includes ci, "test_occurrence_db,test_queue_db,test_search_db,test_storage_db "
     assert_includes ci, "env RAILS_ENV=test bin/rails db:test:prepare"
     assert_no_match(/bin\/rails db:prepare/, ci)
     assert_no_match(/scripts\/test-isolated/, ci)

@@ -489,6 +489,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
         )
 
         @social_signup_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
         assert_redirected_to(
           (flow5_config
                     .fetch(:normalized) == "google") ? auth_app_sign_up_check_google_birthdate_url(
@@ -1192,6 +1193,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
         )
 
         @social_signup_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
         assert_redirected_to(
           (flow12_config
                     .fetch(:normalized) == "google") ? auth_app_sign_up_check_google_birthdate_url(

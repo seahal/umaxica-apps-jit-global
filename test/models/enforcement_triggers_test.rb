@@ -63,6 +63,9 @@ class EnforcementTriggersTest < ActiveSupport::TestCase
         avatar_bureau_ownership_periods_immutability avatar_bureau_ownership_periods_integrity
         avatar_bureau_ownership_periods_no_truncate avatar_enterprise_ownership_periods_immutability
         avatar_enterprise_ownership_periods_integrity avatar_enterprise_ownership_periods_no_truncate
+        avatar_group_concrete_ownership_periods_immutability
+        avatar_group_concrete_ownership_periods_integrity
+        avatar_group_concrete_ownership_periods_no_truncate
         avatar_group_ownership_periods_legacy_truncate_barrier avatar_group_ownership_periods_legacy_write_barrier
         avatar_initial_concrete_owner_required
         avatar_ownership_cutovers_immutability avatar_ownership_cutovers_no_truncate

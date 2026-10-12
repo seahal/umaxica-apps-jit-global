@@ -35,7 +35,8 @@ CREATE TABLE public.operator_notification_records (
     public_id character varying DEFAULT ''::character varying NOT NULL,
     staff_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT operator_notification_records_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -67,7 +68,8 @@ CREATE TABLE public.operator_notifications (
     public_id character varying DEFAULT ''::character varying NOT NULL,
     staff_notification_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT operator_notifications_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -188,6 +190,8 @@ ALTER TABLE ONLY public.operator_notifications
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261012092106'),
+('20261012092006'),
 ('20260612000001'),
 ('20260520143009'),
 ('20260507000000');

@@ -143,7 +143,8 @@ CREATE TABLE public.com_enforcement_appeals (
     redacted_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_com_enforcement_appeals_state CHECK (((state)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'approved'::character varying, 'rejected'::character varying, 'redacted'::character varying])::text[])))
+    CONSTRAINT chk_com_enforcement_appeals_state CHECK (((state)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'approved'::character varying, 'rejected'::character varying, 'redacted'::character varying])::text[]))),
+    CONSTRAINT com_enforcement_appeals_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -405,7 +406,8 @@ CREATE TABLE public.companies (
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    title character varying NOT NULL
+    title character varying NOT NULL,
+    CONSTRAINT companies_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -582,7 +584,8 @@ CREATE TABLE public.company_ownership_transfer_requests (
     CONSTRAINT chk_company_transfer_requests_distinct_parties CHECK ((source_visitor_id <> destination_visitor_id)),
     CONSTRAINT chk_company_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_company_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_company_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
+    CONSTRAINT chk_company_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[]))),
+    CONSTRAINT company_ownership_transfer_requests_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -686,7 +689,8 @@ CREATE TABLE public.company_units (
     name character varying DEFAULT ''::character varying NOT NULL,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT company_units_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -754,7 +758,8 @@ CREATE TABLE public.core_com_visitor_bridges (
     host character varying DEFAULT 'jpx.umaxica.com'::character varying NOT NULL,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT core_com_visitor_bridges_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -821,7 +826,8 @@ CREATE TABLE public.individual_assignments (
     assigned_at timestamp(6) with time zone NOT NULL,
     revoked_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT individual_assignments_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -1094,7 +1100,8 @@ CREATE TABLE public.individual_ownership_transfer_requests (
     CONSTRAINT chk_individual_transfer_requests_distinct_parties CHECK ((source_visitor_id <> destination_visitor_id)),
     CONSTRAINT chk_individual_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_individual_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_individual_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
+    CONSTRAINT chk_individual_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[]))),
+    CONSTRAINT individual_ownership_transfer_requests_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -1227,7 +1234,8 @@ CREATE TABLE public.individuals (
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    title character varying NOT NULL
+    title character varying NOT NULL,
+    CONSTRAINT individuals_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -1268,7 +1276,8 @@ CREATE TABLE public.visitor_accounts (
     public_id character varying DEFAULT ''::character varying NOT NULL,
     visitor_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT visitor_accounts_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -1607,7 +1616,8 @@ CREATE TABLE public.visitor_identities (
     last_authenticated_at timestamp(6) with time zone,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT visitor_identities_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -2508,7 +2518,7 @@ CREATE TABLE public.visitor_preferences (
     motion character varying DEFAULT 'standard'::character varying NOT NULL,
     density character varying DEFAULT 'standard'::character varying NOT NULL,
     page_size character varying DEFAULT 'infinity'::character varying NOT NULL,
-    public_id character varying(21),
+    public_id character varying(21) NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     explicit_fields jsonb DEFAULT '[]'::jsonb
@@ -3270,7 +3280,8 @@ CREATE TABLE public.visitors (
     CONSTRAINT chk_customers_retention_order CHECK ((discard_at <= purge_eligible_at)),
     CONSTRAINT chk_visitors_access_state CHECK (((access_state)::text = ANY ((ARRAY['enabled'::character varying, 'admin_locked'::character varying])::text[]))),
     CONSTRAINT chk_visitors_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY ((ARRAY['abuse'::character varying, 'security_incident'::character varying, 'chargeback'::character varying, 'terms_violation'::character varying, 'support_request'::character varying, 'legal_hold'::character varying, 'operator_error_recovery'::character varying, 'other'::character varying])::text[])))),
-    CONSTRAINT chk_visitors_birthdate_length CHECK (((birthdate IS NULL) OR (char_length(birthdate) <= 1000)))
+    CONSTRAINT chk_visitors_birthdate_length CHECK (((birthdate IS NULL) OR (char_length(birthdate) <= 1000))),
+    CONSTRAINT visitors_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -6977,6 +6988,12 @@ ALTER TABLE ONLY public.visitor_processor_erasure_notification_attempts
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261012092101'),
+('20261012092001'),
+('20261012091001'),
+('20261012091000'),
+('20261012083823'),
+('20261012083817'),
 ('20261010232752'),
 ('20261010230343'),
 ('20261008025005'),

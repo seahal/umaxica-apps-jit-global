@@ -13,10 +13,7 @@
 #  locked_at                 :datetime         default(Infinity), not null
 #  notifiable                :boolean          default(TRUE), not null
 #  otp_attempts_count        :integer          default(0), not null
-#  otp_counter               :text             default(""), not null
-#  otp_expires_at            :datetime         default(-Infinity), not null
 #  otp_last_sent_at          :datetime         default(-Infinity), not null
-#  otp_private_key           :string           default(""), not null
 #  promotional               :boolean          default(TRUE), not null
 #  purge_eligible_at                 :datetime         default(Infinity), not null
 #  subscribable              :boolean          default(TRUE), not null

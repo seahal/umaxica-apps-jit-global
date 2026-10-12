@@ -845,7 +845,8 @@ CREATE TABLE public.app_preferences (
     updated_at timestamp(6) with time zone NOT NULL,
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    explicit_fields jsonb DEFAULT '[]'::jsonb NOT NULL
+    explicit_fields jsonb DEFAULT '[]'::jsonb NOT NULL,
+    CONSTRAINT app_preferences_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
 
@@ -1764,6 +1765,8 @@ ALTER TABLE ONLY public.app_preference_adult_content_gates
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261012090001'),
+('20261012090000'),
 ('20260921133000'),
 ('20260702000000'),
 ('20260612000001'),

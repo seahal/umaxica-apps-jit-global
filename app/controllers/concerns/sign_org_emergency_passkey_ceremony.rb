@@ -21,6 +21,7 @@ module SignOrgEmergencyPasskeyCeremony
   include ::PasskeySignInFlow
   include ::AuthenticationModeSwitchGuard
   include ::SessionLimitGate
+  include ::SignInPhaseBindingControllerSupport
 
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
@@ -32,6 +33,7 @@ module SignOrgEmergencyPasskeyCeremony
     endpoint = name.demodulize.underscore.delete_suffix("_controller")
 
     before_action :start_minimum_response_budget
+    before_action -> { enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") }
     after_action :enforce_minimum_response_budget
 
     # Emergency Access is reachable without Entra, so it is the org sign-in

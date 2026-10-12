@@ -27,6 +27,61 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     @target = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @target_client)
   end
 
+  test "registry request transport is refused before the verified ownership cutover" do
+    grant_step_up!("avatar_transfer_request")
+    key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a50"
+
+    assert_no_difference -> { AvatarTransferReservation.count } do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: {
+             avatar_public_id: @avatar_result.avatar.public_id,
+             target_surface: "app",
+             target_collective_public_id: @target.collective.public_id,
+           },
+           headers: base_browser_headers.merge("Idempotency-Key" => key),
+           as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_equal "registry transfer admission requires the verified Avatar ownership cutover", response.body
+    assert_not AvatarOwnershipCutover.established?
+  end
+
+  test "registry accept transport is refused before the verified ownership cutover" do
+    reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
+      actor: @target_client,
+      surface: "app",
+      subject_public_id: @target.account.public_id,
+      avatar_public_id: @target.avatar.public_id,
+      target_surface: "org",
+      target_collective_public_id: @source.collective.public_id,
+      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a52",
+      request_fingerprint: registry_request_fingerprint(
+        actor: @target_client,
+        surface: "app",
+        subject_public_id: @target.account.public_id,
+        avatar_public_id: @target.avatar.public_id,
+        target_surface: "org",
+        target_collective_public_id: @source.collective.public_id,
+      ),
+    )
+
+    grant_step_up!("avatar_transfer_accept")
+    post base_org_accept_avatar_ownership_transfer_url(
+      reservation.public_id,
+      host: @host,
+      ri: "jp",
+    ),
+         params: { transfer_kind: "registry" },
+         headers: base_browser_headers,
+         as: :json
+
+    assert_response :unprocessable_content
+    assert_equal "registry transfer admission requires the verified Avatar ownership cutover", response.body
+    assert_equal "pending", reservation.reload.state
+    assert_not AvatarOwnershipCutover.established?
+  end
+
   test "org owner can request app transfer and cancel only with cancel scope" do
     grant_step_up!("avatar_transfer_request")
     http_headers_2 =
@@ -251,6 +306,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "registry accept transport completes an explicit registry reservation" do
+    establish_avatar_ownership_cutover!
     source_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
     source = BaseSelectorBootstrapAuthority.call(surface: :app, principal: source_client)
     source.avatar.current_avatar_persona_binding.revoke!(force: true)
@@ -273,7 +329,14 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       target_surface: "org",
       target_collective_public_id: @source.collective.public_id,
       idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a48",
-      request_fingerprint: Digest::SHA256.hexdigest("registry-org-http-accept"),
+      request_fingerprint: registry_request_fingerprint(
+        actor: source_client,
+        surface: "app",
+        subject_public_id: source.account.public_id,
+        avatar_public_id: source_avatar_result.avatar.public_id,
+        target_surface: "org",
+        target_collective_public_id: @source.collective.public_id,
+      ),
     )
 
     grant_step_up!("avatar_transfer_accept")
@@ -378,5 +441,22 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       client_id: rp_client.client_id,
     )
     @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+  end
+
+  def registry_request_fingerprint(actor:, surface:, subject_public_id:, avatar_public_id:, target_surface:,
+                                   target_collective_public_id:)
+    Digest::SHA256.hexdigest(
+      [
+        "avatar_transfer", surface, actor.public_id, subject_public_id, avatar_public_id,
+        target_surface, target_collective_public_id,
+      ].join("\0"),
+    )
+  end
+
+  def establish_avatar_ownership_cutover!
+    AvatarOwnershipCutover.create!(
+      id: AvatarOwnershipCutover::CUTOVER_ID,
+      cutover_at: Time.utc(2030, 1, 1),
+    )
   end
 end

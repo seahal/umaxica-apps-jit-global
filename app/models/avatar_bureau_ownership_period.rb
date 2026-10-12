@@ -16,6 +16,14 @@ class AvatarBureauOwnershipPeriod < AvatarRecord
 
   public
 
+  def owner_surface
+    "org"
+  end
+
+  def owner_collective_public_id
+    bureau_public_id
+  end
+
   def current?
     valid_to == Float::INFINITY
   end

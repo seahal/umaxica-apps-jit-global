@@ -3,6 +3,10 @@
 require "test_helper"
 
 class OperatorTelephonePublicIdImmutabilityTest < ActiveSupport::TestCase
+  test "the public identity is required after the operational NULL-only backfill" do
+    assert_not OperatorTelephone.columns_hash.fetch("public_id").null
+  end
+
   test "direct SQL cannot replace clear or blank an issued ORG Telephone identity" do
     actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
     telephone = actor.staff_telephones.create!(

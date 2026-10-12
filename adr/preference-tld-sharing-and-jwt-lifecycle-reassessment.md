@@ -27,7 +27,7 @@ Whether Preference still needs dedicated refresh and device binding is the quest
 this does not reopen authentication's security contract.
 
 Current Preference credentials are host-only. Base changes therefore do not directly supply the
-canonical credential to sibling hosts. Apex-scoped display mirrors already cross hosts, but are not
+canonical credential to sibling hosts. Registrable-domain-scoped display mirrors already cross hosts, but are not
 the database source of truth. The desired sharing boundary is each **registrable domain**:
 `umaxica.app`, `umaxica.com`, and `umaxica.org`, independently. “TLD sharing” in the filename is
 historical shorthand: no cookie is to be scoped to the public suffix `.app`, `.com`, or `.org`.

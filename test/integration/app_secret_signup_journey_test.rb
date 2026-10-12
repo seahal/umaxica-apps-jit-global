@@ -307,6 +307,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
 
       assert_response :redirect
       flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
       assert_predicate transaction.reload.otp_consumed_at, :present?
       assert_nil transaction.otp_verifier
       flow.reload
@@ -442,6 +443,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
 
       assert_response :see_other
       flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
       assert flow.reload.requirement_cleared?(:passkey)
       assert issuance.reload.confirmed_at if expected_count.positive?
 

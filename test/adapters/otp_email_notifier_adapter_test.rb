@@ -90,6 +90,30 @@ class OtpEmailNotifierAdapterTest < ActiveSupport::TestCase
     assert_empty calls
   end
 
+  test "deliver rejects retired HOTP counter payloads before notifier issue" do
+    calls = []
+    fake_notifier = Object.new
+    fake_notifier.define_singleton_method(:issue) { |**kwargs| calls << kwargs }
+
+    assert_raises(ArgumentError) do
+      OtpEmailNotifierAdapter.new(fake_notifier).deliver(
+        record: Object.new,
+        otp_code: "123456",
+        sign_up_otp_counter: "4",
+      )
+    end
+
+    assert_raises(ArgumentError) do
+      OtpEmailNotifierAdapter.new(fake_notifier).deliver(
+        record: Object.new,
+        otp_code: "654321",
+        contact_otp_counter: "5",
+      )
+    end
+
+    assert_empty calls
+  end
+
   test "records enqueue failure and re-raises the notifier exception" do
     audit_events = []
     record = Object.new

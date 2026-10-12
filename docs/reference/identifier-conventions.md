@@ -33,7 +33,7 @@ exceptions. The rest of ID-8 remains independently required.
 | Table / column                                                               | Meaning and required contract                                                                                                  | Current implementation / transition                                                                                                                                                                                                                                       |
 | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | operator_telephones.id                                                       | Database-local row PK; single bigint                                                                                           | Keep local joins; no new remote/URL authority.                                                                                                                                                                                                                            |
-| operator_telephones.public_id                                                | Owned non-secret resource identity; NanoID-21 issuance, varchar(25) capacity, required/nonblank/unique/immutable after cutover | Nullable expansion and NULL-only operational backfill exist. The named approved trigger rejects changes to non-NULL identities through SQL/bulk writers. Nonblank validation/NOT NULL and writer/proof cutover remain incomplete.                                         |
+| operator_telephones.public_id                                                | Owned non-secret resource identity; NanoID-21 issuance, varchar(25) capacity, required/nonblank/unique/immutable after cutover | The additive expansion, approved immutability trigger, and two-step nonblank/NOT NULL migrations are represented in the current schema workflow. The NULL-only operation remains the pre-cutover maintenance path; writer/proof drain and any real-data cutover remain separately controlled and unclaimed. |
 | operator_telephone_ceremony_transactions.telephone_candidate_ref             | Cross-DB reference to the candidate; not an independently generated owned ID or single-column UNIQUE                           | New registration consumers copy public_id. Old canonical decimal PK references are transitional and cannot be rewritten because they are bound into keyed proof. Bounds must preserve explicit old/new contracts; current unbounded storage is not a permanent exception. |
 | operator_telephones.number / number_digest                                   | Encrypted PII and realm/channel keyed lookup material, not public opaque identity                                              | Preserve normalization, realm keys, comparisons and live uniqueness. Do not NanoID-convert or expose them.                                                                                                                                                                |
 | operator_telephone_ceremony_transactions.otp_verifier / otp_receipt_verifier | Secret proof verification material tied to purpose/actor/session/candidate/generation/deadline                                 | Never emit or regenerate as a public identifier. Keep accepted single-use and bounded original-operation receipt semantics.                                                                                                                                               |
@@ -43,6 +43,99 @@ proof/receipt drain, queue/writer control and consumer deployment are separate s
 [DB workflow](../operations/db-workflow.md). Read-only legacy counts, even all zero, cannot prove
 quiescence. New links use public IDs; the existing owner-scoped numeric management URL reader is
 temporary ID-3b compatibility, with no failed-public-lookup fallback.
+
+## Preference and Client Passkey owned identities
+
+`client_preferences`, `visitor_preferences`, `operator_preferences`, and `client_passkeys` have
+owned management `public_id` values. Their identity meaning is independent of a user, visitor or
+operator's email/telephone identifier and independent of a passkey provider's `webauthn_id` or
+`external_id`. The current P12a transition keeps the existing values and uses an explicitly
+enumerated `PublicIdNullOnlyBackfillOperation` only for a pre-cutover NULL rehearsal; normal reads,
+creates and updates never repair a missing identity.
+
+Each owning database uses an additive migration that first installs `NOT VALID` checks for
+`public_id IS NOT NULL` and nonblank values, then a separate validation migration changes the
+column metadata to `NOT NULL` and removes both temporary checks. The validation migration is
+non-transactional because PostgreSQL check validation must not run while writes are blocked by a
+migration transaction. Its reverse path restores both temporary checks before returning the column
+to nullable metadata. The run-owned rehearsal confirmed zero NULL/blank rows, successful
+NULL-only assignment in the disposable pre-cutover state, and successful down/up application.
+
+This scoped transition does not claim that all identifier consumers, all public-ID immutability,
+provider credential formats, shared/production data, or the remaining P12a inventory are complete.
+See [ID-4b](../checklists/identifier-contracts.md#id-4b--owned-preference-and-client-passkey-identities-become-required)
+for the independently reviewable acceptance conditions.
+
+The three setting-database preference identities now also have an explicit storage-capacity
+boundary. `app_preferences.public_id`, `com_preferences.public_id` and `org_preferences.public_id`
+retain their unbounded PostgreSQL string representation for this additive transition, while named
+`char_length(public_id) <= 25` checks reject oversized direct or bulk writes. The checks are added
+as `NOT VALID`, validated in separate migrations and retained as database constraints; they do not
+truncate existing values, change the NanoID-21 issuer or authorize a broad narrowing of the other
+unbounded catalog candidates. See [ID-4d](../checklists/identifier-contracts.md#id-4d--setting-preference-identities-have-bounded-database-capacity)
+for the observable boundary and reversibility evidence.
+
+## Staff identity audit-event bigint transition
+
+`org_zenith.staff_identity_audit_events` is a fixed identity-audit catalogue whose legacy string
+key was the one cataloged application-owned string primary key found by the P12a inventory. The
+identity-preserving transition is now represented by three explicit stages. The additive migration
+`20261012085039_convert_staff_identity_audit_events_to_bigint.rb` adds `legacy_id`, `id_bigint`
+and `event_id_bigint` with reviewed B-tree indexes. The bounded
+`StaffIdentityAuditEventBigintBackfillOperation` preserves every old code and maps each audit
+reference without guessing or rewriting values.
+
+After complete mapping, `20261012100000_cut_over_staff_identity_audit_event_bigint_keys.rb` swaps
+the event table to a bigint `id` primary key and the audit table to a bigint `event_id` reference.
+The separate validation migration `20261012100100_validate_staff_identity_audit_event_bigint_foreign_key.rb`
+validates the staged checks and foreign key, sets the required columns non-null, and removes only
+the temporary mapping columns. `legacy_id` and `legacy_event_id` remain required correspondence
+values. The old string primary key and foreign key are removed only inside this reviewed cutover;
+the migration refuses an incomplete or conflicting mapping before changing authority.
+
+The maintenance operation continues to support the additive state for an explicitly staged
+backfill and returns an explicit, idempotent no-op in the final schema. A fixed reference catalogue
+does not receive a sequence merely because its key is now bigint; the reviewed mapping supplies
+the IDs. The disposable down/up rehearsal includes a synthetic event/reference pair and verifies
+that both the bigint identities and legacy codes survive. No production/shared data, consumer
+cutover outside these two tables, or complete ID-1 inventory is implied.
+
+## Current public-ID capacity inventory
+
+The 2026-10-12 run-owned catalog recheck found 238 `public_id` columns: 183 at `varchar(21)`, 52
+unbounded `varchar` columns, one `varchar(255)` on `app_zenith.clients`, one `varchar(25)` on
+`org_zenith.operator_telephones`, and one `varchar(16)` on `org_zenith.operators`. Aggregate
+values observed in that disposable catalog had no length above 25. This is an inventory fact, not a
+permission to narrow every column: each unbounded column still requires semantic role and consumer
+review, and the migration rules require an explicit safe method before any narrowing. The
+operator's 16-character value is a separate human-entered code contract and is not a NanoID
+capacity defect. See the revision-scoped
+[`V4D8` evidence](../../evidence/2026-10-12-identifier-capacity-inventory-V4D8.md).
+
+The app and com principal identities are now covered by the same bounded database boundary:
+`app_zenith.clients.public_id` and `com_zenith.visitors.public_id` retain their current string
+columns but reject `char_length(public_id) > 25` through named, validated PostgreSQL checks. The
+checks are additive and identity-preserving; they do not narrow the type, change realm uniqueness,
+alter the ORG human code, or authorize a broad migration across the remaining unbounded candidates.
+See [ID-4e](../checklists/identifier-contracts.md#id-4e--app-and-com-principal-identities-have-bounded-database-capacity)
+for the observable contract and migration rehearsal.
+
+The current P12a capacity slice extends that same database boundary to the explicitly classified
+self-controlled `public_id` columns listed in
+[`CAPACITY_TABLES`](../../test/models/public_id_capacity_contract_test.rb): the selected app/com/org
+Zenith, ticket and signal records, app `members` and `logout_transactions`, plus Avatar groups,
+Avatars, group memberships, handles, posts and post versions. Every listed table has a named,
+validated `char_length(public_id) <= 25` PostgreSQL check installed through an additive migration
+pair in its owning database. This is a storage ceiling for existing string columns, not permission
+to issue arbitrary short values, a replacement for model validation, or a global type-narrowing
+approval. Provider/protocol IDs, the ORG operator human code, retired `legacy_replaced_clients`
+and `legacy_operator_department_accounts` retain their separate legacy contracts until a semantic,
+consumer and retention review supports a later slice. The current run-owned catalog has no rows in
+either table, but retained foreign keys still make the tables part of the schema boundary. See
+[ID-4f](../checklists/identifier-contracts.md#id-4f--classified-self-controlled-identifiers-have-bounded-database-capacity)
+for the exact table inventory and acceptance evidence; the baseline disposable run is recorded in
+[`N9K4`](../../evidence/2026-10-12-public-id-capacity-gate-N9K4.md), with the four-table extension
+recorded in [`V2J6`](../../evidence/2026-10-12-public-id-capacity-extension-V2J6.md).
 
 ## Passkey values are different contracts
 
@@ -96,7 +189,8 @@ No public_id or uniqueness/index is added merely because the history row exists.
 
 Maintain explicit categories for permanent external exceptions, bounded compatibility with actual
 exit conditions, unresolved violations and unverified facts. The physical catalog finding for
-staff_identity_audit_events' string PK is an unresolved violation, not an unmanaged-table exception.
+staff_identity_audit_events' string PK remains an unresolved violation during the additive mapping
+stage, not an unmanaged-table exception; see the staged transition above.
 Complete all-table ownership, eight-role classification, reference bounds, sequence/partition and
 executable regression coverage before declaring I acceptance complete. These scoped mappings do not
 provide that global evidence.

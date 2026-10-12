@@ -232,6 +232,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
             },
             headers: browser_headers.merge(@callback_headers),
           )
+
           assert_response :redirect
           flow2_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
@@ -1027,6 +1028,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
             },
             headers: browser_headers.merge(@callback_headers),
           )
+
           assert_response :redirect
           flow10_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
@@ -1448,6 +1450,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
             },
             headers: browser_headers.merge(@callback_headers),
           )
+
           assert_response :redirect
           flow14_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
@@ -1886,6 +1889,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
             },
             headers: browser_headers.merge(@callback_headers),
           )
+
           assert_response :redirect
           flow18_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 

@@ -23,12 +23,14 @@ module Auth
             include ::TurnstilePageProps
             include ::SurfaceInertiaPage
             include ::AuthenticationModeSwitchGuard
+            include ::SignInPhaseBindingControllerSupport
 
             AUTHENTICATION_MODE = :guest
 
             prepend_before_action :require_sign_in_ceremony_admission!
             ensure_fqdn_gate_first!
             prepend_before_action :apply_default_no_store
+            before_action -> { enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") }
 
             # GET /sign/in/emergency/passkey/new
             def new
@@ -47,8 +49,12 @@ module Auth
                 description: page_t("#{scope}.description"),
                 restricted_mode_notice: page_t("#{scope}.restricted_mode_notice"),
                 panel: {
-                  options_url: auth_org_sign_in_emergency_passkey_options_path(pt: pt, ri: region),
-                  verification_url: auth_org_sign_in_emergency_passkey_verification_path(pt: pt, ri: region),
+                  options_url: auth_org_sign_in_emergency_passkey_options_path(
+                    pt: pt, ri: region, **sign_in_primary_binding_params,
+                  ),
+                  verification_url: auth_org_sign_in_emergency_passkey_verification_path(
+                    pt: pt, ri: region, **sign_in_primary_binding_params,
+                  ),
                   region: region.to_s,
                   identifier_param: "identifier",
                   turnstile_site_key: turnstile_site_key(:CLOUDFLARE_TURNSTILE_SITE_STEALTH_KEY),

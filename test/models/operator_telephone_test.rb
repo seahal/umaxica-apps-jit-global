@@ -11,9 +11,7 @@
 #  number                             :string           not null
 #  number_digest                      :string
 #  otp_attempts_count                 :integer          default(0), not null
-#  otp_counter                        :text             not null
-#  otp_expires_at                     :datetime
-#  otp_private_key                    :string           not null
+#  otp_last_sent_at                   :datetime
 #  created_at                         :datetime         not null
 #  updated_at                         :datetime         not null
 #  staff_id                           :bigint           not null

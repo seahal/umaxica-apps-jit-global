@@ -91,6 +91,7 @@ class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
 
     assert_response :redirect
     @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
     assert_redirected_to auth_app_sign_up_guard_telephone_url(ri: "jp", fb: @flow_binding)
     assert_equal ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP, user_telephone.reload.user_telephone_status_id
     assert session.dig(:user_telephone_registration, "otp_verified")

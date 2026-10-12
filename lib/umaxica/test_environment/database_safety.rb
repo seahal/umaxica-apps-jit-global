@@ -127,9 +127,16 @@ module Umaxica
                 "PostgreSQL test database manifest is missing: #{missing.join(", ")}"
         end
 
+        writable_configurations =
+          effective_configurations.reject { |configuration| configuration.configuration_hash[:replica] }
+        writable_test_databases = writable_configurations.map { |configuration| configuration.database.to_s }
+        writable_test_databases.uniq!
+        writable_test_databases.sort!
+
         {
           admin_database: admin_database,
           test_databases: expected_databases,
+          writable_test_databases:,
           catalog_databases: available_databases,
           server_address: catalog.is_a?(Hash) ? catalog[:server_address] : nil,
           server_port: catalog.is_a?(Hash) ? catalog[:server_port] : nil,
@@ -145,10 +152,19 @@ module Umaxica
         names.sort!
         raise ConfigurationError, "POSTGRESQL_TEST_PREPARE_DATABASES is empty" if names.empty?
 
-        unknown = names - manifest.fetch(:test_databases)
+        verified_databases = manifest.fetch(:test_databases)
+        writable_databases = manifest.fetch(:writable_test_databases)
+        unknown = names - verified_databases
         unless unknown.empty?
           raise ConfigurationError,
                 "POSTGRESQL_TEST_PREPARE_DATABASES contains unverified databases: #{unknown.join(", ")}"
+        end
+
+        missing = writable_databases - names
+        unless missing.empty?
+          raise ConfigurationError,
+                "POSTGRESQL_TEST_PREPARE_DATABASES does not cover every verified test database; " \
+                "missing: #{missing.join(", ")}"
         end
         names
       end

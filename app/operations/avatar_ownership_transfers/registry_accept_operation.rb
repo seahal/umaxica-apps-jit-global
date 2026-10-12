@@ -82,6 +82,13 @@ module AvatarOwnershipTransfers
 
     attr_reader :actor, :surface, :subject_public_id, :reservation_public_id
 
+    def authorized_initiator_public_id
+      public_id = actor.respond_to?(:public_id) ? actor.public_id.to_s : ""
+      return public_id if public_id.present?
+
+      raise InvalidTransfer, "authorized transfer initiator is missing"
+    end
+
     def find_reservation!
       AvatarTransferReservation.find_by(public_id: reservation_public_id) ||
         raise(ActiveRecord::RecordNotFound, "Avatar transfer reservation not found")
@@ -156,7 +163,7 @@ module AvatarOwnershipTransfers
       attributes = {
         avatar: avatar,
         valid_from: transfer_at,
-        transferred_by_actor_public_id: subject_public_id,
+        transferred_by_actor_public_id: authorized_initiator_public_id,
       }
       owner_attribute =
         (definition.fetch(:destination_surface) == "app") ? :enterprise_public_id : :bureau_public_id
@@ -213,8 +220,10 @@ module AvatarOwnershipTransfers
         assert_transfer_instant!(legacy_period, source_period, transfer_at)
         assert_distinct_owners!(locked_detail, definition)
 
-        close_legacy_period!(locked_avatar, transfer_at)
-        open_legacy_period!(locked_avatar, locked_detail, definition, transfer_at)
+        if AvatarOwnershipPeriodSource.legacy?
+          close_legacy_period!(locked_avatar, transfer_at)
+          open_legacy_period!(locked_avatar, locked_detail, definition, transfer_at)
+        end
         close_concrete_period!(source_period, transfer_at)
         open_concrete_period!(locked_avatar, locked_detail, definition, transfer_at)
         remove_group_memberships_with_different_owner!(
@@ -224,7 +233,7 @@ module AvatarOwnershipTransfers
           at: transfer_at,
         )
 
-        locked_detail.update!(accept_actor_public_id: subject_public_id, accepted_at: transfer_at)
+        locked_detail.update!(accept_actor_public_id: authorized_initiator_public_id, accepted_at: transfer_at)
         locked.update!(state: "accepted", completed_at: transfer_at)
         [locked, false]
       end

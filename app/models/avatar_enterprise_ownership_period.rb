@@ -16,6 +16,14 @@ class AvatarEnterpriseOwnershipPeriod < AvatarRecord
 
   public
 
+  def owner_surface
+    "app"
+  end
+
+  def owner_collective_public_id
+    enterprise_public_id
+  end
+
   def current?
     valid_to == Float::INFINITY
   end
