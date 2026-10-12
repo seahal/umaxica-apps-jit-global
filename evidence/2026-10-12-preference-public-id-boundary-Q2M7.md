@@ -61,7 +61,7 @@ Rails ran with four workers:
 
 ```text
 ... bundle exec rails test
-15,158 runs, 128,306 assertions, 0 failures, 0 errors, 0 skips
+15,159 runs, 128,308 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 The repository JavaScript script then passed:
