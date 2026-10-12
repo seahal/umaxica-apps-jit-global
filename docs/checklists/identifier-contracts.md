@@ -553,3 +553,29 @@ criterion.
 - This criterion does not classify Social `result_jti`, provider subject values, candidate `ref`,
   OAuth/OIDC state, permanent external-identity identifiers or other ceremony issuers. Current
   evidence is revision-scoped and is not a permanent PASS for future code.
+
+## ID-3k — Step-up ceremony transaction and grant references
+
+- Basis: I04/I06/I07/I10 and ID-3; scope: APP, COM and ORG Step-up ceremony transaction creation,
+  signed grant admission, verification result handoff and replay lookup. `transaction_id` and
+  `grant_jti` are self-controlled, non-secret ceremony identities; `result_jti`, session and
+  credential references, OTP/protocol values and authorization evidence remain separate contracts.
+- Given a newly created Step-up ceremony transaction, generated `transaction_id` and `grant_jti` are
+  separate NanoID-21 values from the shared public-ID mechanism. Explicitly supplied values remain
+  explicit inputs. The existing purpose, surface, actor, session, audience, allowed-method, expiry
+  and assurance guards remain authoritative; this criterion does not reformat result or
+  authentication-protocol identities.
+- A generated collision may be retried only for the concrete table's named, single-column
+  `transaction_id` or `grant_jti` unique B-tree index. Each retry uses fresh generated values inside
+  a savepoint and the finite shared collision budget. Caller-supplied values, unrelated validation
+  or uniqueness failures and exhausted retries remain explicit failures; no cross-surface,
+  cross-purpose or session-issuance fallback is permitted.
+- Check: `test/services/identity/step_up_ceremony_acme_transaction_test.rb` and the related Step-up
+  contract, replay-store, transition, admission, verification, purge and integration tests executed
+  for this slice. Direct inspection must confirm that `result_jti`, signed result claims,
+  actor/session binding and purpose-specific authorization remain separate. Static checks do not
+  prove concurrent committed collision behavior, external authenticator behavior or production
+  deployment behavior.
+- This criterion does not classify Step-up `result_jti`, OTP/email/passkey/TOTP proof values,
+  credential identities, provider/protocol values, session identifiers or other unclassified
+  ceremony issuers. Current evidence is revision-scoped and is not a permanent PASS for future code.

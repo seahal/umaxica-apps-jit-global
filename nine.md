@@ -3404,3 +3404,39 @@ database-level immutability for every identifier, D-11 committed-transaction iso
 operational cutover, retained legacy identifier semantics, host-Alloy recreation/runtime
 verification, privacy-retention policy or the user-excluded independent acceptance investigation. No
 CI, Podman, production, shared destructive operation or remote synchronization was used.
+
+### 16.79 Resume update — Step-up ceremony transaction and grant references (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next independent
+P2 slice covered the APP, COM and ORG Step-up ceremony transaction creation boundary. The internally
+generated `transaction_id` and `grant_jti` are separate self-controlled, non-secret ceremony
+identities. Step-up purpose, surface, actor/session binding, audience, allowed methods, expiry and
+assurance guards remain authoritative; `result_jti`, signed result claims, credential/session
+references and OTP or authenticator values remain separate contracts.
+
+The Red run reached the public APP Step-up transaction boundary and reproduced the former UUID
+generation plus missing generated-collision recovery:
+`6 runs, 33 assertions, 3 failures, 0 errors, 0 skips`. The smallest Green change now makes
+`StepUpCeremonyTransactionable.create_transaction!` generate separate `PublicId.generate` values for
+missing transaction and grant references. It retries only an exact named single-column
+`transaction_id` or `grant_jti` unique B-tree collision inside a savepoint and the finite
+`PublicId::MAX_COLLISION_RETRIES` budget. Explicit inputs, unrelated validation or uniqueness
+failures and exhausted retries remain explicit; no result, proof, session-issuance, surface or
+purpose fallback was added.
+
+The focused Step-up transaction collection passed
+`6 runs, 41 assertions, 0 failures, 0 errors, 0 skips`. The related Step-up contract, replay-store,
+model-transition, admission, verification, purge and integration collection passed
+`204 runs, 1758 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop passed for the concern
+and transaction test. Gate 2 then ran the run-owned twenty-database Rails suite with four workers
+and passed `15184 runs, 128457 assertions, 0 failures, 0 errors, 0 skips`; Vitest passed `99 files`
+and `1140 tests`. Exact commands, tested HEAD, dirty-worktree scope and verification limits are
+recorded in [`J7P3`](evidence/2026-10-12-step-up-ceremony-references-J7P3.md).
+
+This closes only generated Step-up ceremony transaction/grant references and their exact collision
+boundary. It does not close Step-up `result_jti`, proof or authenticator identities, other
+unclassified ceremony issuers, database-level immutability for every identifier, D-11 committed-
+transaction isolation, P10b/P12b operational cutover, retained legacy identifier semantics,
+host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
+independent acceptance investigation. No CI, Podman, production, shared destructive operation or
+remote synchronization was used.
