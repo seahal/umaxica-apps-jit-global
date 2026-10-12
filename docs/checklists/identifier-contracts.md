@@ -579,3 +579,27 @@ criterion.
 - This criterion does not classify Step-up `result_jti`, OTP/email/passkey/TOTP proof values,
   credential identities, provider/protocol values, session identifiers or other unclassified
   ceremony issuers. Current evidence is revision-scoped and is not a permanent PASS for future code.
+
+## ID-3l — OIDC authorization transaction references
+
+- Basis: I04/I06/I07/I10 and ID-3; scope: the three concrete APP, COM and ORG OIDC authorization
+  transaction writers and their coordinator, admission, token-exchange and purge consumers.
+  `transaction_id` is an internally generated, non-secret durable transaction identity. OIDC
+  `state`, `nonce`, PKCE challenge, login challenge and provider/client values retain their own
+  protocol or request contracts.
+- Given a newly issued OIDC authorization transaction, its generated `transaction_id` is a NanoID-21
+  value from the shared public-ID mechanism. Existing opaque transaction values remain readable; no
+  state, nonce, PKCE, login challenge or external provider value is reformatted or substituted.
+- A generated collision may be retried only for the concrete table's named, single-column
+  `transaction_id` unique B-tree index. Each retry uses a fresh generated value inside a savepoint
+  and the finite shared collision budget. Login-challenge uniqueness, caller/request validation,
+  other uniqueness failures and exhausted retries remain explicit failures; no cross-surface or
+  protocol fallback is permitted.
+- Check: `test/models/concerns/oidc_authorization_transactionable_test.rb` plus the coordinator,
+  admission-binding, token-exchange, purge and OIDC integration tests selected for this slice.
+  Direct inspection must confirm that authorization parameters, surface class, durable admission
+  binding, result generation and token exchange continue to resolve the same transaction. Static
+  checks do not prove concurrent external-provider behavior or production deployment behavior.
+- This criterion does not classify OIDC `state`, `nonce`, PKCE, login challenges, provider/client
+  identifiers, protocol `jti`/`sid` values or other unclassified transaction and result issuers.
+  Current evidence is revision-scoped and is not a permanent PASS for future code.

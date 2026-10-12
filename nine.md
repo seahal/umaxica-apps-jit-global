@@ -3440,3 +3440,37 @@ transaction isolation, P10b/P12b operational cutover, retained legacy identifier
 host-Alloy recreation/runtime verification, privacy-retention policy or the user-excluded
 independent acceptance investigation. No CI, Podman, production, shared destructive operation or
 remote synchronization was used.
+
+### 16.80 Resume update — OIDC authorization transaction references (P2, 2026-10-12)
+
+Following the required Section 5.3, Section 16 and Section 14.2 reading order, the next independent
+P2 slice covered the three concrete APP, COM and ORG OIDC authorization transaction writers and
+their coordinator consumers. `transaction_id` is an internally generated, non-secret durable
+transaction identity. OIDC `state`, `nonce`, PKCE challenge, login challenge, client/provider values
+and protocol identifiers remain separate contracts.
+
+The Red run reached the public model/coordinator boundary and reproduced the former UUID generation
+plus missing collision recovery: `13 runs, 189 assertions, 2 failures, 0 errors, 0 skips`. The
+smallest Green change now makes `OidcAuthorizationTransactionable.create_transaction!` generate a
+NanoID-21 `transaction_id` with `PublicId.generate`. It retries only an exact named single-column
+`transaction_id` unique B-tree collision inside a savepoint and the finite
+`PublicId::MAX_COLLISION_RETRIES` budget. Login-challenge uniqueness, caller/request validation,
+other uniqueness failures and exhausted retries remain explicit; no state, nonce, PKCE, provider,
+surface or protocol fallback was added.
+
+The focused OIDC model collection passed `13 runs, 191 assertions, 0 failures, 0 errors, 0 skips`.
+The related coordinator, admission-binding, token-exchange, purge and OIDC integration collection
+passed `185 runs, 1610 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop passed for the
+concern and test after one parameter-alignment correction. Gate 2 then ran the run-owned
+twenty-database Rails suite with four workers and passed
+`15185 runs, 128451 assertions, 0 failures, 0 errors, 0 skips`; Vitest passed `99 files` and
+`1140 tests`. Exact commands, tested HEAD, dirty-worktree scope and verification limits are recorded
+in [`K2R4`](evidence/2026-10-12-oidc-authorization-transaction-references-K2R4.md).
+
+This closes only generated OIDC authorization transaction references and their exact collision
+boundary. It does not close OIDC `state`, `nonce`, PKCE, login-challenge, provider/client or
+protocol identifiers, other unclassified ceremony issuers, database-level immutability for every
+identifier, D-11 committed-transaction isolation, P10b/P12b operational cutover, retained legacy
+identifier semantics, host-Alloy recreation/runtime verification, privacy-retention policy or the
+user-excluded independent acceptance investigation. No CI, Podman, production, shared destructive
+operation or remote synchronization was used.

@@ -343,6 +343,18 @@ fallback. See
 [`test/services/identity/step_up_ceremony_acme_transaction_test.rb`](../../test/services/identity/step_up_ceremony_acme_transaction_test.rb)
 and the related Step-up contract, admission, verification, replay, purge and integration tests.
 
+OIDC authorization transactions use a separate internal transaction identity. The three concrete
+APP, COM and ORG writers now generate a NanoID-21 `transaction_id` through
+`OidcAuthorizationTransactionable.create_transaction!`; existing values remain opaque and readable.
+OIDC `state`, `nonce`, PKCE challenge, login challenge, client/provider values and protocol
+`jti`/`sid` values retain their own contracts and are never substituted for the durable transaction
+reference. Creation retries only an exact named single-column `transaction_id` unique B-tree
+collision inside a savepoint and the finite `PublicId::MAX_COLLISION_RETRIES` budget. Other
+validation or uniqueness failures, including login-challenge uniqueness, propagate without
+cross-surface or protocol fallback. See
+[`test/models/concerns/oidc_authorization_transactionable_test.rb`](../../test/models/concerns/oidc_authorization_transactionable_test.rb)
+and the related coordinator, admission, token-exchange, purge and OIDC integration tests.
+
 The APP TOTP enrollment child transaction is a separate self-controlled, non-secret ceremony
 identity. `IdentityTotpEnrollmentIssuer` now supplies a NanoID-21 `transaction_id` for new child
 rows while the step-up parent transaction, `grant_jti`, OTP secret/proof, candidate reference and
