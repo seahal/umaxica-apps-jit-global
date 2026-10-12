@@ -163,17 +163,17 @@ inspected. Compose pins Alloy `v1.19.2`. No DB connection, migration state, test
 topology, runtime mount, exporter, or live delivery was verified during preparation. The
 managed-environment status tool was unavailable. These limitations are not successful checks.
 
-| Area               | Observed source evidence                                                                                                                                                                                                                          | Current disposition                                                                                                                        |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Opaque IDs         | `app/models/concerns/public_id.rb` calls `Nanoid.generate(size: 21)` in create callbacks and validates maximum 21, not standard storage capacity 25; it accepts an already supplied value.                                                        | Partial; no complete generator/DB/classification/collision acceptance established.                                                         |
-| Avatar             | `AvatarOwnershipPeriod`/`AvatarOwnershipTransfer` still use surface-discriminated legacy references; the ownership spec remains paused with rejected proposals.                                                                                   | Legacy implementation and incomplete drafts; approved replacement is unimplemented in these inspected paths.                               |
-| Flow enforcement   | `SignFlowBindingCodec` supports only app/com sign-up and signs kind/surface/public ID, without phase/version/expiry. `SignUpPhaseViolationEnforcer` evaluates under a lock, releases it, then calls termination.                                  | Partial. Recheck endpoint phase binding and race behavior; code shape suggests an atomicity question, not a proven exploit.                |
-| Session issuance   | `AuthenticationBase#commit_login_session!` and `lock_sign_in_flow_for_issuance!` retain flow locking, actor/token/state checks. All three Ticket dumps contain unique non-null `token_id` indexes.                                                | Existing protection to retain and test. Index uniqueness is not alone proof of one-flow/one-session issuance.                              |
-| HALTED             | Concrete sign-in state and sign-up status classes already define 930 and terminal mappings; an app sign-up integration test exists.                                                                                                               | Implemented in some paths, unverified here. Older docs claiming HALTED is absent are stale candidates.                                     |
+| Area               | Observed source evidence                                                                                                                                                                                                                                                                                                                              | Current disposition                                                                                                                                                   |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Opaque IDs         | `app/models/concerns/public_id.rb` calls `Nanoid.generate(size: 21)` in create callbacks and validates maximum 21, not standard storage capacity 25; it accepts an already supplied value.                                                                                                                                                            | Partial; no complete generator/DB/classification/collision acceptance established.                                                                                    |
+| Avatar             | `AvatarOwnershipPeriod`/`AvatarOwnershipTransfer` still use surface-discriminated legacy references; the ownership spec remains paused with rejected proposals.                                                                                                                                                                                       | Legacy implementation and incomplete drafts; approved replacement is unimplemented in these inspected paths.                                                          |
+| Flow enforcement   | `SignFlowBindingCodec` supports only app/com sign-up and signs kind/surface/public ID, without phase/version/expiry. `SignUpPhaseViolationEnforcer` evaluates under a lock, releases it, then calls termination.                                                                                                                                      | Partial. Recheck endpoint phase binding and race behavior; code shape suggests an atomicity question, not a proven exploit.                                           |
+| Session issuance   | `AuthenticationBase#commit_login_session!` and `lock_sign_in_flow_for_issuance!` retain flow locking, actor/token/state checks. All three Ticket dumps contain unique non-null `token_id` indexes.                                                                                                                                                    | Existing protection to retain and test. Index uniqueness is not alone proof of one-flow/one-session issuance.                                                         |
+| HALTED             | Concrete sign-in state and sign-up status classes already define 930 and terminal mappings; an app sign-up integration test exists.                                                                                                                                                                                                                   | Implemented in some paths, unverified here. Older docs claiming HALTED is absent are stale candidates.                                                                |
 | OTP separation     | Independent `EmailOtpPolicy` and `TelephoneOtpPolicy` remain responsible for lockout/failure policy only. Identifier-owned HOTP lifecycle methods and withdrawal proof writes were removed in the P3d runtime slice; legacy physical columns and structural empty-value initialization remain pending a complete forward schema-retirement inventory. | Partial; verify every remaining reader/fixture/constraint before dropping legacy columns. Do not recreate an identifier-owned proof path or silently fall back to it. |
-| Realm keys/history | Realm provider, fingerprint verifier, six history models and contract/purge/concurrency tests exist. ADR records six-key/keyring and extensive ceremony work.                                                                                     | Implemented portions, incomplete verification. Historical pass counts are not this execution's evidence.                                   |
-| Observability      | Filter initializer still has ambiguous short Symbols; OTel registers ActionMailer without transforms; common application config search found no mailer logger policy. Alloy redacts URL/auth/token attributes but lacks explicit mail attributes. | Required remediation remains in the inspected configuration.                                                                               |
-| Devcontainer       | Read-only `.github`, `bin`, `.devcontainer` mounts exist; no `podman/alloy` directory overlay was found.                                                                                                                                          | Required mount change remains; effective runtime mount unverified.                                                                         |
+| Realm keys/history | Realm provider, fingerprint verifier, six history models and contract/purge/concurrency tests exist. ADR records six-key/keyring and extensive ceremony work.                                                                                                                                                                                         | Implemented portions, incomplete verification. Historical pass counts are not this execution's evidence.                                                              |
+| Observability      | Filter initializer still has ambiguous short Symbols; OTel registers ActionMailer without transforms; common application config search found no mailer logger policy. Alloy redacts URL/auth/token attributes but lacks explicit mail attributes.                                                                                                     | Required remediation remains in the inspected configuration.                                                                                                          |
+| Devcontainer       | Read-only `.github`, `bin`, `.devcontainer` mounts exist; no `podman/alloy` directory overlay was found.                                                                                                                                                                                                                                              | Required mount change remains; effective runtime mount unverified.                                                                                                    |
 
 The source review was targeted, not an exhaustive audit of every caller/table/ADR. All supplied
 instructions were integrated; remaining local inspection is explicitly required below. Do not
@@ -293,11 +293,11 @@ not independent large audits:
   Explicitly inspect the current PublicId concern and dispersed generation, Operator human-entered
   codes, Preference/Passkey null/default/length/index contracts, Passkey external_id/public_id/
   webauthn_id roles, Token/TokenUsage/DeviceSession public_id/sid/jti/family values, and Ceremony/
-  Chronicle self-generated UUIDs. These are candidates to confirm, not pre-established defects.
-  The read-only catalog starting point is `bundle exec rails identifiers:inventory` with a
-  run-owned isolated test manifest. It writes a JSON report under `tmp/` and never reads application
-  rows or changes schema/data. Its table/PK/sequence/index facts do not replace the required
-  semantic classification, producer/consumer mapping, or external-exception review.
+  Chronicle self-generated UUIDs. These are candidates to confirm, not pre-established defects. The
+  read-only catalog starting point is `bundle exec rails identifiers:inventory` with a run-owned
+  isolated test manifest. It writes a JSON report under `tmp/` and never reads application rows or
+  changes schema/data. Its table/PK/sequence/index facts do not replace the required semantic
+  classification, producer/consumer mapping, or external-exception review.
 - **Ceremony matrix:** surface and credential family; entry route/verb; authoritative object; flow
   creation and principal-discovery time; Rails session locator versus DB state; one-time artifacts;
   phase checker; GET/mutation/reload/multi-tab/replay behavior; issuance/finalization point; cleanup
@@ -518,12 +518,12 @@ Catalog facts already collected by `identifiers:inventory`:
 - 891 tables on 20 writer connections: 53 framework-owned (Rails, Solid Queue) and 838 still
   labelled `requires_owner_review`. Of those 838, exactly one has a non-bigint primary key:
   `org_zenith.staff_identity_audit_events` (`id` varchar).
-- 2,592 name-based candidate columns across those 838 tables, but only 269 distinct column names.
-  By type: 2,028 bigint, 550 varchar, 9 uuid, 4 int4, 1 bytea.
-- 238 `public_id` columns: 183 `varchar(21)`, 52 unbounded `varchar`, and one each of
-  `varchar(255)` (`app_zenith.clients`), `varchar(25)` (`org_zenith.operator_telephones`) and
-  `varchar(16)` (`org_zenith.operators`). Five are nullable: `client_preferences`,
-  `visitor_preferences`, `operator_preferences`, `client_passkeys` and `operator_telephones`.
+- 2,592 name-based candidate columns across those 838 tables, but only 269 distinct column names. By
+  type: 2,028 bigint, 550 varchar, 9 uuid, 4 int4, 1 bytea.
+- 238 `public_id` columns: 183 `varchar(21)`, 52 unbounded `varchar`, and one each of `varchar(255)`
+  (`app_zenith.clients`), `varchar(25)` (`org_zenith.operator_telephones`) and `varchar(16)`
+  (`org_zenith.operators`). Five are nullable: `client_preferences`, `visitor_preferences`,
+  `operator_preferences`, `client_passkeys` and `operator_telephones`.
 
 Suggested order, to keep the semantic half finite:
 
@@ -607,11 +607,11 @@ No secret values in errors/evidence and no code defaults to make tests boot.
 
 #### Post-decision addition — signal only, outside this implementation scope
 
-The user has identified Rails 8.2's combined credentials API (`Rails.app.creds`) as the
-intended configuration approach for the six HMAC keys listed above: environment values take
-precedence, with Rails encrypted credentials supplying the same keys when environment values
-are absent; development also includes Rails' supported `.env` lookup. Missing required keys must
-still fail closed, without legacy global-key fallback or default secrets.
+The user has identified Rails 8.2's combined credentials API (`Rails.app.creds`) as the intended
+configuration approach for the six HMAC keys listed above: environment values take precedence, with
+Rails encrypted credentials supplying the same keys when environment values are absent; development
+also includes Rails' supported `.env` lookup. Missing required keys must still fail closed, without
+legacy global-key fallback or default secrets.
 
 This note records a post-decision signal, not an additional implementation requirement. It is
 excluded from this plan's implementation slices, acceptance criteria and acceptance tests. Do not
@@ -1165,31 +1165,31 @@ boundary, serialize those edits and run the relevant neighboring regressions and
 Record any additional actual consumer dependency in the owning spec and this graph/table together;
 do not invent a domain change or delete a safety dependency to make work appear independent.
 
-| Phase                                | Purpose, concrete scope and prerequisite                                                                                                                                                                                                | First Red / direct check                                                                                                                   | Acceptance, tests and exit                                                                                                                                                                                                                                                  |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0 — reconcile and baseline          | Current Git/env/rules; six draft audit; inventory; amend Avatar spec and governing conflicts. No model/schema edit before reconciliation and DB guarantee/approved-mechanism mapping.                                                   | Direct read-only checks, then Gate 0; no artificial test for planning/setup.                                                               | Snapshots, conflict dispositions, command catalog, current failure list and protected-worktree inventory recorded. No incomplete migration discovered/applied.                                                                                                              |
-| P1a — filter behavior                | Filter initializer and existing `test/unit/security/filter_parameter_logging_test.rb`; real nested keys.                                                                                                                                | `reason_code` is retained while `code` and nested secrets are filtered.                                                                    | All positive/negative keys and boundaries pass; no unnecessary lost observability. Gate 2 at slice end.                                                                                                                                                                     |
-| P1b — mail export                    | Common mailer setting, OTel initializer, existing scrubbers, concrete mailers/interceptor; P1a and installed source inspected.                                                                                                          | Synthetic OTP/subject/args absent from captured application log/span while test delivery succeeds; direct boot policy check.               | All three surfaces, unknown payload keys, suspension/failure/retry and existing delivery semantics verified; no private override. Immediate full gate after common config.                                                                                                  |
-| P1c — collector/mount/docs           | Alloy and devcontainer configuration; P1b. Preserve the user's overlay; host application and runtime checks follow Section 3.1a.                                                                                                        | Direct pinned Alloy config validation and rendered Compose mount check; no setup unit test.                                                | Supported redaction, correct source/target/read_only, no reload changes; runtime remount explicitly unverified until recreate. ADR narrowed and future production criteria recorded. Full gate after build/config change.                                                   |
-| P2 — identifier foundation           | PublicId concern, existing Nanoid mechanism, model/test classification and prospective new schemas; P0 and the per-invariant DB-enforcement/authority map. Hold only an invariant needing new permission; no blanket trigger authority. | New internal issuance is 21 and ordinary public create cannot inject an arbitrary owned ID; exact collision discrimination test if absent. | Generator mechanism, eight-role manifest and exception categories established; targeted public-ID/collision tests and immediate shared-Concern full gate. No broad automatic model rewrite.                                                                                 |
-| P3a — channels and keys              | Independent policies, six identifier models, realm key provider/rotation and ARE inventory; P2.                                                                                                                                         | Resend at existing failures preserves count; cross-realm equal normalized input yields distinct digest; add only missing regressions.      | MAX boundaries, explicit Telephone timestamps, independent policy and rotation tests pass. Boot/key wiring direct evidence; full gate per slice.                                                                                                                            |
-| P3b — Email proof                    | Concrete Email ceremony/issuer/verifier/finalizer/notifier/mailer paths, APP/COM signup/signin and applicable recovery/withdrawal/registration; P1a/P1b/P3a with the primary-control evidence specified above, not pending P1c remount. | Wrong purpose/session code refused without consumption, followed by valid original consume; later retry is receipt, not fresh success.     | Migrate one purpose per slice; fault/deadline/delivery tests prove keyed binding and no HOTP fallback. Source/Ticket fault consequences recorded. Full gate per slice.                                                                                                      |
-| P3c — Telephone proof                | Independent Telephone ceremonies and existing bound SMS transport; P3a, Email design lessons only as pure primitives.                                                                                                                   | Concurrent verification consumes at most once; resend preserves attempt count and original expiry.                                         | Each supported realm/purpose, independent lockout/cooldown, original binding and stale worker refusal verified. No shared stateful policy. Full gate per slice.                                                                                                             |
-| P3d — proof retirement               | Remaining policies, six identifier schemas/fixtures, all legacy proof/envelope readers/writers; P3b/P3c and complete consumer inventory.                                                                                                | Public paths work with no identifier HOTP fields; obsolete payload rejected through real consumer.                                         | Remove legacy runtime methods coherently; prepare forward schema retirement, applying destructive drops only in verified disposable DB or separately approved scope. Do not edit applied history. Full schema gate.                                                         |
-| P3e — live identifier integrity      | Six models, source constraints, current purge interfaces; P3d.                                                                                                                                                                          | Two normalized-equivalent concurrent creates yield one live identity binding; conflicting transaction rollback stays usable.               | Email/Telephone in all realms; delete/create/reuse and status partitions verified with actual PostgreSQL. Immediate shared-model/schema gate.                                                                                                                               |
-| P4 — authoritative phase core        | Codec/gate/enforcer/state writer/audit and app/com signup entry/step paths; P3e.                                                                                                                                                        | Stale bound mutation racing an advance cannot affect committed completion; old A submission leaves B intact.                               | Locking decision atomic, signed original instance/phase/generation, exact GET refusal, non-GET halt and safe audit. Existing issuance retained; immediate security full gate.                                                                                               |
-| P5 — family/surface coverage         | Sign-in locators/gates, primary ceremonies, callbacks, MFA/capacity/checkpoint/selector, finalization; P4.                                                                                                                              | Choose next actual family from matrix: stale phase request creates no artifact/session and refuses without touching replacement flow.      | One family/surface per slice, explicit unsupported cells, all Section 7 cases and diagrams; no new credential method. Immediate full gate after each shared boundary.                                                                                                       |
-| P6 — identifier consumers/DB         | Inventory-driven model/column/index/PK/sequence changes, APIs/jobs/events and current ceremony IDs; P2/P5. Catalog facts start at `identifiers:inventory`; semantic ownership and consumer evidence must be reconciled before schema changes. | Next concrete owned-ID DB bypass or consumer-format mismatch fails at public boundary.                                                     | One meaning/consumer group per slice; external exceptions and existing IDs preserved, correct indexes/constraints, no remote bigint addition. PK/sequence/partition work isolated and verified; full gate per schema slice.                                                 |
-| P7 — ownership integrity prototype   | Six reworked drafts, trigger ADR and isolated DB harness; P0/P2, reviewed complete migrations only.                                                                                                                                     | Real COMMIT with cross-family overlap/gap/missing owner fails with expected SQLSTATE; sequential and concurrent valid chain commits.       | Initial/closed-history/adjacency/direct-SQL/RC/RR/Serializable invariants proven. Stop downstream ownership implementation acceptance if fundamental integrity cannot be enforced. Full gate after schema/prototype slice.                                                  |
-| P8 — concrete ownership models       | Avatar/period associations, ownership resolver/provisioning, concrete remote public references; P7.                                                                                                                                     | New Avatar without an owner cannot commit; valid app/org provisioning preserves all identities and com has no dependency.                  | Concrete model/Ruby interfaces proven; retained-data reader/writer activation waits for P12b. Account/Group unresolved semantics not guessed. Full gate after resolver/model slice.                                                                                         |
-| P9 — registry and transfer           | Shared registry plus four concrete detail models and Request/Accept/Cancel, minimal transports; P8.                                                                                                                                     | Concurrent same-key requests across two families cannot create two operations; changed payload/initiator is refused.                       | Direct-SQL cardinality, global pending/key uniqueness, four directions, five-day boundaries, generation/authority rechecks, atomic periods and retry semantics proven in isolation; admission waits for P10a/P10b/P12b. Keyless transition documented. Immediate full gate. |
-| P10a — Grants (P10)                  | Existing Binding semantics, concrete N:M Grants/policies/provisioning; P9. Group conversion is not a prerequisite.                                                                                                                      | Grant from first O1 period stays ineffective after O1→O2→O1 while a new authorized Grant works.                                            | Management/Binding meaning preserved; concrete subject/period/capability checks and N:M success, no revival. Full authorization/model gate; Group effects separately remain P10b.                                                                                           |
-| P10b — Group semantics (P10)         | Account/owner reader and writer conversion; P9 plus authoritative Group semantic evidence. The additive `avatar_group_concrete_ownership_periods` table, explicit source selector, and bounded inventory/backfill are part of this slice. | Distinct selected-account context survives an ownership change without becoming an alternative owner authority.                            | Actual semantics preserved; incompatible Group access refused; all consumers reconciled. The legacy Group period is not excluded from the barrier; it remains the pre-cutover source and is replaced only after the concrete copy is verified. Hold this child when a domain choice is missing; it blocks Avatar cutover P12b, not P10a. Full gate after each affected writer/policy slice. |
-| P11a — dead identifier history (P11) | Six histories, identifier purgers and legal/retention holds; P3e. No Avatar prerequisite.                                                                                                                                               | A refusal after history INSERT rolls back archive and physical removal together.                                                           | Minimal schema, original-PII fingerprint, internal visibility, reuse and concurrent purge/create behavior across six models; authorized whole-owner semantics preserved. Focused real-DB checks and full gate per lifecycle slice.                                          |
-| P11b — Avatar deferral (P11)         | RetentionPurgeJob and existing/new concrete deferral; P8. No identifier-history prerequisite.                                                                                                                                           | Repeated eligible Avatar purge records one actionable deferral without deleting Avatar/history.                                            | Observable idempotent state and preserved history; personal-data policy remains explicitly undecided. Serialize shared retention edits with P11a and run neighboring tests plus full gate.                                                                                  |
-| P12a — identifier transition (P12)   | Identifier inventory, bounded backfill/consumer transition and recovery; P6/P11a. No Avatar decision dependency.                                                                                                                        | Repeated isolated migration preserves issued identifiers/references; ambiguous data stays unchanged and reported.                          | Fresh migration/schema verification, constraints and sequence safety, documented compatibility exits and rollback/forward-fix. No broad reset or real-data application. Full gate after each transition boundary.                                                           |
-| P12b — Avatar transition (P12)       | Operational Avatar and Group backfill, explicit `avatar_ids` plus `group_ids` cutover inventory, writer quiescence, legacy barrier and forward recovery; P9/P10a/P10b/P11b. | Repeated isolated backfill preserves history; ambiguous row is refused; ordinary-role writes fail only after verified cutover.             | Rebuild/dump/restore including triggers; all ownership/Group writers controlled; INSERT/UPDATE/DELETE/TRUNCATE barrier tested. `AvatarOwnershipCutoverOperation` cannot establish the marker without an explicit Group inventory, and post-marker Group reads/writes select the concrete table without legacy fallback. No production cutover or automatic Phase G deletion. Full gate per transition boundary. |
-| P13 — acceptance and handoff         | All executable guards/docs/checklists/diagrams/evidence and complete current diff; predecessor gates.                                                                                                                                   | Run actual final commands, not a new artificial Red.                                                                                       | Gate 4; every requirement has evidence or explicit incomplete disposition, no new regression and no false global completion. Final report in Section 14.                                                                                                                    |
+| Phase                                | Purpose, concrete scope and prerequisite                                                                                                                                                                                                      | First Red / direct check                                                                                                                   | Acceptance, tests and exit                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0 — reconcile and baseline          | Current Git/env/rules; six draft audit; inventory; amend Avatar spec and governing conflicts. No model/schema edit before reconciliation and DB guarantee/approved-mechanism mapping.                                                         | Direct read-only checks, then Gate 0; no artificial test for planning/setup.                                                               | Snapshots, conflict dispositions, command catalog, current failure list and protected-worktree inventory recorded. No incomplete migration discovered/applied.                                                                                                                                                                                                                                                  |
+| P1a — filter behavior                | Filter initializer and existing `test/unit/security/filter_parameter_logging_test.rb`; real nested keys.                                                                                                                                      | `reason_code` is retained while `code` and nested secrets are filtered.                                                                    | All positive/negative keys and boundaries pass; no unnecessary lost observability. Gate 2 at slice end.                                                                                                                                                                                                                                                                                                         |
+| P1b — mail export                    | Common mailer setting, OTel initializer, existing scrubbers, concrete mailers/interceptor; P1a and installed source inspected.                                                                                                                | Synthetic OTP/subject/args absent from captured application log/span while test delivery succeeds; direct boot policy check.               | All three surfaces, unknown payload keys, suspension/failure/retry and existing delivery semantics verified; no private override. Immediate full gate after common config.                                                                                                                                                                                                                                      |
+| P1c — collector/mount/docs           | Alloy and devcontainer configuration; P1b. Preserve the user's overlay; host application and runtime checks follow Section 3.1a.                                                                                                              | Direct pinned Alloy config validation and rendered Compose mount check; no setup unit test.                                                | Supported redaction, correct source/target/read_only, no reload changes; runtime remount explicitly unverified until recreate. ADR narrowed and future production criteria recorded. Full gate after build/config change.                                                                                                                                                                                       |
+| P2 — identifier foundation           | PublicId concern, existing Nanoid mechanism, model/test classification and prospective new schemas; P0 and the per-invariant DB-enforcement/authority map. Hold only an invariant needing new permission; no blanket trigger authority.       | New internal issuance is 21 and ordinary public create cannot inject an arbitrary owned ID; exact collision discrimination test if absent. | Generator mechanism, eight-role manifest and exception categories established; targeted public-ID/collision tests and immediate shared-Concern full gate. No broad automatic model rewrite.                                                                                                                                                                                                                     |
+| P3a — channels and keys              | Independent policies, six identifier models, realm key provider/rotation and ARE inventory; P2.                                                                                                                                               | Resend at existing failures preserves count; cross-realm equal normalized input yields distinct digest; add only missing regressions.      | MAX boundaries, explicit Telephone timestamps, independent policy and rotation tests pass. Boot/key wiring direct evidence; full gate per slice.                                                                                                                                                                                                                                                                |
+| P3b — Email proof                    | Concrete Email ceremony/issuer/verifier/finalizer/notifier/mailer paths, APP/COM signup/signin and applicable recovery/withdrawal/registration; P1a/P1b/P3a with the primary-control evidence specified above, not pending P1c remount.       | Wrong purpose/session code refused without consumption, followed by valid original consume; later retry is receipt, not fresh success.     | Migrate one purpose per slice; fault/deadline/delivery tests prove keyed binding and no HOTP fallback. Source/Ticket fault consequences recorded. Full gate per slice.                                                                                                                                                                                                                                          |
+| P3c — Telephone proof                | Independent Telephone ceremonies and existing bound SMS transport; P3a, Email design lessons only as pure primitives.                                                                                                                         | Concurrent verification consumes at most once; resend preserves attempt count and original expiry.                                         | Each supported realm/purpose, independent lockout/cooldown, original binding and stale worker refusal verified. No shared stateful policy. Full gate per slice.                                                                                                                                                                                                                                                 |
+| P3d — proof retirement               | Remaining policies, six identifier schemas/fixtures, all legacy proof/envelope readers/writers; P3b/P3c and complete consumer inventory.                                                                                                      | Public paths work with no identifier HOTP fields; obsolete payload rejected through real consumer.                                         | Remove legacy runtime methods coherently; prepare forward schema retirement, applying destructive drops only in verified disposable DB or separately approved scope. Do not edit applied history. Full schema gate.                                                                                                                                                                                             |
+| P3e — live identifier integrity      | Six models, source constraints, current purge interfaces; P3d.                                                                                                                                                                                | Two normalized-equivalent concurrent creates yield one live identity binding; conflicting transaction rollback stays usable.               | Email/Telephone in all realms; delete/create/reuse and status partitions verified with actual PostgreSQL. Immediate shared-model/schema gate.                                                                                                                                                                                                                                                                   |
+| P4 — authoritative phase core        | Codec/gate/enforcer/state writer/audit and app/com signup entry/step paths; P3e.                                                                                                                                                              | Stale bound mutation racing an advance cannot affect committed completion; old A submission leaves B intact.                               | Locking decision atomic, signed original instance/phase/generation, exact GET refusal, non-GET halt and safe audit. Existing issuance retained; immediate security full gate.                                                                                                                                                                                                                                   |
+| P5 — family/surface coverage         | Sign-in locators/gates, primary ceremonies, callbacks, MFA/capacity/checkpoint/selector, finalization; P4.                                                                                                                                    | Choose next actual family from matrix: stale phase request creates no artifact/session and refuses without touching replacement flow.      | One family/surface per slice, explicit unsupported cells, all Section 7 cases and diagrams; no new credential method. Immediate full gate after each shared boundary.                                                                                                                                                                                                                                           |
+| P6 — identifier consumers/DB         | Inventory-driven model/column/index/PK/sequence changes, APIs/jobs/events and current ceremony IDs; P2/P5. Catalog facts start at `identifiers:inventory`; semantic ownership and consumer evidence must be reconciled before schema changes. | Next concrete owned-ID DB bypass or consumer-format mismatch fails at public boundary.                                                     | One meaning/consumer group per slice; external exceptions and existing IDs preserved, correct indexes/constraints, no remote bigint addition. PK/sequence/partition work isolated and verified; full gate per schema slice.                                                                                                                                                                                     |
+| P7 — ownership integrity prototype   | Six reworked drafts, trigger ADR and isolated DB harness; P0/P2, reviewed complete migrations only.                                                                                                                                           | Real COMMIT with cross-family overlap/gap/missing owner fails with expected SQLSTATE; sequential and concurrent valid chain commits.       | Initial/closed-history/adjacency/direct-SQL/RC/RR/Serializable invariants proven. Stop downstream ownership implementation acceptance if fundamental integrity cannot be enforced. Full gate after schema/prototype slice.                                                                                                                                                                                      |
+| P8 — concrete ownership models       | Avatar/period associations, ownership resolver/provisioning, concrete remote public references; P7.                                                                                                                                           | New Avatar without an owner cannot commit; valid app/org provisioning preserves all identities and com has no dependency.                  | Concrete model/Ruby interfaces proven; retained-data reader/writer activation waits for P12b. Account/Group unresolved semantics not guessed. Full gate after resolver/model slice.                                                                                                                                                                                                                             |
+| P9 — registry and transfer           | Shared registry plus four concrete detail models and Request/Accept/Cancel, minimal transports; P8.                                                                                                                                           | Concurrent same-key requests across two families cannot create two operations; changed payload/initiator is refused.                       | Direct-SQL cardinality, global pending/key uniqueness, four directions, five-day boundaries, generation/authority rechecks, atomic periods and retry semantics proven in isolation; admission waits for P10a/P10b/P12b. Keyless transition documented. Immediate full gate.                                                                                                                                     |
+| P10a — Grants (P10)                  | Existing Binding semantics, concrete N:M Grants/policies/provisioning; P9. Group conversion is not a prerequisite.                                                                                                                            | Grant from first O1 period stays ineffective after O1→O2→O1 while a new authorized Grant works.                                            | Management/Binding meaning preserved; concrete subject/period/capability checks and N:M success, no revival. Full authorization/model gate; Group effects separately remain P10b.                                                                                                                                                                                                                               |
+| P10b — Group semantics (P10)         | Account/owner reader and writer conversion; P9 plus authoritative Group semantic evidence. The additive `avatar_group_concrete_ownership_periods` table, explicit source selector, and bounded inventory/backfill are part of this slice.     | Distinct selected-account context survives an ownership change without becoming an alternative owner authority.                            | Actual semantics preserved; incompatible Group access refused; all consumers reconciled. The legacy Group period is not excluded from the barrier; it remains the pre-cutover source and is replaced only after the concrete copy is verified. Hold this child when a domain choice is missing; it blocks Avatar cutover P12b, not P10a. Full gate after each affected writer/policy slice.                     |
+| P11a — dead identifier history (P11) | Six histories, identifier purgers and legal/retention holds; P3e. No Avatar prerequisite.                                                                                                                                                     | A refusal after history INSERT rolls back archive and physical removal together.                                                           | Minimal schema, original-PII fingerprint, internal visibility, reuse and concurrent purge/create behavior across six models; authorized whole-owner semantics preserved. Focused real-DB checks and full gate per lifecycle slice.                                                                                                                                                                              |
+| P11b — Avatar deferral (P11)         | RetentionPurgeJob and existing/new concrete deferral; P8. No identifier-history prerequisite.                                                                                                                                                 | Repeated eligible Avatar purge records one actionable deferral without deleting Avatar/history.                                            | Observable idempotent state and preserved history; personal-data policy remains explicitly undecided. Serialize shared retention edits with P11a and run neighboring tests plus full gate.                                                                                                                                                                                                                      |
+| P12a — identifier transition (P12)   | Identifier inventory, bounded backfill/consumer transition and recovery; P6/P11a. No Avatar decision dependency.                                                                                                                              | Repeated isolated migration preserves issued identifiers/references; ambiguous data stays unchanged and reported.                          | Fresh migration/schema verification, constraints and sequence safety, documented compatibility exits and rollback/forward-fix. No broad reset or real-data application. Full gate after each transition boundary.                                                                                                                                                                                               |
+| P12b — Avatar transition (P12)       | Operational Avatar and Group backfill, explicit `avatar_ids` plus `group_ids` cutover inventory, writer quiescence, legacy barrier and forward recovery; P9/P10a/P10b/P11b.                                                                   | Repeated isolated backfill preserves history; ambiguous row is refused; ordinary-role writes fail only after verified cutover.             | Rebuild/dump/restore including triggers; all ownership/Group writers controlled; INSERT/UPDATE/DELETE/TRUNCATE barrier tested. `AvatarOwnershipCutoverOperation` cannot establish the marker without an explicit Group inventory, and post-marker Group reads/writes select the concrete table without legacy fallback. No production cutover or automatic Phase G deletion. Full gate per transition boundary. |
+| P13 — acceptance and handoff         | All executable guards/docs/checklists/diagrams/evidence and complete current diff; predecessor gates.                                                                                                                                         | Run actual final commands, not a new artificial Red.                                                                                       | Gate 4; every requirement has evidence or explicit incomplete disposition, no new regression and no false global completion. Final report in Section 14.                                                                                                                                                                                                                                                        |
 
 Suggested current test starting points, not preclaimed results:
 `test/models/concerns/public_id_test.rb`, `test/models/dead_identifier_history_contract_test.rb`,
@@ -1554,20 +1554,19 @@ A read-only pre-acceptance review inspected the worktree at HEAD
 `ccceabd05d2e3a8f923ce398046f99d026a5b78e` plus its uncommitted changes while implementation was
 paused. No Rails or Vitest suite was run by that review. Each item below states an observation, the
 existing clause that already governs it, and the expected handling. Observations are hints to
-reconfirm against the current tree, not evidence and not acceptance results. Except for the one
-user decision in 16.7, nothing here adds a requirement or authority; where an item and Sections
-1–15 appear to differ, Sections 1–15 govern. The identifier decisions live in the Section 5.3
-addition.
+reconfirm against the current tree, not evidence and not acceptance results. Except for the one user
+decision in 16.7, nothing here adds a requirement or authority; where an item and Sections 1–15
+appear to differ, Sections 1–15 govern. The identifier decisions live in the Section 5.3 addition.
 
 ### 16.1 Phase-refusal copy is hard-coded on the sign-in side (F, FLOW-2)
 
-`SignInPhaseBindingControllerSupport#refuse_sign_in_phase_request!` and
-`OrgNormalSignInTransaction` render the Japanese refusal as a string literal. `SignUpFlowEntry`
-already renders `errors.messages.phase_violation_refused`, and that key exists in all four locale
-bundles. Section 7.3 requires the explicit translation key with the exact Japanese value. Route
-both sign-in paths through the existing key, forcing the Japanese locale as the sign-up path does,
-so the response body does not vary with the request locale. Keep status, media type, no-store and
-absent Location unchanged, and cover it in the P5 slice for the family being edited.
+`SignInPhaseBindingControllerSupport#refuse_sign_in_phase_request!` and `OrgNormalSignInTransaction`
+render the Japanese refusal as a string literal. `SignUpFlowEntry` already renders
+`errors.messages.phase_violation_refused`, and that key exists in all four locale bundles. Section
+7.3 requires the explicit translation key with the exact Japanese value. Route both sign-in paths
+through the existing key, forcing the Japanese locale as the sign-up path does, so the response body
+does not vary with the request locale. Keep status, media type, no-store and absent Location
+unchanged, and cover it in the P5 slice for the family being edited.
 
 **Resume recheck (2026-10-12):** both sign-in refusal implementations now call
 `errors.messages.phase_violation_refused` with `locale: :ja`; the App public-boundary test requires
@@ -1622,33 +1621,33 @@ closes P3a–P3e and P11a honestly; it is not new scope.
 
 ### 16.5 The six Avatar drafts need a final recorded disposition (A, C03, MIG-2)
 
-The six files remain tracked under `specs/avatar-organization-ownership/migration-drafts/` while
-the working migrations now live in `db/avatars_migrate/` under different versions. The spec's
+The six files remain tracked under `specs/avatar-organization-ownership/migration-drafts/` while the
+working migrations now live in `db/avatars_migrate/` under different versions. The spec's
 "Historical draft disposition" table still describes them only as written or empty stubs. For each
 draft record in the owning spec: the successor migration version or versions that replaced it, or
-that it was abandoned and why; whether its version ever entered any retained database's history;
-and that it stays outside migration discovery. Do not delete the drafts (C03) and do not restore
-them to discovery. Section 14.2 item 3 of the final report depends on this table.
+that it was abandoned and why; whether its version ever entered any retained database's history; and
+that it stays outside migration discovery. Do not delete the drafts (C03) and do not restore them to
+discovery. Section 14.2 item 3 of the final report depends on this table.
 
 **Resume recheck (2026-10-12):** the independent Group transition inventory slice now classifies
 legacy or concrete histories with a missing owner, invalid interval, wrong initial boundary, more
-than one open period, or an interruption between adjacent periods as `conflict`/manual review.
-The bounded backfill does not invent a boundary or establish cutover. The focused slice passed
+than one open period, or an interruption between adjacent periods as `conflict`/manual review. The
+bounded backfill does not invent a boundary or establish cutover. The focused slice passed
 `8 runs, 36 assertions, 0 failures, 0 errors, 0 skips`; the subsequent Rails and Vitest full gates
 also passed. See `evidence/2026-10-12-avatar-group-inventory-S7H2.md`. This closes a migration
-safety defect in the independent P10b preparation work; it does not resolve Group account meaning
-or authorize P12b cutover.
+safety defect in the independent P10b preparation work; it does not resolve Group account meaning or
+authorize P12b cutover.
 
 ### 16.6 Email observability host handoff status (O, MAIL-4/MAIL-5)
 
-The host owner changed the `./podman/alloy` overlay label in `.devcontainer/compose.yaml` from
-`Z` to `z` on 2026-10-12. The change is uncommitted and is the host owner's to commit. The static
-result is recorded in `evidence/2026-10-12-alloy-overlay-label-static-check-K7R3.md`: merged
-Compose render PASS, host has no SELinux. Still NOT_RUN: pinned Alloy syntax validation, the
-effective read-only mount inside `core`, and collector processor behavior. The overlay is not
-mounted in the running container, so `podman/alloy` is currently writable from `core`; do not
-write there. These dynamic checks happen at the user's next recreation and are recorded against
-MAIL-4/MAIL-5; they do not block isolated P3b work (Section 10).
+The host owner changed the `./podman/alloy` overlay label in `.devcontainer/compose.yaml` from `Z`
+to `z` on 2026-10-12. The change is uncommitted and is the host owner's to commit. The static result
+is recorded in `evidence/2026-10-12-alloy-overlay-label-static-check-K7R3.md`: merged Compose render
+PASS, host has no SELinux. Still NOT_RUN: pinned Alloy syntax validation, the effective read-only
+mount inside `core`, and collector processor behavior. The overlay is not mounted in the running
+container, so `podman/alloy` is currently writable from `core`; do not write there. These dynamic
+checks happen at the user's next recreation and are recorded against MAIL-4/MAIL-5; they do not
+block isolated P3b work (Section 10).
 
 ### 16.7 Gate 4 static status, and one user decision on unrelated repairs
 
@@ -1667,55 +1666,57 @@ Run on 2026-10-12 against the paused tree, by the review:
   `bin/rails` passed to `execFileSync`). The review added the config to `entry` and `bin/rails` to
   `ignoreUnresolved` in `knip.json`; `deadcode` then exits 0. Both edits are uncommitted and outside
   Luna's commit authority (Section 14.1).
-- Not run by the review: both full suites, `bun run test:coverage`, the CI invariant selection,
-  the server boot smoke, `bin/bundler-audit` and `bun audit`.
+- Not run by the review: both full suites, `bun run test:coverage`, the CI invariant selection, the
+  server boot smoke, `bin/bundler-audit` and `bun audit`.
 
 **Resume update (2026-10-12):** after the review, the affected focused authentication slice passed
 (`30 runs, 259 assertions, 0 failures, 0 errors, 0 skips`), the four-worker Rails suite passed
 (`15084 runs, 128057 assertions, 0 failures, 0 errors, 0 skips`), and Vitest passed (`99 files`,
-`1140 tests`). These results do not close the remaining schema-drift, isolated committed-transaction,
-host-runtime, Group/cutover, identifier-transition, or privacy-retention dispositions.
+`1140 tests`). These results do not close the remaining schema-drift, isolated
+committed-transaction, host-runtime, Group/cutover, identifier-transition, or privacy-retention
+dispositions.
 
 Still open for Gate 4, from earlier evidence rather than this review: `db:verify_no_schema_drift`
 reported `db/avatar_structure.sql` and `db/org_zenith_structure.sql` as dirty, which Section 12
 expects for intended uncommitted migrations but requires to be explained per dump; and
-`bun run test:coverage` exited non-zero on the existing 99% branch and function thresholds while
-all tests passed.
+`bun run test:coverage` exited non-zero on the existing 99% branch and function thresholds while all
+tests passed.
 
 ### 16.8 Resume update — ORG Telephone NOT NULL transition (P12a, 2026-10-12)
 
-Following Section 14.2, the ORG Telephone `public_id` transition was resumed as an independent
-P12a slice. A public model contract first produced an expected Red because the existing
+Following Section 14.2, the ORG Telephone `public_id` transition was resumed as an independent P12a
+slice. A public model contract first produced an expected Red because the existing
 `operator_telephones.public_id` column was still nullable. A one-step metadata migration was
 rejected by Strong Migrations; it was removed before application and replaced with two generated,
 reviewed migrations. The first adds a `NOT VALID` `public_id IS NOT NULL` check. The second
-validates the existing nonblank check and the new check before changing the column to `NOT NULL`
-and removing both transitional checks. A stale NULL or whitespace value fails the transition; no
-identifier is invented or rewritten by schema DDL. A reversibility rehearsal initially exposed
-that the second migration's `down` restored only the nonblank check; the `down` was corrected to
-restore both transitional checks, then exercised successfully in the run-owned database.
+validates the existing nonblank check and the new check before changing the column to `NOT NULL` and
+removing both transitional checks. A stale NULL or whitespace value fails the transition; no
+identifier is invented or rewritten by schema DDL. A reversibility rehearsal initially exposed that
+the second migration's `down` restored only the nonblank check; the `down` was corrected to restore
+both transitional checks, then exercised successfully in the run-owned database.
 
 The migrations applied successfully to the run-owned test manifest. The focused ORG identity and
-backfill slice passed `9 runs, 56 assertions, 0 failures, 0 errors, 0 skips`, and targeted
-RuboCop reported no offenses. Because the final column contract forbids constructing NULL rows, the
-current backfill tests assert that the retained operation is a post-cutover no-op and never
-regenerates an existing identity. The pre-cutover NULL-only assignment, exact-constraint collision
-retry and exhaustion behavior remain covered by the prior run-owned evidence
+backfill slice passed `9 runs, 56 assertions, 0 failures, 0 errors, 0 skips`, and targeted RuboCop
+reported no offenses. Because the final column contract forbids constructing NULL rows, the current
+backfill tests assert that the retained operation is a post-cutover no-op and never regenerates an
+existing identity. The pre-cutover NULL-only assignment, exact-constraint collision retry and
+exhaustion behavior remain covered by the prior run-owned evidence
 `evidence/2026-10-11-org-telephone-identity-backfill-K6V2.md`; that evidence is historical and is
 not a production cutover claim.
 
 The ORG and Avatar structure dumps were regenerated through the Rails schema-dump tasks. The
 schema-drift command still reports both files as dirty because these intentional generated changes
 remain uncommitted; this is recorded rather than treated as a clean committed-schema gate. The
-combined focused migration/Group slice passed `17 runs, 92 assertions, 0 failures, 0 errors,
-0 skips`, and the corrected four-worker Rails full gate passed `15085 runs, 128036 assertions,
-0 failures, 0 errors, 0 skips`. Vitest passed `99 files, 1140 tests`. See
-`evidence/2026-10-12-org-telephone-not-null-cutover-N8Q4.md` for commands and limits.
+combined focused migration/Group slice passed
+`17 runs, 92 assertions, 0 failures, 0 errors, 0 skips`, and the corrected four-worker Rails full
+gate passed `15085 runs, 128036 assertions, 0 failures, 0 errors, 0 skips`. Vitest passed
+`99 files, 1140 tests`. See `evidence/2026-10-12-org-telephone-not-null-cutover-N8Q4.md` for
+commands and limits.
 
 This closes only the disposable-schema NOT NULL rehearsal for the ORG Telephone candidate. It does
 not establish writer quiescence, proof-drain completion, consumer cutover, ORG delete/recreate
-semantics, the remaining P12a identifier inventory, D-11 committed-transaction coverage, host
-Alloy runtime verification, or the unresolved privacy-retention and Group-account decisions.
+semantics, the remaining P12a identifier inventory, D-11 committed-transaction coverage, host Alloy
+runtime verification, or the unresolved privacy-retention and Group-account decisions.
 
 ### 16.9 Resume update — owned preference and Client Passkey NOT NULL transition (P12a, 2026-10-12)
 
@@ -1729,18 +1730,19 @@ normal read/create/update repair path. The final migrations add and validate `NO
 then enforce `NOT NULL` and remove the temporary checks; each reverse path restores both checks and
 nullable metadata. No existing identifier was truncated, regenerated or changed by schema DDL.
 
-The focused P12a contract/operation/model slice passed `54 runs, 159 assertions, 0 failures,
-0 errors, 0 skips` with the run-owned isolated PostgreSQL manifest. A controlled disposable
-pre-cutover NULL rehearsal assigned exactly one identifier (`assigned: 1, missing: 0,
-generated_length: 21`) before the final constraints were restored. Three migration down/up
-rehearsals passed. The fresh-schema inventory reported zero NULL and zero blank values for all four
-columns. The Rails full gate after this slice passed `15092 runs, 128072 assertions, 0 failures,
-0 errors, 0 skips` with four workers, and Vitest passed `99 files, 1140 tests`.
+The focused P12a contract/operation/model slice passed
+`54 runs, 159 assertions, 0 failures, 0 errors, 0 skips` with the run-owned isolated PostgreSQL
+manifest. A controlled disposable pre-cutover NULL rehearsal assigned exactly one identifier
+(`assigned: 1, missing: 0, generated_length: 21`) before the final constraints were restored. Three
+migration down/up rehearsals passed. The fresh-schema inventory reported zero NULL and zero blank
+values for all four columns. The Rails full gate after this slice passed
+`15092 runs, 128072 assertions, 0 failures, 0 errors, 0 skips` with four workers, and Vitest passed
+`99 files, 1140 tests`.
 
 This closes only the isolated P12a NOT NULL rehearsal for these four candidates. It does not claim
-real-data application, all-table identifier acceptance, permanent DB immutability, consumer
-cutover, the remaining P12a inventory or a clean committed-schema gate. The durable acceptance
-definition is [ID-4b](docs/checklists/identifier-contracts.md#id-4b--owned-preference-and-client-passkey-identities-become-required);
+real-data application, all-table identifier acceptance, permanent DB immutability, consumer cutover,
+the remaining P12a inventory or a clean committed-schema gate. The durable acceptance definition is
+[ID-4b](docs/checklists/identifier-contracts.md#id-4b--owned-preference-and-client-passkey-identities-become-required);
 see `evidence/2026-10-12-identifier-transition-L3M7.md` for the bounded commands and limitations.
 
 ### 16.10 Resume update — staff identity audit-event bigint staging (P12a, 2026-10-12)
@@ -1749,52 +1751,52 @@ The remaining cataloged non-bigint application primary key was then resumed as a
 identity-preserving staging slice. `org_zenith.staff_identity_audit_events.id` remains the
 authoritative string key while the additive migration
 `20261012085039_convert_staff_identity_audit_events_to_bigint.rb` adds `legacy_id` and `id_bigint`,
-and `staff_identity_audits.event_id_bigint`, with reviewed indexes. The first contract test
-produced the expected Red against the empty migration; the implementation then provided a bounded
-restartable `StaffIdentityAuditEventBigintBackfillOperation` with explicit dry-run mode. It keeps
-the old code, maps audit references only when the event mapping exists, rejects conflicting or
-missing mappings, and makes no PK/FK cutover claim.
+and `staff_identity_audits.event_id_bigint`, with reviewed indexes. The first contract test produced
+the expected Red against the empty migration; the implementation then provided a bounded restartable
+`StaffIdentityAuditEventBigintBackfillOperation` with explicit dry-run mode. It keeps the old code,
+maps audit references only when the event mapping exists, rejects conflicting or missing mappings,
+and makes no PK/FK cutover claim.
 
-The focused transition and operation tests passed `4 runs, 28 assertions, 0 failures, 0 errors,
-0 skips`. A run-owned migration down/up rehearsal passed, including removal and recreation of all
-three additive columns and their indexes. The synthetic mapping test preserved the string event
-code, assigned one bigint mapping, mapped the audit reference exactly once, and was idempotent on
-repeat. A current run-owned dry run returned zero missing and unresolved mappings. The additive
-stage is recorded in the durable `ID-4c` acceptance condition and the
-identifier reference/workflow documents.
+The focused transition and operation tests passed
+`4 runs, 28 assertions, 0 failures, 0 errors, 0 skips`. A run-owned migration down/up rehearsal
+passed, including removal and recreation of all three additive columns and their indexes. The
+synthetic mapping test preserved the string event code, assigned one bigint mapping, mapped the
+audit reference exactly once, and was idempotent on repeat. A current run-owned dry run returned
+zero missing and unresolved mappings. The additive stage is recorded in the durable `ID-4c`
+acceptance condition and the identifier reference/workflow documents.
 
 This does not establish the final bigint primary-key/foreign-key replacement, consumer migration,
-real-data backfill, production/shared-data application or complete ID-1 acceptance. The next
-P12a step must inventory every consumer and define a reviewed cutover/recovery boundary before any
-old key is retired. Full Rails/Vitest gate results for this new schema slice must be recorded after
-the required Gate 2 execution; those results are recorded in Section 16.11. The slice is focused-
-Green and full-gate verified for the current staged schema, but not final-cutover complete.
+real-data backfill, production/shared-data application or complete ID-1 acceptance. The next P12a
+step must inventory every consumer and define a reviewed cutover/recovery boundary before any old
+key is retired. Full Rails/Vitest gate results for this new schema slice must be recorded after the
+required Gate 2 execution; those results are recorded in Section 16.11. The slice is focused- Green
+and full-gate verified for the current staged schema, but not final-cutover complete.
 
 ### 16.11 Gate 2 result after staff-event staging (P12a, 2026-10-12)
 
-The first Gate 2 recheck after the final staff-event test assertion observed one unrelated
-failure in the existing `SignUpExpiryJobTest` timing case (`15096 runs, 128106 assertions, 1
-failure`). The named test passed separately with the same run-owned manifest using both one and
-four workers (`6 runs, 16 assertions, 0 failures, 0 errors, 0 skips`). No application repair was
-made for that unrelated observation. The first parallel process also refused worker-database
-cleanup while transient connections were present; after the process ended, the four run-owned
-worker databases were cleaned through the repository helper after ownership, identity, comment
-and no-active-connection checks.
+The first Gate 2 recheck after the final staff-event test assertion observed one unrelated failure
+in the existing `SignUpExpiryJobTest` timing case (`15096 runs, 128106 assertions, 1 failure`). The
+named test passed separately with the same run-owned manifest using both one and four workers
+(`6 runs, 16 assertions, 0 failures, 0 errors, 0 skips`). No application repair was made for that
+unrelated observation. The first parallel process also refused worker-database cleanup while
+transient connections were present; after the process ended, the four run-owned worker databases
+were cleaned through the repository helper after ownership, identity, comment and
+no-active-connection checks.
 
 The required Gate 2 was then rerun with four workers against all twenty run-owned databases and
 completed successfully: `15096 runs, 128109 assertions, 0 failures, 0 errors, 0 skips`. All four
 worker receipts recorded completed cleanup. Vitest was rechecked with `bun run test` and passed
-`99 files, 1140 tests`. Targeted RuboCop for the new operation and tests reported no offenses.
-The initial schema-dump invocation without the repository-required `PARALLEL_WORKERS` environment
+`99 files, 1140 tests`. Targeted RuboCop for the new operation and tests reported no offenses. The
+initial schema-dump invocation without the repository-required `PARALLEL_WORKERS` environment
 variable was an environment precondition failure; it was rerun with the verified isolated settings
 and passed. The detailed final gate and failure classification are recorded in
-`evidence/2026-10-12-staff-event-gate-final-P4C7.md`; the slice-specific schema evidence remains
-in `evidence/2026-10-12-identifier-transition-L3M7.md`.
+`evidence/2026-10-12-staff-event-gate-final-P4C7.md`; the slice-specific schema evidence remains in
+`evidence/2026-10-12-identifier-transition-L3M7.md`.
 
-This Gate 2 result validates the current worktree against the staged schema; it does not convert
-the generated structure dumps into a clean committed-schema result, and it does not close the
-remaining P12a inventory, final staff-event PK/FK cutover, D-11 committed-transaction coverage,
-P10b/P12b Avatar cutover, host Alloy runtime verification or privacy-retention decision.
+This Gate 2 result validates the current worktree against the staged schema; it does not convert the
+generated structure dumps into a clean committed-schema result, and it does not close the remaining
+P12a inventory, final staff-event PK/FK cutover, D-11 committed-transaction coverage, P10b/P12b
+Avatar cutover, host Alloy runtime verification or privacy-retention decision.
 
 ### 16.12 Current P10a/P11a focused recheck (2026-10-12)
 
@@ -1821,36 +1823,36 @@ value above 25 in that disposable catalog.
 This does not authorize one broad narrowing migration. The candidates carry different model and
 consumer meanings, the operator's 16-character value is a separate human-entered code, and the
 migration rules prohibit an unapproved `change_column`. The remaining P12a capacity work therefore
-stays as a per-column semantic/consumer review; no value was truncated, regenerated or narrowed.
-The bounded evidence and limitation are in
-`evidence/2026-10-12-identifier-capacity-inventory-V4D8.md`. This hold affects the remaining
-identifier-transition branch only and does not block the current P10a/P11a focused recheck.
+stays as a per-column semantic/consumer review; no value was truncated, regenerated or narrowed. The
+bounded evidence and limitation are in `evidence/2026-10-12-identifier-capacity-inventory-V4D8.md`.
+This hold affects the remaining identifier-transition branch only and does not block the current
+P10a/P11a focused recheck.
 
 ### 16.14 Resume update — setting preference public-ID capacity checks (P12a, 2026-10-12)
 
 The next independent P12a capacity slice covered the three setting-database preference identities:
-`app_preferences.public_id`, `com_preferences.public_id` and `org_preferences.public_id`. A
-focused contract first failed against the current schema because none of the named database checks
-existed (`3 runs, 3 assertions, 3 failures`). The reviewed implementation adds one `NOT VALID`
+`app_preferences.public_id`, `com_preferences.public_id` and `org_preferences.public_id`. A focused
+contract first failed against the current schema because none of the named database checks existed
+(`3 runs, 3 assertions, 3 failures`). The reviewed implementation adds one `NOT VALID`
 `char_length(public_id) <= 25` check per table and a separate validation migration. It retains the
 existing unbounded string representation for this additive transition, changes no issued value and
 does not alter the NanoID-21 writer or model-level 21-character validation.
 
-The focused contract plus the three existing setting preference model suites passed `59 runs, 148
-assertions, 0 failures, 0 errors, 0 skips` with four workers. Direct SQL attempted against each
-table's persisted row was rejected by PostgreSQL inside a savepoint. All six migrations were
-reversed and reapplied in the run-owned setting databases; the three setting structure dumps were
-regenerated. The acceptance definition is [ID-4d](docs/checklists/identifier-contracts.md#id-4d--setting-preference-identities-have-bounded-database-capacity),
+The focused contract plus the three existing setting preference model suites passed
+`59 runs, 148 assertions, 0 failures, 0 errors, 0 skips` with four workers. Direct SQL attempted
+against each table's persisted row was rejected by PostgreSQL inside a savepoint. All six migrations
+were reversed and reapplied in the run-owned setting databases; the three setting structure dumps
+were regenerated. The acceptance definition is
+[ID-4d](docs/checklists/identifier-contracts.md#id-4d--setting-preference-identities-have-bounded-database-capacity),
 with the implementation workflow recorded in [the DB workflow](docs/operations/db-workflow.md).
 
 This slice closes only the three setting-preference capacity checks in the disposable schema. It
-does not authorize a global `change_column`, narrow the remaining unbounded candidates, or close
-the all-table identifier inventory, staff-event final PK/FK cutover, D-11 isolation matrix,
-P10b/P12b Avatar cutover, host Alloy runtime verification or privacy-retention decision. The
-post-slice Gate 2 completed with Rails `15099 runs, 128124 assertions, 0 failures, 0 errors, 0
-skips` using four workers and Vitest `99 files, 1140 tests`; all worker receipts recorded
-completed cleanup. Detailed evidence is in
-`evidence/2026-10-12-setting-preference-capacity-G6P2.md`.
+does not authorize a global `change_column`, narrow the remaining unbounded candidates, or close the
+all-table identifier inventory, staff-event final PK/FK cutover, D-11 isolation matrix, P10b/P12b
+Avatar cutover, host Alloy runtime verification or privacy-retention decision. The post-slice Gate 2
+completed with Rails `15099 runs, 128124 assertions, 0 failures, 0 errors, 0 skips` using four
+workers and Vitest `99 files, 1140 tests`; all worker receipts recorded completed cleanup. Detailed
+evidence is in `evidence/2026-10-12-setting-preference-capacity-G6P2.md`.
 
 ### 16.15 Resume update — app/com principal public-ID capacity checks (P12a, 2026-10-12)
 
@@ -1861,12 +1863,13 @@ absent (`5 runs, 14 assertions, 2 failures`). The reviewed implementation adds o
 `char_length(public_id) <= 25` check and a separate validation migration per owning database. It
 keeps the current string type, NanoID-21 issuance and model validation unchanged.
 
-The focused contract plus Client and Visitor model suites passed `111 runs, 220 assertions, 0
-failures, 0 errors, 0 skips` with four workers. Direct SQL oversized updates were rejected inside
-savepoints, all four migrations were reversed and reapplied, and the app/com schema dumps were
-regenerated. The post-slice Gate 2 then completed with Rails `15101 runs, 128126 assertions, 0
-failures, 0 errors, 0 skips` and Vitest `99 files, 1140 tests`; all worker receipts recorded
-completed cleanup. See [ID-4e](docs/checklists/identifier-contracts.md#id-4e--app-and-com-principal-identities-have-bounded-database-capacity)
+The focused contract plus Client and Visitor model suites passed
+`111 runs, 220 assertions, 0 failures, 0 errors, 0 skips` with four workers. Direct SQL oversized
+updates were rejected inside savepoints, all four migrations were reversed and reapplied, and the
+app/com schema dumps were regenerated. The post-slice Gate 2 then completed with Rails
+`15101 runs, 128126 assertions, 0 failures, 0 errors, 0 skips` and Vitest `99 files, 1140 tests`;
+all worker receipts recorded completed cleanup. See
+[ID-4e](docs/checklists/identifier-contracts.md#id-4e--app-and-com-principal-identities-have-bounded-database-capacity)
 and `evidence/2026-10-12-principal-capacity-G8R4.md`.
 
 This closes only these two disposable-schema capacity checks. It does not authorize global column
@@ -1879,11 +1882,10 @@ retention.
 The next independent P12a slice covered the explicitly classified, self-controlled non-secret
 `public_id` columns in the current capacity inventory: the selected app/com/org Zenith records,
 ticket and signal records, and Avatar groups, Avatars, group memberships and handles. The complete
-table list is the `CAPACITY_TABLES` inventory in
-`test/models/public_id_capacity_contract_test.rb`; provider/protocol identifiers, the ORG
-16-character human code and unclassified remaining candidates remain outside this slice. The
-metadata contract first failed against the current schema because the 42 newly listed checks were
-absent (`47 runs, 62 assertions, 42 failures`).
+table list is the `CAPACITY_TABLES` inventory in `test/models/public_id_capacity_contract_test.rb`;
+provider/protocol identifiers, the ORG 16-character human code and unclassified remaining candidates
+remain outside this slice. The metadata contract first failed against the current schema because the
+42 newly listed checks were absent (`47 runs, 62 assertions, 42 failures`).
 
 The implementation adds one named `char_length(public_id) <= 25` check per listed table through an
 additive `NOT VALID` migration and a separate validation migration for each owning database. The
@@ -1891,21 +1893,22 @@ existing string columns, NanoID-21 issuance and model-level contracts remain unc
 truncated, regenerated or case-converted. The first migration's reverse removes the check, while
 reversing validation restores the unvalidated check so the transition remains ordered and explicit.
 
-The focused metadata/direct-write contract passed `47 runs, 146 assertions, 0 failures, 0 errors,
-0 skips` with four workers against the run-owned manifest. All seven remaining database groups were
-reversed and reapplied in order after an app_zenith rehearsal; every down/up command exited zero.
-The eight affected structure dumps (`app_zenith`, `com_zenith`, `org_zenith`, `app_ticket`,
-`app_signal`, `com_signal`, `org_signal` and `avatar`) regenerated successfully, and the dumps
-contain the expected 42 new named checks in addition to the earlier principal checks.
+The focused metadata/direct-write contract passed
+`47 runs, 146 assertions, 0 failures, 0 errors, 0 skips` with four workers against the run-owned
+manifest. All seven remaining database groups were reversed and reapplied in order after an
+app_zenith rehearsal; every down/up command exited zero. The eight affected structure dumps
+(`app_zenith`, `com_zenith`, `org_zenith`, `app_ticket`, `app_signal`, `com_signal`, `org_signal`
+and `avatar`) regenerated successfully, and the dumps contain the expected 42 new named checks in
+addition to the earlier principal checks.
 
 This closes only the listed disposable-schema capacity boundary. It does not authorize a global
 `change_column`, close the remaining semantic/consumer inventory, establish public-ID immutability
-for every table, complete the staff-event bigint primary-key/foreign-key cutover, or resolve
-D-11 isolation coverage, P10b/P12b Avatar cutover, host Alloy runtime verification or privacy
-retention. The post-slice Gate 2 was then run against the same run-owned manifest with four
-workers: Rails completed `15143 runs, 128254 assertions, 0 failures, 0 errors, 0 skips`, and
-`bun run test` completed with `99 files, 1140 tests`. The four latest worker receipts all recorded
-completed cleanup. The acceptance definition is
+for every table, complete the staff-event bigint primary-key/foreign-key cutover, or resolve D-11
+isolation coverage, P10b/P12b Avatar cutover, host Alloy runtime verification or privacy retention.
+The post-slice Gate 2 was then run against the same run-owned manifest with four workers: Rails
+completed `15143 runs, 128254 assertions, 0 failures, 0 errors, 0 skips`, and `bun run test`
+completed with `99 files, 1140 tests`. The four latest worker receipts all recorded completed
+cleanup. The acceptance definition is
 [ID-4f](docs/checklists/identifier-contracts.md#id-4f--classified-self-controlled-identifiers-have-bounded-database-capacity),
 with the operational sequence in `docs/operations/db-workflow.md` and the focused evidence to be
 recorded in `evidence/2026-10-12-public-id-capacity-gate-N9K4.md`. These are disposable dirty-
@@ -1942,15 +1945,15 @@ include the retired legacy table, close the remaining identifier inventory or st
 cutover, or resolve D-11, P10b/P12b, host-runtime or privacy-retention holds. Detailed evidence is
 in `evidence/2026-10-12-public-id-capacity-extension-V2J6.md`.
 
-**User decision (2026-10-12):** when a failure that is unrelated to the five contracts blocks a
-Gate 4 command, Luna may make the smallest repair that lets that command pass. This is the scope
-authorization that Gate 3 requires for pre-existing unrelated repairs, and it is limited as
-follows. Classify the failure as pre-existing and unrelated first, with its cause, and record that
-in evidence before repairing. Repair the cause; do not lower a threshold, exclude a file, skip or
+**User decision (2026-10-12):** when a failure that is unrelated to the five contracts blocks a Gate
+4 command, Luna may make the smallest repair that lets that command pass. This is the scope
+authorization that Gate 3 requires for pre-existing unrelated repairs, and it is limited as follows.
+Classify the failure as pre-existing and unrelated first, with its cause, and record that in
+evidence before repairing. Repair the cause; do not lower a threshold, exclude a file, skip or
 delete a test, broaden an allowlist or weaken a check (Gate 3 still applies in full). Keep the
-repair out of the files of an in-progress contract slice, and run both full suites afterwards as
-for any other change. A repair that would need a design change, a dependency change or more than a
-small local edit is reported instead of made. Commit authority is unchanged.
+repair out of the files of an in-progress contract slice, and run both full suites afterwards as for
+any other change. A repair that would need a design change, a dependency change or more than a small
+local edit is reported instead of made. Commit authority is unchanged.
 
 ### 16.18 Resume update — staff identity audit-event bigint cutover (P12a, 2026-10-12)
 
@@ -1960,36 +1963,36 @@ authority. The consumer inventory found no application reader or writer for thes
 catalogue tables beyond the persisted `staff_identity_audits` reference. The additive mapping was
 therefore verified before the key swap; incomplete or conflicting mappings still fail closed.
 
-The structural migration
-`20261012100000_cut_over_staff_identity_audit_event_bigint_keys.rb` installs a temporary bigint FK,
-adds non-null checks without blocking writes, drops the old string primary key, promotes the mapped
-bigint to `staff_identity_audit_events.id`, retains the original code as `legacy_id`, renames the
-audit reference to bigint `event_id` while retaining `legacy_event_id`, and reattaches the FK to the
-new primary key. The separate validation migration
+The structural migration `20261012100000_cut_over_staff_identity_audit_event_bigint_keys.rb`
+installs a temporary bigint FK, adds non-null checks without blocking writes, drops the old string
+primary key, promotes the mapped bigint to `staff_identity_audit_events.id`, retains the original
+code as `legacy_id`, renames the audit reference to bigint `event_id` while retaining
+`legacy_event_id`, and reattaches the FK to the new primary key. The separate validation migration
 `20261012100100_validate_staff_identity_audit_event_bigint_foreign_key.rb` validates the checks and
 FK, sets the correspondence and reference columns non-null, and removes only the temporary checks.
 The old string PK/FK and temporary mapping columns are not fallback authorities after cutover.
 
-The focused transition and retained-operation collection passed `5 runs, 39 assertions, 0 failures,
-0 errors, 0 skips` with four workers against the run-owned manifest. The isolated database was
-rehearsed through validation down, structural down, structural up and validation up with one
-synthetic event/reference pair; its bigint IDs and both legacy codes were preserved, and the
-synthetic rows were removed afterward. The final ORG schema dump was regenerated through the
-repository task. The final catalog has a bigint `staff_identity_audit_events.id` primary key, a
-validated bigint `staff_identity_audits.event_id` FK, required `legacy_id`/`legacy_event_id`, and
-no `id_bigint`, `event_id_bigint` or old string FK. The fixed catalogue does not gain an automatic
-sequence; the reviewed mapping supplies its IDs.
+The focused transition and retained-operation collection passed
+`5 runs, 39 assertions, 0 failures, 0 errors, 0 skips` with four workers against the run-owned
+manifest. The isolated database was rehearsed through validation down, structural down, structural
+up and validation up with one synthetic event/reference pair; its bigint IDs and both legacy codes
+were preserved, and the synthetic rows were removed afterward. The final ORG schema dump was
+regenerated through the repository task. The final catalog has a bigint
+`staff_identity_audit_events.id` primary key, a validated bigint `staff_identity_audits.event_id`
+FK, required `legacy_id`/`legacy_event_id`, and no `id_bigint`, `event_id_bigint` or old string FK.
+The fixed catalogue does not gain an automatic sequence; the reviewed mapping supplies its IDs.
 
 After this slice, the required Gate 2 was rerun against the same run-owned manifest with four
-workers. Rails completed `15148 runs, 128275 assertions, 0 failures, 0 errors, 0 skips` in
-335.118 seconds, and `bun run test` completed with `99 files, 1140 tests` in 12.83 seconds.
-`db:verify_no_schema_drift` remains non-zero because eleven intended structure dumps are still
-dirty in this uncommitted worktree; it is recorded as a classified drift result, not a clean
+workers. Rails completed `15148 runs, 128275 assertions, 0 failures, 0 errors, 0 skips` in 335.118
+seconds, and `bun run test` completed with `99 files, 1140 tests` in 12.83 seconds.
+`db:verify_no_schema_drift` remains non-zero because eleven intended structure dumps are still dirty
+in this uncommitted worktree; it is recorded as a classified drift result, not a clean
 committed-schema claim. Targeted RuboCop reported no offenses.
 
 This slice does not claim production/shared-data application, full ID-1 coverage, or completion of
 D-11, P10b/P12b, host Alloy runtime verification or privacy-retention decisions. The durable
-acceptance definition is [ID-4c](docs/checklists/identifier-contracts.md#id-4c--staff-identity-audit-event-keys-have-an-identity-preserving-bigint-cutover);
+acceptance definition is
+[ID-4c](docs/checklists/identifier-contracts.md#id-4c--staff-identity-audit-event-keys-have-an-identity-preserving-bigint-cutover);
 the operational sequence is in `docs/operations/db-workflow.md`, and the slice evidence is in
 `evidence/2026-10-12-staff-event-final-cutover-Q4T9.md`.
 
@@ -2000,37 +2003,37 @@ has no identifier-history or Group-account prerequisite. The existing `Retention
 `AvatarPurgeDeferral` implementation was rechecked through the public job boundary. An eligible
 Avatar with ownership history remains present, its ownership and moniker history remains present,
 and repeated runs update one reason-scoped deferral instead of deleting or silently skipping the
-obligation. An ownerless Avatar is refused by the database ownership invariant and cannot be
-treated as purgeable. Concurrent deferral attempts converge on one row under the named unique
-pair and row lock.
+obligation. An ownerless Avatar is refused by the database ownership invariant and cannot be treated
+as purgeable. Concurrent deferral attempts converge on one row under the named unique pair and row
+lock.
 
-The focused Avatar/retention collection passed `21 runs, 89 assertions, 0 failures, 0 errors, 0
-skips`; the adjacent dead-identifier concurrency and cross-database child-purge collection passed
+The focused Avatar/retention collection passed
+`21 runs, 89 assertions, 0 failures, 0 errors, 0 skips`; the adjacent dead-identifier concurrency
+and cross-database child-purge collection passed
 `38 runs, 180 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop inspected six affected
 job/model/test files with no offenses. The preceding current Gate 2 remains the authoritative full
-gate for this unchanged runtime slice: Rails `15148 runs, 128275 assertions, 0 failures, 0 errors,
-0 skips` and Vitest `99 files, 1140 tests`.
+gate for this unchanged runtime slice: Rails
+`15148 runs, 128275 assertions, 0 failures, 0 errors, 0 skips` and Vitest `99 files, 1140 tests`.
 
 This closes the disposable P11b deferral behavior only. The personal-data retention duration and
 final deletion/anonymization policy remain unresolved; no physical Avatar/history deletion is
 authorized. P12b still waits for P10b Group semantics, writer control, backfill/reconciliation and
-the legacy write barrier. Evidence is in
-`evidence/2026-10-12-p11b-retention-deferral-R8L2.md`.
+the legacy write barrier. Evidence is in `evidence/2026-10-12-p11b-retention-deferral-R8L2.md`.
 
 ### 16.20 Resume update — contact purge and dead-history current check (P3e/P11a, 2026-10-12)
 
 The next focused recheck covered the six realm/channel dead-history models and their public purge
 boundaries. It exercised schema/visibility invariants, protected and held refusal, repeated salted
 history, physical reuse, duplicate purge, independent-connection purge/reuse races, OTP failure
-retention, realm/channel HMAC rotation and maintenance isolation, and realm encryption rotation.
-The collection passed `109 runs, 1046 assertions, 0 failures, 0 errors, 0 skips` against the
-run-owned four-worker manifest. This supports the current live uniqueness/dead-history behavior in
-the disposable databases without changing the approved separate Email/Telephone policy design.
+retention, realm/channel HMAC rotation and maintenance isolation, and realm encryption rotation. The
+collection passed `109 runs, 1046 assertions, 0 failures, 0 errors, 0 skips` against the run-owned
+four-worker manifest. This supports the current live uniqueness/dead-history behavior in the
+disposable databases without changing the approved separate Email/Telephone policy design.
 
 The result does not close every CONTACT-4/5 ceremony route, complete the remaining source/fixture
-legacy-proof inventory, or establish a full cross-database failure campaign. Those conditions
-remain explicit rather than being inferred from focused purge and cryptography tests. Evidence is
-in `evidence/2026-10-12-contact-purge-current-check-L6P4.md`.
+legacy-proof inventory, or establish a full cross-database failure campaign. Those conditions remain
+explicit rather than being inferred from focused purge and cryptography tests. Evidence is in
+`evidence/2026-10-12-contact-purge-current-check-L6P4.md`.
 
 ### 16.21 Resume update — Avatar ownership concurrency current check (P7/P9, 2026-10-12)
 
@@ -2040,48 +2043,47 @@ passed `28 runs, 101 assertions, 0 failures, 0 errors, 0 skips` on the run-owned
 manifest. This current result supports the isolated period/trigger subconditions and confirms that
 the earlier concurrency implementation remains executable after the P12a staff-event changes.
 
-It does not establish the full Avatar transfer consumer cutover, Group semantics, writer
-quiescence, dump/restore acceptance or the P12b marker. Evidence is in
+It does not establish the full Avatar transfer consumer cutover, Group semantics, writer quiescence,
+dump/restore acceptance or the P12b marker. Evidence is in
 `evidence/2026-10-12-avatar-concurrency-current-Q2F6.md`.
 
 ### 16.22 Resume update — P3d proof-retirement schema assertion and Gate 2 (2026-10-12)
 
 Following Sections 5.3 and 14.2, the proof-retirement slice was rechecked before any new feature
-edit. `test/models/otp_failure_retention_test.rb` now asserts against the PostgreSQL schema that
-the six concrete Email/Telephone identifier tables no longer contain `otp_private_key`,
-`otp_counter` or `otp_expires_at`, and that the APP/COM source tables no longer contain
-`sign_up_otp_context` or `credential_registration_otp_context`. The focused collection of that
-contract with the two existing proof-database contracts passed `43 runs, 958 assertions, 0
-failures, 0 errors, 0 skips` on the run-owned four-worker manifest.
+edit. `test/models/otp_failure_retention_test.rb` now asserts against the PostgreSQL schema that the
+six concrete Email/Telephone identifier tables no longer contain `otp_private_key`, `otp_counter` or
+`otp_expires_at`, and that the APP/COM source tables no longer contain `sign_up_otp_context` or
+`credential_registration_otp_context`. The focused collection of that contract with the two existing
+proof-database contracts passed `43 runs, 958 assertions, 0 failures, 0 errors, 0 skips` on the
+run-owned four-worker manifest.
 
-The required current Gate 2 then passed against the same manifest: Rails completed `15149 runs,
-128291 assertions, 0 failures, 0 errors, 0 skips` in 338.524 seconds, and `bun run test` completed
-with `99 files, 1140 tests` in 12.91 seconds. All four worker receipts reported completed cleanup;
-a read-only PostgreSQL check found zero worker databases and zero active sessions afterward. The
-evidence is `evidence/2026-10-12-p3d-proof-retirement-gate-C6M4.md`.
+The required current Gate 2 then passed against the same manifest: Rails completed
+`15149 runs, 128291 assertions, 0 failures, 0 errors, 0 skips` in 338.524 seconds, and
+`bun run test` completed with `99 files, 1140 tests` in 12.91 seconds. All four worker receipts
+reported completed cleanup; a read-only PostgreSQL check found zero worker databases and zero active
+sessions afterward. The evidence is `evidence/2026-10-12-p3d-proof-retirement-gate-C6M4.md`.
 
 This re-establishes the shared-worktree Gate 2 after the schema assertion was added. It does not
 close the full CONTACT-4/5 route and legacy-proof inventory, the cross-database partial-failure
-campaign, D-11's complete committed-transaction/isolation matrix, P10b Group account semantics,
-P12b Avatar cutover/write barrier, the remaining P12a semantic inventory, host Alloy runtime
-verification or the privacy-retention decision. The realm plan remains unchecked for any item
-whose route-level or cross-database evidence is still missing; this schema assertion alone is not
-completion of P3d.
+campaign, D-11's complete committed-transaction/isolation matrix, P10b Group account semantics, P12b
+Avatar cutover/write barrier, the remaining P12a semantic inventory, host Alloy runtime verification
+or the privacy-retention decision. The realm plan remains unchecked for any item whose route-level
+or cross-database evidence is still missing; this schema assertion alone is not completion of P3d.
 
 ### 16.23 Resume update — P11a cross-database partial failure and retry (2026-10-12)
 
-After the current Gate 2 was re-established, the next independent P11a gap was exercised through
-the public `RetentionCrossDatabaseChildPurge` service. New tests inject a second-child database
-failure for Client, Visitor and Operator actors. In each case the first child deletion remains
-committed, the second child remains for retry, a retry removes only that child, and a further retry
-is a no-op. This verifies the accepted partial-failure model without pretending that separate
-PostgreSQL databases have a distributed transaction.
+After the current Gate 2 was re-established, the next independent P11a gap was exercised through the
+public `RetentionCrossDatabaseChildPurge` service. New tests inject a second-child database failure
+for Client, Visitor and Operator actors. In each case the first child deletion remains committed,
+the second child remains for retry, a retry removes only that child, and a further retry is a no-op.
+This verifies the accepted partial-failure model without pretending that separate PostgreSQL
+databases have a distributed transaction.
 
 The focused collection passed `10 runs, 33 assertions, 0 failures, 0 errors, 0 skips`; targeted
 RuboCop inspected both test files with no offenses. The required post-change Gate 2 passed with
-Rails `15152 runs, 128317 assertions, 0 failures, 0 errors, 0 skips` in 322.100 seconds and
-Vitest `99 files, 1140 tests` in 12.80 seconds. Three receipts initially lacked their completion
-field despite a read-only catalog showing no worker databases or active sessions; the existing
+Rails `15152 runs, 128317 assertions, 0 failures, 0 errors, 0 skips` in 322.100 seconds and Vitest
+`99 files, 1140 tests` in 12.80 seconds. Three receipts initially lacked their completion field
+despite a read-only catalog showing no worker databases or active sessions; the existing
 receipt-verified cleanup helper reconciled all four exact receipts to `cleanup_completed: true`.
 Evidence is `evidence/2026-10-12-cross-db-purge-failure-retry-P5H7.md`.
 
@@ -2094,33 +2096,31 @@ inventory, host Alloy runtime verification or privacy-retention policy.
 
 Following Sections 5.3 and 14.2, the remaining executable P3d edge was checked through the public
 Email and Telephone delivery adapters. The current runtime inventory contains no writer for the
-retired identifier-owned HOTP fields or APP/COM source proof contexts. `OtpTelephoneAdapter`
-rejects retired `sign_up_otp_counter` and `contact_otp_counter` keywords before SMS transport;
-`OtpEmailNotifierAdapter` rejects those keywords before invoking the notifier. Tests now assert
-both rejection paths and the absence of a transport/notifier side effect.
+retired identifier-owned HOTP fields or APP/COM source proof contexts. `OtpTelephoneAdapter` rejects
+retired `sign_up_otp_counter` and `contact_otp_counter` keywords before SMS transport;
+`OtpEmailNotifierAdapter` rejects those keywords before invoking the notifier. Tests now assert both
+rejection paths and the absence of a transport/notifier side effect.
 
 The focused adapter collection passed `19 runs, 73 assertions, 0 failures, 0 errors, 0 skips`.
-Targeted RuboCop passed for both adapters and the modified parallel-test cleanup helper. The
-cleanup helper now records an already-empty run-owned worker catalog as complete only after it
-confirms that no expected worker session remains; it does not issue a second destructive drop.
+Targeted RuboCop passed for both adapters and the modified parallel-test cleanup helper. The cleanup
+helper now records an already-empty run-owned worker catalog as complete only after it confirms that
+no expected worker session remains; it does not issue a second destructive drop.
 
 The required post-change Gate 2 passed against the same run-owned manifest with Rails
 `15154 runs, 128329 assertions, 0 failures, 0 errors, 0 skips` in 332.481 seconds and Vitest
 `99 files, 1140 tests` in 13.21 seconds. All four latest worker receipts were reconciled to
 `cleanup_completed: true`, and read-only catalog checks found zero worker databases and zero active
-sessions. Evidence is in
-[`J8R4`](evidence/2026-10-12-p3d-adapter-retirement-gate-J8R4.md).
+sessions. Evidence is in [`J8R4`](evidence/2026-10-12-p3d-adapter-retirement-gate-J8R4.md).
 
 This closes only the tested adapter rejection edge and cleanup evidence. It does not close the
-complete CONTACT-4/5 route, source/fixture/constraint inventory, full D-11 isolation matrix or
-the entire P3d schema-retirement acceptance; the realm plan remains unchecked for those gaps.
+complete CONTACT-4/5 route, source/fixture/constraint inventory, full D-11 isolation matrix or the
+entire P3d schema-retirement acceptance; the realm plan remains unchecked for those gaps.
 
 ### 16.25 Resume update — P12a legacy public-ID candidates classified and held (2026-10-12)
 
-The fresh run-owned `identifiers:inventory` report inspected 20 connections and 892 tables. Of
-the 52 unbounded `public_id` columns, the current `CAPACITY_TABLES` slice and explicit target
-migrations cover 50. The two remaining names are
-`app_zenith.legacy_replaced_clients.public_id` and
+The fresh run-owned `identifiers:inventory` report inspected 20 connections and 892 tables. Of the
+52 unbounded `public_id` columns, the current `CAPACITY_TABLES` slice and explicit target migrations
+cover 50. The two remaining names are `app_zenith.legacy_replaced_clients.public_id` and
 `org_zenith.legacy_operator_department_accounts.public_id`.
 
 Read-only source and schema review found no current application model/runtime consumer for either
@@ -2147,13 +2147,14 @@ forbidden-claim lists, parameter-filtering/legacy translation metadata, or publi
 that reject retired counters before invoking transport. Current `otp_expires_at` runtime uses are
 ceremony-owned fields.
 
-The public route/consumer collection passed `682 runs, 10952 assertions, 0 failures, 0 errors,
-0 skips` with four workers against the run-owned PostgreSQL manifest. This narrows the P3d gap to
-the explicit CONTACT-4/5 HTTP-family matrix and cross-database fault campaign; it does not claim
-that those remaining cases are complete, and it does not weaken the requirement for ceremony
-binding, purpose isolation, single-use consumption or transport receipt evidence. The source and
-test inventory is in [`K4L8`](evidence/2026-10-12-p3d-route-inventory-K4L8.md). No application or
-schema change was made by this inventory step.
+The public route/consumer collection passed
+`682 runs, 10952 assertions, 0 failures, 0 errors, 0 skips` with four workers against the run-owned
+PostgreSQL manifest. This narrows the P3d gap to the explicit CONTACT-4/5 HTTP-family matrix and
+cross-database fault campaign; it does not claim that those remaining cases are complete, and it
+does not weaken the requirement for ceremony binding, purpose isolation, single-use consumption or
+transport receipt evidence. The source and test inventory is in
+[`K4L8`](evidence/2026-10-12-p3d-route-inventory-K4L8.md). No application or schema change was made
+by this inventory step.
 
 ### 16.27 Resume update — P3d public authentication route matrix (2026-10-12)
 
@@ -2164,9 +2165,9 @@ paths, Email sign-in isolation, sign-up completion, Email verification, delayed 
 withdrawal reentry. This extends the preceding operation/adapter inventory without changing
 application or schema code.
 
-The focused collection passed `223 runs, 2525 assertions, 0 failures, 0 errors, 0 skips` in
-16.154 seconds with four workers. A read-only PostgreSQL follow-up reported zero run-owned worker
-databases and zero active sessions. Evidence is in
+The focused collection passed `223 runs, 2525 assertions, 0 failures, 0 errors, 0 skips` in 16.154
+seconds with four workers. A read-only PostgreSQL follow-up reported zero run-owned worker databases
+and zero active sessions. Evidence is in
 [`H2N6`](evidence/2026-10-12-p3d-public-route-matrix-H2N6.md).
 
 This is current public route evidence, not completion of every CONTACT-4/5 condition. Provider-
@@ -2180,20 +2181,20 @@ must re-establish Gate 2 before another feature slice.
 
 The next independently ready child after the P3d route check was P10a. Following the dependency
 graph, this recheck stayed within concrete Grant and permission behavior and did not attempt the
-held P10b Group account decision or the P12b cutover. The collection covered Enterprise Persona
-and Bureau Agent Grant issuance, ownership-generation binding, non-owner/member refusal,
-revocation, permission resolution, Group membership authorization, transfer reservation
-cardinality/replay and the app/org public registry-admission guards.
+held P10b Group account decision or the P12b cutover. The collection covered Enterprise Persona and
+Bureau Agent Grant issuance, ownership-generation binding, non-owner/member refusal, revocation,
+permission resolution, Group membership authorization, transfer reservation cardinality/replay and
+the app/org public registry-admission guards.
 
-The focused collection passed `81 runs, 355 assertions, 0 failures, 0 errors, 0 skips` in
-5.616 seconds with four workers. A read-only PostgreSQL follow-up reported zero run-owned worker
-databases and zero active sessions. Evidence is in
+The focused collection passed `81 runs, 355 assertions, 0 failures, 0 errors, 0 skips` in 5.616
+seconds with four workers. A read-only PostgreSQL follow-up reported zero run-owned worker databases
+and zero active sessions. Evidence is in
 [`R3V7`](evidence/2026-10-12-avatar-p10a-grant-recheck-R3V7.md).
 
-This recheck supports the independently executable P10a subconditions in the current dirty
-worktree. It does not close the full O1→O2→O1 transfer consequence, P10b Group account semantics,
-writer quiescence or the P12b marker. Registry tests remain implementation evidence until the
-explicit cutover boundary is verified; no new admission or schema change was made by this slice.
+This recheck supports the independently executable P10a subconditions in the current dirty worktree.
+It does not close the full O1→O2→O1 transfer consequence, P10b Group account semantics, writer
+quiescence or the P12b marker. Registry tests remain implementation evidence until the explicit
+cutover boundary is verified; no new admission or schema change was made by this slice.
 
 ### 16.29 Resume update — P3d Source/Ticket fault and retry check (2026-10-12)
 
@@ -2202,16 +2203,16 @@ integration was run for APP and COM with injected Ticket failures after Source c
 HTTP retries. The Step-Up settings integration was run for App, Com and Org to verify that a binding
 failure retains the original proof and that an identical retry is the receipt/recovery path.
 
-The focused collection passed `28 runs, 1236 assertions, 0 failures, 0 errors, 0 skips` in
-6.367 seconds with four workers. A read-only PostgreSQL follow-up reported zero run-owned worker
-databases and zero active sessions. Evidence is in
+The focused collection passed `28 runs, 1236 assertions, 0 failures, 0 errors, 0 skips` in 6.367
+seconds with four workers. A read-only PostgreSQL follow-up reported zero run-owned worker databases
+and zero active sessions. Evidence is in
 [`H5W2`](evidence/2026-10-12-p3d-source-ticket-fault-H5W2.md).
 
 This closes the exercised Email Source/Ticket and Step-Up retry subconditions in the current dirty
-worktree. It does not claim a distributed transaction or all provider/credential-family paths;
-the existing Telephone sign-up fault journey and any remaining CONTACT-4/5 applicability cells
-must still be reconciled before P3d is marked complete. No application or schema change was made
-by this verification slice.
+worktree. It does not claim a distributed transaction or all provider/credential-family paths; the
+existing Telephone sign-up fault journey and any remaining CONTACT-4/5 applicability cells must
+still be reconciled before P3d is marked complete. No application or schema change was made by this
+verification slice.
 
 ### 16.30 Resume update — P3d remaining Email integration edges (2026-10-12)
 
@@ -2221,8 +2222,8 @@ The remaining named Email integration edges in the current P3d inventory were ex
 fault collections without changing application or schema code.
 
 The focused collection passed `10 runs, 215 assertions, 0 failures, 0 errors, 0 skips` in 3.740
-seconds with four workers. A read-only PostgreSQL follow-up reported zero run-owned worker
-databases and zero active sessions. Evidence is in
+seconds with four workers. A read-only PostgreSQL follow-up reported zero run-owned worker databases
+and zero active sessions. Evidence is in
 [`J6Q4`](evidence/2026-10-12-p3d-integration-edges-J6Q4.md).
 
 The named Email integration edge set is now current evidence for this dirty worktree. P3d remains
@@ -2238,15 +2239,15 @@ The documentation inventory still contained six per-record OTP Mermaid axes that
 retired Source-HOTP `store_otp`/`clear_otp` lifecycle and referenced the removed `otp_lockable`
 concern. The current source was rechecked before editing: runtime `app/`, `lib/` and `config/`
 contain no identifier-owned HOTP proof writer, reader or lifecycle method. The six diagrams now
-describe the independent `EmailOtpPolicy`/`TelephoneOtpPolicy` failure and lock predicates,
-explicit Telephone issuance time, preserved failure state and separate ceremony-owned proof. The
+describe the independent `EmailOtpPolicy`/`TelephoneOtpPolicy` failure and lock predicates, explicit
+Telephone issuance time, preserved failure state and separate ceremony-owned proof. The
 state-axis/value-coverage sources and transition-inventory disposition now point to the existing
 policy/transaction/operation boundaries and label retained Source-HOTP rows as historical.
 
 `git diff --check` and `scripts/check-repository-knowledge` both passed. Evidence is in
 [`N7C4`](evidence/2026-10-12-p3d-mermaid-policy-reconciliation-N7C4.md). This is a documentation
-reconciliation only; it does not close the remaining P3d source/fixture/constraint inventory or
-the complete CONTACT-4/5 matrix, and it does not require a new full Gate 2.
+reconciliation only; it does not close the remaining P3d source/fixture/constraint inventory or the
+complete CONTACT-4/5 matrix, and it does not require a new full Gate 2.
 
 ### 16.32 Resume update — P3a independent policy disposition (2026-10-12)
 
@@ -2256,43 +2257,43 @@ MAX+1 failure boundaries, issuance/resend retention, expiry/cancellation retenti
 successful-consumption reset, Telephone issuance timestamps, retired identifier-proof absence and
 the absence of the superseded shared stateful policy.
 
-The run passed `33 runs, 458 assertions, 0 failures, 0 errors, 0 skips` in 2.706 seconds with
-four workers; the run-owned catalog and active-session counts were both zero afterward. Evidence
-is in [`G5L2`](evidence/2026-10-12-p3a-independent-policy-G5L2.md). The corresponding plan item is
-checked with that revision-scoped evidence. The ceremony-purpose/realm/concurrency matrix and
-remaining P3d schema/fixture/constraint inventory remain separate open criteria.
+The run passed `33 runs, 458 assertions, 0 failures, 0 errors, 0 skips` in 2.706 seconds with four
+workers; the run-owned catalog and active-session counts were both zero afterward. Evidence is in
+[`G5L2`](evidence/2026-10-12-p3a-independent-policy-G5L2.md). The corresponding plan item is checked
+with that revision-scoped evidence. The ceremony-purpose/realm/concurrency matrix and remaining P3d
+schema/fixture/constraint inventory remain separate open criteria.
 
 ### 16.33 Resume update — Group transition and contact retirement recheck (2026-10-12)
 
 Following Section 14.2, two independently executable checks were run against the same run-owned
-PostgreSQL fleet. The bounded Group transition collection passed `8 runs, 36 assertions, 0 failures,
-0 errors, 0 skips`. It covers direct-SQL protection of concrete Group history, legacy/concrete
-source selection around the cutover marker, dry-run/apply/replay behavior, matching-chain readiness,
-ownerless selection refusal, bounded selection and gap classification. It does not decide whether
-`account_surface`/`account_public_id` is identical to ownership, establish writer quiescence or
-perform the P12b marker/cutover. Evidence is in
+PostgreSQL fleet. The bounded Group transition collection passed
+`8 runs, 36 assertions, 0 failures, 0 errors, 0 skips`. It covers direct-SQL protection of concrete
+Group history, legacy/concrete source selection around the cutover marker, dry-run/apply/replay
+behavior, matching-chain readiness, ownerless selection refusal, bounded selection and gap
+classification. It does not decide whether `account_surface`/`account_public_id` is identical to
+ownership, establish writer quiescence or perform the P12b marker/cutover. Evidence is in
 [`G4H6`](evidence/2026-10-12-avatar-group-transition-G4H6.md).
 
-The six-model Client/Visitor/Operator Email/Telephone collection passed `126 runs, 405 assertions,
-0 failures, 0 errors, 0 skips`, covering current normalization, live status predicates, digest
-lookup, deletion/reuse and the available independent-connection race/rollback cases. CONTACT-6
-remains open for any missing realm/status/concurrency partitions. Evidence is in
-[`T6N4`](evidence/2026-10-12-p3e-live-uniqueness-T6N4.md).
+The six-model Client/Visitor/Operator Email/Telephone collection passed
+`126 runs, 405 assertions, 0 failures, 0 errors, 0 skips`, covering current normalization, live
+status predicates, digest lookup, deletion/reuse and the available independent-connection
+race/rollback cases. CONTACT-6 remains open for any missing realm/status/concurrency partitions.
+Evidence is in [`T6N4`](evidence/2026-10-12-p3e-live-uniqueness-T6N4.md).
 
 The P3d catalog recheck found zero retired identifier-owned proof columns in all six identifier
 tables, all corresponding retirement versions in their owning disposable databases, and zero
-constraint, non-internal trigger or public function definitions referencing those retired names.
-The schema portion of CONTACT-5 is current for this rehearsal; historical migration definitions,
+constraint, non-internal trigger or public function definitions referencing those retired names. The
+schema portion of CONTACT-5 is current for this rehearsal; historical migration definitions,
 intentional forbidden-key/redaction lists, stale test names and adapter rejection fixtures remain
-traceability material. The full P3d transport/source/fixture/constraint and purpose/realm/concurrency
-matrix remains open. Evidence is in
+traceability material. The full P3d transport/source/fixture/constraint and
+purpose/realm/concurrency matrix remains open. Evidence is in
 [`U4K6`](evidence/2026-10-12-p3d-schema-retirement-U4K6.md). The six model-test schema comments were
 also corrected to remove retired columns and show the explicit Telephone issuance timestamp; no
 runtime behavior or migration history was changed.
 
 These checks changed only documentation/evidence and test comments after the current full Gate 2;
-they do not require a new full Gate 2. Any subsequent application, test behavior or schema edit
-must re-establish Gate 2 before another feature slice.
+they do not require a new full Gate 2. Any subsequent application, test behavior or schema edit must
+re-establish Gate 2 before another feature slice.
 
 ### 16.34 Resume update — P3d ceremony delivery matrix (2026-10-12)
 
@@ -2300,14 +2301,13 @@ The next focused P3d check exercised the existing Email/Telephone ceremony model
 integration and delivery boundaries: expiry/deadline, purpose and binding checks, proof-shape and
 terminal database protections, registration issuer/verifier/resend paths, delivery guards, HTTP
 Telephone signup delivery and stale source-proof retry behavior. The selected collection passed
-`418 runs, 6843 assertions, 0 failures, 0 errors, 0 skips` in 8.318 seconds with four workers on
-the run-owned fleet. Evidence is in
-[`B7Q5`](evidence/2026-10-12-p3d-ceremony-matrix-B7Q5.md).
+`418 runs, 6843 assertions, 0 failures, 0 errors, 0 skips` in 8.318 seconds with four workers on the
+run-owned fleet. Evidence is in [`B7Q5`](evidence/2026-10-12-p3d-ceremony-matrix-B7Q5.md).
 
-This narrows the executable CONTACT-4/5 gap. It does not close every provider/credential cell,
-every realm/purpose concurrency case, the complete source/fixture/constraint inventory or the
-cross-database transport fault campaign. No application or schema source changed in this slice,
-so the already current full Gate 2 remains the latest shared-worktree gate; any later behavior or
+This narrows the executable CONTACT-4/5 gap. It does not close every provider/credential cell, every
+realm/purpose concurrency case, the complete source/fixture/constraint inventory or the
+cross-database transport fault campaign. No application or schema source changed in this slice, so
+the already current full Gate 2 remains the latest shared-worktree gate; any later behavior or
 schema edit must re-establish it before further feature work.
 
 ### 16.35 Resume update — P11a dead-history and retention matrix recheck (2026-10-12)
@@ -2315,9 +2315,9 @@ schema edit must re-establish it before further feature work.
 After rereading Sections 5.3, 16 and 14.2, the next independently executable P11a check was the
 current seven-file dead-identifier history and retention collection. It exercised the six concrete
 history contracts, identity-scoped fingerprint verification, ordinary destroy/purge boundaries,
-retention behavior, visibility invariants and the available independent-connection concurrent
-purge cases. The run passed `96 runs, 776 assertions, 0 failures, 0 errors, 0 skips` in 6.710
-seconds with four workers against the run-owned PostgreSQL fleet. Evidence is in
+retention behavior, visibility invariants and the available independent-connection concurrent purge
+cases. The run passed `96 runs, 776 assertions, 0 failures, 0 errors, 0 skips` in 6.710 seconds with
+four workers against the run-owned PostgreSQL fleet. Evidence is in
 [`V3M7`](evidence/2026-10-12-p11a-history-matrix-V3M7.md).
 
 This is current focused evidence for the P11a history boundary. It does not authorize real-data
@@ -2329,35 +2329,35 @@ re-establish Gate 2 before another feature slice.
 
 ### 16.36 Resume update — P11a integrated history and retention matrix (2026-10-12)
 
-The next P11a/P3e recheck combined the current six-model dead-history and purge collection with
-OTP failure retention, realm/channel HMAC rotation and maintenance isolation, and realm encryption
-rotation. It passed `110 runs, 1066 assertions, 0 failures, 0 errors, 0 skips` in 5.977 seconds
-with four workers against the run-owned PostgreSQL fleet. Evidence is in
+The next P11a/P3e recheck combined the current six-model dead-history and purge collection with OTP
+failure retention, realm/channel HMAC rotation and maintenance isolation, and realm encryption
+rotation. It passed `110 runs, 1066 assertions, 0 failures, 0 errors, 0 skips` in 5.977 seconds with
+four workers against the run-owned PostgreSQL fleet. Evidence is in
 [`X7Q4`](evidence/2026-10-12-p11a-integrated-matrix-X7Q4.md).
 
-This is current focused evidence for the executable history, cryptographic and retention paths.
-It does not authorize real-data purge or close every CONTACT-4/5 route, the complete
-source/fixture inventory, cross-database transport campaign, whole-owner/legal-retention partition
-or the full D-11 committed-transaction matrix. No application or schema source changed in this
-slice; the latest full Rails/Vitest Gate 2 remains current. Any later behavior or schema edit must
-re-establish Gate 2 before another feature slice.
+This is current focused evidence for the executable history, cryptographic and retention paths. It
+does not authorize real-data purge or close every CONTACT-4/5 route, the complete source/fixture
+inventory, cross-database transport campaign, whole-owner/legal-retention partition or the full D-11
+committed-transaction matrix. No application or schema source changed in this slice; the latest full
+Rails/Vitest Gate 2 remains current. Any later behavior or schema edit must re-establish Gate 2
+before another feature slice.
 
 ### 16.37 Resume update — P3d provider, MFA, checkpoint and session-limit matrix (2026-10-12)
 
 The next P3d public-boundary check exercised the existing App/Com/Org MFA and checkpoint
-controllers, session-limit paths, social ceremony and callback guards, OIDC callbacks and
-entrances, and Org Entra resolver/preflight/token guards. The focused collection passed `210 runs,
-1831 assertions, 0 failures, 0 errors, 0 skips` in 22.031 seconds with four workers against the
-run-owned PostgreSQL fleet. A read-only Rails catalog follow-up reported zero worker databases and
-zero active worker sessions. Evidence is in
+controllers, session-limit paths, social ceremony and callback guards, OIDC callbacks and entrances,
+and Org Entra resolver/preflight/token guards. The focused collection passed
+`210 runs, 1831 assertions, 0 failures, 0 errors, 0 skips` in 22.031 seconds with four workers
+against the run-owned PostgreSQL fleet. A read-only Rails catalog follow-up reported zero worker
+databases and zero active worker sessions. Evidence is in
 [`Y5R8`](evidence/2026-10-12-p3d-provider-mfa-matrix-Y5R8.md).
 
 This is current evidence for the selected provider/MFA/checkpoint/session-limit cells. It does not
 claim every provider or credential family applies to every surface, close the remaining P3d
 source/fixture/constraint and cross-database transport inventory, or verify live external providers
-or production infrastructure. No application or schema source changed in this slice; the latest
-full Rails/Vitest Gate 2 remains current. Any later behavior or schema edit must re-establish Gate
-2 before another feature slice.
+or production infrastructure. No application or schema source changed in this slice; the latest full
+Rails/Vitest Gate 2 remains current. Any later behavior or schema edit must re-establish Gate 2
+before another feature slice.
 
 ### 16.38 Resume update — P10a transfer and generation-bound Grant matrix (2026-10-12)
 
@@ -2378,51 +2378,50 @@ before another feature slice.
 
 ### 16.39 Resume update — P10a historical Grant non-reactivation (2026-10-12)
 
-Following Sections 5.3, 16 and 14.2, the next ready P10a subcondition was the explicit
-O1 → O2 → O1 Grant rule. A public-operation regression first failed because a stale in-memory
-ownership-period object was treated as current after its database row had been closed. The minimal
-fix makes `AvatarAccessGrantResolver` re-read the current period from the database before resolving
-a Grant. The same test then passed through the concrete registry, proved that the historical O1
-Grant was ineffective for the closed O1 period and the new O1 period, and proved that a newly
-authorized Grant was required.
+Following Sections 5.3, 16 and 14.2, the next ready P10a subcondition was the explicit O1 → O2 → O1
+Grant rule. A public-operation regression first failed because a stale in-memory ownership-period
+object was treated as current after its database row had been closed. The minimal fix makes
+`AvatarAccessGrantResolver` re-read the current period from the database before resolving a Grant.
+The same test then passed through the concrete registry, proved that the historical O1 Grant was
+ineffective for the closed O1 period and the new O1 period, and proved that a newly authorized Grant
+was required.
 
 The focused collection passed `33 runs, 172 assertions, 0 failures, 0 errors, 0 skips` in 3.148
-seconds. Evidence is in
-[`G5N2`](evidence/2026-10-12-avatar-p10a-generation-reuse-G5N2.md). Because this changed runtime
-behavior and a test, Gate 2 was re-established afterward: Rails passed `15155 runs, 128324
-assertions, 0 failures, 0 errors, 0 skips` in 351.294 seconds and Vitest passed `99 files,
-1140 tests` in 13.77 seconds. The run-owned catalog follow-up reported zero worker databases and
-zero active worker sessions.
+seconds. Evidence is in [`G5N2`](evidence/2026-10-12-avatar-p10a-generation-reuse-G5N2.md). Because
+this changed runtime behavior and a test, Gate 2 was re-established afterward: Rails passed
+`15155 runs, 128324 assertions, 0 failures, 0 errors, 0 skips` in 351.294 seconds and Vitest passed
+`99 files, 1140 tests` in 13.77 seconds. The run-owned catalog follow-up reported zero worker
+databases and zero active worker sessions.
 
-This closes the stale-period Grant non-reactivation subcondition only. It does not close the full
-O1 → O2 → O1/client-transition or failure-injection matrix, P10b Group account semantics, writer
+This closes the stale-period Grant non-reactivation subcondition only. It does not close the full O1
+→ O2 → O1/client-transition or failure-injection matrix, P10b Group account semantics, writer
 quiescence, operational backfill, the P12b marker/cutover, D-11's complete committed-transaction
-matrix, remaining P3d transport/source inventory, held P12a public-ID candidates, host Alloy
-runtime verification or the unresolved privacy-retention policy. No production/shared data was
-changed, and no local commit or remote synchronization was performed.
+matrix, remaining P3d transport/source inventory, held P12a public-ID candidates, host Alloy runtime
+verification or the unresolved privacy-retention policy. No production/shared data was changed, and
+no local commit or remote synchronization was performed.
 
 ### 16.40 Resume update — P3d OTP and authentication concurrency matrix (2026-10-12)
 
-After the behavior Gate 2, the next independent P3d subcondition was the real concurrent
-single-use and authentication-state boundary. The selected collection exercised independent
-connections for Email/Telephone ceremony consumption, Auth Email consumption, authentication
-session and revocation state, TOTP-window consumption, Telephone sign-up issuance and
-registration OTP verification. It passed `118 runs, 1653 assertions, 0 failures, 0 errors, 0
-skips` in 5.909 seconds with four workers. Evidence is in
-[`P6R2`](evidence/2026-10-12-p3d-otp-concurrency-matrix-P6R2.md). A read-only catalog follow-up
-reported zero run-owned worker databases and zero active worker sessions.
+After the behavior Gate 2, the next independent P3d subcondition was the real concurrent single-use
+and authentication-state boundary. The selected collection exercised independent connections for
+Email/Telephone ceremony consumption, Auth Email consumption, authentication session and revocation
+state, TOTP-window consumption, Telephone sign-up issuance and registration OTP verification. It
+passed `118 runs, 1653 assertions, 0 failures, 0 errors, 0 skips` in 5.909 seconds with four
+workers. Evidence is in [`P6R2`](evidence/2026-10-12-p3d-otp-concurrency-matrix-P6R2.md). A
+read-only catalog follow-up reported zero run-owned worker databases and zero active worker
+sessions.
 
 This narrows the concurrency evidence for the exercised P3d cells. It does not close every
-purpose/realm/provider applicability partition, the remaining source/fixture/constraint
-retirement inventory, or the cross-database transport fault campaign. No application or schema
-source changed in this slice, so the latest full Rails/Vitest Gate remains current; a subsequent
-behavior or schema edit must re-establish Gate 2.
+purpose/realm/provider applicability partition, the remaining source/fixture/constraint retirement
+inventory, or the cross-database transport fault campaign. No application or schema source changed
+in this slice, so the latest full Rails/Vitest Gate remains current; a subsequent behavior or schema
+edit must re-establish Gate 2.
 
 ### 16.41 Resume update — P3d retired proof reference inventory (2026-10-12)
 
-The remaining P3d source/fixture question was classified without changing runtime or schema code.
-A repository-wide search for the retired identifier-owned proof/context names enumerated 15 `app`,
-0 `lib`, 5 `config`, 61 `test` and 41 `db` paths. The current application paths are ceremony-owned
+The remaining P3d source/fixture question was classified without changing runtime or schema code. A
+repository-wide search for the retired identifier-owned proof/context names enumerated 15 `app`, 0
+`lib`, 5 `config`, 61 `test` and 41 `db` paths. The current application paths are ceremony-owned
 `otp_expires_at` reads, explicit rejection/forbidden-key/filter names, or the bounded ORG legacy
 reference inventory; no identifier-owned proof writer, reader or lifecycle helper was found. The
 current disposable catalog result in `U4K6` still reports no retired identifier columns or matching
@@ -2442,18 +2441,19 @@ resuming the next check. A first command without the required `PARALLEL_WORKERS`
 migrations was refused before tests; the corrected `db:test:prepare` completed successfully. The
 focused restart sample passed `35 runs, 188 assertions, 0 failures, 0 errors, 0 skips`.
 
-The current full Rails gate then passed `15155 runs, 128326 assertions, 0 failures, 0 errors, 0
-skips` in 334.240 seconds with four workers. `bun run test` passed `99 files` and `1140 tests` in
-13.09 seconds. The four newest worker receipts report `cleanup_completed: true`, and the manifest
-still contains twenty run-owned databases. The detailed command record is
-[`H8K4`](evidence/2026-10-12-resume-gate-H8K4.md).
+The current full Rails gate then passed
+`15155 runs, 128326 assertions, 0 failures, 0 errors, 0 skips` in 334.240 seconds with four workers.
+`bun run test` passed `99 files` and `1140 tests` in 13.09 seconds. The four newest worker receipts
+report `cleanup_completed: true`, and the manifest still contains twenty run-owned databases. The
+detailed command record is [`H8K4`](evidence/2026-10-12-resume-gate-H8K4.md).
 
-Gate 4 static checks also passed for `bun run check`, `bin/rubocop`, `bundle exec erb_lint
---lint-all`, Brakeman, repository knowledge and a local test Rails boot. `bin/bundler-audit` found
-no vulnerabilities. `bun audit` remains a separate dependency finding for the existing moderate
-`postcss-selector-parser@6.0.10` advisory; no upgrade was authorized or made. This current gate
-does not close D-11's complete committed-transaction matrix, P10b/P12b Group/cutover decisions,
-held legacy identifier candidates, host Alloy runtime remount or privacy-retention policy.
+Gate 4 static checks also passed for `bun run check`, `bin/rubocop`,
+`bundle exec erb_lint --lint-all`, Brakeman, repository knowledge and a local test Rails boot.
+`bin/bundler-audit` found no vulnerabilities. `bun audit` remains a separate dependency finding for
+the existing moderate `postcss-selector-parser@6.0.10` advisory; no upgrade was authorized or made.
+This current gate does not close D-11's complete committed-transaction matrix, P10b/P12b
+Group/cutover decisions, held legacy identifier candidates, host Alloy runtime remount or
+privacy-retention policy.
 
 ### 16.43 Resume update — test-preparation scope aligned locally (2026-10-12)
 
@@ -2464,29 +2464,28 @@ non-replica test databases that the current Rails configuration owns: `test_prim
 `test_chronicle_db`. The guarded run-owned `db:test:prepare` completed successfully before the
 focused and full suites recorded in [H8K4](evidence/2026-10-12-resume-gate-H8K4.md).
 
-The aligned configuration contract passed with `15 runs, 60 assertions, 0 failures, 0 errors,
-0 skips`. The post-change full Gate 2 then passed with Rails `15155 runs, 128346 assertions,
-0 failures, 0 errors, 0 skips` in 330.574606 seconds and Vitest `99 files, 1140 tests` in 12.94
-seconds.
+The aligned configuration contract passed with
+`15 runs, 60 assertions, 0 failures, 0 errors, 0 skips`. The post-change full Gate 2 then passed
+with Rails `15155 runs, 128346 assertions, 0 failures, 0 errors, 0 skips` in 330.574606 seconds and
+Vitest `99 files, 1140 tests` in 12.94 seconds.
 
-The initial gate process left one run-owned worker receipt incomplete at the tool wait boundary.
-The receipt's exact 20 database names and owner were rechecked read-only; the existing
-receipt-verified cleanup helper removed only those 20 worker-3 databases, set its completion field,
-and a final catalog query found zero worker databases for workers 0–3.
+The initial gate process left one run-owned worker receipt incomplete at the tool wait boundary. The
+receipt's exact 20 database names and owner were rechecked read-only; the existing receipt-verified
+cleanup helper removed only those 20 worker-3 databases, set its completion field, and a final
+catalog query found zero worker databases for workers 0–3.
 
-`ruby -c config/ci.rb` and `git diff --check` passed. GitHub's
-`.github/workflows/ci.yml` is mounted read-only in this container and still has the previous
-four-name literal; it was not bypassed or edited. A host-side workflow edit to the same six-name
-set remains required before that external job is aligned. No CI job was run, and no CI result is
-claimed. The exact local disposition is recorded in
-[`R6M4`](evidence/2026-10-12-test-preparation-scope-R6M4.md).
+`ruby -c config/ci.rb` and `git diff --check` passed. GitHub's `.github/workflows/ci.yml` is mounted
+read-only in this container and still has the previous four-name literal; it was not bypassed or
+edited. A host-side workflow edit to the same six-name set remains required before that external job
+is aligned. No CI job was run, and no CI result is claimed. The exact local disposition is recorded
+in [`R6M4`](evidence/2026-10-12-test-preparation-scope-R6M4.md).
 
 ### 16.44 Resume audit after the Section 5.3/16/14.2 restart check (2026-10-12)
 
-The restart procedure was applied again after rereading the Section 5.3 addition, all of Section
-16 and Section 14.2. The worktree remains on branch `feature` at
-`ccceabd05d2e3a8f923ce398046f99d026a5b78e` with 226 changed paths; no reset, clean, stash,
-worktree, push or shared-database operation was performed.
+The restart procedure was applied again after rereading the Section 5.3 addition, all of Section 16
+and Section 14.2. The worktree remains on branch `feature` at
+`ccceabd05d2e3a8f923ce398046f99d026a5b78e` with 226 changed paths; no reset, clean, stash, worktree,
+push or shared-database operation was performed.
 
 The local test-preparation repair is now part of the current source: `config/ci.rb` names all six
 non-replica test databases and its existing configuration contract is synchronized. The focused
@@ -2495,10 +2494,10 @@ verification passed Rails with `15155 runs, 128346 assertions, 0 failures, 0 err
 Vitest with `99 files, 1140 tests`; the run-owned worker catalog was empty after the verified
 cleanup helper completed. These results are current execution evidence, not acceptance completion.
 
-The implementation/source reconciliation found no additional independent production-code slice
-that can be changed safely in this shared tree without either guessing a domain decision or
-activating an operational cutover. The six contact schemas no longer contain identifier-owned
-HOTP/context columns; remaining matching source is ceremony-owned proof, explicit legacy-payload
+The implementation/source reconciliation found no additional independent production-code slice that
+can be changed safely in this shared tree without either guessing a domain decision or activating an
+operational cutover. The six contact schemas no longer contain identifier-owned HOTP/context
+columns; remaining matching source is ceremony-owned proof, explicit legacy-payload
 rejection/filtering, historical migration definitions or bounded inventory traceability. The
 concrete Group ownership source selector/backfill and Avatar cutover guard already exist, but the
 marker still requires an explicit Group inventory and verified writer quiescence. The two remaining
@@ -2524,18 +2523,19 @@ The old observation that `avatar_ownership_cutovers` lacked a primary key is no 
 `20261012130000_promote_avatar_ownership_cutover_key.rb` is present and the current structure dump
 contains its bigint primary-key constraint. No Hash, invalid or unready index was reported.
 
-The two reviewed unbounded legacy `public_id` tables remain the only capacity candidates outside
-the explicit P12a inventory. Their retained foreign keys and historical ownership/retention meaning
+The two reviewed unbounded legacy `public_id` tables remain the only capacity candidates outside the
+explicit P12a inventory. Their retained foreign keys and historical ownership/retention meaning
 still prevent a safe narrowing or removal without a separate reviewed decision. Current Group
 consumers and the owning specification also settle the D-2 meaning question: `account_surface` /
 `account_public_id` remain selected-account context and are not the concrete organization owner.
 This correction removes the stale marker-key and domain-meaning holds; it does not close data
-reconciliation, permanent-ID immutability or shared/production transition work. The catalog report and command are recorded in
-[`7P3M`](evidence/2026-10-12-current-identifier-catalog-7P3M.md).
+reconciliation, permanent-ID immutability or shared/production transition work. The catalog report
+and command are recorded in [`7P3M`](evidence/2026-10-12-current-identifier-catalog-7P3M.md).
 
-The current marker/barrier regression was also rerun against the same manifest and passed `5 runs,
-74 assertions, 0 failures, 0 errors, 0 skips`. This verifies the current local migration/model
-boundary only; it does not establish the operational writer-quiescence or shared-data cutover.
+The current marker/barrier regression was also rerun against the same manifest and passed
+`5 runs, 74 assertions, 0 failures, 0 errors, 0 skips`. This verifies the current local
+migration/model boundary only; it does not establish the operational writer-quiescence or
+shared-data cutover.
 
 ### 16.46 Resume update — Avatar draft provenance is already recorded (2026-10-12)
 
@@ -2551,27 +2551,27 @@ not authorize the separate operational P12b cutover or any historical-data delet
 The next read-only resume check inspected the two remaining unbounded legacy identifier candidates
 and the current development Avatar catalog. `legacy_replaced_clients.public_id` and
 `legacy_operator_department_accounts.public_id` both have zero rows in the development databases,
-but each table retains a unique B-tree index and several foreign-key/dependent-reference paths.
-The empty development result therefore does not authorize a capacity narrowing, rename or removal
-for retained data. The exact catalog facts and commands are in
+but each table retains a unique B-tree index and several foreign-key/dependent-reference paths. The
+empty development result therefore does not authorize a capacity narrowing, rename or removal for
+retained data. The exact catalog facts and commands are in
 [`H3K8`](evidence/2026-10-12-resume-legacy-catalog-H3K8.md).
 
 The development Avatar database contains the existing Avatar, Group, legacy-period and cutover
 tables with zero rows, but it does not yet contain `avatar_group_concrete_ownership_periods`. A
-model-count probe failed closed on that absent relation; a follow-up `to_regclass`/`count(*)`
-probe was read-only. No development/shared migration was run and no cutover marker was created.
-The concrete Group backfill and P12b writer-barrier operation remain prepared-only until a
-run-owned disposable rehearsal or an explicitly approved operational environment supplies the
-missing table, complete inventory and writer-quiescence evidence. This is an environment and
-operational boundary, not permission to add a fallback or to weaken the cutover guard.
+model-count probe failed closed on that absent relation; a follow-up `to_regclass`/`count(*)` probe
+was read-only. No development/shared migration was run and no cutover marker was created. The
+concrete Group backfill and P12b writer-barrier operation remain prepared-only until a run-owned
+disposable rehearsal or an explicitly approved operational environment supplies the missing table,
+complete inventory and writer-quiescence evidence. This is an environment and operational boundary,
+not permission to add a fallback or to weaken the cutover guard.
 
 ### 16.48 Resume update — HMAC role lifecycle boundary (2026-10-12)
 
 The HMAC role lifecycle was rechecked before any migration edit. The three maintenance migrations
 are already applied in the local development databases. Their forward path correctly validates
-restricted attributes, membership and foreign database dependencies before reusing an existing
-role, and the current catalog contains the expected twelve restricted roles. The exact role
-attributes, dependency scope and applied-version facts are in
+restricted attributes, membership and foreign database dependencies before reusing an existing role,
+and the current catalog contains the expected twelve restricted roles. The exact role attributes,
+dependency scope and applied-version facts are in
 [`J4N8`](evidence/2026-10-12-hmac-role-lifecycle-J4N8.md).
 
 The applied migration `down` methods still contain unconditional `DROP ROLE` statements. Because
@@ -2593,17 +2593,17 @@ the twenty non-replica writer databases derived from the current Rails test conf
 completed successfully without reset, drop, CI, Podman or shared-database operations. The exact
 scope and command are recorded in [`P7L4`](evidence/2026-10-12-resume-minitest-sample-P7L4.md).
 
-The focused public HMAC maintenance boundary then passed with `4 runs, 108 assertions, 0
-failures, 0 errors, 0 skips`. This confirms that the local test databases can be prepared and a
-representative service contract can run when the complete writer scope is supplied explicitly. It
-does not certify the full suite or acceptance completion. The inherited four-database container
-variable still needs the approved host/container configuration to be corrected or recreated before
-plain `bundle exec rails test` can be treated as self-preparing for future migrations. After the
-local twenty writer databases were prepared, the unqualified sample command also passed with `4
-runs, 108 assertions, 0 failures, 0 errors, 0 skips`; that result relies on the current DBs already
-being migrated. The local `config/ci.rb` source was
-also aligned to enumerate all twenty non-replica writers, and its focused static contract passed
-with `15 runs, 66 assertions, 0 failures, 0 errors, 0 skips`; no CI job was invoked.
+The focused public HMAC maintenance boundary then passed with
+`4 runs, 108 assertions, 0 failures, 0 errors, 0 skips`. This confirms that the local test databases
+can be prepared and a representative service contract can run when the complete writer scope is
+supplied explicitly. It does not certify the full suite or acceptance completion. The inherited
+four-database container variable still needs the approved host/container configuration to be
+corrected or recreated before plain `bundle exec rails test` can be treated as self-preparing for
+future migrations. After the local twenty writer databases were prepared, the unqualified sample
+command also passed with `4 runs, 108 assertions, 0 failures, 0 errors, 0 skips`; that result relies
+on the current DBs already being migrated. The local `config/ci.rb` source was also aligned to
+enumerate all twenty non-replica writers, and its focused static contract passed with
+`15 runs, 66 assertions, 0 failures, 0 errors, 0 skips`; no CI job was invoked.
 
 ### 16.50 Resume update — Gate 2 after writer-scope alignment (2026-10-12)
 
@@ -2611,38 +2611,38 @@ Because the test-preparation source changed, Gate 2 was rerun before considering
 implementation slice. The existing run-owned twenty-database manifest was used with four Rails
 workers. Rails passed with `15155 runs, 128338 assertions, 0 failures, 0 errors, 0 skips` in
 334.271947 seconds, and `bun run test` passed `99` files and `1140` tests in 12.86 seconds. The
-focused configuration contract remained green at `15 runs, 66 assertions, 0 failures, 0 errors,
-0 skips`. The commands and dirty-worktree conditions are recorded in
-[`U8Q2`](evidence/2026-10-12-resume-gate-after-scope-U8Q2.md).
+focused configuration contract remained green at
+`15 runs, 66 assertions, 0 failures, 0 errors, 0 skips`. The commands and dirty-worktree conditions
+are recorded in [`U8Q2`](evidence/2026-10-12-resume-gate-after-scope-U8Q2.md).
 
-This closes the local test-preparation regression for the current writer scope. It does not turn
-the stale inherited four-database container variable into a self-preparing environment, and it
-does not close P12b operational cutover, legacy identifier retention review, D-11 committed-
-transaction coverage, host Alloy remount, privacy retention, or the historical HMAC-role rollback
-hazard. This current twenty-writer result supersedes the six-database source wording in Sections
-16.43 and 16.44; those sections remain historical records of the earlier repair state.
+This closes the local test-preparation regression for the current writer scope. It does not turn the
+stale inherited four-database container variable into a self-preparing environment, and it does not
+close P12b operational cutover, legacy identifier retention review, D-11 committed- transaction
+coverage, host Alloy remount, privacy retention, or the historical HMAC-role rollback hazard. This
+current twenty-writer result supersedes the six-database source wording in Sections 16.43 and 16.44;
+those sections remain historical records of the earlier repair state.
 
 ### 16.51 Resume update — preparation scope now fails closed (2026-10-12)
 
 The next safe slice after the Section 5.3/16/14.2 restart check closed the remaining local
 preparation loophole. `DatabaseSafety.verify_catalog!` now publishes the effective non-replica
-writer set separately from the full test configuration set, and `prepare_database_names!` rejects
-an environment scope that omits any verified writer. Replica configurations remain excluded from
-the migration target by their actual Rails configuration rather than by requiring replica names in
-the migration variable.
+writer set separately from the full test configuration set, and `prepare_database_names!` rejects an
+environment scope that omits any verified writer. Replica configurations remain excluded from the
+migration target by their actual Rails configuration rather than by requiring replica names in the
+migration variable.
 
 The TDD Red case showed that the former implementation accepted the single-name subset
-`test_primary_db`. The Green focused collection passed `28 runs, 137 assertions, 0 failures, 0
-errors, 0 skips`. Re-running the old four-name environment caused `db:test:prepare` to fail before
-the migration loop and list the missing writers, so it cannot accumulate pending migrations while
-appearing prepared.
+`test_primary_db`. The Green focused collection passed
+`28 runs, 137 assertions, 0 failures, 0 errors, 0 skips`. Re-running the old four-name environment
+caused `db:test:prepare` to fail before the migration loop and list the missing writers, so it
+cannot accumulate pending migrations while appearing prepared.
 
 After the implementation, the required current Gate 2 was re-established against the run-owned
-twenty-database manifest with four workers: Rails passed `15155 runs, 128349 assertions, 0
-failures, 0 errors, 0 skips` in 346.959799 seconds, and Vitest passed `99` files / `1140` tests
-in 12.98 seconds. RuboCop, Ruby syntax checks, `git diff --check` and the repository knowledge
-checker also passed. Detailed commands and the dirty-worktree scope are recorded in
-[`M7Q2`](evidence/2026-10-12-test-preparation-fail-fast-M7Q2.md).
+twenty-database manifest with four workers: Rails passed
+`15155 runs, 128349 assertions, 0 failures, 0 errors, 0 skips` in 346.959799 seconds, and Vitest
+passed `99` files / `1140` tests in 12.98 seconds. RuboCop, Ruby syntax checks, `git diff --check`
+and the repository knowledge checker also passed. Detailed commands and the dirty-worktree scope are
+recorded in [`M7Q2`](evidence/2026-10-12-test-preparation-fail-fast-M7Q2.md).
 
 A read-only catalog check after Rails reported zero run-owned worker databases and zero active
 worker sessions; the twenty run-owned parent databases were preserved.
@@ -2659,8 +2659,8 @@ by this entry.
 After the preparation-scope slice and its Gate 2, the repository-wide static checks were rerun
 against the same dirty worktree. `bin/rubocop` inspected 5,381 files with no offenses,
 `bundle exec erb_lint --lint-all` linted 4,391 files with no errors, `bin/brakeman` reported zero
-errors and zero security warnings, and `bin/bundler-audit` reported no vulnerabilities. The
-commands and exact scope are included in [`M7Q2`](evidence/2026-10-12-test-preparation-fail-fast-M7Q2.md).
+errors and zero security warnings, and `bin/bundler-audit` reported no vulnerabilities. The commands
+and exact scope are included in [`M7Q2`](evidence/2026-10-12-test-preparation-fail-fast-M7Q2.md).
 
 These checks strengthen current code quality evidence but do not close the remaining operational
 cutover, privacy-retention, host-runtime, isolated committed-transaction, legacy identifier or
@@ -2672,18 +2672,18 @@ independent acceptance decision.
 After rereading Sections 5.3, 16 and 14.2, the next safe P1 observability slice was a concrete
 secondary-control gap. The ActionMailer instrumentation already uses the installed 0.8.1 formal
 allowlist transform and `email_address: :omit`; however, the in-process `ObservabilitySpanScrubber`
-did not classify an accidentally emitted `email.subject` or `args` span attribute as sensitive.
-The Red test reproduced that leak shape, and the smallest Green change now removes every `email.*`
-attribute except the explicitly permitted `email.x_mailer`, plus `args` at any span-key depth.
-The Rails ActionMailer logger policy, delivery semantics, Noticed/interceptor behavior and Alloy
+did not classify an accidentally emitted `email.subject` or `args` span attribute as sensitive. The
+Red test reproduced that leak shape, and the smallest Green change now removes every `email.*`
+attribute except the explicitly permitted `email.x_mailer`, plus `args` at any span-key depth. The
+Rails ActionMailer logger policy, delivery semantics, Noticed/interceptor behavior and Alloy
 secondary processor were not changed.
 
 The focused collection passed `13 runs, 50 assertions, 0 failures, 0 errors, 0 skips`; the exact
 Red/Green and source diff are recorded in
 [`M2H7`](evidence/2026-10-12-observability-span-scrubber-M2H7.md). The shared-worktree Gate 2 was
 then re-established with Rails `15156 runs, 128351 assertions, 0 failures, 0 errors, 0 skips` in
-335.967952 seconds and Vitest `99 files, 1140 tests` in 12.96 seconds. RuboCop, ERB lint,
-Brakeman, bundler-audit, repository knowledge and `git diff --check` also passed.
+335.967952 seconds and Vitest `99 files, 1140 tests` in 12.96 seconds. RuboCop, ERB lint, Brakeman,
+bundler-audit, repository knowledge and `git diff --check` also passed.
 
 This closes only the in-process ActionMailer span-scrubber regression boundary. It does not claim
 the host-managed Alloy read-only mount or processor runtime was exercised, and it does not close
@@ -2693,12 +2693,12 @@ destructive operation was used, and no acceptance condition is marked complete b
 
 ### 16.54 Resume recheck after the required 14.2 procedure (2026-10-12)
 
-The resume order was applied again: Section 5.3 including its appended decision, all of Section
-16, and then Section 14.2. The current tree remains on `feature` at
+The resume order was applied again: Section 5.3 including its appended decision, all of Section 16,
+and then Section 14.2. The current tree remains on `feature` at
 `ccceabd05d2e3a8f923ce398046f99d026a5b78e` with the pre-existing dirty work preserved. The exact
-status split at capture was 240 status paths, with 0 staged, 129 unstaged tracked and 111
-untracked paths. No reset, clean, stash, worktree, push, CI, Podman, production or shared
-destructive operation was used.
+status split at capture was 240 status paths, with 0 staged, 129 unstaged tracked and 111 untracked
+paths. No reset, clean, stash, worktree, push, CI, Podman, production or shared destructive
+operation was used.
 
 The last implementation slice was rechecked through its public focused tests against the complete
 run-owned disposable writer scope: `13 runs, 50 assertions, 0 failures, 0 errors, 0 skips`. A
@@ -2706,16 +2706,37 @@ read-only post-run catalog check reported zero run-owned worker databases and ze
 sessions. The first cleanup probe without `PARALLEL_WORKERS` failed closed during application
 initialization and made no database change; rerunning it with the manifest's four-worker scope
 passed. The existing P10b Group inventory/backfill preparation tests were also rerun with
-`5 runs, 22 assertions, 0 failures, 0 errors, 0 skips`; they do not establish a cutover marker.
-The exact commands and scope are in [`Q8V4`](evidence/2026-10-12-resume-check-Q8V4.md).
+`5 runs, 22 assertions, 0 failures, 0 errors, 0 skips`; they do not establish a cutover marker. The
+exact commands and scope are in [`Q8V4`](evidence/2026-10-12-resume-check-Q8V4.md).
 
 `git diff --check`, the changed Ruby syntax check and the repository knowledge checker passed. The
-latest full Gate 2 remains the current result in [`M2H7`](evidence/2026-10-12-observability-span-scrubber-M2H7.md): Rails `15156 runs, 128351 assertions, 0 failures, 0 errors,
-0 skips` and Vitest `99 files, 1140 tests`, with the recorded static checks green.
+latest full Gate 2 remains the current result in
+[`M2H7`](evidence/2026-10-12-observability-span-scrubber-M2H7.md): Rails
+`15156 runs, 128351 assertions, 0 failures, 0 errors, 0 skips` and Vitest `99 files, 1140 tests`,
+with the recorded static checks green.
 
-This recheck does not convert evidence into acceptance. No further reversible production-code
-slice was selected because the remaining work requires an existing boundary: P10b/P12b Group
-semantics and operational cutover, the two retained legacy identifier tables, the complete D-11
+This recheck does not convert evidence into acceptance. No further reversible production-code slice
+was selected because the remaining work requires an existing boundary: P10b/P12b Group semantics and
+operational cutover, the two retained legacy identifier tables, the complete D-11
 committed-transaction/isolation matrix, host Alloy remount/runtime verification, privacy-retention
 policy, or the historical HMAC-role rollback path. The acceptance-test work excluded by the user
 remains unclaimed.
+
+### 16.55 Resume update — explicit safe ActionMailer attribute guard (2026-10-12)
+
+The in-process scrubber slice received one additional regression guard for the existing OTel
+allowlist: `email.x_mailer` remains observable while all other `email.*` attributes and `args`
+remain redacted. The focused collection then passed
+`14 runs, 51 assertions, 0 failures, 0 errors, 0 skips`.
+
+Because a test file changed, Gate 2 was rerun against the same complete run-owned writer manifest.
+Rails passed with `15157 runs, 128352 assertions, 0 failures, 0 errors, 0 skips` in 337.407710
+seconds, and Vitest passed with `99` files and `1140` tests in 12.87 seconds. No new regression was
+observed. No CI, Podman, production or shared destructive operation was used. The current command
+record is in [`Q8V4`](evidence/2026-10-12-resume-check-Q8V4.md). During the Rails run an external
+local `[CHECKPOINT] .` commit advanced HEAD from `ccceabd05d2e3a8f923ce398046f99d026a5b78e` to
+`0823fde7ee93e5ca54a05a4b4102382db3c683f2`; it was preserved and not rewritten by this work.
+
+This remains a local implementation/regression result. It does not close host Alloy runtime
+verification, P10b/P12b cutover, D-11 isolation, held legacy identifier semantics, privacy-retention
+policy or the user-excluded independent acceptance work.
