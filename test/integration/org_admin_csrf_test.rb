@@ -6,11 +6,11 @@ require "test_helper"
 # Browser-condition CSRF for the org administrative mutations. The requests are authenticated by the
 # access cookie alone (no bearer header), synthetic verified evidence is finalized through
 # the public Base committer, and forgery protection is on. This isolates mutation CSRF; the
-# administrative ceremony integration test exercises the HTTP completion and real signatures. The expected results
-# follow the org surface's
-# `protect_from_forgery using: :header_or_legacy_token` contract in Rails:
+# administrative ceremony integration test exercises the HTTP completion and real signatures. The
+# expected results follow Rails' `:header_or_legacy_token` Origin and Fetch Metadata checks plus the
+# Base/Auth legacy-token requirement on every unsafe request:
 #
-# - `Sec-Fetch-Site: same-origin` or `same-site` is accepted without a token;
+# - `Sec-Fetch-Site: same-origin` or `same-site` still requires a valid authenticity token;
 # - `cross-site` is accepted only from a trusted origin (none is trusted for these endpoints);
 # - a missing `Sec-Fetch-Site` falls back to the authenticity token;
 # - an `Origin` header that differs from the request's own origin is rejected;
@@ -202,7 +202,7 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
           assert_response :unprocessable_content
         end
 
-        assert_difference(count, 1, "#{name}: same-origin without a token is accepted") do
+        assert_no_difference(count, "#{name}: same-origin without a token is refused") do
           post(
             url.call, params: params.call,
                       headers: @session_headers.merge(
@@ -210,6 +210,8 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
                         "Referer" => "https://attacker.example/",
                       ),
           )
+
+          assert_response :unprocessable_content
         end
       ensure
         ActionController::Base.allow_forgery_protection = original

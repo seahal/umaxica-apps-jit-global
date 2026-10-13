@@ -75,9 +75,20 @@ module Base
       before_action :set_current_observability
       prepend_around_action :with_actor_lifecycle
 
-      protect_from_forgery using: :header_or_legacy_token, with: :exception
+      # Rails validates Origin and Fetch Metadata first; require its session-bound token before surface callbacks.
+      prepend_before_action :require_authenticity_token_for_unsafe_request!
+      protect_from_forgery using: :header_or_legacy_token, with: :exception, prepend: true
 
       private
+
+      def require_authenticity_token_for_unsafe_request!
+        return unless protect_against_forgery?
+        return if request.get? || request.head? || verified_query_request?
+        return if any_authenticity_token_valid?
+
+        instrument_unverified_request
+        handle_unverified_request
+      end
 
       def sign_in_url_with_pt(_return_to)
         base_org_sign_show_path(ri: RequestContextContract.normalize_region(params[:ri]))

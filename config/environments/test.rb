@@ -32,6 +32,10 @@ Rails.application.configure do
   # While tests run files are not watched, reloading is not necessary.
   config.enable_reloading = false
 
+  # Eager-load Rake task environments in CI, matching Rails' generated test configuration.
+  ci = ENV["CI"]
+  config.rake_eager_load = ci.nil? ? false : ci.present?
+
   # Eager loading loads your entire application before parallel workers fork.
   # Process-based parallelize relies on this so each worker inherits the loaded
   # constant table via copy-on-write instead of repeating cold autoload after fork.

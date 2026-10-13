@@ -4330,7 +4330,12 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
             end
             browser_headers.merge(fx48_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
           end.merge("Sec-Fetch-Site" => "same-origin")
-      post base_app_oidc_logout_url(host: @host), headers: begin
+      follow_redirect! if response.redirect?
+
+      assert_response :success
+      csrf_token = response.parsed_body.at_css("meta[name='csrf-token']")&.[]("content")
+      assert_withheld("logout confirmation must include a CSRF token") { csrf_token.present? }
+      post base_app_oidc_logout_url(host: @host), params: { authenticity_token: csrf_token }, headers: begin
         fx49_harness =
           begin
             f49_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)

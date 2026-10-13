@@ -5,7 +5,9 @@ require "test_helper"
 class AuthAdmissionCsrfTransportTest < ActionDispatch::IntegrationTest
   %w(app com org).each do |surface|
     [
-      ["same-origin header without a token", "same-origin", :absent, :local, 303],
+      ["same-origin header with a valid token", "same-origin", :valid, :local, 303],
+      ["same-origin header without a token", "same-origin", :absent, :local, 422],
+      ["same-origin header with an invalid token", "same-origin", :malformed, :local, 422],
       ["same-site header with a local Origin", "same-site", :valid, :local, 303],
       ["cross-site header despite a valid token", "cross-site", :valid, :local, 422],
       ["missing header with a valid form token", nil, :valid, :local, 303],

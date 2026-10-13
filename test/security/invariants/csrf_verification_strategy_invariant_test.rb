@@ -23,6 +23,17 @@ module Security
       self.fixture_table_names = []
 
       EXPECTED_STRATEGY = :header_or_legacy_token
+      TOKEN_REQUIRED_ROOTS = %w(
+        app/controllers/base/app/application_controller.rb
+        app/controllers/base/com/application_controller.rb
+        app/controllers/base/org/application_controller.rb
+        app/controllers/base/app/authority_controller.rb
+        app/controllers/base/com/authority_controller.rb
+        app/controllers/base/org/authority_controller.rb
+        app/controllers/auth/app/application_controller.rb
+        app/controllers/auth/com/application_controller.rb
+        app/controllers/auth/org/application_controller.rb
+      ).freeze
 
       test "every protect_from_forgery declaration states its verification strategy" do
         missing =
@@ -59,6 +70,19 @@ module Security
                      ApplicationController.forgery_protection_verification_strategy
         assert_equal ActionController::RequestForgeryProtection::ProtectionMethods::Exception,
                      ApplicationController.forgery_protection_strategy
+      end
+
+      test "Base and Auth stateful roots require Rails tokens before surface callbacks" do
+        missing =
+          TOKEN_REQUIRED_ROOTS.filter_map do |relative|
+            source = Rails.root.join(relative).read
+            next if source.include?("prepend_before_action :require_authenticity_token_for_unsafe_request!") &&
+              source.include?("protect_from_forgery using: :header_or_legacy_token, with: :exception, prepend: true")
+
+            relative
+          end
+
+        assert_empty missing, "Base/Auth roots must enforce the Rails token check before surface callbacks: #{missing}"
       end
 
       private

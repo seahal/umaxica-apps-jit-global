@@ -74,7 +74,7 @@ Rails.application.configure do
   # Prevent health checks from clogging up the logs.
   config.silence_healthcheck_path = "/health"
 
-  # Report deprecations via Sentry (do not silence them)
+  # Keep deprecations observable through the bounded Rails application-log subscriber.
   config.active_support.report_deprecations = true
   config.active_support.deprecation = :notify
 

@@ -125,10 +125,11 @@ target, a different Step-Up scope, and an Emergency session all fail to satisfy 
 made for these operations.
 
 **CSRF.** The org surface uses Rails `protect_from_forgery using: :header_or_legacy_token` with the
-staff host as the only trusted origin. For cookie-authenticated requests, `Sec-Fetch-Site:
-same-origin` (or `same-site`) is accepted without a token, `cross-site` from an untrusted origin is
-rejected, a request without Fetch Metadata needs a valid authenticity token, an `Origin` differing
-from the request's origin is rejected, and `Referer` is not consulted. JSON bodies get no exemption.
+staff host as the only trusted origin. Rails validates Origin and Fetch Metadata first; the Base/Auth
+controller boundary then requires a valid Rails authenticity token for every unsafe request,
+including `same-origin` and `same-site` requests. `cross-site` from an untrusted origin is rejected,
+a request without Fetch Metadata needs a valid authenticity token, an `Origin` differing from the
+request's origin is rejected, and `Referer` is not consulted. JSON bodies get no exemption.
 `test/integration/org_admin_csrf_test.rb` checks this for the Support, IAM, and Enforcement
 mutations.
 

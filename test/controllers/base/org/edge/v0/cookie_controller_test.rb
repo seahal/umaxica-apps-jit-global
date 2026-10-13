@@ -41,10 +41,12 @@ class Base::Org::Edge::V0::CookieControllerTest < ActionDispatch::IntegrationTes
     cookies[PreferenceCookieName.access] = token
 
     with_preference_jwt_keys(host: @host) do
-      patch base_org_edge_v0_cookie_path,
-            params: { consented: true },
-            headers: json_headers(with_csrf: true),
-            as: :json
+      with_forgery_protection do
+        patch base_org_edge_v0_cookie_path,
+              params: { consented: true },
+              headers: json_headers(with_csrf: true),
+              as: :json
+      end
     end
 
     assert_response :ok
@@ -54,13 +56,14 @@ class Base::Org::Edge::V0::CookieControllerTest < ActionDispatch::IntegrationTes
 
   test "PATCH update without CSRF token returns 403" do
     with_forgery_protection do
-      # Sec-Fetch-Site is what a token-less request is judged on first: a same-origin
-      # request needs no token by design, so the missing token only decides the outcome
-      # for a request that another site made.
-      patch base_org_edge_v0_cookie_path,
-            params: { consented: true },
-            headers: json_headers(with_csrf: false).merge("Sec-Fetch-Site" => "cross-site"),
-            as: :json
+      # Base requires a Rails authenticity token even for same-origin requests; this request
+      # also carries cross-site metadata and must be rejected before preference state changes.
+      assert_no_difference -> { OrgPreference.count } do
+        patch base_org_edge_v0_cookie_path,
+              params: { consented: true },
+              headers: json_headers(with_csrf: false).merge("Sec-Fetch-Site" => "same-origin"),
+              as: :json
+      end
     end
 
     assert_response :forbidden
@@ -78,7 +81,13 @@ class Base::Org::Edge::V0::CookieControllerTest < ActionDispatch::IntegrationTes
   end
 
   def csrf_token
-    @csrf_token ||= "test_csrf_token"
+    @csrf_token ||=
+      begin
+        get(base_org_root_path(ri: "jp"))
+        response.parsed_body.at_css("meta[name='csrf-token']")&.[]("content").tap do |token|
+          raise KeyError, "Base org page did not provide a CSRF token" if token.blank?
+        end
+      end
   end
 
   def with_forgery_protection

@@ -73,8 +73,8 @@ class AuthPublicControllerTest < ActionDispatch::IntegrationTest
     end
     host!(ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost").delete_suffix("/"))
     with_forgery_protection do
-      # Sec-Fetch-Site decides first: a same-origin request needs no token, so the missing
-      # token only rejects a request another site made.
+      # This local test controller inherits the Auth bare boundary and exercises a cross-site
+      # tokenless request. Ordinary Auth application roots additionally require a legacy token.
       post("/test_csrf", params: { ri: "jp" }, headers: { "Sec-Fetch-Site" => "cross-site" })
     end
 

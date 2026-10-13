@@ -145,8 +145,8 @@ class CspViolationReportsControllerTest < ActionDispatch::IntegrationTest
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
 
     with_forgery_protection do
-      # Sec-Fetch-Site decides first: a same-origin request needs no token, so the
-      # missing token only rejects a request another site made.
+      # This is explicitly a cross-site request without a token; Base also requires a token
+      # for same-origin state changes.
       post base_app_sign_out_url(ri: "jp"), headers: { "Sec-Fetch-Site" => "cross-site" }
     end
 

@@ -11,6 +11,7 @@ class SocialCompletionCrossHostCsrfTest < ActionDispatch::IntegrationTest
     ActionController::Base.allow_forgery_protection = true
     @base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     @auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    host! @base_host
     @result_ref = SecureRandom.uuid
   end
 
@@ -19,8 +20,7 @@ class SocialCompletionCrossHostCsrfTest < ActionDispatch::IntegrationTest
   end
 
   test "result handoff starts with a receiver-local GET form" do
-    get base_app_social_authentication_completion_path(id: "google", result_ref: @result_ref, ri: "jp"),
-        headers: { "Host" => @base_host }
+    get base_app_social_authentication_completion_path(id: "google", result_ref: @result_ref, ri: "jp")
 
     assert_response :success
     assert_select "form" do
@@ -30,8 +30,7 @@ class SocialCompletionCrossHostCsrfTest < ActionDispatch::IntegrationTest
   end
 
   test "a cross-host POST is rejected by standard Rails CSRF protection" do
-    get base_app_social_authentication_completion_path(id: "google", result_ref: @result_ref, ri: "jp"),
-        headers: { "Host" => @base_host }
+    get base_app_social_authentication_completion_path(id: "google", result_ref: @result_ref, ri: "jp")
 
     assert_response :success
     token = response.parsed_body.at_css("input[name='authenticity_token']")["value"]
@@ -49,8 +48,7 @@ class SocialCompletionCrossHostCsrfTest < ActionDispatch::IntegrationTest
   end
 
   test "a receiver-local CSRF-protected POST reaches result validation" do
-    get base_app_social_authentication_completion_path(id: "google", result_ref: @result_ref, ri: "jp"),
-        headers: { "Host" => @base_host }
+    get base_app_social_authentication_completion_path(id: "google", result_ref: @result_ref, ri: "jp")
 
     assert_response :success
     token = response.parsed_body.at_css("input[name='authenticity_token']")["value"]
@@ -69,8 +67,7 @@ class SocialCompletionCrossHostCsrfTest < ActionDispatch::IntegrationTest
   end
 
   test "a null Origin cannot substitute for the receiver-local CSRF check" do
-    get base_app_social_authentication_completion_path(id: "google", result_ref: @result_ref, ri: "jp"),
-        headers: { "Host" => @base_host }
+    get base_app_social_authentication_completion_path(id: "google", result_ref: @result_ref, ri: "jp")
 
     assert_response :success
     token = response.parsed_body.at_css("input[name='authenticity_token']")["value"]

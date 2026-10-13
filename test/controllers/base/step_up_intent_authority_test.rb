@@ -1623,8 +1623,8 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     result = BaseAuthAdmissionCoordinator.issue_result!(transaction:, ceremony_session_ref: ceremony.id.to_s)
 
     with_forgery_protection do
-      # Sec-Fetch-Site decides first: a same-origin request needs no token, so the
-      # missing token only rejects a request another site made.
+      # The request is explicitly cross-site and has no CSRF token; refuse it before consuming
+      # the Step-Up result.
       post base_app_verification_completion_url(ri: "jp", host: host),
            params: { transaction_ref: transaction.transaction_id, result_ref: result.reference },
            headers: begin

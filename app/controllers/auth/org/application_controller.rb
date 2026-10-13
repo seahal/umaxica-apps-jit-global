@@ -39,7 +39,9 @@ module Auth
 
       allow_browser versions: :modern
 
-      protect_from_forgery using: :header_or_legacy_token, with: :exception
+      # Rails validates Origin and Fetch Metadata first; require its session-bound token before surface callbacks.
+      prepend_before_action :require_authenticity_token_for_unsafe_request!
+      protect_from_forgery using: :header_or_legacy_token, with: :exception, prepend: true
 
       authorize :user, through: :current_policy_user
       authorize :actor, through: :current_actor
@@ -95,6 +97,15 @@ module Auth
       end
 
       private
+
+      def require_authenticity_token_for_unsafe_request!
+        return unless protect_against_forgery?
+        return if request.get? || request.head? || verified_query_request?
+        return if any_authenticity_token_valid?
+
+        instrument_unverified_request
+        handle_unverified_request
+      end
 
       def sign_in_phase_binding_surface = "org"
 

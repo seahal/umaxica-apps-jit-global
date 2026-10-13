@@ -17,7 +17,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
                                               }, as: :json,
     )
 
-    assert_response :unprocessable_content
+    assert_response :forbidden
 
     patch(
       base_app_api_v0_preferences_cookie_path, params: { consented: true },
@@ -27,7 +27,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
                                                }, as: :json,
     )
 
-    assert_response :unprocessable_content
+    assert_response :forbidden
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -49,7 +49,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
                                               }, as: :json,
     )
 
-    assert_response :unprocessable_content
+    assert_response :forbidden
 
     patch(
       base_com_api_v0_preferences_cookie_path, params: { consented: true },
@@ -59,7 +59,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
                                                }, as: :json,
     )
 
-    assert_response :unprocessable_content
+    assert_response :forbidden
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -81,7 +81,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
                                               }, as: :json,
     )
 
-    assert_response :unprocessable_content
+    assert_response :forbidden
 
     patch(
       base_org_api_v0_preferences_cookie_path, params: { consented: true },
@@ -91,7 +91,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
                                                }, as: :json,
     )
 
-    assert_response :unprocessable_content
+    assert_response :forbidden
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -100,24 +100,30 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       Rails.configuration.action_controller.allow_forgery_protection
   end
 
-  test "same-origin strict-mode POST reaches app controller without a CSRF rejection" do
+  test "same-origin preference mutations require valid tokens across Base surfaces" do
     ActionController::Base.allow_forgery_protection = true
 
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    host!(host)
+    endpoints = [
+      [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), base_app_api_v0_preferences_theme_path],
+      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), base_com_api_v0_preferences_theme_path],
+      [ENV.fetch("PUBLIC_BASE_STAFF_URL"), base_org_api_v0_preferences_theme_path],
+    ]
 
-    patch(
-      base_app_api_v0_preferences_theme_path,
-      params: { theme: "dark" },
-      headers: {
-        "Accept" => "application/json",
-        "Origin" => "http://#{host}",
-        "Sec-Fetch-Site" => "same-origin",
-      },
-      as: :json,
-    )
+    endpoints.each do |host, path|
+      host!(host)
+      [nil, "invalid-token"].each do |token|
+        headers = {
+          "Accept" => "application/json",
+          "Origin" => "http://#{host}",
+          "Sec-Fetch-Site" => "same-origin",
+        }
+        headers["X-CSRF-Token"] = token if token
 
-    assert_not_equal I18n.t("errors.invalid_authenticity_token"), response.parsed_body["error"]
+        patch(path, params: { theme: "dark" }, headers:, as: :json)
+
+        assert_response :forbidden
+      end
+    end
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -126,7 +132,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       Rails.configuration.action_controller.allow_forgery_protection
   end
 
-  test "same-site strict-mode POST reaches allowed base surfaces without a CSRF rejection" do
+  test "same-site preference mutations without tokens are refused on base surfaces" do
     ActionController::Base.allow_forgery_protection = true
 
     [
@@ -146,7 +152,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
         as: :json,
       )
 
-      assert_not_equal 403, response.status
+      assert_response :forbidden
     end
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
@@ -156,7 +162,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       Rails.configuration.action_controller.allow_forgery_protection
   end
 
-  test "standard Rails Fetch Metadata accepts same-site POST without an Origin on base surfaces" do
+  test "same-site preference mutations without Origin still require tokens on base surfaces" do
     ActionController::Base.allow_forgery_protection = true
 
     [
@@ -175,8 +181,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
         as: :json,
       )
 
-      assert_response :success
-      assert_equal "dr", response.parsed_body.fetch("theme")
+      assert_response :forbidden
     end
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
@@ -203,7 +208,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       as: :json,
     )
 
-    assert_response :unprocessable_content
+    assert_response :forbidden
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -239,7 +244,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
         as: :json,
       )
 
-      assert_response :unprocessable_content, origin
+      assert_response :forbidden, origin
     end
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
@@ -267,7 +272,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       as: :json,
     )
 
-    assert_response :unprocessable_content
+    assert_response :forbidden
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -281,6 +286,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
 
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host!(host)
+    https!
 
     user = Client.first
     session_record = ClientToken.create!(
@@ -326,6 +332,20 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
+        "Origin" => "https://#{host}",
+        "X-CSRF-Token" => token,
+        "Sec-Fetch-Site" => "same-origin",
+      },
+      as: :json,
+    )
+
+    assert_response :success
+
+    patch(
+      base_app_api_v0_preferences_theme_path(ri: "jp"),
+      params: { theme: "dark" },
+      headers: {
+        "Accept" => "application/json",
         "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}",
         "Sec-Fetch-Site" => "cross-site",
         "X-CSRF-Token" => token,
@@ -333,7 +353,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       as: :json,
     )
 
-    assert_response :unprocessable_content
+    assert_response :forbidden
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -357,14 +377,13 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
         "Accept" => "application/json",
         "Origin" => "https://#{host}",
         "X-CSRF-Token" => token,
-        # Empty means absent: FetchMetadataDefaults injects same-origin unless the test
-        # states the header itself, and same-origin never reaches the legacy token path.
+        # Empty means absent: the hybrid strategy uses this session-bound token fallback.
         "Sec-Fetch-Site" => "",
       },
       as: :json,
     )
 
-    assert_response :unprocessable_content
+    assert_response :forbidden
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -378,6 +397,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
 
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host!(host)
+    https!
 
     user = Client.first
     session_record = ClientToken.create!(
@@ -425,17 +445,17 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
         "Accept" => "application/json",
         "Origin" => "https://#{host}",
         "X-CSRF-Token" => token,
-        # Empty means absent: FetchMetadataDefaults injects same-origin unless the test
-        # states the header itself, and same-origin never reaches the legacy token path.
+        # Empty means absent. Base still requires the session-bound token for this request.
         "Sec-Fetch-Site" => "",
       },
       as: :json,
     )
 
-    assert_not_equal 403, response.status
+    assert_response :success
 
     second_session = open_session
     second_session.host!(host)
+    second_session.https!
     second_session.patch(
       base_app_api_v0_preferences_theme_path(ri: "jp"),
       params: { theme: "dark" },
@@ -443,14 +463,12 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
         "Accept" => "application/json",
         "Origin" => "https://#{host}",
         "X-CSRF-Token" => token,
-        # Empty means absent: FetchMetadataDefaults injects same-origin unless the test
-        # states the header itself, and same-origin never reaches the legacy token path.
-        "Sec-Fetch-Site" => "",
+        "Sec-Fetch-Site" => "same-origin",
       },
       as: :json,
     )
 
-    assert_equal 422, second_session.response.status
+    assert_equal 403, second_session.response.status
 
     patch(
       base_app_api_v0_preferences_theme_path(ri: "jp"),
@@ -459,14 +477,13 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
         "Accept" => "application/json",
         "Origin" => "https://#{host}",
         "X-CSRF-Token" => "invalid-token",
-        # Empty means absent: FetchMetadataDefaults injects same-origin unless the test
-        # states the header itself, and same-origin never reaches the legacy token path.
+        # Empty means absent. Base requires a valid session-bound token for this request.
         "Sec-Fetch-Site" => "",
       },
       as: :json,
     )
 
-    assert_response :unprocessable_content
+    assert_response :forbidden
 
     patch(
       base_app_api_v0_preferences_theme_path(ri: "jp"),
@@ -474,14 +491,13 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       headers: {
         "Accept" => "application/json",
         "Origin" => "https://#{host}",
-        # Empty means absent: FetchMetadataDefaults injects same-origin unless the test
-        # states the header itself, and same-origin never reaches the legacy token path.
+        # Empty means absent. Base requires a valid session-bound token for this request.
         "Sec-Fetch-Site" => "",
       },
       as: :json,
     )
 
-    assert_response :unprocessable_content
+    assert_response :forbidden
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
