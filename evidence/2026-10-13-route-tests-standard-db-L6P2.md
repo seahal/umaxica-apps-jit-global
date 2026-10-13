@@ -30,7 +30,18 @@
 
 ## Limits
 
-- The checks used only the standard Rails test database configurations. `PARALLEL_WORKERS=1` avoided
-  creating parallel worker databases.
-- No database reset or migration was run. The from-scratch migration acceptance remains unverified.
+- The route tests and migration targets used the standard Rails `test_*` database configurations.
+  `PARALLEL_WORKERS=1` avoided creating parallel worker databases.
+- Follow-up correction was recorded after post-run checks at full HEAD
+  `65b786f9ed5270da3007b457fff33b946008c394`, with the worktree still dirty. The route-test command
+  itself ran against full HEAD `45ed455caa35c0efc2139c1969f541b5b3fc2242` with the test expectation
+  change uncommitted.
+- Rails' `db:test:prepare` task first calls the repository's catalog safety check. That check
+  connected to the configured `POSTGRESQL_DATABASE` (`db`) in a read-only transaction to inspect
+  `current_database()` and `pg_database`, then rolled back. It did not read application rows or
+  mutate that database. The same Rails task invoked migrations for the 20 selected test databases;
+  all 1,429 migration entries were already `up` before the test run, and a read-only post-run status
+  check still found all entries `up` with no schema drift. No migration remained to execute, and no
+  database was reset.
+- The from-scratch migration acceptance remains unverified.
 - No full Minitest or Vitest suite was run.
