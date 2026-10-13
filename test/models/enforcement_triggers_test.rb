@@ -8,6 +8,18 @@ require "test_helper"
 # callback tests prove nothing about the trigger and do not satisfy this
 # requirement -- every test below uses delete_all or raw SQL.
 class EnforcementTriggersTest < ActiveSupport::TestCase
+  [AppPreference, ComPreference, OrgPreference].each do |model|
+    test "#{model.name} has exactly its approved public identity trigger" do
+      connection = model.lease_connection
+      triggers = connection.select_values(
+        "SELECT tgname FROM pg_trigger WHERE tgrelid = " \
+        "#{connection.quote(model.table_name)}::regclass AND NOT tgisinternal ORDER BY tgname",
+      )
+
+      assert_equal ["#{model.table_name}_public_id_immutability"], triggers
+    end
+  end
+
   test "trigger inventory in org zenith preserves rotation and the approved Telephone identity guard" do
     triggers =
       OrgZenithRecord.connected_to(role: :writing) do

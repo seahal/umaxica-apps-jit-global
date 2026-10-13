@@ -62,8 +62,8 @@ Short-lived receiver capabilities that only index a purpose- and surface-bound V
 references, not durable resource identities or signed result evidence. An established UUID-v4
 admission transport may retain that format when its receiver validates the same contract; changing
 it requires a consumer-specific transition with an exact legacy reader. The NanoID rule alone does
-not authorize reformatting a capability, weakening its receiver validation, or adding a cross-surface
-lookup fallback.
+not authorize reformatting a capability, weakening its receiver validation, or adding a
+cross-surface lookup fallback.
 
 ### Database protection and authorized mechanisms
 
@@ -72,6 +72,10 @@ direct SQL. Map every required guarantee to its actual constraint, privilege or 
 mechanism before implementation. CHECK, FOREIGN KEY, UNIQUE and EXCLUDE are preferred where
 sufficient. A forbidden mutation fails explicitly and leaves original identity/references intact;
 valid reference and token-state changes remain permitted.
+
+The 2026-10-13 user decision permits narrowly scoped permanent-ID triggers for APP/COM/ORG setting
+Preferences with no ordinary update exception; see the named exception in
+`adr/database-trigger-usage-boundary.md`. Other tables require their own enforcement assessment.
 
 The trigger ADR's general boundary and Avatar D-3/D-4/D-10 approvals do not authorize a general
 identifier immutability trigger. Existing proof triggers remain scoped to their named proof

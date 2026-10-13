@@ -37,9 +37,9 @@ criterion.
 - Given an ordinary new resource, create it through normal, validation-disabled and bulk writers.
   New IDs use the one approved CSPRNG-backed NanoID mechanism, length 21 and the library alphabet;
   standard string/varchar capacity is 25. The shared `PublicId` model boundary enforces that storage
-  maximum separately from the 21-character generator. Ordinary clients cannot supply their own resource
-  identity. Explicit authorized imports have a separate contract. Read/update does not regenerate a
-  missing ID.
+  maximum separately from the 21-character generator. Ordinary clients cannot supply their own
+  resource identity. Explicit authorized imports have a separate contract. Read/update does not
+  regenerate a missing ID.
 - Empty/whitespace/NULL/oversized values are refused as applicable to the classified role. Test new
   issuance length independently of storage at 24/25/26; explicitly supported legacy forms remain
   valid. Storage capacity is neither permission to issue arbitrary 1–25 lengths nor an unconditional
@@ -86,6 +86,16 @@ criterion.
   expected errors. Mechanism approval is checked before implementation by PROC-2; this criterion
   does not authorize new triggers/raw SQL. Complete immutability/bulk regression coverage is
   planned.
+
+The setting-preference database boundary is exercised by
+`test/models/setting_preference_public_id_immutability_test.rb`: APP, COM and ORG each attempt
+replacement through `update_columns`, `update_all`, `upsert_all` and direct SQL. The tests require
+database rejection and unchanged identity; their existence does not establish a passing result.
+Current revision-scoped results belong in the acceptance evidence. The approved setting-only trigger
+mechanism and reverse-order cleanup are defined in `adr/database-trigger-usage-boundary.md`. Same-ID
+assignment and unrelated state updates must remain valid; logical deletion must not permit a
+different ID. This does not extend immutability to reference or token-state columns or authorize
+triggers for additional tables.
 
 ## ID-4a — ORG Telephone identity survives bypass writes
 
@@ -699,9 +709,9 @@ criterion.
   generated through the shared public-ID mechanism. An already issued UUID-v4 candidate remains
   readable during this bounded transition; no existing candidate is rewritten and no shared UUID
   admission pattern is widened for unrelated flows.
-- A link-completion request accepts only a strict Social candidate reference: the new NanoID-21
-  form or the retained UUID-v4 form. Missing, malformed, cross-purpose or unknown references are
-  rejected without a lookup fallback to another identity column. Provider callback verification,
+- A link-completion request accepts only a strict Social candidate reference: the new NanoID-21 form
+  or the retained UUID-v4 form. Missing, malformed, cross-purpose or unknown references are rejected
+  without a lookup fallback to another identity column. Provider callback verification,
   actor/session binding, expiry and one-shot consumption remain authoritative.
 - A generated collision may be retried only for the concrete candidate table's named, single-column
   `ref` unique B-tree index. Each retry uses a fresh value inside a savepoint and the finite shared
@@ -711,10 +721,9 @@ criterion.
 - Check: `test/services/identity/social_ceremony_contract_test.rb`,
   `test/integration/acme_social_link_completion_test.rb` and
   `test/integration/social_auth_link_test.rb`, plus direct inspection of
-  `IdentitySocialCeremonyCandidateStore` and
-  `Auth::App::Social::LinkCompletionsController`. Static checks do not prove concurrent committed
-  collision behavior or live provider behavior. Evidence is revision-scoped and is not a permanent
-  PASS for future code.
+  `IdentitySocialCeremonyCandidateStore` and `Auth::App::Social::LinkCompletionsController`. Static
+  checks do not prove concurrent committed collision behavior or live provider behavior. Evidence is
+  revision-scoped and is not a permanent PASS for future code.
 
 ## ID-3q — Step-Up passkey challenge references
 
@@ -732,9 +741,8 @@ criterion.
   validation or uniqueness failures, malformed bindings, cross-surface references and exhausted
   retries remain explicit failures; no fallback lookup or new challenge is authorized by the
   reference alone.
-- Check: the public Step-Up admission tests and
-  `test/models/step_up_passkey_challenge_test.rb`, plus direct inspection of
-  `StepUpSessionConsumable`. Verification must also confirm that challenge bytes, RP/origin,
-  expiry, burn and session-issuance boundaries are unchanged. Static checks do not prove committed
-  concurrent collision behavior or live WebAuthn-provider behavior. Evidence is revision-scoped and
-  is not a permanent PASS for future code.
+- Check: the public Step-Up admission tests and `test/models/step_up_passkey_challenge_test.rb`,
+  plus direct inspection of `StepUpSessionConsumable`. Verification must also confirm that challenge
+  bytes, RP/origin, expiry, burn and session-issuance boundaries are unchanged. Static checks do not
+  prove committed concurrent collision behavior or live WebAuthn-provider behavior. Evidence is
+  revision-scoped and is not a permanent PASS for future code.

@@ -43,6 +43,72 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     )
   end
 
+  test "contradictory MFA GET and HEAD preserve the original com flow and issue no session" do
+    flow = VisitorSignInFlow.find_by!(
+      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
+    )
+    before = flow.attributes
+    path = auth_com_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
+
+    assert_no_difference -> { VisitorToken.count } do
+      get path
+
+      assert_response :conflict
+      assert_equal "text/plain", response.media_type
+      assert_equal "戻るはだめです", response.body
+      assert_nil response.headers["Location"]
+      assert_includes response.headers["Cache-Control"], "no-store"
+      assert_equal before, flow.reload.attributes
+
+      head path
+
+      assert_response :conflict
+      assert_empty response.body
+      assert_nil response.headers["Location"]
+      assert_includes response.headers["Cache-Control"], "no-store"
+      assert_equal before, flow.reload.attributes
+    end
+  end
+
+  test "missing malformed and wrong-surface MFA bindings cannot halt the com flow" do
+    flow = VisitorSignInFlow.find_by!(
+      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
+    )
+    wrong_surface = SignInFlowBindingCodec.encode(flow: flow, surface: "app", phase: "PRIMARY_PENDING")
+    before = flow.attributes
+
+    [nil, "", "invalid", wrong_surface].each do |binding|
+      assert_no_difference -> { VisitorToken.count } do
+        delete auth_com_sign_in_challenge_path(ri: "jp", fb: binding)
+      end
+
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
+      assert_equal before, flow.reload.attributes
+    end
+  end
+
+  test "a contradictory com mutation halts once and replay cannot issue a session" do
+    flow = VisitorSignInFlow.find_by!(
+      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
+    )
+    path = auth_com_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
+
+    assert_no_difference -> { VisitorToken.count } do
+      delete path
+
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
+      assert_equal VisitorSignInFlowState::HALTED, flow.reload.state_id
+      terminal = flow.attributes
+
+      delete path
+
+      assert_response :conflict
+      assert_equal terminal, flow.reload.attributes
+    end
+  end
+
   teardown do
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil

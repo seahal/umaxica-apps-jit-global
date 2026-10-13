@@ -1,5 +1,35 @@
 # UMAXICA STACK — Integrated Implementation Instruction
 
+> Final delivery scope, 2026-10-13: the user accepts the known ORG durable halt-audit defect with
+> [explicit follow-up](plans/backlog/org-normal-sign-in-durable-halt-audit.md), and defers the
+> remaining authentication/identifier verification planning to
+> [two cycles later](plans/backlog/nine-auth-identifier-verification-two-cycles.md). These
+> exceptions supersede earlier blocker wording; they are not completed fixes or checks. Correct the
+> clean-database test prerequisites and pass the remaining suites. See
+> [the final scoped decision](specs/integrated-stack-delivery/acceptance.md#final-user-approved-delivery-exceptions--2026-10-13).
+
+> Avatar acceptance update, 2026-10-13: the user accepts the current Avatar implementation for this
+> delivery, with remaining investigation retained in
+> [the Avatar backlog](plans/backlog/avatar-ownership-acceptance-followups.md). This is a scoped
+> acceptance exception, not proof of full coverage. Authentication authority verification, durable
+> halt audit and identifier requirements remain in scope. See
+> [the acceptance decision](specs/integrated-stack-delivery/acceptance.md#scoped-avatar-acceptance--2026-10-13).
+
+> Acceptance scope update, 2026-10-13: the user excluded actual Alloy/host mount verification,
+> unresolved personal-data retention/deletion policy and its dependent work, and production
+> cutover/recovery assurance from this acceptance. These are deferred, not passing checks. See
+> [seven.md, Section 13](seven.md#13-deferred-work-excluded-from-the-current-nine-acceptance) and
+> [the scoped exclusions](specs/integrated-stack-delivery/acceptance.md#scoped-environment-and-policy-exclusions--2026-10-13).
+> Local Minitest coverage, public-ID immutability and isolated migration/recovery remain in scope.
+
+> Acceptance follow-up, 2026-10-13: the user accepted the observed JavaScript coverage shortfall
+> (functions 98.48%, branches 97.21%) for this delivery. Existing coverage thresholds remain intact;
+> this is a scoped Gate 4 exception, not permission to waive Minitest behavior or migration/runtime
+> acceptance. The user authorized the OTel flush repair, missing behavioral coverage and isolated
+> migration/recovery verification. See [the follow-up plan](specs/integrated-stack-delivery/plan.md)
+> and
+> [the recorded exception](specs/integrated-stack-delivery/acceptance.md#scoped-acceptance-exception--2026-10-13).
+
 Prepared for Codex Luna 5.6 Max. This is one self-contained implementation instruction, not a
 request for another audit or a series of prompts requiring separate approval. Implement the
 authorized local changes below, verify them in small increments, and preserve unfinished acceptance

@@ -8,6 +8,71 @@ instruction is [nine.md](../../nine.md). Results belong in `evidence/`, never pe
 boxes here. Local IDs are stable; qualify them with this path. No retrospective static inspection
 can establish that a past Red or full gate actually ran.
 
+### Scoped acceptance exception — 2026-10-13
+
+After the independent investigation in
+[`N6A2`](../../evidence/2026-10-13-nine-independent-acceptance-N6A2.md), the user accepted the
+observed JavaScript coverage result for this delivery: functions 98.48% and branches 97.21%, with
+all 1,140 tests passing. This is a one-time exception to the coverage portion of Gate 4, not a
+change to Vitest thresholds or permission to waive behavioral acceptance. The historical coverage
+command still exited unsuccessfully. New regressions and the remaining Minitest, migration/recovery
+and runtime obligations remain subject to their existing criteria.
+
+### Scoped environment and policy exclusions — 2026-10-13
+
+The user subsequently excluded three items from the current `nine.md` acceptance:
+
+1. Actual Alloy processor execution and effective host read-only mount verification.
+2. Owner decisions defining personal-data retention, deletion/anonymization and exceptions, and
+   implementation/verification dependent on those unresolved decisions.
+3. Production cutover and recovery assurance, including actual writer quiescence, real-data
+   reconciliation and recovery timing at production volume.
+
+Track these as **EXCLUDED from this acceptance**, not PASS. The follow-up work is retained in
+[seven.md, Section 13](../../seven.md#13-deferred-work-excluded-from-the-current-nine-acceptance).
+This scoped decision takes precedence over the runtime-obligation wording in the earlier coverage
+exception above. It does not waive local behavioral acceptance, remaining Minitest coverage,
+public-ID immutability, application-side telemetry protection or isolated migration/recovery
+verification. Mixed criteria retain their in-scope checks. Historical evidence remains unchanged;
+these exclusions do not authorize production or host changes.
+
+### Scoped Avatar acceptance — 2026-10-13
+
+The user subsequently accepted the current Avatar implementation for this delivery and deferred the
+remaining Avatar investigation to
+[the Avatar follow-up backlog](../../plans/backlog/avatar-ownership-acceptance-followups.md). Record
+this as **ACCEPTED WITH FOLLOW-UP**, not a test-proven PASS. It covers the remaining Avatar-specific
+AV-1–AV-9 and MIG-2–MIG-4 investigation gaps described in the current assessment; mixed criteria
+retain their non-Avatar obligations. Existing contracts and historical test results remain intact,
+and no new defect discovered later is silently covered by this exception.
+
+Authentication flow binding and authorization coverage remain required, including cross-actor,
+cross-surface and original/replacement-flow isolation. No exploitable IDOR has been established
+merely by identifying missing coverage. The reproduced ORG halt-audit failure and permanent
+identifier failures remain acceptance blockers. Identifier inventory and migration obligations are
+not deferred by the Avatar exception. No production activation is authorized.
+
+### Final user-approved delivery exceptions — 2026-10-13
+
+The user subsequently requested acceptance with the ORG halt audit defect retained as known work,
+and deferred the remaining authentication/identifier verification gaps as planning debt to two
+delivery cycles after this one. This decision supersedes earlier blocker wording above.
+
+- ORG durable halt audit: **ACCEPTED WITH KNOWN DEFECT** for this delivery only, retained in
+  [the audit backlog](../../plans/backlog/org-normal-sign-in-durable-halt-audit.md). Preserve its
+  historical failing evidence. The current regression still requires safe refusals, HALT and no
+  token/challenge creation on replay; it no longer asserts the deferred audit guarantee. Do not skip
+  the test or assert that missing audit is desirable behavior.
+- Remaining authentication/identifier coverage: **ACCEPTED WITH DEFERRED VERIFICATION**, retained in
+  [the two-cycle backlog](../../plans/backlog/nine-auth-identifier-verification-two-cycles.md). This
+  is an explicit scope exception, not a claim that the missing checks ran or an IDOR was fixed.
+- The clean-database passkey test prerequisite error must be corrected and documented, not waived.
+  Current in-scope Minitest/Vitest suites must pass after an isolated rebuild.
+
+Durable contracts, existing protections, prior failure records and the earlier Avatar/coverage/
+environment/policy exclusions remain intact. Any current delivery PASS must cite these exceptions;
+it does not establish unrestricted production readiness or waive new unrelated failures.
+
 ## PROC-1 — Current checkout and protected scope
 
 - Basis: M01–M03/M06, I01/I02, A00/A02/D-1, F01, E20, C01–C15.
@@ -169,9 +234,10 @@ can establish that a past Red or full gate actually ran.
   email HMAC definer role was also depended on by stale `_2`/`_3` worker clones from an earlier
   four-worker run. Read-only receipt/catalog checks proved those clones were owned by this run and
   inactive; the existing cloner cleanup removed only those disposable databases under the run lock.
-  A repeated no-delete preflight then reported `Verified 20 disposable databases and 12 scoped HMAC
-  roles`. No role, parent database or shared resource was removed or adopted. The initial refusal
-  and its safe resolution are recorded in the [P7 evidence](../../evidence/2026-10-12-avatar-p7-concurrency-7K4M.md).
+  A repeated no-delete preflight then reported
+  `Verified 20 disposable databases and 12 scoped HMAC roles`. No role, parent database or shared
+  resource was removed or adopted. The initial refusal and its safe resolution are recorded in the
+  [P7 evidence](../../evidence/2026-10-12-avatar-p7-concurrency-7K4M.md).
 - For a parallel isolated run, each worker uses its own actual creation/OID receipt and verifies its
   connection targets before executing tests. A receipt for another worker, changed object OID or
   pre-existing unknown name must not authorize connection or deletion. Parent configurations and the

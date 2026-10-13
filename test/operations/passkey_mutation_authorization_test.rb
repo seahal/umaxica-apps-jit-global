@@ -5,6 +5,9 @@ require "webauthn/fake_client"
 
 class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
   self.fixture_table_names = []
+  # These token references must exist even on a newly migrated database.
+  fixtures :client_token_binding_methods, :visitor_token_binding_methods, :operator_token_binding_methods,
+           :client_token_dbsc_statuses, :visitor_token_dbsc_statuses, :operator_token_dbsc_statuses
 
   test "passkey removal requires scoped evidence in app com and org even when another key survives" do
     [[Client, ClientPasskey, ClientToken, :user_id],

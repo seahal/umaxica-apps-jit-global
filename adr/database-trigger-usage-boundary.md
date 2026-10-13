@@ -139,8 +139,8 @@ asserts this set exactly:
   `avatar_bureau_ownership_periods_no_truncate` reject TRUNCATE with SQLSTATE `45000`.
 - `avatar_initial_concrete_owner_required` is a deferred `AFTER INSERT` constraint trigger on
   `avatars`. It rejects an Avatar whose same-transaction concrete Enterprise/Bureau period set has
-  no row, more than one current row, or a first `valid_from` different from `avatars.created_at`.
-  It raises SQLSTATE `23514` with the named constraint and performs no writes, owner selection,
+  no row, more than one current row, or a first `valid_from` different from `avatars.created_at`. It
+  raises SQLSTATE `23514` with the named constraint and performs no writes, owner selection,
   notifications, or audit side effects. `test/models/avatar_concrete_ownership_period_test.rb`
   proves the direct SQL/real-COMMIT refusal and the absence of the committed Avatar; the reversible
   migration is `db/avatars_migrate/20261011212119_enforce_avatar_initial_concrete_ownership.rb`.
@@ -154,10 +154,10 @@ asserts this set exactly:
   require each concrete detail's source ownership period to belong to the same Avatar as its
   registry reservation. They raise SQLSTATE `23514` and do not rewrite rows or choose an owner.
 - `avatar_group_concrete_ownership_periods_integrity` is a deferred row trigger for INSERT/UPDATE/
-  DELETE on the staged concrete Group ownership-period table. It locks the Group row and rejects
-  an ownerless, multiply-current, gapped or non-creation-aligned concrete chain with SQLSTATE
-  `23514`. `avatar_group_concrete_ownership_periods_immutability` rejects deletion and owner/start
-  mutation while permitting one finite close of the current period with SQLSTATE `45000`, and
+  DELETE on the staged concrete Group ownership-period table. It locks the Group row and rejects an
+  ownerless, multiply-current, gapped or non-creation-aligned concrete chain with SQLSTATE `23514`.
+  `avatar_group_concrete_ownership_periods_immutability` rejects deletion and owner/start mutation
+  while permitting one finite close of the current period with SQLSTATE `45000`, and
   `avatar_group_concrete_ownership_periods_no_truncate` rejects TRUNCATE with SQLSTATE `45000`.
   These triggers protect only the new concrete table; the legacy Group table remains writable until
   the explicit Avatar cutover marker and is protected by the existing named legacy barrier.
@@ -176,11 +176,11 @@ no production or shared-database trigger change is authorized by this note.
 
 ## Approved Avatar legacy-writer cutover barrier
 
-The Avatar transition uses a singleton `avatar_ownership_cutovers` marker only after an
-independent operational inventory has shown that the concrete ownership reader is complete and
-all legacy writers are quiesced. Before that marker exists, the legacy ownership-period,
-ownership-transfer and Group-ownership-period tables remain writable so the staged migration can
-finish. The marker itself is a logged, finite, singleton row and is immutable after insertion.
+The Avatar transition uses a singleton `avatar_ownership_cutovers` marker only after an independent
+operational inventory has shown that the concrete ownership reader is complete and all legacy
+writers are quiesced. Before that marker exists, the legacy ownership-period, ownership-transfer and
+Group-ownership-period tables remain writable so the staged migration can finish. The marker itself
+is a logged, finite, singleton row and is immutable after insertion.
 
 Once the marker exists, named BEFORE triggers reject INSERT, UPDATE, DELETE and TRUNCATE on those
 three legacy tables with SQLSTATE `55006` and the `avatar_legacy_owner_write_barrier` constraint
@@ -188,16 +188,16 @@ name. The triggers do not rewrite rows, migrate data, or silently skip a stateme
 separate mutation and TRUNCATE guards with the same SQLSTATE and the
 `avatar_ownership_cutover_immutable` constraint name. The exact trigger set is asserted by
 `test/models/enforcement_triggers_test.rb`, and
-`test/models/avatar_ownership_cutover_barrier_test.rb` observes the barrier through direct SQL
-after a real marker transition while also proving legacy writes remain possible before it.
+`test/models/avatar_ownership_cutover_barrier_test.rb` observes the barrier through direct SQL after
+a real marker transition while also proving legacy writes remain possible before it.
 
 The reversible DDL is in
 `db/avatars_migrate/20261011220000_add_avatar_ownership_cutover_barrier.rb`; the follow-up
 `20261011220500_make_avatar_ownership_cutover_logged.rb` repairs Rails test-mode table logging
-without changing applied migration history. Establishing the marker is an explicit operational
-step (`AvatarOwnershipCutoverOperation`) and is never performed automatically by a migration or
-request path. Production cutover, physical legacy-table removal and role-permission changes remain
-outside this implementation.
+without changing applied migration history. Establishing the marker is an explicit operational step
+(`AvatarOwnershipCutoverOperation`) and is never performed automatically by a migration or request
+path. Production cutover, physical legacy-table removal and role-permission changes remain outside
+this implementation.
 
 ## Approved ORG Telephone permanent-identity exception
 
@@ -230,6 +230,32 @@ bypass updates, upsert conflict updates and permitted same-ID/state writes.
 NULL insertion and one-time backfill. `test/models/enforcement_triggers_test.rb` asserts the exact
 ORG inventory, including the existing rotation-audit trigger. Final deployment/NOT NULL cutover and
 other tables' DB immutability remain independent requirements; these references alone are not PASS.
+
+## Approved setting Preference permanent-identity exception
+
+On 2026-10-13, the user approved immutable issued public IDs for `app_preferences`,
+`com_preferences` and `org_preferences`, enforced by narrowly scoped database triggers, with no
+ordinary operational exception. This is a named exception to the general cross-row/table rule. It
+authorizes the necessary raw SQL function/trigger DDL in reversible Rails migrations because the
+migration DSL cannot express an OLD/NEW comparison. It does not authorize other tables.
+
+Each table has its own BEFORE UPDATE OF public_id trigger and function. A distinct NEW value,
+including NULL or blank, is rejected with SQLSTATE `23514`; the same value and unrelated updates
+remain permitted. INSERT issuance, columns, formats and existing identities remain unchanged. No
+model, job, maintenance flag, role-name bypass, identifier generation, audit or side effect is
+introduced into the function. Exceptional future data repair requires a separately scoped plan.
+
+Functions are `prevent_{app,com,org}_preference_public_id_mutation()`; triggers are
+`{app,com,org}_preferences_public_id_immutability`; diagnostic constraint names are
+`{app,com,org}_preferences_public_id_immutable`. Each migration creates and attaches its objects
+together and reverses by dropping the trigger before the function. DDL uses the repository's bounded
+lock timeout; row execution acquires no additional locks and performs no additional writes. Rollback
+removes enforcement only and does not rewrite data. No production deployment or administrator-proof
+enforcement is claimed.
+
+Behavioral coverage belongs to `test/models/setting_preference_public_id_immutability_test.rb`;
+inventory belongs to `test/models/enforcement_triggers_test.rb`. Verify four bypass writers,
+NULL/blank, same-value updates, unrelated mutable state and retained identity after rejection.
 
 ## Related
 

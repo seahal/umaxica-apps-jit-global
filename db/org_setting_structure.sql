@@ -38,6 +38,15 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
+--
+-- Name: prevent_org_preference_public_id_mutation(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prevent_org_preference_public_id_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN IF NEW.public_id IS DISTINCT FROM OLD.public_id THEN RAISE EXCEPTION 'preference public identity cannot be changed' USING ERRCODE = '23514', CONSTRAINT = 'org_preferences_public_id_immutable'; END IF; RETURN NEW; END; $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -1543,6 +1552,13 @@ CREATE INDEX index_org_preferences_on_used_at ON public.org_preferences USING bt
 
 
 --
+-- Name: org_preferences org_preferences_public_id_immutability; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER org_preferences_public_id_immutability BEFORE UPDATE OF public_id ON public.org_preferences FOR EACH ROW EXECUTE FUNCTION public.prevent_org_preference_public_id_mutation();
+
+
+--
 -- Name: org_preference_languages fk_org_preference_languages_on_option_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1765,6 +1781,7 @@ ALTER TABLE ONLY public.org_preference_themes
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261013035720'),
 ('20261012090001'),
 ('20261012090000'),
 ('20260921133000'),

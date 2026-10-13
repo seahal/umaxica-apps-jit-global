@@ -80,11 +80,11 @@ OpenTelemetry::SDK.configure do |c|
       end
 
       def force_flush(*)
-        true
+        OpenTelemetry::SDK::Trace::Export::SUCCESS
       end
 
       def shutdown(*)
-        true
+        OpenTelemetry::SDK::Trace::Export::SUCCESS
       end
     end.new,
   )

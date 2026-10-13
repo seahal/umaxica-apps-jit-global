@@ -42,10 +42,15 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   [step refusal tests](../../test/policies/sign_up_step_gate_refusals_test.rb), measuring
   before/after records and response. The local sign-in slice also has public-boundary coverage in
   [app MFA admission tests](../../test/controllers/auth/app/in/challenges_controller_test.rb),
-  [com MFA admission tests](../../test/controllers/auth/com/in/challenges_controller_test.rb),
-  and the app/com passkey and MFA controller tests; these references establish only the scenarios
-  they actually exercise. Other families/surfaces require explicit planned-to-actual test
-  references.
+  [com MFA admission tests](../../test/controllers/auth/com/in/challenges_controller_test.rb), and
+  the app/com passkey and MFA controller tests; these references establish only the scenarios they
+  actually exercise. Other families/surfaces require explicit planned-to-actual test references.
+
+The corresponding COM Email sign-up phase cases are in
+`test/integration/sign_up_phase_regression_com_test.rb`. APP and COM MFA admission tests also
+exercise contradictory GET/HEAD, missing/malformed/wrong-surface mutation bindings, and terminal
+replay without token issuance. These are separate surface boundaries. ORG's normal Entra/passkey and
+emergency paths retain their own contracts; APP/COM MFA coverage is not evidence for ORG.
 
 ## FLOW-3 — Unsafe phase violation and terminal absorption
 
@@ -62,8 +67,8 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   testing must demonstrate atomic lock/reload/check/transition; a released-lock precheck followed by
   termination is not proof. The signed-instance codec contract is covered by
   [sign-in binding codec tests](../../test/services/sign_in_flow_binding_codec_test.rb). Full
-  terminal consumer and independent-connection race coverage remains a planned acceptance item
-  until actual evidence is recorded.
+  terminal consumer and independent-connection race coverage remains a planned acceptance item until
+  actual evidence is recorded.
 
 ## FLOW-4 — Original A cannot mutate replacement B
 
@@ -80,8 +85,8 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   labels/raw PKs are not authority. No raw locator nonce exposure or OAuth state/PKCE/CSRF/pt reuse.
 - Check codec, Rails-generated URLs/bodies, session locator and HTTP tests. Existing app phase tests
   are a starting reference, not complete cross-family coverage; planned gaps must be named. The
-  codec and app/com public controller references above must be checked against the current HEAD,
-  not merely found by path. No JS Back/History API state is needed to decide a server request.
+  codec and app/com public controller references above must be checked against the current HEAD, not
+  merely found by path. No JS Back/History API state is needed to decide a server request.
 
 ## FLOW-5 — Concurrent progression and committed work
 
@@ -117,3 +122,11 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   a stale diagram.
 - Check public halt/audit tests and source/diagram comparison; additional safe-audit coverage is
   planned if absent. TDD chronology/reporting is PROC-3/4, not a static-code acceptance inference.
+
+The ORG normal-passkey integration test in
+`test/controllers/auth/org/in/passkeys_controller_test.rb` now follows the Entra first stage with
+safe binding refusals and an attributable generation violation, including no new token/challenge on
+replay. Its durable `OperatorChronicleEvent::SIGN_FLOW_HALTED` assertion exposed a known defect. The
+user deferred that assertion for this delivery; the durable requirement above remains, with
+reproduction and restoration criteria in
+[the audit backlog](../../plans/backlog/org-normal-sign-in-durable-halt-audit.md).

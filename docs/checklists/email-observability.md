@@ -72,6 +72,10 @@ older production/Sentry/broader-review obligations: those remain separately owne
   config alone cannot establish the dynamic export boundary. No live collector is used. The
   installed gem/API inspection and guarded local checks are recorded in
   [`O9P4`](../../evidence/2026-10-12-observability-env-and-gate-O9P4.md).
+- The configured span scrubber participates in the installed SDK's processor lifecycle: flush and
+  shutdown return the SDK's numeric export status, including when another exporter is registered.
+  Exercise the actual initializer with an in-memory exporter and external exporters disabled;
+  successful notification capture alone does not establish flush compatibility.
 
 ## MAIL-4 — Collector secondary defense
 

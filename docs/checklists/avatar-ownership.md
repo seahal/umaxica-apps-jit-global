@@ -64,13 +64,13 @@ boundary while the remaining writer/cutover and cross-isolation acceptance stays
   Period-row checks have local tests, but their firing scope is not universal Avatar creation
   protection. The deferred `avatar_initial_concrete_owner_required` trigger added by
   `db/avatars_migrate/20261011212119_enforce_avatar_initial_concrete_ownership.rb` now rejects a
-  committed Avatar-only INSERT at the Avatar boundary with SQLSTATE `23514` and leaves no row.
-  The regression is exercised through direct SQL and a real COMMIT in the disposable database.
-  This closes the missing-owner creation subcondition. The same test file now also performs raw-SQL
-  real commits for an accepted adjacent chain, a rejected gap and a rejected cross-family overlap,
-  and leaves the original history unchanged after each rejected commit. AV-1/AV-2 acceptance
-  remains incomplete for full transfer and cutover conditions described below. The accepted
-  ownership contract is unchanged.
+  committed Avatar-only INSERT at the Avatar boundary with SQLSTATE `23514` and leaves no row. The
+  regression is exercised through direct SQL and a real COMMIT in the disposable database. This
+  closes the missing-owner creation subcondition. The same test file now also performs raw-SQL real
+  commits for an accepted adjacent chain, a rejected gap and a rejected cross-family overlap, and
+  leaves the original history unchanged after each rejected commit. AV-1/AV-2 acceptance remains
+  incomplete for full transfer and cutover conditions described below. The accepted ownership
+  contract is unchanged.
 - Finite starts are independently enforced by validated CHECK constraints introduced through
   `db/avatars_migrate/20261011041046_add_finite_concrete_avatar_ownership_period_starts.rb` and
   `db/avatars_migrate/20261011041103_validate_finite_concrete_avatar_ownership_period_starts.rb`. A
@@ -91,15 +91,17 @@ boundary while the remaining writer/cutover and cross-isolation acceptance stays
   correction, recursion/lock-upgrade bug or trigger disabling. Existing trigger inventory includes
   actual objects.
 - The registry request race is exercised with two independent Avatar-DB connections in
-  `test/operations/avatar_ownership_transfers_concurrency_test.rb`, and the concrete-period test
-  now exercises two independent backend PIDs at READ COMMITTED, REPEATABLE READ and SERIALIZABLE.
-  The trigger/concrete-period selection passed `22 runs, 79 assertions, 0 failures, 0 errors`, and
-  the affected transfer/inventory selection passed `30 runs, 165 assertions, 0 failures, 0 errors`
-  on the run-owned disposable fleet. The recurring Rails gate then completed with `15060 runs,
-  127731 assertions, 1 failure, 0 errors`; the only failure was the unrelated Acme terminology
-  inventory check described in the [P7 evidence](../../evidence/2026-10-12-avatar-p7-concurrency-7K4M.md).
-  These results prove deterministic period refusal and history preservation for this P7 slice, not
-  the complete ownership-acceptance race, transfer cutover or dump/restore acceptance. Start at the [concurrency tests](../../test/operations/avatar_ownership_transfers_concurrency_test.rb),
+  `test/operations/avatar_ownership_transfers_concurrency_test.rb`, and the concrete-period test now
+  exercises two independent backend PIDs at READ COMMITTED, REPEATABLE READ and SERIALIZABLE. The
+  trigger/concrete-period selection passed `22 runs, 79 assertions, 0 failures, 0 errors`, and the
+  affected transfer/inventory selection passed `30 runs, 165 assertions, 0 failures, 0 errors` on
+  the run-owned disposable fleet. The recurring Rails gate then completed with
+  `15060 runs, 127731 assertions, 1 failure, 0 errors`; the only failure was the unrelated Acme
+  terminology inventory check described in the
+  [P7 evidence](../../evidence/2026-10-12-avatar-p7-concurrency-7K4M.md). These results prove
+  deterministic period refusal and history preservation for this P7 slice, not the complete
+  ownership-acceptance race, transfer cutover or dump/restore acceptance. Start at the
+  [concurrency tests](../../test/operations/avatar_ownership_transfers_concurrency_test.rb),
   [concrete-period tests](../../test/models/avatar_concrete_ownership_period_test.rb) and
   [trigger tests](../../test/models/enforcement_triggers_test.rb). Approximately twenty draft
   triggers is not a required count. The same run's no-delete database/role preflight also verified
@@ -107,10 +109,11 @@ boundary while the remaining writer/cutover and cross-isolation acceptance stays
   clones. Block runtime acceptance without isolation.
 
 Current resume evidence reran the concrete-period, registry-concurrency and trigger-inventory
-selection against the run-owned four-worker manifest: `28 runs, 101 assertions, 0 failures, 0
-errors, 0 skips` (`evidence/2026-10-12-avatar-concurrency-current-Q2F6.md`). This updates only the
-isolated concurrency subcondition; it does not establish final transfer consumer cutover, Group
-semantics, writer quiescence or the P12b marker.
+selection against the run-owned four-worker manifest:
+`28 runs, 101 assertions, 0 failures, 0 errors, 0 skips`
+(`evidence/2026-10-12-avatar-concurrency-current-Q2F6.md`). This updates only the isolated
+concurrency subcondition; it does not establish final transfer consumer cutover, Group semantics,
+writer quiescence or the P12b marker.
 
 ## AV-4 — Global registry and concrete transfer cardinality
 
@@ -143,19 +146,18 @@ semantics, writer quiescence or the P12b marker.
   available for keyless callers; the additive app/org transport branch is selected only by an
   explicit Idempotency-Key on create and `transfer_kind=registry` on accept/cancel. Before the
   verified `AvatarOwnershipCutover` marker, both public app/org registry branches refuse with an
-  explicit `InvalidTransfer` response before invoking registry mutation; after the marker they
-  can reach the concrete registry path. This keeps P9's internal operation tests usable on
-  synthetic data without making new transfer admission reachable before P10a/P10b/P12b. The
-  writer cutover for all existing callers and the complete P12b transition remain unestablished.
+  explicit `InvalidTransfer` response before invoking registry mutation; after the marker they can
+  reach the concrete registry path. This keeps P9's internal operation tests usable on synthetic
+  data without making new transfer admission reachable before P10a/P10b/P12b. The writer cutover for
+  all existing callers and the complete P12b transition remain unestablished.
 - P12b now has an independently reviewable, bounded transition path:
   `AvatarOwnershipTransitionInventoryQuery` classifies legacy/concrete ownership rows without
   writing them, `AvatarConcreteOwnershipBackfillOperation` offers dry-run and idempotent bounded
   apply for only unambiguous rows, and `AvatarOwnershipCutoverOperation` establishes an explicit
-  singleton marker only after inventory readiness and an explicit writer-quiescence assertion.
-  The marker's `id bigint` is also the actual PostgreSQL primary key through
+  singleton marker only after inventory readiness and an explicit writer-quiescence assertion. The
+  marker's `id bigint` is also the actual PostgreSQL primary key through
   `db/avatars_migrate/20261012130000_promote_avatar_ownership_cutover_key.rb`; the singleton check
-  and immutable marker triggers remain unchanged.
-  The reversible barrier migration
+  and immutable marker triggers remain unchanged. The reversible barrier migration
   `db/avatars_migrate/20261011220000_add_avatar_ownership_cutover_barrier.rb` plus its logged-table
   repair `20261011220500_make_avatar_ownership_cutover_logged.rb` rejects legacy period, transfer,
   and Group-period INSERT/UPDATE/DELETE/TRUNCATE after the marker, while allowing those writes
@@ -164,21 +166,21 @@ semantics, writer quiescence or the P12b marker.
   and `AvatarGroupConcreteOwnershipBackfillOperation`. `AvatarGroupOwnershipPeriodSource` selects
   the legacy source before the verified marker and the concrete source after it, without a legacy
   fallback. Direct-SQL barrier and trigger-inventory tests pass against the owned disposable
-  PostgreSQL fleet. The marker has not been established in a shared or production database, and
-  this implementation does not claim that operational backfill, consumer quiescence, or final
-  read cutover has occurred.
+  PostgreSQL fleet. The marker has not been established in a shared or production database, and this
+  implementation does not claim that operational backfill, consumer quiescence, or final read
+  cutover has occurred.
 
-  Runtime Avatar ownership now has the matching `AvatarOwnershipPeriodSource`. Before the marker
-  it preserves the legacy reader plus the concrete reconciliation copy; after the marker it
-  resolves current owners and owner-scoped selectors from concrete Enterprise/Bureau periods only,
-  without a legacy fallback. New provisioning writes the legacy and concrete pair before cutover
-  and only the concrete period after cutover. Registry transfer acceptance skips legacy period
-  writes after the marker, while the old keyless Request/Accept/Cancel operations fail explicitly
-  instead of reaching a blocked legacy table. This runtime source slice is covered by
+  Runtime Avatar ownership now has the matching `AvatarOwnershipPeriodSource`. Before the marker it
+  preserves the legacy reader plus the concrete reconciliation copy; after the marker it resolves
+  current owners and owner-scoped selectors from concrete Enterprise/Bureau periods only, without a
+  legacy fallback. New provisioning writes the legacy and concrete pair before cutover and only the
+  concrete period after cutover. Registry transfer acceptance skips legacy period writes after the
+  marker, while the old keyless Request/Accept/Cancel operations fail explicitly instead of reaching
+  a blocked legacy table. This runtime source slice is covered by
   `test/models/avatar_ownership_period_source_test.rb`, the post-cutover operation regression in
-  `test/operations/avatar_ownership_transfers_test.rb`, and public pre/post-marker transport
-  cases in the app/org controller tests. It does not claim that operational backfill, writer
-  quiescence, or final cutover has been performed.
+  `test/operations/avatar_ownership_transfers_test.rb`, and public pre/post-marker transport cases
+  in the app/org controller tests. It does not claim that operational backfill, writer quiescence,
+  or final cutover has been performed.
 
   A current P10a transfer/Grant matrix covering concrete period and transfer validation, registry
   cardinality and replay, concurrency, cutover barriers, app/org controllers, Grant issuance and
@@ -223,18 +225,24 @@ semantics, writer quiescence or the P12b marker.
   (before/at/after) or non-increasing clock leaves history unchanged. Lock order is consistent
   across Group/Avatar writers and acquired facts are revalidated; no claimed Zenith/Avatar
   atomicity.
-- Registry operation tests now demonstrate successful app→app, app→org, org→app and org→org
-  period transitions, non-advancing-instant refusal, expiry boundaries, generation checks, group
-  membership consequence and recorded-result replay. The operation locks Group rows before the
-  Avatar row and commits local period/detail state together. The explicit app/org accept transport
-  is covered; independent-connection lock/serialization behavior, failure injection between writes,
-  and the legacy-writer cutover are still required before AV-6 is complete.
+- Registry operation tests now demonstrate successful app→app, app→org, org→app and org→org period
+  transitions, non-advancing-instant refusal, expiry boundaries, generation checks, group membership
+  consequence and recorded-result replay. The operation locks Group rows before the Avatar row and
+  commits local period/detail state together. The explicit app/org accept transport is covered;
+  independent-connection lock/serialization behavior, failure injection between writes, and the
+  legacy-writer cutover are still required before AV-6 is complete.
 - Check actual operation/controller and concurrency tests with failures between writes, lock waits
   and recorded-result retry. Full concrete implementation evidence is planned; current model
   validation or a successful sequential transfer alone cannot establish the contract. The current
   transfer/Grant matrix result is recorded in
   [`Z4M6`](../../evidence/2026-10-12-avatar-p10a-transfer-grant-matrix-Z4M6.md); its stated
   limitations remain.
+
+`test/operations/avatar_registry_transfer_failure_test.rb` injects a failure at the concrete
+destination-period persistence boundary for all four source/destination directions. It checks
+rollback of the preceding legacy/concrete period changes and registry state, then successful retry
+and recorded-result replay without another period. This transactional failure coverage complements
+the independent-connection concurrency cases; it does not replace them or the cutover rehearsal.
 
 ## AV-7 — N:M Grants remain generation-bound
 
@@ -271,17 +279,18 @@ semantics, writer quiescence or the P12b marker.
   `test/policies/group_avatar_membership_policy_test.rb`. Transfer registry cutover and full Group
   transition consequences remain required before Avatar cutover. P10a and this Grant integration are
   independently reviewable and are not blocked solely by the unresolved Group account semantics in
-  AV-8. The current transfer/Grant matrix passed `130 runs, 600 assertions, 0 failures, 0 errors,
-  0 skips`; see [`Z4M6`](../../evidence/2026-10-12-avatar-p10a-transfer-grant-matrix-Z4M6.md).
-  A subsequent public-operation regression exercised O1 → O2 → O1 through the concrete registry:
-  the closed O1 Grant was ineffective both when the stale period object was supplied and when the
-  new O1 period was current, while a newly authorized Grant was required. The focused slice passed
+  AV-8. The current transfer/Grant matrix passed
+  `130 runs, 600 assertions, 0 failures, 0 errors, 0 skips`; see
+  [`Z4M6`](../../evidence/2026-10-12-avatar-p10a-transfer-grant-matrix-Z4M6.md). A subsequent
+  public-operation regression exercised O1 → O2 → O1 through the concrete registry: the closed O1
+  Grant was ineffective both when the stale period object was supplied and when the new O1 period
+  was current, while a newly authorized Grant was required. The focused slice passed
   `33 runs, 172 assertions, 0 failures, 0 errors, 0 skips`, and the following Rails/Vitest Gate 2
-  passed `15155 runs, 128324 assertions, 0 failures, 0 errors, 0 skips` and `99 files passed,
-  1140 tests passed`; see [`G5N2`](../../evidence/2026-10-12-avatar-p10a-generation-reuse-G5N2.md).
-  This closes the stale-period Grant non-reactivation subcondition only. It does not close the
-  complete O1-to-O2-to-O1/client-transition, failure-injection, writer-quiescence or P12b cutover
-  criteria.
+  passed `15155 runs, 128324 assertions, 0 failures, 0 errors, 0 skips` and
+  `99 files passed, 1140 tests passed`; see
+  [`G5N2`](../../evidence/2026-10-12-avatar-p10a-generation-reuse-G5N2.md). This closes the
+  stale-period Grant non-reactivation subcondition only. It does not close the complete
+  O1-to-O2-to-O1/client-transition, failure-injection, writer-quiescence or P12b cutover criteria.
 
 ## AV-8 — Group account meaning is not assumed ownership
 
@@ -295,22 +304,22 @@ semantics, writer quiescence or the P12b marker.
 - Check Group policies/resolvers/provisioning and
   [existing Group period tests](../../test/models/avatar_group_ownership_period_test.rb), then
   concrete Group and transfer consequence tests. The registry acceptance regression in
-  `test/operations/avatar_ownership_transfers_test.rb` now proves that an ownership transfer
-  removes an owner-mismatched membership while preserving each Group's independent
-  `account_surface`/`account_public_id` context and a target-matched membership. This hold affects P10b/P12b, not
-  independent Grants or identifier history. Current `GroupManagement::Create` and
+  `test/operations/avatar_ownership_transfers_test.rb` now proves that an ownership transfer removes
+  an owner-mismatched membership while preserving each Group's independent
+  `account_surface`/`account_public_id` context and a target-matched membership. This hold affects
+  P10b/P12b, not independent Grants or identifier history. Current `GroupManagement::Create` and
   `AvatarGroupPolicy` compare/filter selected subject account separately from owning collective; the
   app Avatar controller resolves that account as `ClientPersona`. The owning specification records
   these concrete observations. Account identity must not be replaced by owner identity. The meaning
   decision is therefore settled for the current contract: account context remains distinct from
   concrete organization ownership. These observations do not establish data reconciliation, a
   concrete account relationship, migrated consumers, or the full four-direction cutover; those
-  implementation and operational steps remain required for this criterion.
-  The read-only transition inventory also classifies a legacy or concrete Group history with a
-  missing owner, invalid interval, non-creation initial boundary, multiple open periods, or a gap as
-  `conflict`/manual review. The bounded Group backfill refuses that candidate and never invents a
-  boundary. This protects the pre-cutover migration boundary; it does not resolve the account
-  meaning or establish the cutover marker. The revision-scoped result is recorded in
+  implementation and operational steps remain required for this criterion. The read-only transition
+  inventory also classifies a legacy or concrete Group history with a missing owner, invalid
+  interval, non-creation initial boundary, multiple open periods, or a gap as `conflict`/manual
+  review. The bounded Group backfill refuses that candidate and never invents a boundary. This
+  protects the pre-cutover migration boundary; it does not resolve the account meaning or establish
+  the cutover marker. The revision-scoped result is recorded in
   [`evidence/2026-10-12-avatar-group-inventory-S7H2.md`](../../evidence/2026-10-12-avatar-group-inventory-S7H2.md).
 
 ## AV-9 — Observable retention deferral

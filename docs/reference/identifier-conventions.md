@@ -19,10 +19,9 @@ alphabet/CSPRNG path, explicitly non_secure=false. The shared concern validates 
 capacity of 25 independently from the 21-character issuer, so existing values up to that capacity
 remain compatible. Preference, TOTP, RP-session and ORG Telephone backfill writers call that
 mechanism without sharing their distinct lifecycle policies. Existing resource values and callback
-timing are preserved. Ownership-ID DB protection and bulk/collision
-handling must satisfy ID-4/ID-5 and the explicit authority map. Model callbacks do not establish DB
-immutability. New same-row identifier triggers and shared-role changes are not authorized by this
-document.
+timing are preserved. Ownership-ID DB protection and bulk/collision handling must satisfy ID-4/ID-5
+and the explicit authority map. Model callbacks do not establish DB immutability. New same-row
+identifier triggers and shared-role changes are not authorized by this document.
 
 The public generation contract is tested in `test/lib/public_id_generation_test.rb`. The existing
 invariant suite's `test/security/invariants/identifier_generation_invariant_test.rb` parses Ruby
@@ -88,8 +87,14 @@ ordinary model updates. Existing preference values are not rewritten. Focused co
 [`test/models/preference_public_id_collision_test.rb`](../../test/models/preference_public_id_collision_test.rb)
 and the shared concern contract remains in
 [`test/models/concerns/public_id_test.rb`](../../test/models/concerns/public_id_test.rb). This is
-model-level protection; it does not close the separate ID-4 requirement for database-enforced
-immutability through direct SQL or every owned identifier.
+model-level protection. The separately approved 2026-10-13 setting-Preference migrations add
+`app_preferences_public_id_immutability`, `com_preferences_public_id_immutability` and
+`org_preferences_public_id_immutability`. These triggers reject distinct UPDATE values, including
+NULL/blank, with SQLSTATE `23514`; same-ID and unrelated mutable fields remain writable. They do not
+rewrite issued values or cover other tables. Direct/bulk/upsert and logical-deletion coverage is in
+`test/models/setting_preference_public_id_immutability_test.rb`; exact inventory is in
+`test/models/enforcement_triggers_test.rb`. See the named exception in
+`adr/database-trigger-usage-boundary.md` for authority and rollback boundaries.
 
 ## Staff identity audit-event bigint transition
 
@@ -180,7 +185,7 @@ catalog-conformance claim. Their current UUID generation is not a provider-forma
 | Producer / column                                         | Role and meaning                                                                  | Required boundary and remaining work                                                                                                                                                                                                                                                                                      |
 | --------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Client/Visitor/Operator Email ceremony transaction_id     | Owned ceremony identity in the concrete realm/channel transaction family          | New values from `EmailCeremonyTransactionable.create_transaction!` and the public EVP challenge factory are separate NanoID-21 references; existing opaque values remain readable. Preserve proof-bound consumers and do not substitute OTP generation, result or protocol values.                                        |
-| Client/Visitor/Operator Telephone ceremony transaction_id | Owned ceremony identity in the concrete realm/channel transaction family          | New values from `TelephoneCeremonyTransactionable.create_transaction!` and the legacy `IdentityTelephoneCeremonyTransaction` value object use separate NanoID-21 references; existing opaque values remain readable. Preserve proof-bound consumers and do not substitute OTP generation, result or protocol values.                   |
+| Client/Visitor/Operator Telephone ceremony transaction_id | Owned ceremony identity in the concrete realm/channel transaction family          | New values from `TelephoneCeremonyTransactionable.create_transaction!` and the legacy `IdentityTelephoneCeremonyTransaction` value object use separate NanoID-21 references; existing opaque values remain readable. Preserve proof-bound consumers and do not substitute OTP generation, result or protocol values.      |
 | The same Email ceremony grant_jti                         | Identity of the ceremony's grant, distinct from transaction_id and result_jti     | The concrete Email factory generates a separate NanoID-21 value and `grant_claims` publishes it as `jti`; explicit values remain explicit. Do not reuse the resource ID or merge grant lifetime with result lifetime. Existing grant values and token validators remain readable and purpose-bound.                       |
 | The same Email ceremony result_jti                        | Result identity, absent until consumption                                         | consume_registration_result! creates it under lock; consume_result! accepts an explicitly supplied result. Preserve NULL before result and one-time consumption; do not create dummy IDs or blanket immutability that blocks initial result establishment. Full result producer/consumer provenance remains to be traced. |
 | chronicles.event_uuid                                     | Owned audit-event identity                                                        | ChronicleCapturable.capture generates a UUID; ChronicleIntentWriter persists it, and result/failure/invalidation writers retain the same event identity. Preserve existing audit references. Current model uniqueness is not proof of DB immutability or bounded capacity.                                                |
@@ -239,16 +244,15 @@ reference. The existing intent, provider, TTL, callback-state, authorization and
 remain authoritative. The public SocialAuth link integration boundary covers the NanoID-21 format in
 [`test/integration/social_auth_link_test.rb`](../../test/integration/social_auth_link_test.rb).
 
-The `SocialCeremonyResultAdapter` reference and the
-`LocalAuthenticationResultCoordinator` reference are short-lived Valkey receiver capabilities,
-not durable resource identities. They carry no raw result code and are looked up only through their
-purpose-, surface-, flow- and generation-bound stores. Their current browser receivers share the
-strict UUID-v4 admission transport pattern, so existing UUID references remain readable and new
-format changes require a consumer-specific transport decision. They must not be treated as public
-resource IDs, substituted for the signed/result evidence, or resolved through a cross-surface
-fallback. A future bounded format transition would need to update the matching receiver validation
-and its exact legacy reader together; the standard NanoID rule alone is not authority to reformat
-these capability values.
+The `SocialCeremonyResultAdapter` reference and the `LocalAuthenticationResultCoordinator` reference
+are short-lived Valkey receiver capabilities, not durable resource identities. They carry no raw
+result code and are looked up only through their purpose-, surface-, flow- and generation-bound
+stores. Their current browser receivers share the strict UUID-v4 admission transport pattern, so
+existing UUID references remain readable and new format changes require a consumer-specific
+transport decision. They must not be treated as public resource IDs, substituted for the
+signed/result evidence, or resolved through a cross-surface fallback. A future bounded format
+transition would need to update the matching receiver validation and its exact legacy reader
+together; the standard NanoID rule alone is not authority to reformat these capability values.
 
 Identity ceremony candidates use purpose-specific reference contracts. The TOTP enrollment
 candidate, secret-credential candidate, and concrete APP/COM/ORG passkey candidates are
@@ -273,9 +277,9 @@ OAuth/OIDC state, callback payloads and result identities retain separate contra
 candidate is rewritten merely to change its format. The contract is covered by
 [`test/services/identity/social_ceremony_contract_test.rb`](../../test/services/identity/social_ceremony_contract_test.rb)
 and the end-to-end link boundaries in
-[`test/integration/social_auth_link_test.rb`](../../test/integration/social_auth_link_test.rb).
-The shared candidate factory retries only a collision on the named single-column `ref` unique
-B-tree index, inside a savepoint and the finite `PublicId::MAX_COLLISION_RETRIES` budget; unrelated
+[`test/integration/social_auth_link_test.rb`](../../test/integration/social_auth_link_test.rb). The
+shared candidate factory retries only a collision on the named single-column `ref` unique B-tree
+index, inside a savepoint and the finite `PublicId::MAX_COLLISION_RETRIES` budget; unrelated
 validation or uniqueness failures remain errors.
 
 Credential-registration Email and Telephone transaction references are a bounded P2 slice of the
@@ -419,8 +423,8 @@ proof fallback. See
 [`test/models/concerns/ceremony_transactionable_test.rb`](../../test/models/concerns/ceremony_transactionable_test.rb),
 [`test/services/identity_telephone_ceremony_transaction_coverage_test.rb`](../../test/services/identity_telephone_ceremony_transaction_coverage_test.rb)
 and the related Telephone contract, replay, finalization, result, purge, delivery and integration
-tests. The legacy `IdentityTelephoneCeremonyTransaction` value object is not a persisted issuer;
-its omitted `transaction_id` and `grant_jti` defaults now use the shared NanoID-21 generator, while
+tests. The legacy `IdentityTelephoneCeremonyTransaction` value object is not a persisted issuer; its
+omitted `transaction_id` and `grant_jti` defaults now use the shared NanoID-21 generator, while
 explicit caller-supplied values remain unchanged. Its defaults are covered by
 [`test/services/identity_telephone_ceremony_transaction_coverage_test.rb`](../../test/services/identity_telephone_ceremony_transaction_coverage_test.rb);
 there is no independent database collision boundary for the value object.
@@ -468,16 +472,17 @@ issuers.
 Step-Up passkey challenge references are a separate expiring workflow-state identity. The
 `passkey_challenge_ref` columns on `client_step_up_sessions`, `visitor_step_up_sessions` and
 `operator_step_up_sessions` identify the currently bound challenge row; they are not WebAuthn
-protocol challenges, credential IDs, session tokens or permanent resource identities. New
-references are issued through `PublicId.generate` as NanoID-21 values. Existing opaque references,
-including previously issued UUID-v4 values, remain readable through the exact row-bound comparison.
-Each realm keeps its existing named single-column unique B-tree index as the final collision
-guarantee. A generated collision is retried only for that index, inside a savepoint and within the
-finite `MAX_CHALLENGE_REF_COLLISION_RETRIES` budget; unrelated uniqueness or validation failures
-propagate. The protocol `passkey_challenge` value, RP/origin binding, expiry and burn semantics are
-unchanged. Focused public-boundary and model coverage is in
+protocol challenges, credential IDs, session tokens or permanent resource identities. New references
+are issued through `PublicId.generate` as NanoID-21 values. Existing opaque references, including
+previously issued UUID-v4 values, remain readable through the exact row-bound comparison. Each realm
+keeps its existing named single-column unique B-tree index as the final collision guarantee. A
+generated collision is retried only for that index, inside a savepoint and within the finite
+`MAX_CHALLENGE_REF_COLLISION_RETRIES` budget; unrelated uniqueness or validation failures propagate.
+The protocol `passkey_challenge` value, RP/origin binding, expiry and burn semantics are unchanged.
+Focused public-boundary and model coverage is in
 [`test/controllers/auth/step_up_admission_test.rb`](../../test/controllers/auth/step_up_admission_test.rb)
-and [`test/models/step_up_passkey_challenge_test.rb`](../../test/models/step_up_passkey_challenge_test.rb).
+and
+[`test/models/step_up_passkey_challenge_test.rb`](../../test/models/step_up_passkey_challenge_test.rb).
 
 The APP/COM sign-up Email and Telephone `grant_jti` is a separate self-controlled, non-secret grant
 identity. New sign-up issuers generate it with `PublicId.generate` (NanoID-21), while existing

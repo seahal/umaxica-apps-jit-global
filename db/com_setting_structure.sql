@@ -38,6 +38,15 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
+--
+-- Name: prevent_com_preference_public_id_mutation(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prevent_com_preference_public_id_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN IF NEW.public_id IS DISTINCT FROM OLD.public_id THEN RAISE EXCEPTION 'preference public identity cannot be changed' USING ERRCODE = '23514', CONSTRAINT = 'com_preferences_public_id_immutable'; END IF; RETURN NEW; END; $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -1543,6 +1552,13 @@ CREATE INDEX index_com_preferences_on_used_at ON public.com_preferences USING bt
 
 
 --
+-- Name: com_preferences com_preferences_public_id_immutability; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER com_preferences_public_id_immutability BEFORE UPDATE OF public_id ON public.com_preferences FOR EACH ROW EXECUTE FUNCTION public.prevent_com_preference_public_id_mutation();
+
+
+--
 -- Name: com_preference_languages fk_com_preference_languages_on_option_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1765,6 +1781,7 @@ ALTER TABLE ONLY public.com_preference_themes
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261013035716'),
 ('20261012090001'),
 ('20261012090000'),
 ('20260921133000'),

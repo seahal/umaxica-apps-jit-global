@@ -109,7 +109,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_equal 0, OperatorToken.where(staff_id: @staff.id).count
   end
 
-  test "should get new" do
+  test "normal passkey binding refusal preserves safe requests and prevents replay artifacts" do
     begin
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
@@ -166,8 +166,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     panel = inertia_props.fetch("panel")
 
     # The Entra transaction names the operator, so the page asks for no identifier.
-    assert_nil panel.fetch("field")
-    assert_nil panel.fetch("identifier_param")
+    assert_equal [nil, nil], [panel.fetch("field"), panel.fetch("identifier_param")]
     options_uri = URI.parse(panel.fetch("options_url"))
     verification_uri = URI.parse(panel.fetch("verification_url"))
 
@@ -183,6 +182,59 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     ).surface
     assert_equal "jp", panel.fetch("region")
     assert_nil inertia_props["secret_link"]
+
+    transaction = session.fetch(OrgNormalSignInTransaction::SESSION_KEY).deep_dup
+    stale_binding = OrgNormalSignInBindingCodec.encode(
+      transaction: transaction.merge("issued_at" => transaction.fetch("issued_at") - 1),
+      surface: "org", phase: "PRIMARY_PENDING",
+    )
+    token_count = OperatorToken.count
+
+    assert_nil session[:passkey_challenges]
+
+    [nil, "", "invalid-binding", stale_binding].each do |binding|
+      get new_auth_org_sign_in_passkey_path, params: { ri: "jp", fb: binding }
+
+      assert_equal(
+        { status: 409, media_type: "text/plain", body: "戻るはだめです", location: nil, no_store: true },
+        {
+          status: response.status,
+          media_type: response.media_type,
+          body: response.body,
+          location: response.headers["Location"],
+          no_store: response.headers["Cache-Control"].include?("no-store"),
+        },
+      )
+      assert_equal transaction, session.fetch(OrgNormalSignInTransaction::SESSION_KEY)
+
+      head new_auth_org_sign_in_passkey_path, params: { ri: "jp", fb: binding }
+
+      assert_response :conflict
+      assert_equal ["", nil], [response.body, response.headers["Location"]]
+      assert_includes response.headers["Cache-Control"], "no-store"
+      assert_equal transaction, session.fetch(OrgNormalSignInTransaction::SESSION_KEY)
+    end
+
+    assert_equal token_count, OperatorToken.count
+    assert_nil session[:passkey_challenges]
+
+    post auth_org_sign_in_passkey_options_path, params: { ri: "jp", fb: stale_binding }
+
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
+    halted_transaction = session.fetch(OrgNormalSignInTransaction::SESSION_KEY).deep_dup
+
+    assert_equal "halted", halted_transaction.fetch("status")
+    assert_equal "phase_violation", halted_transaction.fetch("halt_reason")
+    assert_equal token_count, OperatorToken.count
+    assert_nil session[:passkey_challenges]
+
+    post auth_org_sign_in_passkey_options_path, params: { ri: "jp", fb: stale_binding }
+
+    assert_equal token_count, OperatorToken.count
+    assert_nil session[:passkey_challenges]
+    # The user deferred the missing durable audit for this delivery on 2026-10-13.
+    # Restore its positive assertion with plans/backlog/org-normal-sign-in-durable-halt-audit.md.
   end
 
   test "new sends the operator back to the entry when no entra transaction is pending" do
