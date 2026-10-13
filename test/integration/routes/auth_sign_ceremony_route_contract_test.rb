@@ -917,21 +917,18 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     )
   end
 
-  test "app device placeholder remains read-only and app-only" do
-    { "device" => "devices" }.each do |resource, controller|
-      assert_recognizes(
-        { controller: "auth/app/sign/in/#{controller}", action: "show" },
-        { path: "http://#{SIGN_APP_HOST}/sign/in/#{resource}", method: :get },
-      )
-      %i(post put patch delete).each do |verb|
-        assert_raises(ActionController::RoutingError) do
-          Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/sign/in/#{resource}", method: verb)
-        end
+  test "app device placeholder route is fully retired" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/sign/in/device", method: :get)
+    end
+    %i(post put patch delete).each do |verb|
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/sign/in/device", method: verb)
       end
-      [SIGN_COM_HOST, SIGN_ORG_HOST].each do |host|
-        assert_raises(ActionController::RoutingError) do
-          Rails.application.routes.recognize_path("http://#{host}/sign/in/#{resource}", method: :get)
-        end
+    end
+    [SIGN_COM_HOST, SIGN_ORG_HOST].each do |host|
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path("http://#{host}/sign/in/device", method: :get)
       end
     end
     [SIGN_APP_HOST, SIGN_COM_HOST, SIGN_ORG_HOST].each do |host|
