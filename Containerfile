@@ -20,6 +20,8 @@ ARG REVISION=""
 ARG NODE_VERSION=24.20.0
 # Bun is pinned for reproducible builds across local containers and CI.
 ARG BUN_VERSION=1.4.0
+# actionlint has no Debian package; the binary is copied from the upstream image at a pinned tag.
+ARG ACTIONLINT_VERSION=1.7.7
 
 # ============================================================================
 # Node.js toolchain (binaries copied into the development and asset images)
@@ -29,6 +31,10 @@ FROM node:${NODE_VERSION}-trixie-slim AS node-toolchain
 # Bun toolchain (standalone binary copied into development and asset images)
 # ============================================================================
 FROM docker.io/oven/bun:${BUN_VERSION} AS bun-toolchain
+# ============================================================================
+# actionlint toolchain (standalone binary copied into the development image)
+# ============================================================================
+FROM docker.io/rhysd/actionlint:${ACTIONLINT_VERSION} AS actionlint-toolchain
 # ============================================================================
 # Production base — runtime-only dependencies
 # ============================================================================
@@ -279,6 +285,7 @@ COPY --from=node-toolchain /usr/local/bin/node /usr/local/bin/node
 COPY --from=node-toolchain /usr/local/lib/node_modules /usr/local/lib/node_modules
 # Node remains available for runtime compatibility; Bun is the sole JavaScript package manager.
 COPY --from=bun-toolchain /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=actionlint-toolchain /usr/local/bin/actionlint /usr/local/bin/actionlint
 
 # The lib* packages below are Chromium's shared-library closure, for the Vitest
 # `component` project, which runs against a real browser rather than jsdom (see
@@ -291,6 +298,9 @@ COPY --from=bun-toolchain /usr/local/bin/bun /usr/local/bin/bun
 # browser desktop (podman/core/desktop.sh). `chromium-sandbox` is left out on
 # purpose: it is a setuid helper, and `core` runs with `no-new-privileges`, so
 # it could never take effect -- Chromium uses its user-namespace sandbox here.
+#
+# Debian ships fd and bat as `fdfind` and `batcat` to avoid name clashes; the
+# symlinks restore the upstream names that documentation and tools expect.
 # hadolint ignore=DL3008
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -303,6 +313,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && apt-get update -qq \
     && apt-get install --no-install-recommends -y \
     bat \
+    bsdextrautils \
     bubblewrap \
     chromium \
     entr \
@@ -317,6 +328,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     iproute2 \
     jq \
     lefthook \
+    less \
     libasound2t64 \
     libatk-bridge2.0-0t64 \
     libatk1.0-0t64 \
@@ -334,6 +346,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libxkbcommon0 \
     libxrandr2 \
     lsb-release \
+    lsof \
     ncdu \
     netcat-openbsd \
     novnc \
@@ -342,12 +355,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     openssh-server \
     openssl \
     ripgrep \
+    shellcheck \
     silversearcher-ag \
     socat \
     tailscale=1.102.3 \
     tig \
     tree \
     util-linux \
+    valkey-tools \
     watch \
     websockify \
     wget \
@@ -355,6 +370,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     xvfb \
     yq \
     zip \
+    && ln -s /usr/bin/fdfind /usr/local/bin/fd \
+    && ln -s /usr/bin/batcat /usr/local/bin/bat \
     && rm -rf /tmp/* /var/tmp/* "/home/${DOCKER_USER}/"
 
 # Dev Container features run `chown $_REMOTE_USER:$_REMOTE_USER`, which assumes a
