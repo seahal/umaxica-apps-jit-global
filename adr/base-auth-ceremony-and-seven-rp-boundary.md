@@ -11,6 +11,10 @@ their established names.
 Current callback note (2026-10-02): the RP protocol callback written below as `GET /sign/callback`
 is now `GET /oidc/callback`. See `adr/sign-neutral-entry-and-logout-target-authorization.md`.
 
+Back-channel note (2026-10-13): the backchannel logout URI named below as a per-client binding is
+withdrawn for first-party clients by
+`adr/first-party-sign-out-shared-database-without-backchannel-logout.md`.
+
 Supersedes conflicting authority claims in:
 
 - `adr/acme-sign-core-base-port-boundary.md` where it calls Base an RP or Auth/Sign a special RP

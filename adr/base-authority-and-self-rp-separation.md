@@ -4,6 +4,12 @@
 
 Accepted (2026-10-06) as the target architecture for the `two.md` implementation cycle.
 
+> **Partial supersession (2026-10-13):** `adr/first-party-sign-out-shared-database-without-backchannel-logout.md`
+> replaces the statement below that sibling RP rows are not synchronously revoked, and ends the
+> retained back-channel scope freeze: the parent and all of its RP rows are revoked in one
+> transaction and first-party Back-Channel Logout is removed. Authority-first logout and the
+> irreversible commit point are unchanged.
+
 ## Context
 
 Base is both the physical OAuth/OIDC authority and an ordinary browser relying party of itself.

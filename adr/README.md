@@ -52,6 +52,15 @@ Current identity authority decision:
   implementation now; `auth.*` origins and Xper apex origins stay stable; the redesign is retained
   as backlog.
 
+Current sign-out decision (target contract; runtime not yet migrated):
+
+- `adr/first-party-sign-out-shared-database-without-backchannel-logout.md` — the parent
+  session on the realm Ticket writer is the single source of truth; a global sign-out revokes the
+  parent and all of its RP session rows in one transaction, and a confirmed COMMIT is the point of
+  no return. Back-Channel Logout is not used between the IdP and first-party RPs and must not be
+  reintroduced without a new ADR. The rejected design is recorded in
+  `research/2026-10-13-first-party-backchannel-logout-rejected-design.md`.
+
 Current IdP flow lifecycle decisions (target contract; runtime not yet migrated):
 
 - `adr/idp-flow-lifecycle-vocabulary.md` — lifecycle, event, request-semantics, and outcome
@@ -66,6 +75,12 @@ Current browser credential recovery decision:
   preference browser credentials: credential rejection and lifecycle ends are detached, system
   failures raise, and stale preference reads never delete a newer generation. Supersedes
   `adr/preference-credential-entry-recovery.md`, which is retained for history.
+
+Current Ruby source decision (target contract; repository not yet conforming):
+
+- `adr/frozen-string-literals.md` — every owned Ruby file, migrations and `bin/` executables
+  included, declares `# frozen_string_literal: true`; enforced by RuboCop `always_true`; no global
+  switch and no third-party patch. Single authority for the topic.
 
 Current configuration decision:
 

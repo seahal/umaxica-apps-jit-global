@@ -11,6 +11,11 @@ Accepted (2026-05-20)
 > reintroduce sign-side sessions, refresh tokens, preference writes, dashboards, account lifecycle,
 > downstream token issuance, authorization decisions, or step-up freshness.
 
+> **Partial supersession (2026-10-13):** for first-party relying parties, the back-channel and
+> front-channel RP entrypoints and the planned `Oidc::BackchannelLogoutNotifier` layer described
+> below are not used. See
+> `adr/first-party-sign-out-shared-database-without-backchannel-logout.md`.
+
 ## Context
 
 IdP-side session management needs two logout flows: revoke only the current session and revoke every
