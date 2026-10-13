@@ -27,7 +27,7 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
     issuers.each do |namespace, origin|
       tld = namespace.split("_").last.downcase
       peer = namespace.start_with?("BASE_") ? "auth" : "www"
-      token = JumpRtIssuer.call(namespace: namespace, url: "https://#{peer}.umaxica.#{tld}/")
+      token = JumpRtIssuer.call(namespace: namespace, url: "https://#{peer}.umaxica.#{tld}/", dst: "internal")
       claims, header = JWT.decode(token, nil, false)
 
       assert_equal origin, claims.fetch("iss"), namespace
@@ -40,6 +40,18 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
       assert_response :ok
       keys = response.parsed_body.fetch("keys")
 
+      assert_includes 1..JitSecurityJwtRegistry::MAX_JUMP_PUBLISHED_JWKS_KEYS, keys.size, namespace
+      assert_operator JSON.generate(response.parsed_body).bytesize,
+                      :<=,
+                      JitSecurityJwtRegistry::MAX_JUMP_PUBLISHED_JWKS_BYTES,
+                      namespace
+      assert_equal keys.size, keys.pluck("kid").uniq.size, namespace
+      keys.each do |key|
+        assert_equal "ES384", key.fetch("alg"), namespace
+        assert_equal "sig", key.fetch("use"), namespace
+        assert_equal "EC", key.fetch("kty"), namespace
+        assert_equal "P-384", key.fetch("crv"), namespace
+      end
       assert_includes keys.pluck("kid"), header.fetch("kid"), namespace
       assert_empty keys.flat_map(&:keys) & JitSecurityJwtJwk::PRIVATE_FIELDS, namespace
       verified, = JWT.decode(

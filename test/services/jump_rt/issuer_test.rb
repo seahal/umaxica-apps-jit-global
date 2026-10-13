@@ -84,6 +84,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
         token = JumpRtIssuer.call(
           namespace: "AUTH_APP",
           url: "https://target.example/?a=scalar&a[b]=nested",
+          dst: "internal",
         )
         payload, = JWT.decode(token, nil, false)
 
@@ -95,14 +96,16 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
   test "callers cannot choose a replay policy" do
     %w(reuse once).each do |policy|
       assert_raises(ArgumentError, policy) do
-        JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://target.example/path", replay_policy: policy)
+        JumpRtIssuer.call(
+          namespace: "AUTH_APP", url: "https://target.example/path", replay_policy: policy, dst: "internal",
+        )
       end
     end
   end
 
   test "every schema 1 token issued by each Jump issuer carries rpl reuse" do
     JumpRtSurface::ISSUER_NAMESPACES.each do |namespace|
-      token = JumpRtIssuer.call(namespace: namespace, url: "https://target.example/path")
+      token = JumpRtIssuer.call(namespace: namespace, url: "https://target.example/path", dst: "internal")
       payload, = JWT.decode(token, nil, false)
 
       assert_equal 1, payload.fetch("schema"), namespace
@@ -139,6 +142,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
             url: "https://target.example/path",
             now: Time.zone.at(1_800_000_000),
             jti: "jti-test",
+            dst: "internal",
           )
           payload, = JWT.decode(token, nil, false)
 
@@ -159,13 +163,124 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     end
   end
 
+  test "requires an explicit internal destination and refuses all other values" do
+    assert_raises(ArgumentError) do
+      JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://target.example/")
+    end
+
+    [nil, "external", "unknown", [], {}, 1].each do |destination|
+      assert_nil JumpRtIssuer.call(
+        namespace: "AUTH_APP", url: "https://target.example/", dst: destination,
+      ), destination.inspect
+    end
+
+    with_env("JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
+      JumpRtKeyring.stub(:private_key, @private_key) do
+        token = JumpRtIssuer.call(
+          namespace: "AUTH_APP", url: "https://target.example/", dst: "internal",
+        )
+
+        assert_equal "internal", JWT.decode(token, nil, false).first.fetch("dst")
+      end
+    end
+  end
+
+  test "issue ttl accepts one and thirty seconds and refuses zero and thirty one" do
+    with_env("JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
+      JumpRtKeyring.stub(:private_key, @private_key) do
+        [0, 31].each do |ttl|
+          assert_nil JumpRtIssuer.call(
+            namespace: "AUTH_APP", url: "https://target.example/", dst: "internal", ttl: ttl,
+          ), "ttl=#{ttl}"
+        end
+
+        [1, 30].each do |ttl|
+          token = JumpRtIssuer.call(
+            namespace: "AUTH_APP", url: "https://target.example/", dst: "internal", ttl: ttl,
+          )
+          payload, = JWT.decode(token, nil, false)
+
+          assert_equal ttl, payload.fetch("exp") - payload.fetch("iat"), "ttl=#{ttl}"
+        end
+      end
+    end
+  end
+
+  test "normalized url utf16 length accepts 2047 and 2048 units and refuses 2049" do
+    with_env("JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
+      JumpRtKeyring.stub(:private_key, @private_key) do
+        [2_047, 2_048].each do |length|
+          base = "https://target.example/"
+          url = base + ("a" * (length - base.length))
+          token = JumpRtIssuer.call(namespace: "AUTH_APP", url: url, dst: "internal")
+          payload, = JWT.decode(token, nil, false)
+
+          assert_equal length, payload.fetch("url").encode(Encoding::UTF_16LE).bytesize / 2
+        end
+
+        base = "https://target.example/"
+        oversized = base + ("a" * (2_049 - base.length))
+
+        assert_nil JumpRtIssuer.call(namespace: "AUTH_APP", url: oversized, dst: "internal")
+      end
+    end
+  end
+
+  test "unicode path is percent encoded before applying the normalized url length limit" do
+    with_env("JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
+      JumpRtKeyring.stub(:private_key, @private_key) do
+        token = JumpRtIssuer.call(
+          namespace: "AUTH_APP", url: "https://target.example/😀?q=a%20b&plus=a%2Bb", dst: "internal",
+        )
+        payload, = JWT.decode(token, nil, false)
+
+        assert_equal "https://target.example/%F0%9F%98%80?q=a+b&plus=a%2Bb", payload.fetch("url")
+        assert_equal payload.fetch("url").length,
+                     payload.fetch("url").encode(Encoding::UTF_16LE).bytesize / 2
+      end
+    end
+  end
+
+  test "url length is checked after dangerous query pairs are stripped" do
+    with_env("JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
+      JumpRtKeyring.stub(:private_key, @private_key) do
+        oversized_before_normalization = "https://target.example/?keep=1&rt=#{"x" * 3_000}"
+        token = JumpRtIssuer.call(
+          namespace: "AUTH_APP", url: oversized_before_normalization, dst: "internal",
+        )
+        payload, = JWT.decode(token, nil, false)
+
+        assert_equal "https://target.example/?keep=1", payload.fetch("url")
+      end
+    end
+  end
+
+  # With the pinned receiver's 2,048-unit URL and 128-character jti maxima, a valid issuer payload
+  # remains below 4,095 bytes. The nearest reachable issue case verifies the hard ceiling and ASCII
+  # compact serialization; exact 4,095/4,096/4,097 JWTs require violating the receiver's claim caps.
+  test "maximum valid claims produce an ascii compact jwt within the 4096 byte bound" do
+    with_env("JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
+      JumpRtKeyring.stub(:private_key, @private_key) do
+        base = "https://target.example/"
+        url = base + ("a" * (2_048 - base.length))
+        token = JumpRtIssuer.call(
+          namespace: "AUTH_APP", url: url, dst: "internal", jti: "j" * 128,
+        )
+
+        assert_predicate token, :ascii_only?
+        assert_operator token.bytesize, :<=, JumpRtIssuer::MAX_TOKEN_LENGTH
+        assert_operator token.bytesize, :<, 4_095
+      end
+    end
+  end
+
   test "refuses unsafe destination urls" do
     with_env("JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
       JumpRtKeyring.stub(:private_key, @private_key) do
-        assert_nil JumpRtIssuer.call(namespace: "AUTH_APP", url: "javascript:alert(1)")
-        assert_nil JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://user:pass@target.example/")
-        assert_nil JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://target.example/#fragment")
-        assert_nil JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://target.example/\n")
+        assert_nil JumpRtIssuer.call(namespace: "AUTH_APP", url: "javascript:alert(1)", dst: "internal")
+        assert_nil JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://user:pass@target.example/", dst: "internal")
+        assert_nil JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://target.example/#fragment", dst: "internal")
+        assert_nil JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://target.example/\n", dst: "internal")
       end
     end
   end
@@ -179,6 +294,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
         token = JumpRtIssuer.call(
           namespace: "AUTH_APP",
           url: "https://target.example/path?ok=1&pt=/evil&rt=stale&xt=foo&keep=2",
+          dst: "internal",
         )
         payload, = JWT.decode(token, nil, false)
 
@@ -193,6 +309,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
         token = JumpRtIssuer.call(
           namespace: "AUTH_APP",
           url: "https://target.example/path?redirect_uri=https%3A%2F%2Fwww.example.com%2Fauth%2Fcallback&ok=1",
+          dst: "internal",
         )
         payload, = JWT.decode(token, nil, false)
 
@@ -208,6 +325,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
           namespace: "AUTH_APP",
           url: "https://target.example/path?redirect_uri=https%3A%2F%2Fwww.example.com%2Fauth%2Fcallback&rt=stale&ok=1",
           preserve_query_keys: ["redirect_uri"],
+          dst: "internal",
         )
         payload, = JWT.decode(token, nil, false)
         query = Rack::Utils.parse_nested_query(URI.parse(payload["url"]).query)
@@ -225,6 +343,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
         token = JumpRtIssuer.call(
           namespace: "AUTH_APP",
           url: "https://target.example/path?tag=b&rt=stale&tag=a&q=a%2Bb&s=a+b",
+          dst: "internal",
         )
         payload, = JWT.decode(token, nil, false)
 
@@ -239,6 +358,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
         token = JumpRtIssuer.call(
           namespace: "AUTH_APP",
           url: "https://target.example/path?ok=1&rt%5B%5D=x&next[x]=evil&%72t=y&redirect_uri%5Ba%5D=z",
+          dst: "internal",
         )
         payload, = JWT.decode(token, nil, false)
 
@@ -254,6 +374,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
           namespace: "AUTH_APP",
           url: "https://target.example/path?ok=1&redirect_uri=https%3A%2F%2Fwww.example.com%2Fcb&rt=stale&z=2",
           preserve_query_keys: ["redirect_uri"],
+          dst: "internal",
         )
         payload, = JWT.decode(token, nil, false)
 
@@ -269,6 +390,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
         token = JumpRtIssuer.call(
           namespace: "AUTH_APP",
           url: "https://target.example/path?rt=stale&pt=/evil",
+          dst: "internal",
         )
         payload, = JWT.decode(token, nil, false)
 
@@ -281,7 +403,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     JumpRtKeyring.stub(:active_kid, nil) do
       error =
         assert_raises(JumpRtConfigurationError) do
-          JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://target.example/")
+          JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://target.example/", dst: "internal")
         end
 
       assert_match(/Jump RT signing key configuration/, error.message)
@@ -290,7 +412,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     JumpRtKeyring.stub(:private_key, nil) do
       error =
         assert_raises(JumpRtConfigurationError) do
-          JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://target.example/")
+          JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://target.example/", dst: "internal")
         end
 
       assert_match(/Jump RT signing key configuration/, error.message)
@@ -300,7 +422,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
   test "refuses unsupported issuer surface" do
     ["JUMP_APP", nil, ""].each do |namespace|
       assert_raises(JumpRtConfigurationError, namespace.inspect) do
-        JumpRtIssuer.call(namespace: namespace, url: "https://target.example/")
+        JumpRtIssuer.call(namespace: namespace, url: "https://target.example/", dst: "internal")
       end
     end
   end
@@ -359,7 +481,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
       end
     end
     assert_raises(JumpRtConfigurationError) do
-      JumpRtIssuer.call(namespace: "EDIT_ORG", url: "https://www.umaxica.org/oauth/authorize")
+      JumpRtIssuer.call(namespace: "EDIT_ORG", url: "https://www.umaxica.org/oauth/authorize", dst: "internal")
     end
     assert_raises(JitSecurityJwtRegistry::ConfigurationError) do
       JitSecurityJwtRegistry.surface("EDIT_ORG")
@@ -392,14 +514,14 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
       https://172.16.0.1/ https://192.168.1.1/ https://169.254.1.1/ https://[::1]/
       https://[::ffff:192.168.1.1]/ https://[fd00::1]/
     ).each do |url|
-      assert_nil JumpRtIssuer.call(namespace: "AUTH_APP", url: url), url
+      assert_nil JumpRtIssuer.call(namespace: "AUTH_APP", url: url, dst: "internal"), url
     end
   end
 
   test "development issuance signs as the canonical PUBLIC_* issuer origin" do
     token =
       Rails.stub(:env, ActiveSupport::EnvironmentInquirer.new("development")) do
-        JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://www.umaxica.app/")
+        JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://www.umaxica.app/", dst: "internal")
       end
 
     assert_equal "https://auth.umaxica.app", JWT.decode(token, nil, false).first.fetch("iss")
@@ -408,7 +530,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
   test "issuance fails closed when the PUBLIC_* issuer origin is unsafe" do
     with_env("PUBLIC_AUTH_SERVICE_URL" => "auth.app.localhost") do
       assert_raises(JumpRtConfigurationError) do
-        JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://www.umaxica.app/")
+        JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://www.umaxica.app/", dst: "internal")
       end
     end
   end

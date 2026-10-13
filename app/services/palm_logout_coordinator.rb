@@ -44,6 +44,7 @@ class PalmLogoutCoordinator < ApplicationService
     rt = JumpRtIssuer.call(
       namespace: "PALM_APP",
       url: acme_oidc_logout_url(logout_challenge: transaction.logout_challenge),
+      dst: "internal",
     )
     return failure("invalid_request", "logout Jump token could not be issued") if rt.blank?
 

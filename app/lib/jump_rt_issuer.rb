@@ -8,8 +8,12 @@ class JumpRtIssuer
   ALGORITHM = SecurityJwtJumpRtTokenCodec::ALGORITHM
   DEFAULT_TTL = SecurityTokenLifetimes::JUMP_RT_TTL
   MAX_TTL = SecurityTokenLifetimes::JUMP_RT_TTL
+  MAX_TOKEN_LENGTH = 4_096
+  MAX_URL_LENGTH = 2_048
+  MAX_JTI_LENGTH = 128
+  JTI_PATTERN = /\A[\x21-\x7E]{1,#{MAX_JTI_LENGTH}}\z/o
   TOKEN_SUBJECT = SecurityJwtJumpRtTokenCodec::TOKEN_SUBJECT
-  VALID_DESTINATIONS = %w(internal external).freeze
+  VALID_DESTINATIONS = %w(internal).freeze
   # Defense in depth: strip redirect-target query keys from the signed URL so
   # the gateway cannot return a request that re-enters a `pt`/`nt`/`xt`/`rt`
   # processing path. Same list as RedirectsExternalTargetResolver.
@@ -19,13 +23,13 @@ class JumpRtIssuer
     new(...).call
   end
 
-  def initialize(namespace:, url:, dst: "internal", preserve_query_keys: [], ttl: nil, now: Time.current,
+  def initialize(namespace:, url:, dst:, preserve_query_keys: [], ttl: nil, now: Time.current,
                  jti: SecureRandom.uuid)
     @namespace = JumpRtSurface.normalize_namespace(namespace)
     @url = url
-    @dst = dst.to_s
+    @dst = dst
     @preserve_query_keys = Array(preserve_query_keys).map(&:to_s)
-    @ttl = ttl || default_ttl
+    @ttl = ttl.nil? ? default_ttl : ttl
     @now = now
     @jti = jti
   end
@@ -33,9 +37,11 @@ class JumpRtIssuer
   def call
     return nil unless valid_destination?
     return nil unless valid_ttl?
+    return nil unless valid_jti?
 
     normalized_url = normalize_url(url)
     return nil if normalized_url.blank?
+    return nil if utf16_code_units(normalized_url) > MAX_URL_LENGTH
 
     issuer = JumpRtSurface.issuer_origin(namespace)
     kid = JumpRtKeyring.active_kid(namespace)
@@ -44,7 +50,11 @@ class JumpRtIssuer
       raise JumpRtConfigurationError, "Jump RT signing key configuration is incomplete for #{namespace}"
     end
 
-    SecurityJwtJumpRtTokenCodec.encode(payload(issuer, normalized_url), private_key: private_key, kid: kid)
+    token = SecurityJwtJumpRtTokenCodec.encode(payload(issuer, normalized_url), private_key: private_key, kid: kid)
+    return nil unless token.ascii_only?
+    return nil if token.bytesize > MAX_TOKEN_LENGTH
+
+    token
   end
 
   private
@@ -67,12 +77,17 @@ class JumpRtIssuer
   def normalize_url(value)
     raw = value.to_s
     return nil if raw.blank?
+    return nil unless raw.valid_encoding?
     return nil if raw.match?(/[\x00-\x1F\x7F]/)
 
-    uri = URI.parse(raw)
+    # URL APIs percent-encode Unicode path and query bytes during serialization. URI.parse accepts
+    # ASCII only, so encode non-ASCII UTF-8 bytes first while rejecting a percent-escaped host.
+    ascii_url = raw.b.gsub(/[^\x00-\x7F]/n) { |byte| format("%%%02X", byte.ord) }
+    uri = URI.parse(ascii_url)
     return nil unless uri.is_a?(URI::HTTP)
     return nil unless uri.scheme == "https"
     return nil if uri.host.blank?
+    return nil if uri.host.include?("%")
     return nil if private_destination?(uri)
     return nil if uri.userinfo.present?
     return nil if uri.fragment.present?
@@ -100,11 +115,21 @@ class JumpRtIssuer
   end
 
   def valid_destination?
-    VALID_DESTINATIONS.include?(dst)
+    dst.is_a?(String) && VALID_DESTINATIONS.include?(dst)
   end
 
   def valid_ttl?
-    ttl.to_i.positive? && ttl.to_i <= MAX_TTL.to_i
+    ttl.is_a?(Integer) && ttl.positive? && ttl <= MAX_TTL.to_i
+  end
+
+  def valid_jti?
+    jti.is_a?(String) && jti.match?(JTI_PATTERN)
+  end
+
+  def utf16_code_units(value)
+    value.encode(Encoding::UTF_16LE).bytesize / 2
+  rescue EncodingError
+    Float::INFINITY
   end
 
   def default_ttl

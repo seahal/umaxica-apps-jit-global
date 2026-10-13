@@ -5,6 +5,10 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class JumpRtReturnPolicyTest < ActiveSupport::TestCase
+  PINNED_CANDIDATE_GRAPH = JSON.parse(
+    Rails.root.join("test/fixtures/files/jump_production_graph_0_4_0.json").read,
+  ).freeze
+
   self.fixture_table_names = []
 
   test "normalize_origin returns nil for invalid URI" do
@@ -153,6 +157,44 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
                    JumpRtReturnPolicy.allowed_source?(
                      destination_origin: origins.fetch(destination),
                      source: origins.fetch(source),
+                   ),
+                   "#{source} -> #{destination}"
+    end
+  end
+
+  test "0.4.0 candidate graph fixture matches the Rails graph across all 169 ordered pairs" do
+    namespace_by_node = {
+      "auth-app-ww" => "AUTH_APP",
+      "auth-com-ww" => "AUTH_COM",
+      "auth-org-ww" => "AUTH_ORG",
+      "base-app-ww" => "BASE_APP",
+      "base-com-ww" => "BASE_COM",
+      "base-org-ww" => "BASE_ORG",
+      "core-app-jp" => "CORE_APP",
+      "core-com-jp" => "CORE_COM",
+      "core-org-jp" => "CORE_ORG",
+      "warp-app-jp" => "WARP_APP",
+      "warp-com-jp" => "WARP_COM",
+      "warp-org-jp" => "WARP_ORG",
+      "palm-app-jp" => "PALM_APP",
+    }
+    origins = PINNED_CANDIDATE_GRAPH.fetch("nodes")
+    edges = PINNED_CANDIDATE_GRAPH.fetch("edges")
+    namespaces = origins.keys.index_with { |node| namespace_by_node.fetch(node) }
+    expected_edges = edges.map { |source, destination| [namespaces.fetch(source), namespaces.fetch(destination)] }
+
+    assert_equal 13, origins.size
+    assert_equal 20, edges.size
+    assert_equal expected_edges.sort, JumpRtReturnPolicy::ALLOWED_EDGES.sort
+
+    pairs = origins.to_a.product(origins.to_a)
+
+    assert_equal 169, pairs.size
+    pairs.each do |(source, source_origin), (destination, destination_origin)|
+      assert_equal edges.include?([source, destination]),
+                   JumpRtReturnPolicy.allowed_source?(
+                     destination_origin: destination_origin,
+                     source: source_origin,
                    ),
                    "#{source} -> #{destination}"
     end

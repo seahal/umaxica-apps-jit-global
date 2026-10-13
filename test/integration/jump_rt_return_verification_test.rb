@@ -224,6 +224,32 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
     assert_response :bad_request
   end
 
+  test "a valid Jump return token does not exempt an unsafe Base request from CSRF" do
+    previous = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    base_origin = acme_app_origin
+    token = sign_return_token(
+      aud: base_origin,
+      src: JumpRtSurface.issuer_origin("AUTH_APP"),
+      url: "#{base_origin}/sign",
+    )
+    prime_jump_jwks_cache
+    https!
+
+    post(
+      "#{base_origin}/sign?rt=#{Rack::Utils.escape(token)}",
+      headers: {
+        "Origin" => base_origin,
+        "Sec-Fetch-Site" => "same-origin",
+      },
+    )
+
+    assert_response :unprocessable_content
+    assert_nil response.location
+  ensure
+    ActionController::Base.allow_forgery_protection = previous
+  end
+
   test "sign app runs jump return verification before set_current_context" do
     before_filters =
       Auth::App::ApplicationController._process_action_callbacks.filter_map do |callback|

@@ -5,6 +5,29 @@ require "test_helper"
 
 class JumpRtReturnVerifierTest < ActiveSupport::TestCase
   JWKS_URL = "https://jump.umaxica.net/.well-known/jwks.json"
+  StreamOptions = Struct.new(:on_data)
+  StreamRequest = Struct.new(:options)
+
+  class StreamingConnection
+    Response =
+      Struct.new(:success) do
+        def success? = success
+      end
+
+    def initialize(body:, success:, requested:)
+      @body = body
+      @success = success
+      @requested = requested
+    end
+
+    def get(uri)
+      @requested << uri.to_s
+      request = StreamRequest.new(StreamOptions.new)
+      yield request
+      request.options.on_data.call(@body, @body.bytesize, nil)
+      Response.new(@success)
+    end
+  end
 
   self.fixture_table_names = []
 
@@ -78,6 +101,12 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     assert_equal "audience_mismatch", verify(token).error
   end
 
+  test "requires the audience to be one exact string" do
+    token = sign_return_token(aud: ["https://www.umaxica.app"])
+
+    assert_equal "invalid_claim", verify(token).error
+  end
+
   test "rejects wrong issuer" do
     token = sign_return_token(iss: "https://evil.example")
 
@@ -88,6 +117,28 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     token = sign_return_token(iat: @now.to_i - 20, nbf: @now.to_i - 20, exp: @now.to_i - 10)
 
     assert_equal "invalid_claim", verify(token).error
+  end
+
+  test "return url length accepts 2047 and 2048 utf16 units and rejects 2049" do
+    [2_047, 2_048, 2_049].each do |length|
+      base = "https://www.umaxica.app/"
+      url = base + ("a" * (length - base.length))
+      token = sign_return_token(url: url)
+      result = JumpRtReturnVerifier.call(
+        token: token,
+        request_url: "#{url}?rt=#{token}",
+        request_base_url: "https://www.umaxica.app",
+        fetcher: -> { { "keys" => [@public_jwk] } },
+        now: @now,
+      )
+
+      if length <= JumpRtReturnVerifier::MAX_URL_LENGTH
+        assert_predicate result, :success?, "url units=#{length}: #{result.error}"
+      else
+        assert_equal "invalid_claim", result.error, "url units=#{length}"
+      end
+      Rails.cache.clear
+    end
   end
 
   test "rejects a token that is not yet valid" do
@@ -248,7 +299,41 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
       now: @now,
     )
 
-    assert_equal "unknown_kid", result.error
+    assert_equal "jwks_unavailable", result.error
+  end
+
+  test "rejects a fetched jwks with more than ten keys before filtering" do
+    token = sign_return_token
+    jwks = { "keys" => Array.new(11) { @public_jwk } }
+
+    result = JumpRtReturnVerifier.call(
+      token: token,
+      request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
+      request_base_url: "https://www.umaxica.app",
+      fetcher: -> { jwks },
+      now: @now,
+    )
+
+    assert_equal "jwks_unavailable", result.error
+  end
+
+  test "rejects duplicate kids and invalid key operations in the fetched jwks" do
+    token = sign_return_token
+    duplicate_kid = { "keys" => [@public_jwk, @public_jwk] }
+    key_ops_without_verify = { "keys" => [@public_jwk.merge("key_ops" => ["sign"])] }
+
+    [duplicate_kid, key_ops_without_verify].each do |jwks|
+      result = JumpRtReturnVerifier.call(
+        token: token,
+        request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
+        request_base_url: "https://www.umaxica.app",
+        fetcher: -> { jwks },
+        now: @now,
+      )
+
+      assert_equal "jwks_unavailable", result.error
+      Rails.cache.clear
+    end
   end
 
   [1, 10, 29, 30].each do |issuance_ttl|
@@ -272,7 +357,7 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     end
   end
 
-  [[29, true], [30, true], [31, false]].each do |lifetime, accepted|
+  [[0, false], [1, true], [30, true], [31, false]].each do |lifetime, accepted|
     test "return token lifetime boundary exp minus iat #{lifetime} is #{accepted ? "accepted" : "rejected"}" do
       token = sign_return_token(exp: @now.to_i + lifetime)
 
@@ -326,7 +411,8 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     fetcher =
       lambda do
         calls += 1
-        { "keys" => (calls == 1) ? [] : [@public_jwk] }
+        keys = (calls == 1) ? [@public_jwk.merge("kid" => "old-jump-test")] : [@public_jwk]
+        { "keys" => keys }
       end
 
     result = JumpRtReturnVerifier.call(
@@ -347,7 +433,7 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     fetcher =
       lambda do
         calls += 1
-        { "keys" => [] }
+        { "keys" => [@public_jwk.merge("kid" => "old-jump-test")] }
       end
 
     2.times do
@@ -405,6 +491,32 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     assert_equal "malformed", verify("not-a-jwt").error
   end
 
+  test "returned jwt length boundary is checked in bytes before parsing" do
+    [8_191, 8_192, 8_193].each do |length|
+      Rails.cache.clear
+      calls = 0
+      token = compact_token_with_size(length)
+      result = JumpRtReturnVerifier.call(
+        token: token,
+        request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
+        request_base_url: "https://www.umaxica.app",
+        fetcher: lambda {
+          calls += 1
+          { "keys" => [@public_jwk] }
+        },
+        now: @now,
+      )
+
+      if length <= JumpRtReturnVerifier::MAX_TOKEN_LENGTH
+        assert_equal "invalid_signature", result.error, "bytes=#{length}"
+        assert_equal 1, calls, "bytes=#{length} reaches JWKS-backed verification"
+      else
+        assert_equal "malformed", result.error, "bytes=#{length}"
+        assert_equal 0, calls, "bytes=#{length} is refused before parsing and JWKS"
+      end
+    end
+  end
+
   test "rejects payload claim mismatches that the happy path does not exercise" do
     assert_includes %w(invalid_claim invalid_signature), verify(sign_return_token(schema: 2)).error
     assert_includes %w(invalid_claim invalid_signature), verify(sign_return_token(sub: "other")).error
@@ -413,6 +525,13 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     assert_includes %w(invalid_claim invalid_signature), verify(sign_return_token(src: "")).error
     assert_includes %w(invalid_claim invalid_signature),
                     verify(sign_return_token(nbf: @now.to_i + 90, exp: @now.to_i + 60)).error
+  end
+
+  test "rejects unknown claims and invalid jti and url types" do
+    assert_equal "invalid_claim", verify(sign_return_token(extra: "unknown")).error
+    assert_equal "invalid_claim", verify(sign_return_token(jti: 12)).error
+    assert_equal "invalid_claim", verify(sign_return_token(jti: "j" * 129)).error
+    assert_equal "invalid_claim", verify(sign_return_token(url: ["https://www.umaxica.app/path?ok=1"])).error
   end
 
   test "rejects http claimed urls in the local environment too" do
@@ -436,19 +555,20 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
   end
 
   test "call rejects invalid header" do
-    verifier = JumpRtReturnVerifier.new(
-      token: "a.b.c",
+    header = Base64.urlsafe_encode64({ "alg" => "none", "typ" => "JWT", "kid" => "x" }.to_json, padding: false)
+    payload = Base64.urlsafe_encode64("{}", padding: false)
+    token = "#{header}.#{payload}.signature"
+
+    result = JumpRtReturnVerifier.call(
+      token: token,
       request_url: "https://www.umaxica.app/path",
       request_base_url: "https://www.umaxica.app",
       fetcher: -> { { "keys" => [] } },
       now: @now,
     )
-    verifier.stub(:parse_header, { "alg" => "none", "typ" => "JWT", "kid" => "x" }) do
-      result = verifier.call
 
-      assert_not result.success?
-      assert_equal "invalid_header", result.error
-    end
+    assert_not result.success?
+    assert_equal "invalid_header", result.error
   end
 
   test "fails closed when the jwks fetcher returns something other than a json object" do
@@ -467,13 +587,8 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
 
   test "default fetcher reads the JWKS URI derived from PUBLIC_JUMP_GATEWAY_URL" do
     token = sign_return_token
-    response = Struct.new(:success?, :body).new(true, { "keys" => [@public_jwk] }.to_json)
     requested = []
-    connection = Object.new
-    connection.define_singleton_method(:get) do |uri|
-      requested << uri.to_s
-      response
-    end
+    connection = StreamingConnection.new(body: { "keys" => [@public_jwk] }.to_json, success: true, requested: requested)
 
     result =
       OutboundHttp::Connection.stub(:build, connection) do
@@ -491,9 +606,9 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
 
   test "default fetcher fails closed on a non-success jwks response" do
     token = sign_return_token
-    response = Struct.new(:success?, :body).new(false, { "keys" => [@public_jwk] }.to_json)
-    connection = Object.new
-    connection.define_singleton_method(:get) { |_uri| response }
+    connection = StreamingConnection.new(
+      body: { "keys" => [@public_jwk] }.to_json, success: false, requested: [],
+    )
 
     result =
       OutboundHttp::Connection.stub(:build, connection) do
@@ -508,16 +623,16 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     assert_equal "jwks_unavailable", result.error
   end
 
-  test "default fetcher accepts a jwks body at the size limit and rejects one byte above it" do
+  test "default fetcher accepts bodies just below and at 64 KiB and rejects one byte above" do
     token = sign_return_token
     jwks_json = { "keys" => [@public_jwk] }.to_json
-    at_limit = jwks_json + (" " * (JumpRtReturnVerifier::MAX_JWKS_BYTES - jwks_json.bytesize))
     results =
-      [at_limit, "#{at_limit} "].map do |body|
+      [JumpRtReturnVerifier::MAX_JWKS_BYTES - 1,
+       JumpRtReturnVerifier::MAX_JWKS_BYTES,
+       JumpRtReturnVerifier::MAX_JWKS_BYTES + 1,].map do |size|
         Rails.cache.clear
-        response = Struct.new(:success?, :body).new(true, body)
-        connection = Object.new
-        connection.define_singleton_method(:get) { |_uri| response }
+        body = jwks_json + (" " * (size - jwks_json.bytesize))
+        connection = StreamingConnection.new(body: body, success: true, requested: [])
         OutboundHttp::Connection.stub(:build, connection) do
           JumpRtReturnVerifier.call(
             token: token,
@@ -528,11 +643,34 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
         end
       end
 
-    assert_predicate results.first, :success?
-    assert_equal "jwks_unavailable", results.last.error
+    assert_predicate results[0], :success?
+    assert_predicate results[1], :success?
+    assert_equal "jwks_unavailable", results[2].error
   end
 
   private
+
+  def compact_token_with_size(target_bytes)
+    header = Base64.urlsafe_encode64(
+      { typ: "JWT", alg: "ES384", kid: "jump-test" }.to_json,
+      padding: false,
+    )
+    (0..512).each do |payload_padding|
+      payload = Base64.urlsafe_encode64(
+        JSON.generate(return_payload.merge(padding: "x" * payload_padding)),
+        padding: false,
+      )
+      next if payload.length % 4 == 1
+
+      signature_length = target_bytes - header.length - payload.length - 2
+      next if signature_length <= 0 || signature_length % 4 == 1
+
+      token = "#{header}.#{payload}.#{"A" * signature_length}"
+      return token if token.bytesize == target_bytes
+    end
+
+    raise RuntimeError, "could not construct a syntactically compact JWT of #{target_bytes} bytes"
+  end
 
   def verify(token)
     JumpRtReturnVerifier.call(

@@ -23,6 +23,9 @@ module JitSecurityJwtRegistry
     PALM_APP
     BASE_APP BASE_COM BASE_ORG
   ).freeze
+  MAX_JUMP_PUBLISHED_JWKS_KEYS = 4
+  MAX_JUMP_PUBLISHED_JWKS_BYTES = 65_536
+  MAX_JUMP_KID_LENGTH = 128
   # Palm signs Jump RTs; its bearer API does not use a surface access-token issuer. Jump issuer
   # capability is narrower than this list and is owned by JumpRtSurface::ISSUER_NAMESPACES.
   ACCESS_TOKEN_SURFACE_NAMESPACES = (SURFACE_NAMESPACES - %w(PALM_APP)).freeze
@@ -201,12 +204,15 @@ module JitSecurityJwtRegistry
 
   def build_surface_issuer(namespace, source:)
     prefix = "JWT_#{namespace}"
+    public_keyset = source.value("#{prefix}_PUBLIC_KEYSET")
+    validate_jump_public_keyset!(namespace, public_keyset) if JumpRtSurface::ISSUER_NAMESPACES.include?(namespace)
+
     JitSecurityJwtIssuerBuilder.build_surface_issuer(
       namespace: namespace,
       active_kid: source.value("#{prefix}_ACTIVE_KID"),
       private_key: source.value("#{prefix}_PRIVATE_KEY"),
       private_key_source: "#{prefix}_PRIVATE_KEY",
-      public_keyset: source.value("#{prefix}_PUBLIC_KEYSET"),
+      public_keyset: public_keyset,
       public_keyset_source: "#{prefix}_PUBLIC_KEYSET",
       revoked_kids: source.csv("#{prefix}_REVOKED_KIDS"),
       issuer: surface_issuer_origin(namespace),
@@ -283,7 +289,68 @@ module JitSecurityJwtRegistry
   def validate!(records = issuers)
     records.each_value { |record| validate_record!(record) }
     validate_global_kid_uniqueness!(records)
+    validate_jump_issuer_records!(records)
     true
+  end
+
+  def validate_jump_public_keyset!(namespace, raw)
+    return if raw.blank?
+
+    parsed = JSON.parse(raw)
+    entries =
+      if parsed.is_a?(Array)
+        parsed
+      elsif parsed.is_a?(Hash) && parsed["keys"].is_a?(Array)
+        parsed.fetch("keys")
+      end
+    return unless entries
+
+    kids = entries.filter_map { |entry| entry["kid"] if entry.is_a?(Hash) }
+    return if kids.uniq.size == kids.size
+
+    raise ConfigurationError, "surface:#{namespace} public JWKS contains duplicate kid values"
+  rescue JSON::ParserError => e
+    raise ConfigurationError, "surface:#{namespace} public JWKS contains invalid JSON: #{e.message}"
+  end
+
+  def validate_jump_issuer_records!(records)
+    JumpRtSurface::ISSUER_NAMESPACES.each do |namespace|
+      record = records.fetch("surface:#{namespace}")
+      keys = record.jwks.fetch(:keys)
+      unless (1..MAX_JUMP_PUBLISHED_JWKS_KEYS).cover?(keys.size)
+        raise ConfigurationError,
+              "surface:#{namespace} published Jump JWKS must contain 1..#{MAX_JUMP_PUBLISHED_JWKS_KEYS} keys"
+      end
+
+      kids = keys.map { |key| key.fetch("kid") }
+      unless kids.uniq.size == kids.size
+        raise ConfigurationError, "surface:#{namespace} published Jump JWKS contains duplicate kid values"
+      end
+
+      keys.each do |key|
+        validate_jump_kid!(namespace, key.fetch("kid"))
+        validate_public_jwk!(key, source: "surface:#{namespace}:#{key.fetch("kid")}")
+      end
+
+      bytes = JSON.generate(record.jwks).bytesize
+      next if bytes <= MAX_JUMP_PUBLISHED_JWKS_BYTES
+
+      raise ConfigurationError,
+            "surface:#{namespace} published Jump JWKS exceeds #{MAX_JUMP_PUBLISHED_JWKS_BYTES} bytes"
+    end
+  end
+
+  def validate_jump_kid!(namespace, kid)
+    valid =
+      kid.is_a?(String) && kid.present? &&
+      kid.codepoints.none? { |codepoint| codepoint < 0x20 || (0x7f..0x9f).cover?(codepoint) } &&
+      kid.encode(Encoding::UTF_16LE).bytesize / 2 <= MAX_JUMP_KID_LENGTH
+    return if valid
+
+    raise ConfigurationError,
+          "surface:#{namespace} kid must be a safe string of at most #{MAX_JUMP_KID_LENGTH} UTF-16 units"
+  rescue EncodingError
+    raise ConfigurationError, "surface:#{namespace} kid contains invalid encoding"
   end
 
   def validate_record!(record)
@@ -403,6 +470,7 @@ module JitSecurityJwtRegistry
                        :jump_gateway_audience,
                        :preference_hosts_from_boot_config, :validate_record_metadata!, :validate_active_key!,
                        :validate_record_keys!, :validate_global_kid_uniqueness!, :validate_public_jwk!,
+                       :validate_jump_public_keyset!, :validate_jump_issuer_records!, :validate_jump_kid!,
                        :surface_issuer_origin, :normalize_oidc_client_namespace, :insecure_default_kid?,
                        :insecure_default_kid_allowed?, :reserved_env_kid?
 end

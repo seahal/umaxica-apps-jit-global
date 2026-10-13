@@ -40,12 +40,22 @@ class SecurityJwtJumpRtTokenCodec
     end
 
     def valid_header?(header)
+      return false unless header.is_a?(Hash)
+      return false unless header.keys.sort == %w(alg kid typ)
       return false unless header["typ"] == TOKEN_TYPE
       return false unless header["alg"] == ALGORITHM
-      return false if header["kid"].blank?
-      return false if %w(crit jku jwk x5u).any? { |key| header.key?(key) }
+      return false unless valid_kid?(header["kid"])
 
       true
+    end
+
+    def valid_kid?(value)
+      return false unless value.is_a?(String) && value.present?
+      return false if value.codepoints.any? { |codepoint| codepoint < 0x20 || (0x7f..0x9f).cover?(codepoint) }
+
+      value.encode(Encoding::UTF_16LE).bytesize / 2 <= 128
+    rescue EncodingError
+      false
     end
 
     def decode_with_key(token:, key:, issuer:, audience:, leeway:)

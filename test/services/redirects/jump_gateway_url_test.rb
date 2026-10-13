@@ -40,8 +40,21 @@ class RedirectsJumpGatewayUrlTest < ActiveSupport::TestCase
     assert_equal "token_too_short", result.failure_reason
   end
 
+  test "gateway URL refuses tokens above the issued-token ceiling and accepts the boundary" do
+    at_limit = ("a" * 1_300) + "." + ("b" * 1_300) + "." + ("c" * 1_494)
+    over_limit = ("a" * 1_300) + "." + ("b" * 1_300) + "." + ("c" * 1_495)
+
+    assert_equal RedirectsJumpGatewayUrl::MAX_TOKEN_LENGTH, at_limit.bytesize
+    assert_predicate RedirectsJumpGatewayUrl.call(at_limit), :ok?
+    assert_equal RedirectsJumpGatewayUrl::MAX_TOKEN_LENGTH + 1, over_limit.bytesize
+    result = RedirectsJumpGatewayUrl.call(over_limit)
+
+    assert_not result.ok?
+    assert_equal "token_too_large", result.failure_reason
+  end
+
   test "accepts rails issued jwt" do
-    token = JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://www.umaxica.app/dashboard")
+    token = JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://www.umaxica.app/dashboard", dst: "internal")
     result = RedirectsJumpGatewayUrl.call(token)
 
     assert_predicate result, :ok?
