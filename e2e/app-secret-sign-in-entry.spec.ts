@@ -44,7 +44,7 @@ for (const region of ["us", "jp"]) {
     // The nonce-bearing admission document submits its own CSRF-protected form.
     await expect(page.locator('a[href*="/sign/in/email"]')).toBeVisible();
     await expect(page.locator('a[href*="/sign/in/passkey"]')).toBeVisible();
-    await expect(page.locator('a[href*="/sign/in/device"]')).toBeVisible();
+    await expect(page.locator('a[href*="/sign/in/device"]')).toHaveCount(0);
     await expect(page.locator('form[action*="/google"] button')).toBeVisible();
     await expect(page.locator('form[action*="/apple"] button')).toBeVisible();
     const secret = page.locator('a[href*="/sign/in/secret/new"]');

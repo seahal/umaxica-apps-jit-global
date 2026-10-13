@@ -59,9 +59,6 @@ module Auth
             { key: "passkey",
               label: page_t("#{scope}.links.passkey"),
               href: new_auth_app_sign_in_passkey_path(pt: pt, **binding), },
-            { key: "device",
-              label: page_t("sign.app.authentication.new.links.device"),
-              href: auth_app_sign_in_device_path(pt: pt, **binding), },
             { key: "secret",
               label: t("sign.app.authentication.new.links.secret"),
               href: new_auth_app_sign_in_secret_url(

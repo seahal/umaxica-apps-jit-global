@@ -15,7 +15,10 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
   test "sign entry helpers use explicit lifecycle resources" do
     assert_equal "/sign/up", auth_app_sign_up_path
     assert_equal "/sign/in", auth_app_sign_in_path
-    assert_equal "/sign/in/device", auth_app_sign_in_device_path
+  end
+
+  test "retired device sign-in path is not recognized" do
+    assert_unrecognized(:app, "/sign/in/device", :get)
   end
 
   test "sign logout helpers expose the explicit ceremony lifecycle" do

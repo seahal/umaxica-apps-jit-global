@@ -3337,8 +3337,6 @@ en:
           label: "Secret"
           submit: "Sign in"
           title: "Secret Sign in"
-        device:
-          placeholder: Sign-in using another device is not implemented yet.
         email:
           create:
             cooldown: Please wait and try again.
@@ -3358,7 +3356,6 @@ en:
           description: Select the method that fits your current session.
           links:
             secret: Secret
-            device: Sign in using another device
             apple: Continue with Apple
             email: Email
             google: Continue with Google

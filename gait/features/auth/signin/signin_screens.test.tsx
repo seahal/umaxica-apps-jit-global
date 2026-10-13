@@ -94,14 +94,13 @@ describe("sign-in method choice", () => {
           { key: "email", label: "Email", href: "/sign/in/email/new" },
           { key: "passkey", label: "Passkey", href: "/sign/in/passkey/new" },
           { key: "emergency", label: "Emergency", href: "/sign/in/emergency" },
-          { key: "device", label: "Device", href: "/sign/in/device" },
         ]}
         social_providers={props.social_providers.slice(0, 2)}
         cancel_label="Cancel"
       />,
     );
     expect(markup).toMatch(
-      />Email<.*>Passkey<.*>Emergency<.*>Device<.*action="\/social\/google\/session\?ri=jp".*action="\/social\/apple\/session\?ri=jp".*<hr[^>]*>.*>Need an account<.*<p[^>]*>Cancel<\/p>/su,
+      />Email<.*>Passkey<.*>Emergency<.*action="\/social\/google\/session\?ri=jp".*action="\/social\/apple\/session\?ri=jp".*<hr[^>]*>.*>Need an account<.*<p[^>]*>Cancel<\/p>/su,
     );
     expect(markup).toMatch(/<p[^>]*>Cancel<\/p>/u);
     const interactiveElements = markup.match(/<(a|button|form)\b[^>]*>[^]*?<\/\1>/gu)!;
@@ -123,7 +122,6 @@ describe("sign-in method choice", () => {
     expect(controls.some((control) => control.includes("Cancel"))).toBe(false);
     expect(markup).not.toContain("<hr");
     expect(markup).not.toContain("/sign/in/emergency");
-    expect(markup).not.toContain("/sign/in/device");
   });
 
   it("omits optional Cancel and app-only methods and separator", () => {
@@ -136,7 +134,6 @@ describe("sign-in method choice", () => {
     expect(markup).not.toContain("<hr");
     expect(markup).not.toContain("Cancel");
     expect(markup).not.toContain("/sign/in/emergency");
-    expect(markup).not.toContain("/sign/in/device");
   });
 
   it("lists every method the server offered", () => {

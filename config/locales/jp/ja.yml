@@ -1128,15 +1128,22 @@ ja:
         add: "Secretを1個追加"
         capacity_conflict: "Secretの上限に達しているか、別の発行操作が進行中です。"
         confirm: "提示されたSecretを保存しました"
-        distribution_omitted: "有効な Secret が上限の20個あるため、今回は新しい Secret を配布していません。保存済みの Secret は引き続き使用できます。"
-        distribution_one_confirmed: "Secret は最大20個まで保有できます。上限を超えないよう、今回は2個ではなく1個を配布しました。"
-        distribution_one_present: "Secret は最大20個まで保有できます。上限を超えないよう、今回は2個ではなく1個を配布します。"
+        distribution_omitted:
+          "有効な Secret が上限の20個あるため、今回は新しい Secret を配布していません。保存済みの
+          Secret は引き続き使用できます。"
+        distribution_one_confirmed:
+          "Secret
+          は最大20個まで保有できます。上限を超えないよう、今回は2個ではなく1個を配布しました。"
+        distribution_one_present:
+          "Secret は最大20個まで保有できます。上限を超えないよう、今回は2個ではなく1個を配布します。"
         payload_unavailable: "提示値を取得できません。新しい発行を明示的に開始してください。"
         reattempt: "もう一度発行する"
         present: "Secretを一度だけ表示"
         rename: "名前を変更"
         revoke: "失効"
-        single_delivery: "この値を保存してください。再表示はできません。保存確認を完了するまでSign inには使えません。"
+        single_delivery:
+          "この値を保存してください。再表示はできません。保存確認を完了するまでSign
+          inには使えません。"
         title: "Secret"
       avatars:
         already_assigned: すでにアバターをお持ちのため、新しいアバターは作成できません。
@@ -1492,7 +1499,9 @@ ja:
           capability: "権限を一覧から選んでください。"
           duration: "有効期間を一覧から選んでください。"
           last_holder: "この権限を有効に保持する最後の付与のため、失効できません。"
-          break_glass_required: "このケースの解除には第二承認者を伴う break-glass が必要ですが、コンソールでは提供していません。"
+          break_glass_required:
+            "このケースの解除には第二承認者を伴う break-glass
+            が必要ですが、コンソールでは提供していません。"
           release_reason: "解除理由を一覧から選んでください。"
         fields:
           public_id: "公開 ID"
@@ -2416,7 +2425,8 @@ ja:
       invalid_request: 無効なリクエストです。
       less_than: は%{count}より小さい値にしてください
       less_than_or_equal_to: は%{count}以下の値にしてください
-      login_cooldown_retry: "現在サインインできません。しばらく待ってから %{restart_url} でもう一度お試しください"
+      login_cooldown_retry:
+        "現在サインインできません。しばらく待ってから %{restart_url} でもう一度お試しください"
       login_required: ログインが必要です
       model_invalid: "バリデーションに失敗しました: %{errors}"
       not_a_number: は数値で入力してください
@@ -3294,8 +3304,6 @@ ja:
           label: "Secret"
           submit: "Sign in"
           title: "SecretでSign in"
-        device:
-          placeholder: 別の端末でのサインインはまだ実装されていません。
         email:
           create:
             cooldown: しばらくしてから再度お試しください。
@@ -3325,7 +3333,6 @@ ja:
           description: 今回のサインインで利用する認証方法を選択してください。
           links:
             secret: Secret
-            device: 別の端末でサインイン
             apple: Appleで続行
             email: メールアドレス
             google: Googleで続行

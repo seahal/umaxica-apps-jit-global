@@ -144,8 +144,6 @@ scope(module: :auth, as: :auth) do
 
         # Sign-in ceremony.
         namespace :in do
-          resource :device, only: :show
-
           resource :email, only: %i(new create edit update destroy)
 
           resource :passkey, only: :new
