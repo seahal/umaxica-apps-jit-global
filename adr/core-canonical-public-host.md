@@ -85,9 +85,12 @@ remains reachable on the `PRIVATE_*` ingress for smoke tests.
   `core-next-rp` redirect URI.
 - `OidcClientStoresStaticClientStore.boot_host_for` maps the `PUBLIC_CORE_*` keys, so the
   `core-next-rp` redirect URIs no longer carry literal `jpx.*` defaults.
-- Development Host Authorization is unaffected: `config/environments/development.rb` filters boot
-  hosts to `*.localhost`, and `test/config/host_authorization_contract_test.rb` asserts that the
-  canonical `jp.umaxica.*` family is rejected in development exactly as the legacy families are.
+- Development has a separate Host Authorization policy. It admits configured browser-facing
+  hostnames and private `*.localhost` origins. A 2026-10-13 development boot probe returned HTTP 200
+  for both configured families, including `jp.umaxica.{app,com,org}`, and HTTP 403 for the
+  unconfigured `core-jp.umaxica.app` and `evil.example.com`; see the
+  [recorded observation](../evidence/2026-10-13-environment-test-retirement-A6V9.md). This is a
+  point-in-time observation, not an automated test-suite guard.
 
 ## Remaining migration steps
 

@@ -97,12 +97,14 @@ the remotely managed Tunnel routes it to `http://edit.org.localhost:3000`. It re
 Cloudflare Access at the perimeter and Rails operator authentication and Action Policy at the
 application boundary.
 
-`test/config/host_authorization_contract_test.rb` guards the result in both directions: the
-published site names are accepted, and an Umaxica-owned hostname that no `PUBLIC_*_URL` names is
-still rejected — admitting the published names must not degrade into admitting the whole `umaxica.*`
-domain. It also asserts that every non-`*.localhost` alias in `compose.yaml` is backed by a
-`PUBLIC_*_URL` value in the same file, so an alias can never outlive the configuration that makes
-Rails accept it.
+The effective development Host Authorization policy was verified by booting Rails in development and
+exercising its middleware with `Rack::MockRequest`. The probe accepted the configured private
+origins and browser-facing site names, including `jp.umaxica.*`, and rejected the unconfigured
+`core-jp.umaxica.app` and `evil.example.com`; see the
+[recorded observation](../../evidence/2026-10-13-environment-test-retirement-A6V9.md). This one-time
+evidence is not a regression-test guard. It checks Rails' effective host policy, not Compose DNS or
+alias-to-environment-variable consistency; inspect those configuration boundaries directly when they
+change.
 
 ### Scheme and cookie behaviour on the tunnel path
 

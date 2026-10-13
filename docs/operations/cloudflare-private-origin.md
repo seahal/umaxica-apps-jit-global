@@ -33,10 +33,13 @@ The gates are intentionally independent:
    running connector requests `GET /health/liveness` through every private surface alias and
    requires HTTP `200`. No committed script performs this — `bin/` carries generated binstubs only —
    so it is a manual procedure, written out under "Running the Transport Probe" below.
-2. **Host Authorization**: `ruby test/config/host_authorization_contract_test.rb` boots a separate
-   Rails development process, constructs the middleware from the effective development settings,
-   requests the non-excluded `/` path, accepts the private origins and the published site hostnames,
-   and rejects both an unknown host and an Umaxica-owned hostname that no `PUBLIC_*_URL` names.
+2. **Host Authorization**: boot Rails in development, construct `ActionDispatch::HostAuthorization`
+   from the effective settings, and send `GET /` through `Rack::MockRequest` to a stub endpoint.
+   Confirm HTTP 200 for the documented private origin aliases and published site hostnames; confirm
+   HTTP 403 for an unconfigured Umaxica hostname and an unrelated hostname. The 2026-10-13
+   observation is recorded in
+   [evidence](../../evidence/2026-10-13-environment-test-retirement-A6V9.md). This is an operational
+   check, not a test-suite guard; repeat it after changing host configuration.
 3. **Surface routing**: the route contract tests recognize non-health application resources for the
    private Host values and assert the matching `app`, `com`, `org`, `net`, or `dev` controller.
 4. **Podman DNS aliases**: `podman compose config` must show the private aliases on `core`'s
