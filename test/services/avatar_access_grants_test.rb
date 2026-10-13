@@ -174,6 +174,8 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
     assert_not_includes columns, "subject_type"
     assert_not_includes columns, "owner_type"
     assert_not_includes columns, "ownership_period_type"
+    assert_not_includes columns, "expires_at"
+    assert_not_includes AvatarBureauAgentGrant.column_names, "expires_at"
   end
 
   test "an owner can grant a current generation to another concrete member" do
@@ -199,6 +201,146 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
       avatar: @app.avatar,
       ownership_period: @period,
       subject: recipient.account,
+      capability: "avatar.view",
+    )
+  end
+
+  test "independent Persona grants allow multiple recipients and multiple Avatars without owner membership" do
+    recipient_a_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    recipient_a = BaseSelectorBootstrapAuthority.call(surface: :app, principal: recipient_a_actor)
+    recipient_b_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    recipient_b = BaseSelectorBootstrapAuthority.call(surface: :app, principal: recipient_b_actor)
+    second_owner_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    second_owner = BaseSelectorBootstrapAuthority.call(surface: :app, principal: second_owner_actor)
+
+    assert_not PersonaMembership.exists?(persona_id: recipient_a.account.id, enterprise_id: @app.collective.id)
+    assert_not PersonaMembership.exists?(persona_id: recipient_b.account.id, enterprise_id: @app.collective.id)
+    assert_not PersonaMembership.exists?(
+      persona_id: recipient_b.account.id,
+      enterprise_id: second_owner.collective.id,
+    )
+
+    AvatarAccessGrants::IssueOperation.call(
+      ownership_period: @period,
+      subject: recipient_a.account,
+      capability: "avatar.view",
+      granted_by_actor_public_id: @client.public_id,
+      granting_subject_public_id: @app.account.public_id,
+    )
+    AvatarAccessGrants::IssueOperation.call(
+      ownership_period: @period,
+      subject: recipient_b.account,
+      capability: "avatar.view",
+      granted_by_actor_public_id: @client.public_id,
+      granting_subject_public_id: @app.account.public_id,
+    )
+
+    second_period = second_owner.avatar.reload.enterprise_ownership_periods.current.first
+    AvatarAccessGrants::IssueOperation.call(
+      ownership_period: second_period,
+      subject: recipient_b.account,
+      capability: "avatar.view",
+      granted_by_actor_public_id: second_owner_actor.public_id,
+      granting_subject_public_id: second_owner.account.public_id,
+    )
+
+    assert AvatarAccessGrantResolver.call(
+      avatar: @app.avatar,
+      ownership_period: @period,
+      subject: recipient_a.account,
+      capability: "avatar.view",
+    )
+    assert AvatarAccessGrantResolver.call(
+      avatar: @app.avatar,
+      ownership_period: @period,
+      subject: recipient_b.account,
+      capability: "avatar.view",
+    )
+    assert AvatarAccessGrantResolver.call(
+      avatar: second_owner.avatar,
+      ownership_period: second_period,
+      subject: recipient_b.account,
+      capability: "avatar.view",
+    )
+    assert_not AvatarAccessGrantResolver.call(
+      avatar: second_owner.avatar,
+      ownership_period: second_period,
+      subject: recipient_a.account,
+      capability: "avatar.view",
+    )
+  end
+
+  test "a Grant is effective at granted_at and cannot confer another capability" do
+    granted_at = Time.current.change(usec: 0).advance(minutes: 1)
+    grant = AvatarAccessGrants::IssueOperation.call(
+      ownership_period: @period,
+      subject: @app.account,
+      capability: "avatar.view",
+      granted_by_actor_public_id: @client.public_id,
+      granting_subject_public_id: @app.account.public_id,
+      granted_at: granted_at,
+    )
+
+    assert_not AvatarAccessGrantResolver.call(
+      avatar: @app.avatar,
+      ownership_period: @period,
+      subject: @app.account,
+      capability: "avatar.view",
+      at: granted_at - Rational(1, 1_000_000),
+    )
+    assert AvatarAccessGrantResolver.call(
+      avatar: @app.avatar,
+      ownership_period: @period,
+      subject: @app.account,
+      capability: "avatar.view",
+      at: granted_at,
+    )
+    assert_not AvatarAccessGrantResolver.call(
+      avatar: @app.avatar,
+      ownership_period: @period,
+      subject: @app.account,
+      capability: "avatar.update",
+      at: granted_at,
+    )
+    assert_not AvatarAccessGrantResolver.call(
+      avatar: @app.avatar,
+      ownership_period: @period,
+      subject: @app.account,
+      capability: "avatar.transfer.request",
+      at: granted_at,
+    )
+    assert_equal "avatar.view", grant.capability
+
+    assert_no_difference -> { AvatarEnterprisePersonaGrant.count } do
+      assert_raises(ArgumentError) do
+        AvatarAccessGrants::IssueOperation.call(
+          ownership_period: @period,
+          subject: @app.account,
+          capability: "avatar.transfer.request",
+          granted_by_actor_public_id: @client.public_id,
+          granting_subject_public_id: @app.account.public_id,
+        )
+      end
+    end
+  end
+
+  test "an Agent cannot receive a Grant for an Enterprise ownership period" do
+    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    org = BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
+
+    assert_raises(ArgumentError) do
+      AvatarAccessGrants::IssueOperation.call(
+        ownership_period: @period,
+        subject: org.account,
+        capability: "avatar.view",
+        granted_by_actor_public_id: @client.public_id,
+        granting_subject_public_id: @app.account.public_id,
+      )
+    end
+    assert_not AvatarAccessGrantResolver.call(
+      avatar: @app.avatar,
+      ownership_period: @period,
+      subject: org.account,
       capability: "avatar.view",
     )
   end

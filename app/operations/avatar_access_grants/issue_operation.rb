@@ -4,8 +4,14 @@
 module AvatarAccessGrants
   class IssueOperation < ApplicationService
     GRANT_CLASSES = {
-      "AvatarEnterpriseOwnershipPeriod" => AvatarEnterprisePersonaGrant,
-      "AvatarBureauOwnershipPeriod" => AvatarBureauAgentGrant,
+      "AvatarEnterpriseOwnershipPeriod" => [
+        AvatarEnterprisePersonaGrant,
+        AvatarEnterprisePersonaGrant::CAPABILITIES,
+      ].freeze,
+      "AvatarBureauOwnershipPeriod" => [
+        AvatarBureauAgentGrant,
+        AvatarBureauAgentGrant::CAPABILITIES,
+      ].freeze,
     }.freeze
 
     def initialize(ownership_period:, subject:, capability:, granted_by_actor_public_id:,
@@ -23,8 +29,7 @@ module AvatarAccessGrants
     public
 
     def call
-      validate_inputs!
-      grant_class = GRANT_CLASSES.fetch(ownership_period.class.name)
+      grant_class = validate_inputs!
 
       with_authorized_granting_actor do
         AvatarRecord.transaction(requires_new: true) do
@@ -52,17 +57,21 @@ module AvatarAccessGrants
                 :granting_subject_public_id, :granted_at
 
     def validate_inputs!
-      unless GRANT_CLASSES.key?(ownership_period.class.name)
-        raise ArgumentError, "unsupported ownership period for access grant"
-      end
+      grant_class, capabilities =
+        GRANT_CLASSES.fetch(ownership_period.class.name) do
+          raise ArgumentError, "unsupported ownership period for access grant"
+        end
 
       expected_subject = ownership_period.is_a?(AvatarEnterpriseOwnershipPeriod) ? ClientPersona : Agent
       raise ArgumentError, "subject must be a concrete supported identity" unless subject.is_a?(expected_subject)
       raise ArgumentError, "subject public id is required" if subject.public_id.blank?
       raise ArgumentError, "capability is required" if capability.blank?
+      raise ArgumentError, "unsupported access grant capability" unless capabilities.include?(capability)
       raise ArgumentError, "granting actor public id is required" if granted_by_actor_public_id.blank?
       raise ArgumentError, "granting subject public id is required" if granting_subject_public_id.blank?
       raise ArgumentError, "granted_at is required" if granted_at.blank?
+
+      grant_class
     end
 
     def subject_attributes
