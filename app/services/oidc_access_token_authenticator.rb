@@ -79,16 +79,17 @@ class OidcAccessTokenAuthenticator < ApplicationService
   end
 
   # Normal Access JWT authentication is cryptographic (RFC 9068) plus a direct
-  # binding to the Base Browser Session that issued the RP credentials. The RP
-  # Session remains the refresh/revocation authority, but it is deliberately not
-  # read on every authenticated request. `sid` remains the protocol identifier
-  # for the RP Session; `umx_base_sid` identifies the parent Base session.
+  # binding to the Base Browser Session that issued the RP credentials. Read the
+  # parent from the writer without query caching so a committed parent revocation
+  # takes effect on the next authenticated request. `sid` remains the protocol
+  # identifier for the RP Session; `umx_base_sid` identifies the parent Base session.
   def find_base_session(payload)
     base_sid = AuthorizationTokenClaims.base_session_id(payload).to_s
     return if base_sid.blank?
 
-    token_class_for_resource_type.connection_class_for_self.connected_to(role: :reading) do
-      token_class_for_resource_type.find_by(public_id: base_sid)
+    token_class = token_class_for_resource_type
+    token_class.connection_class_for_self.connected_to(role: :writing) do
+      token_class.uncached { token_class.find_by(public_id: base_sid) }
     end
   end
 

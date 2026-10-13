@@ -15,8 +15,9 @@ module RpSession
   def active?(now = nil)
     now ||= self.class.database_now
     revoked_at.blank? &&
+      SessionAbsoluteExpiryValue.finite?(refresh_token_expires_at) &&
       root_token_active?(now) &&
-      (refresh_token_expires_at.blank? || refresh_token_expires_at > now)
+      refresh_token_expires_at > now
   end
 
   # A revoked RP Session cannot be replaced until every Access JWT issued by it
@@ -73,6 +74,9 @@ module RpSession
 
     token = device_session.current_refresh_token
     return false unless token
+    return false unless SessionAbsoluteExpiryValue.finite?(token.discard_at)
+    return false unless SessionAbsoluteExpiryValue.finite?(refresh_token_expires_at)
+    return false if refresh_token_expires_at > token.discard_at
 
     decision_time = now || self.class.database_now
     return false unless token.currently_usable?(decision_time)

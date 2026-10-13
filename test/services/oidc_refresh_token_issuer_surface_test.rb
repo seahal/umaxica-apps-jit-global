@@ -26,7 +26,9 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     connection = OperatorOidcConnection.create!(
       staff: operator, client_id: "org-console-rp", last_used_at: 3.days.ago,
     )
-    usage = OperatorRpSession.create!(operator_token: token, oidc_client_id: "org-console-rp")
+    usage = OperatorRpSession.create!(
+      operator_token: token, oidc_client_id: "org-console-rp", refresh_token_expires_at: 1.hour.from_now,
+    )
     refresh_token = usage.issue_refresh_token!
 
     result = OidcRefreshTokenIssuer.call(refresh_token: refresh_token, resource_type: "operator")
@@ -44,7 +46,9 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
-    usage = OperatorRpSession.create!(operator_token: token, oidc_client_id: "org-console-rp")
+    usage = OperatorRpSession.create!(
+      operator_token: token, oidc_client_id: "org-console-rp", refresh_token_expires_at: 1.hour.from_now,
+    )
     replayed = usage.issue_refresh_token!
 
     assert_predicate OidcRefreshTokenIssuer.call(
@@ -87,7 +91,9 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     connection = VisitorOidcConnection.create!(
       visitor: visitor, client_id: "com-portal-rp", last_used_at: 3.days.ago,
     )
-    usage = VisitorRpSession.create!(visitor_token: token, oidc_client_id: "com-portal-rp")
+    usage = VisitorRpSession.create!(
+      visitor_token: token, oidc_client_id: "com-portal-rp", refresh_token_expires_at: 1.hour.from_now,
+    )
     refresh_token = usage.issue_refresh_token!
 
     result = OidcRefreshTokenIssuer.call(refresh_token: refresh_token, resource_type: "visitor")
@@ -95,6 +101,33 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     assert_predicate result, :success?
     assert_equal usage.id, result.token.id
     assert_operator connection.reload.last_used_at, :>, 1.minute.ago
+  end
+
+  test "a client refresh token is refused after its parent Browser Session is revoked" do
+    client = clients(:one)
+    token = ClientToken.create!(
+      user: client,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      discard_at: 1.day.from_now,
+    )
+    usage = ClientRpSession.create!(
+      client_token: token,
+      oidc_client_id: "core-app",
+      oidc_scope: "openid profile",
+      refresh_token_expires_at: 1.hour.from_now,
+    )
+    refresh_token = usage.issue_refresh_token!
+    refresh_digest = usage.reload.refresh_token_digest
+    refresh_generation = usage.refresh_generation
+
+    RpSessionRevoker.call(scope: :browser_session, record: token)
+    result = OidcRefreshTokenIssuer.call(refresh_token:, resource_type: "client")
+
+    assert_not result.success?
+    assert_equal :inactive_token, result.reason
+    assert_equal refresh_digest, usage.reload.refresh_token_digest
+    assert_equal refresh_generation, usage.refresh_generation
   end
 
   test "replaying a visitor refresh token is reported as reuse against the visitor id" do
@@ -105,7 +138,9 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
-    usage = VisitorRpSession.create!(visitor_token: token, oidc_client_id: "com-portal-rp")
+    usage = VisitorRpSession.create!(
+      visitor_token: token, oidc_client_id: "com-portal-rp", refresh_token_expires_at: 1.hour.from_now,
+    )
     replayed = usage.issue_refresh_token!
 
     assert_predicate OidcRefreshTokenIssuer.call(
@@ -145,7 +180,9 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
-    usage = OperatorRpSession.create!(operator_token: token, oidc_client_id: "org-console-rp")
+    usage = OperatorRpSession.create!(
+      operator_token: token, oidc_client_id: "org-console-rp", refresh_token_expires_at: 1.hour.from_now,
+    )
     refresh_token = usage.issue_refresh_token!
     lock_tables = []
     callback =

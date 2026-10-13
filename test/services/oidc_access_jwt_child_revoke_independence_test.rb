@@ -36,7 +36,19 @@ class OidcAccessJwtChildRevokeIndependenceTest < ActiveSupport::TestCase
     root, session = create_rp_session
     token = access_token_for(root, session)
 
-    root.update!(user_token_status_id: ClientTokenStatus::REVOKED)
+    RpSessionRevoker.call(scope: :browser_session, record: root)
+
+    result = authenticate(token)
+
+    assert_not result.success?
+    assert_equal "invalid_token", result.error
+    assert_predicate session.reload, :revoked?
+  end
+
+  test "an Access JWT is refused when its Base Session lacks a finite expiry" do
+    root, session = create_rp_session
+    token = access_token_for(root, session)
+    root.update!(discard_at: Float::INFINITY)
 
     result = authenticate(token)
 

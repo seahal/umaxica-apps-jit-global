@@ -85,6 +85,30 @@ class PalmAccessTokenAuthenticatorTest < ActiveSupport::TestCase
     assert_equal "invalid_token", result.error
   end
 
+  test "rejects a bearer token on the next request after its parent Browser Session is revoked" do
+    token = persisted_token
+    access_token = palm_token(sid: token.oidc_sid, jti: token.oidc_jti)
+
+    assert_predicate authenticate(token: access_token), :success?
+
+    RpSessionRevoker.call(scope: :browser_session, record: token)
+    result = authenticate(token: access_token)
+
+    assert_not result.success?
+    assert_equal "invalid_token", result.error
+  end
+
+  test "rejects a bearer token whose persisted Base Session has no finite expiry" do
+    token = persisted_token
+    access_token = palm_token(sid: token.oidc_sid, jti: token.oidc_jti)
+    token.update!(discard_at: Float::INFINITY)
+
+    result = authenticate(token: access_token)
+
+    assert_not result.success?
+    assert_equal "invalid_token", result.error
+  end
+
   test "rejects rotated persisted client token when inactive" do
     token = persisted_token(user_token_status_id: ClientTokenStatus::ACTIVE)
     token.update!(user_token_status_id: ClientTokenStatus::REVOKED, rotated_at: Time.current)

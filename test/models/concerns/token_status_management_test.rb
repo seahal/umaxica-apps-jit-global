@@ -161,6 +161,14 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
     assert_predicate past_token, :expired?
   end
 
+  test "positive infinity is not a usable absolute session deadline" do
+    @token.update!(discard_at: Float::INFINITY, purge_eligible_at: Float::INFINITY)
+
+    assert_predicate @token.reload, :expired?
+    assert_not_predicate @token, :currently_usable?
+    assert_not ClientToken.currently_usable_at.exists?(id: @token.id)
+  end
+
   test "instance expiry and the SQL scope use the same supplied evaluation time" do
     evaluation_time = Time.utc(2040, 1, 1, 12)
     token = ClientToken.create!(

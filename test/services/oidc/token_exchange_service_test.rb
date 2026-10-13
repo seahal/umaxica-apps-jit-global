@@ -46,6 +46,116 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_kind_of Integer, result.token_response[:expires_in]
   end
 
+  test "authorization code exchange refuses an unbounded root before consuming the code" do
+    code_record = OidcAuthorizationCodeIssuer.call(
+      client: @client,
+      params: {
+        client_id: @client.client_id,
+        redirect_uri: @redirect_uri,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        nonce: "test_nonce",
+        scope: "openid profile email",
+      },
+      resource: @user,
+      session_token: @user_session_token,
+      authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+    )
+    @user_session_token.update!(discard_at: Float::INFINITY)
+
+    result =
+      OidcClientRegistry.stub(
+        :authenticate_assertion,
+        ->(client_id, assertion, token_url:) {
+          client_id == @client.client_id && assertion.present? && token_url.present?
+        },
+      ) do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: @client.client_id,
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+          expected_resource_type: "client",
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "invalid_grant", result.error
+    code_payload = Valkey::AuthState::AuthorizationCodeStore.new.read(code_record.code)
+
+    assert_equal "issued", code_payload.fetch("state")
+    assert_nil ClientRpSession.find_by(client_token: @user_session_token, oidc_client_id: @client.client_id)
+  end
+
+  test "refresh grant refuses to extend a root with an unbounded expiry" do
+    code_record = OidcAuthorizationCodeIssuer.call(
+      client: @client,
+      params: {
+        client_id: @client.client_id,
+        redirect_uri: @redirect_uri,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        nonce: "test_nonce",
+        scope: "openid profile email",
+      },
+      resource: @user,
+      session_token: @user_session_token,
+      authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+    )
+    initial_result =
+      OidcClientRegistry.stub(
+        :authenticate_assertion,
+        ->(client_id, assertion, token_url:) {
+          client_id == @client.client_id && assertion.present? && token_url.present?
+        },
+      ) do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: @client.client_id,
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+          expected_resource_type: "client",
+        )
+      end
+
+    assert_predicate initial_result, :success?
+    usage = ClientRpSession.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+    original_digest = usage.refresh_token_digest
+    original_generation = usage.refresh_generation
+    @user_session_token.update!(discard_at: Float::INFINITY)
+
+    result =
+      OidcClientRegistry.stub(
+        :authenticate_assertion,
+        ->(client_id, assertion, token_url:) {
+          client_id == @client.client_id && assertion.present? && token_url.present?
+        },
+      ) do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "refresh_token",
+          refresh_token: initial_result.token_response.fetch(:refresh_token),
+          client_id: @client.client_id,
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          expected_resource_type: "client",
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "invalid_grant", result.error
+    assert_equal original_digest, usage.reload.refresh_token_digest
+    assert_equal original_generation, usage.refresh_generation
+  end
+
   test "transaction-bound authorization code aliases redeem one durable grant" do
     transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app",

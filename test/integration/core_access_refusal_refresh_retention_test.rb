@@ -105,6 +105,23 @@ class CoreAccessRefusalRefreshRetentionTest < ActionDispatch::IntegrationTest
       assert_response :success
       assert response.parsed_body.fetch("authenticated"), "the next request must accept Rails-issued access"
       assert_equal resource.public_id, response.parsed_body.fetch("actor").fetch("id")
+
+      refresh_digest = rp.reload.refresh_token_digest
+      refresh_generation = rp.refresh_generation
+      RpSessionRevoker.call(scope: :browser_session, record: token)
+      post(
+        "/api/v0/token/refresh",
+        headers: {
+          "Accept" => "application/json",
+          "X-CSRF-Token" => csrf,
+          "Origin" => "https://#{hostname}",
+          "Sec-Fetch-Site" => "same-origin",
+        },
+      )
+
+      assert_response :unauthorized
+      assert_equal refresh_digest, rp.reload.refresh_token_digest
+      assert_equal refresh_generation, rp.refresh_generation
     end
   ensure
     ENV["CORE_BROWSER_JWT_COOKIE_ENABLED"] = previous_flag

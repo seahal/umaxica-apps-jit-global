@@ -28,6 +28,12 @@ class SessionAbsoluteExpiryValueTest < ActiveSupport::TestCase
                  SessionAbsoluteExpiryValue.cap(proposed_expiry: proposed, absolute_expiry: Float::INFINITY)
   end
 
+  test "finite expiry classification rejects missing and infinite deadlines" do
+    assert_not SessionAbsoluteExpiryValue.finite?(nil)
+    assert_not SessionAbsoluteExpiryValue.finite?(Float::INFINITY)
+    assert SessionAbsoluteExpiryValue.finite?(Time.utc(2026, 9, 13, 10, 0))
+  end
+
   test "a later refresh proposal cannot extend past the original absolute ceiling" do
     started = Time.utc(2026, 9, 13, 9, 0)
     ceiling = started + 8.hours

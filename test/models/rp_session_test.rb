@@ -194,7 +194,7 @@ class RpSessionTest < ActiveSupport::TestCase
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app",
         :oidc_scope => "openid profile",
-        :refresh_token_expires_at => absolute_expiry + 1.day,
+        :refresh_token_expires_at => 30.minutes.from_now,
       )
 
       session.issue_refresh_token!(expires_at: absolute_expiry + 2.days)
@@ -206,6 +206,37 @@ class RpSessionTest < ActiveSupport::TestCase
 
       assert_operator session.reload.refresh_token_expires_at, :<=, absolute_expiry
       assert_equal absolute_expiry.to_i, session.refresh_token_expires_at.to_i
+    end
+
+    test "#{rp_session_case[:name]} RP session rejects a missing or infinite parent or child expiry" do
+      root = rp_session_case[:root_builder].call
+      session = rp_session_case[:model].create!(
+        rp_session_case[:parent_label] => root,
+        :oidc_client_id => "core-app",
+        :oidc_scope => "openid profile",
+        :refresh_token_expires_at => 1.hour.from_now,
+      )
+
+      root.update!(discard_at: Float::INFINITY)
+
+      assert_not_predicate session.reload, :active?
+      assert_raises(RpSession::IssuanceRejected) { session.issue_refresh_token! }
+
+      root.update!(discard_at: 1.day.from_now)
+      session.update!(refresh_token_expires_at: nil)
+
+      assert_not_predicate session.reload, :active?
+      assert_raises(RpSession::IssuanceRejected) { session.issue_refresh_token! }
+
+      session.update!(refresh_token_expires_at: Float::INFINITY)
+
+      assert_not_predicate session.reload, :active?
+      assert_raises(RpSession::IssuanceRejected) { session.issue_refresh_token! }
+
+      session.update!(refresh_token_expires_at: 2.days.from_now)
+
+      assert_not_predicate session.reload, :active?
+      assert_raises(RpSession::IssuanceRejected) { session.issue_refresh_token! }
     end
 
     test "#{rp_session_case[:name]} rp session detects a replay of the digest superseded by rotation" do

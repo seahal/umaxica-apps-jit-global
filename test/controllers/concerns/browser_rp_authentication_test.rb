@@ -515,6 +515,20 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     assert_raises(RpSession::IssuanceRejected) { @rp_session.reload.issue_refresh_token! }
   end
 
+  test "a safe request cannot refresh credentials after its parent Browser Session is revoked" do
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = "expired"
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = @refresh_token
+    RpSessionRevoker.call(scope: :browser_session, record: @root_token)
+    refresh_digest = @rp_session.reload.refresh_token_digest
+    refresh_generation = @rp_session.refresh_generation
+
+    get :show, params: { required: "1" }
+
+    assert_response :unauthorized
+    assert_equal refresh_digest, @rp_session.reload.refresh_token_digest
+    assert_equal refresh_generation, @rp_session.refresh_generation
+  end
+
   test "an access credential stops authenticating as soon as its root token is revoked" do
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
     @root_token.revoke!

@@ -154,10 +154,15 @@ class RefreshTokenableTest < ActiveSupport::TestCase
     assert_not_predicate token, :active?
   end
 
-  test "negative infinity or nil expiry cannot make a refresh token active" do
+  test "missing or infinite expiry cannot make a refresh token active" do
     token = ClientToken.new(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     token.define_singleton_method(:discard_at) { -Float::INFINITY }
+
+    assert_predicate token, :expired_refresh?
+    assert_not_predicate token, :active?
+
+    token.define_singleton_method(:discard_at) { Float::INFINITY }
 
     assert_predicate token, :expired_refresh?
     assert_not_predicate token, :active?

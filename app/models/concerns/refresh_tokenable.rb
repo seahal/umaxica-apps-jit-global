@@ -265,9 +265,7 @@ module RefreshTokenable
 
   # Whether the refresh token has expired.
   def expired_refresh?
-    return true if discard_at.blank?
-    return true if discard_at.respond_to?(:infinite?) && discard_at.infinite? == -1
-    return false if discard_at.respond_to?(:infinite?) && discard_at.infinite? == 1
+    return true unless SessionAbsoluteExpiryValue.finite?(discard_at)
 
     discard_at <= Time.current
   end

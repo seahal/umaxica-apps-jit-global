@@ -78,10 +78,12 @@ class PalmAccessTokenAuthenticator < ApplicationService
     sid = payload["sid"].to_s
     return if sid.blank?
 
-    AppTicketRecord.connected_to(role: :reading) do
-      ClientRpSession.find_by(public_id: sid) ||
-        ClientToken.find_by(oidc_sid: sid) ||
-        ClientToken.find_by(public_id: sid)
+    AppTicketRecord.connected_to(role: :writing) do
+      AppTicketRecord.uncached do
+        ClientRpSession.find_by(public_id: sid) ||
+          ClientToken.find_by(oidc_sid: sid) ||
+          ClientToken.find_by(public_id: sid)
+      end
     end
   end
 

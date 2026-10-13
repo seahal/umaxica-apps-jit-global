@@ -119,9 +119,10 @@ module TokenStatusManagement
   def expired?(now = Time.current)
     return true if revoked?
     return true if token_status_id == self.class.token_status_model::EXPIRED
-    return true if has_attribute?(:discard_at) && discard_at.blank?
-    if respond_to?(:discard_at) && has_attribute?(:discard_at) && past_or_present_time?(discard_at, now)
-      return true
+
+    if has_attribute?(:discard_at)
+      return true unless SessionAbsoluteExpiryValue.finite?(discard_at)
+      return true if past_or_present_time?(discard_at, now)
     end
     return true if scheduled_revocation_due?(now)
 
@@ -147,6 +148,7 @@ module TokenStatusManagement
 
       if column_names.include?("discard_at")
         scope = scope.where(arel_table[:discard_at].gt(now))
+        scope = scope.where.not(discard_at: Float::INFINITY)
       end
       if column_names.include?(token_status_foreign_key.to_s)
         scope = scope.where.not(token_status_foreign_key => [token_status_model::EXPIRED, token_status_model::REVOKED])
