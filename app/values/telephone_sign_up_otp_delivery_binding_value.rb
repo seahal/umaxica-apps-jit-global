@@ -17,16 +17,35 @@ TelephoneSignUpOtpDeliveryBindingValue =
           raise ArgumentError, "invalid Telephone signup delivery binding"
         end
 
-        [transaction_ref, generation].each do |reference|
-          unless reference.is_a?(String) && reference.encoding.ascii_compatible? && reference.valid_encoding? &&
-              reference.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/)
-            raise ArgumentError, "Telephone signup delivery UUID references required"
-          end
+        unless transaction_reference?(transaction_ref)
+          raise ArgumentError, "Telephone signup delivery transaction reference required"
         end
+        unless generation_reference?(generation)
+          raise ArgumentError, "Telephone signup delivery UUID generation required"
+        end
+
         new(
           surface: surface.dup.freeze, purpose: purpose.dup.freeze, flow_ref: flow_ref.dup.freeze,
           transaction_ref: transaction_ref.dup.freeze, generation: generation.dup.freeze,
         )
+      end
+
+      private
+
+      def transaction_reference?(reference)
+        valid_reference?(
+          reference,
+          /\A(?:[A-Za-z0-9_-]{21}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\z/,
+        )
+      end
+
+      def generation_reference?(reference)
+        valid_reference?(reference, /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/)
+      end
+
+      def valid_reference?(reference, pattern)
+        reference.is_a?(String) && reference.encoding.ascii_compatible? && reference.valid_encoding? &&
+          reference.match?(pattern)
       end
     end
 

@@ -11,6 +11,102 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
   end
 
   %w(app com).each do |surface|
+    test "#{surface} Email signup retries a generated transaction reference collision" do
+      owner_model, email_model, flow_model, transaction_model, owner_key, status =
+        case surface
+        when "app"
+          [Client, ClientEmail, ClientSignUpFlow, ClientEmailCeremonyTransaction,
+           :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
+        when "com"
+          [Visitor, VisitorEmail, VisitorSignUpFlow, VisitorEmailCeremonyTransaction,
+           :visitor_id, VisitorStatus::ACTIVE,]
+        end
+      owner = owner_model.create!(status_id: status)
+      email = email_model.create!(
+        owner_key => owner.id, :raw_address => "signup-collision-#{SecureRandom.hex(8)}@example.test",
+        :confirm_policy => true,
+      )
+      now = flow_model.database_now
+      nonce = "signup-collision-browser"
+      flow = flow_model.create!(
+        principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
+        nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
+        entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+      )
+      session_ref = Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
+      binding = {
+        operation: "sign_up",
+        actor_ref: owner.public_id,
+        session_ref: session_ref,
+        email_candidate_ref: email.public_id,
+        normalized_email_digest: email.address_digest,
+      }
+      collision = "a" * 21
+      transaction_model.create_transaction!(
+        **binding.merge(session_ref: "#{session_ref}-existing"), transaction_id: collision,
+                                                                 expires_at: flow.expires_at,
+      )
+      generated = [collision, "g" * 21, "b" * 21, "h" * 21]
+
+      issued =
+        PublicId.stub(:generate, -> { generated.shift }) do
+          EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: nonce)
+        end
+
+      assert_predicate issued, :success?
+      assert_equal "b" * 21, issued.transaction.transaction_id
+      assert_equal "h" * 21, issued.transaction.grant_jti
+      assert_equal 2, transaction_model.where(actor_ref: owner.public_id).count
+    end
+
+    test "#{surface} Email signup retries a generated grant reference collision" do
+      owner_model, email_model, flow_model, transaction_model, owner_key, status =
+        case surface
+        when "app"
+          [Client, ClientEmail, ClientSignUpFlow, ClientEmailCeremonyTransaction,
+           :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
+        when "com"
+          [Visitor, VisitorEmail, VisitorSignUpFlow, VisitorEmailCeremonyTransaction,
+           :visitor_id, VisitorStatus::ACTIVE,]
+        end
+      owner = owner_model.create!(status_id: status)
+      email = email_model.create!(
+        owner_key => owner.id, :raw_address => "signup-grant-collision-#{SecureRandom.hex(8)}@example.test",
+        :confirm_policy => true,
+      )
+      now = flow_model.database_now
+      nonce = "signup-grant-collision-browser"
+      flow = flow_model.create!(
+        principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
+        nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
+        entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
+      )
+      session_ref = Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", flow.public_id, flow.nonce_digest]))
+      binding = {
+        operation: "sign_up",
+        actor_ref: owner.public_id,
+        session_ref: session_ref,
+        email_candidate_ref: email.public_id,
+        normalized_email_digest: email.address_digest,
+      }
+      collision = "i" * 21
+      transaction_model.create_transaction!(
+        **binding.merge(session_ref: "#{session_ref}-existing"), transaction_id: "j" * 21,
+                                                                 grant_jti: collision,
+                                                                 expires_at: flow.expires_at,
+      )
+      generated = ["k" * 21, collision, "l" * 21, "m" * 21]
+
+      issued =
+        PublicId.stub(:generate, -> { generated.shift }) do
+          EmailSignUpOtpIssuer.call(flow: flow, email: email, session_nonce: nonce)
+        end
+
+      assert_predicate issued, :success?
+      assert_equal "l" * 21, issued.transaction.transaction_id
+      assert_equal "m" * 21, issued.transaction.grant_jti
+    end
+
     test "#{surface} Email retained receipt guesses count below but not at or above its deadline" do
       owner_model, email_model, flow_model, transaction_model, owner_key, status =
         case surface
@@ -212,6 +308,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
 
       assert_equal :issued, issued.status
       assert_instance_of transaction_model, issued.transaction
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, issued.transaction.transaction_id)
       assert_match(/\A[0-9]{6}\z/, issued.code)
       assert_equal "sign_up", issued.transaction.operation
       assert_equal "sign_up", issued.transaction.purpose

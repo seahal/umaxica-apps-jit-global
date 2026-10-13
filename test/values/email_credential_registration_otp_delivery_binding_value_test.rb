@@ -3,7 +3,7 @@
 require "test_helper"
 
 class EmailCredentialRegistrationOtpDeliveryBindingValueTest < ActiveSupport::TestCase
-  test "Email registration delivery requires transaction and generation UUIDs instead of a source counter" do
+  test "Email registration delivery accepts NanoID transaction and UUID generation references" do
     arguments = {
       purpose: "credential_registration",
       contact_ceremony_transaction_ref: SecureRandom.uuid,
@@ -27,5 +27,12 @@ class EmailCredentialRegistrationOtpDeliveryBindingValueTest < ActiveSupport::Te
     assert_nil EmailCredentialRegistrationOtpDeliveryBindingValue.for(
       purpose: "sign_up", contact_ceremony_transaction_ref: nil, contact_otp_generation: nil,
     )
+
+    nanoid_binding = EmailCredentialRegistrationOtpDeliveryBindingValue.for(
+      purpose: "credential_registration", contact_ceremony_transaction_ref: "A1_b2-C3d4E5f6G7h8I9j",
+      contact_otp_generation: arguments.fetch(:contact_otp_generation),
+    )
+
+    assert_equal "A1_b2-C3d4E5f6G7h8I9j", nanoid_binding.contact_ceremony_transaction_ref
   end
 end

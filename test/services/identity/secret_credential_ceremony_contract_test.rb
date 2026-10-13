@@ -134,6 +134,7 @@ class IdentitySecretCredentialCeremonyContractTest < ActiveSupport::TestCase
 
       fetched = IdentitySecretCredentialCeremonyCandidateStore.fetch!(candidate.ref)
 
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, candidate.ref)
       assert_equal candidate.ref, fetched.ref
       assert_equal candidate.digest, fetched.digest
       assert_equal "password-digest", fetched.password_digest

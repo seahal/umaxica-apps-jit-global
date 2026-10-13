@@ -2596,7 +2596,7 @@ module AuthenticationBase
     issued_at = Time.current.to_i
     expires_at = pending_mfa_ttl.from_now.to_i
     session[:pending_mfa] = {
-      "public_id" => SecureRandom.hex(16),
+      "public_id" => PublicId.generate,
       "user_id" => resource.id,
       "resource_type" => resource_type,
       "primary" => primary.to_s,

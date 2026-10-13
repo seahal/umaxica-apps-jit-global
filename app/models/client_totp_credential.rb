@@ -67,7 +67,6 @@ class ClientTotpCredential < AppPrincipalRecord
   validate :revoked_status_is_terminal, on: :update
 
   after_initialize :generate_private_key_if_blank
-  after_initialize :generate_public_id_if_blank
 
   public
 
@@ -148,12 +147,6 @@ class ClientTotpCredential < AppPrincipalRecord
   end
 
   private
-
-  def generate_public_id_if_blank
-    return unless has_attribute?(:public_id)
-
-    self.public_id = PublicId.generate if self[:public_id].blank?
-  end
 
   def generate_private_key_if_blank
     self.private_key = ROTP::Base32.random_base32 if read_attribute_before_type_cast("private_key").blank?

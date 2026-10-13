@@ -80,20 +80,26 @@ class IdentityTotpEnrollmentIssuer
 
     def create_candidate!(actor, token, transaction, now)
       secret = ROTP::Base32.random_base32
-      candidate = IdentityTotpCeremonyCandidate.create!(
-        ref: SecureRandom.uuid, digest: Digest::SHA256.hexdigest(secret), surface: "app",
+      candidate = IdentityCeremonyCandidateRecord.create_with_generated_ref(
+        IdentityTotpCeremonyCandidate,
+        digest: Digest::SHA256.hexdigest(secret), surface: "app",
         actor_ref: actor.public_id, session_ref: token.public_id,
         step_up_ceremony_transaction_ref: transaction.transaction_id,
         private_key: secret, expires_at: [now + 10.minutes, transaction.expires_at].min,
       )
-      ClientTotpCeremonyTransaction.create!(
-        transaction_id: SecureRandom.uuid, grant_jti: SecureRandom.uuid,
+      create_transaction_with_generated_reference!(
+        actor: actor, token: token, transaction: transaction, candidate: candidate, now: now,
+      )
+      candidate
+    end
+
+    def create_transaction_with_generated_reference!(actor:, token:, transaction:, candidate:, now:)
+      ClientTotpCeremonyTransaction.create_transaction!(
         surface: "app", actor_ref: actor.public_id, session_ref: token.public_id,
         operation: "registration", expires_at: candidate.expires_at,
         credential_candidate_ref: candidate.ref, credential_candidate_digest: candidate.digest,
-        step_up_ceremony_transaction_ref: transaction.transaction_id,
+        step_up_ceremony_transaction_ref: transaction.transaction_id, now: now,
       )
-      candidate
     end
   end
 end

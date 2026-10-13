@@ -49,6 +49,8 @@ class EmailReentryOtpIssuerTest < ActiveJob::TestCase
         assert_instance_of transaction_model, transaction
         assert_equal operation, transaction.operation
         assert_equal operation, transaction.purpose
+        assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.transaction_id)
+        assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.grant_jti)
         assert_equal browser_ref, transaction.session_ref
         assert_equal owner.public_id, transaction.actor_ref
         assert_equal email.public_id, transaction.email_candidate_ref
@@ -90,5 +92,54 @@ class EmailReentryOtpIssuerTest < ActiveJob::TestCase
 
       assert_equal "ORG withdrawal reentry is unsupported", error.message
     end
+  end
+
+  test "reentry retries a generated transaction reference collision in a savepoint" do
+    owner = clients(:one)
+    email = owner.client_emails.create!(
+      raw_address: "reentry-collision-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
+    )
+    collision = "a" * 21
+    existing_session = SecureRandom.uuid
+    ClientEmailCeremonyTransaction.create_transaction!(
+      transaction_id: collision, actor_ref: owner.public_id, session_ref: existing_session,
+      operation: "recovery", email_candidate_ref: email.public_id,
+      normalized_email_digest: email.address_digest, expires_at: 1.day.from_now,
+    )
+    generated = [collision, "g" * 21, "b" * 21, "h" * 21]
+    generator = -> { generated.shift || raise(RuntimeError, "unexpected reference generation") }
+
+    issued = nil
+    PublicId.stub(:generate, generator) do
+      issued = EmailReentryOtpIssuer.call(email: email, operation: "recovery", session_ref: SecureRandom.uuid)
+    end
+
+    assert_predicate issued, :persisted?
+    assert_equal "b" * 21, issued.transaction_id
+    assert_equal "h" * 21, issued.grant_jti
+  end
+
+  test "reentry retries a generated grant reference collision in a savepoint" do
+    owner = clients(:one)
+    email = owner.client_emails.create!(
+      raw_address: "reentry-grant-collision-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
+    )
+    collision = "i" * 21
+    ClientEmailCeremonyTransaction.create_transaction!(
+      transaction_id: "j" * 21, grant_jti: collision, actor_ref: owner.public_id,
+      session_ref: SecureRandom.uuid, operation: "recovery", email_candidate_ref: email.public_id,
+      normalized_email_digest: email.address_digest, expires_at: 1.day.from_now,
+    )
+    generated = ["k" * 21, collision, "l" * 21, "m" * 21]
+    generator = -> { generated.shift || raise(RuntimeError, "unexpected reference generation") }
+
+    issued = nil
+    PublicId.stub(:generate, generator) do
+      issued = EmailReentryOtpIssuer.call(email: email, operation: "recovery", session_ref: SecureRandom.uuid)
+    end
+
+    assert_predicate issued, :persisted?
+    assert_equal "l" * 21, issued.transaction_id
+    assert_equal "m" * 21, issued.grant_jti
   end
 end

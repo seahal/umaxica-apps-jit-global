@@ -22,6 +22,8 @@ class SignInSequenceCarrierTest < ActiveSupport::TestCase
       pt: "/settings",
     )
 
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, sequence.id)
+
     assert_equal sequence.id, session.fetch(:app_sign_in_sequence).fetch("id")
     assert_nil session[:com_sign_in_sequence]
     assert_nil session[SignInSequenceCarrier::KEY]

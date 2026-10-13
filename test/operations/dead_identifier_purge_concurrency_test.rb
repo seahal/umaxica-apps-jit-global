@@ -116,7 +116,7 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
       ensure
         threads&.each { |thread| thread.join if thread.alive? }
         [owner, replacement_owner].compact.each do |actor|
-          model.where(owner_key => actor.id).find_each(&:destroy!)
+          model.where(owner_key => actor.id).find_each(&:destroy_without_dead_history!)
           history_model.where(owner_key => actor.id).find_each(&:destroy!)
           actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
           actor.reload.destroy!
@@ -190,7 +190,7 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
       ensure
         threads&.each { |thread| thread.join if thread.alive? }
         history_model&.where(owner_key => owner.id)&.find_each(&:destroy!) if owner
-        record&.destroy! if record&.persisted? && model.exists?(record.id)
+        record&.destroy_without_dead_history! if record&.persisted? && model.exists?(record.id)
         owner&.reload&.update!(discard_at: owner.created_at, purge_eligible_at: owner.created_at)
         owner&.destroy!
       end

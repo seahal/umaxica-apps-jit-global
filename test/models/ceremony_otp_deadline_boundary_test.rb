@@ -7,7 +7,7 @@ class CeremonyOtpDeadlineBoundaryTest < ActiveSupport::TestCase
     test "#{model.name} delivery refuses OTP deadline and nearest representable later instant" do
       transaction = model.create_transaction!(
         actor_ref: "deadline-actor", session_ref: "deadline-browser",
-        operation: "registration", email_candidate_ref: "deadline-candidate",
+        operation: "sign_up", email_candidate_ref: "deadline-candidate",
       )
       transaction.issue_email_otp!(purpose: "sign_up")
       transaction.reload
@@ -25,7 +25,7 @@ class CeremonyOtpDeadlineBoundaryTest < ActiveSupport::TestCase
     test "#{model.name} delivery refuses parent deadline even when the OTP verifier remains present" do
       transaction = model.create_transaction!(
         actor_ref: "deadline-actor", session_ref: "deadline-browser",
-        operation: "registration", email_candidate_ref: "deadline-candidate", expires_at: 1.minute.from_now,
+        operation: "sign_up", email_candidate_ref: "deadline-candidate", expires_at: 1.minute.from_now,
       )
       transaction.issue_email_otp!(purpose: "sign_up")
       transaction.reload
@@ -41,7 +41,7 @@ class CeremonyOtpDeadlineBoundaryTest < ActiveSupport::TestCase
     test "#{model.name} delivery refuses OTP deadline and nearest representable later instant" do
       transaction = model.create_transaction!(
         actor_ref: "deadline-actor", session_ref: "deadline-browser",
-        operation: "registration", telephone_candidate_ref: "deadline-candidate",
+        operation: "sign_up", telephone_candidate_ref: "deadline-candidate",
       )
       transaction.issue_telephone_otp!(purpose: "sign_up")
       transaction.reload
@@ -59,7 +59,7 @@ class CeremonyOtpDeadlineBoundaryTest < ActiveSupport::TestCase
     test "#{model.name} delivery refuses parent deadline even when the OTP verifier remains present" do
       transaction = model.create_transaction!(
         actor_ref: "deadline-actor", session_ref: "deadline-browser",
-        operation: "registration", telephone_candidate_ref: "deadline-candidate", expires_at: 1.minute.from_now,
+        operation: "sign_up", telephone_candidate_ref: "deadline-candidate", expires_at: 1.minute.from_now,
       )
       transaction.issue_telephone_otp!(purpose: "sign_up")
       transaction.reload

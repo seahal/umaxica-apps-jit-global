@@ -11,6 +11,102 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
   end
 
   %w(app com).each do |surface|
+    test "#{surface} Telephone signup retries a generated transaction reference collision" do
+      owner_model, telephone_model, flow_model, transaction_model, owner_key, status =
+        case surface
+        when "app"
+          [Client, ClientTelephone, ClientSignUpFlow, ClientTelephoneCeremonyTransaction,
+           :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
+        when "com"
+          [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction,
+           :visitor_id, VisitorStatus::ACTIVE,]
+        end
+      owner = owner_model.create!(status_id: status)
+      telephone = telephone_model.create!(
+        owner_key => owner.id, :raw_number => "+120255501#{SecureRandom.random_number(10_000).to_s.rjust(4, "0")}",
+        :confirm_policy => true,
+      )
+      now = flow_model.database_now
+      nonce = "telephone-signup-collision-browser"
+      flow = flow_model.create!(
+        principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
+        nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
+        entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
+      )
+      session_ref = Digest::SHA256.hexdigest(JSON.generate(["telephone_sign_up", flow.public_id, flow.nonce_digest]))
+      binding = {
+        operation: "sign_up",
+        actor_ref: owner.public_id,
+        session_ref: session_ref,
+        telephone_candidate_ref: telephone.public_id,
+        normalized_number_digest: telephone.number_digest,
+      }
+      collision = "c" * 21
+      transaction_model.create_transaction!(
+        **binding.merge(session_ref: "#{session_ref}-existing"), transaction_id: collision,
+                                                                 expires_at: flow.expires_at,
+      )
+      generated = [collision, "g" * 21, "d" * 21, "h" * 21]
+
+      issued =
+        PublicId.stub(:generate, -> { generated.shift }) do
+          TelephoneSignUpOtpIssuer.call(flow: flow, telephone: telephone, session_nonce: nonce)
+        end
+
+      assert_predicate issued, :success?
+      assert_equal "d" * 21, issued.transaction.transaction_id
+      assert_equal "h" * 21, issued.transaction.grant_jti
+      assert_equal 2, transaction_model.where(actor_ref: owner.public_id).count
+    end
+
+    test "#{surface} Telephone signup retries a generated grant reference collision" do
+      owner_model, telephone_model, flow_model, transaction_model, owner_key, status =
+        case surface
+        when "app"
+          [Client, ClientTelephone, ClientSignUpFlow, ClientTelephoneCeremonyTransaction,
+           :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP,]
+        when "com"
+          [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction,
+           :visitor_id, VisitorStatus::ACTIVE,]
+        end
+      owner = owner_model.create!(status_id: status)
+      telephone = telephone_model.create!(
+        owner_key => owner.id, :raw_number => "+12025550#{SecureRandom.random_number(100_000).to_s.rjust(5, "0")}",
+        :confirm_policy => true,
+      )
+      now = flow_model.database_now
+      nonce = "telephone-signup-grant-collision-browser"
+      flow = flow_model.create!(
+        principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
+        nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
+        entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
+      )
+      session_ref = Digest::SHA256.hexdigest(JSON.generate(["telephone_sign_up", flow.public_id, flow.nonce_digest]))
+      binding = {
+        operation: "sign_up",
+        actor_ref: owner.public_id,
+        session_ref: session_ref,
+        telephone_candidate_ref: telephone.public_id,
+        normalized_number_digest: telephone.number_digest,
+      }
+      collision = "i" * 21
+      transaction_model.create_transaction!(
+        **binding.merge(session_ref: "#{session_ref}-existing"), transaction_id: "j" * 21,
+                                                                 grant_jti: collision,
+                                                                 expires_at: flow.expires_at,
+      )
+      generated = ["k" * 21, collision, "l" * 21, "m" * 21]
+
+      issued =
+        PublicId.stub(:generate, -> { generated.shift }) do
+          TelephoneSignUpOtpIssuer.call(flow: flow, telephone: telephone, session_nonce: nonce)
+        end
+
+      assert_predicate issued, :success?
+      assert_equal "l" * 21, issued.transaction.transaction_id
+      assert_equal "m" * 21, issued.transaction.grant_jti
+    end
+
     test "#{surface} Telephone retained receipt guesses count below but not at or above its deadline" do
       owner_model, telephone_model, flow_model, transaction_model, owner_key, status =
         case surface
@@ -371,6 +467,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
 
       assert_equal :issued, issued.status
       assert_instance_of transaction_model, issued.transaction
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, issued.transaction.transaction_id)
       assert_match(/\A[0-9]{6}\z/, issued.code)
       assert_equal "sign_up", issued.transaction.operation
       assert_equal "sign_up", issued.transaction.purpose

@@ -58,6 +58,13 @@ single-column uniqueness or immutability. Unavailable results remain NULL rather
 dummy identities. Separate shard-local uniqueness from any evidenced distributed guarantee; do not
 invent a central identifier service for hypothetical future needs.
 
+Short-lived receiver capabilities that only index a purpose- and surface-bound Valkey record are
+references, not durable resource identities or signed result evidence. An established UUID-v4
+admission transport may retain that format when its receiver validates the same contract; changing
+it requires a consumer-specific transition with an exact legacy reader. The NanoID rule alone does
+not authorize reformatting a capability, weakening its receiver validation, or adding a cross-surface
+lookup fallback.
+
 ### Database protection and authorized mechanisms
 
 Model validation alone cannot establish integrity for update_columns/update_all/upsert/bulk or

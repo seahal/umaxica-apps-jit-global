@@ -7,7 +7,7 @@ class CeremonyOtpDeliveryTest < ActiveSupport::TestCase
    OperatorEmailCeremonyTransaction,].each do |model|
     test "#{model.name} delivers only the current authentic email code before cancellation" do
       transaction = model.create_transaction!(
-        actor_ref: "actor", session_ref: "browser", operation: "registration", email_candidate_ref: "candidate",
+        actor_ref: "actor", session_ref: "browser", operation: "sign_up", email_candidate_ref: "candidate",
       )
       code = transaction.issue_email_otp!(purpose: "sign_up")
       generation = transaction.otp_generation
@@ -41,7 +41,7 @@ class CeremonyOtpDeliveryTest < ActiveSupport::TestCase
    OperatorEmailCeremonyTransaction,].each do |model|
     test "#{model.name} email delivery accepts deadline minus one microsecond and rejects deadline and plus one" do
       transaction = model.create_transaction!(
-        actor_ref: "actor", session_ref: "browser", operation: "registration", email_candidate_ref: "candidate",
+        actor_ref: "actor", session_ref: "browser", operation: "sign_up", email_candidate_ref: "candidate",
       )
       code = transaction.issue_email_otp!(purpose: "sign_up")
       generation = transaction.otp_generation
@@ -67,7 +67,7 @@ class CeremonyOtpDeliveryTest < ActiveSupport::TestCase
    OperatorTelephoneCeremonyTransaction,].each do |model|
     test "#{model.name} delivers only the current authentic telephone code before cancellation" do
       transaction = model.create_transaction!(
-        actor_ref: "actor", session_ref: "browser", operation: "registration", telephone_candidate_ref: "candidate",
+        actor_ref: "actor", session_ref: "browser", operation: "sign_up", telephone_candidate_ref: "candidate",
       )
       code = transaction.issue_telephone_otp!(purpose: "sign_up")
       generation = transaction.otp_generation
@@ -97,7 +97,7 @@ class CeremonyOtpDeliveryTest < ActiveSupport::TestCase
    OperatorTelephoneCeremonyTransaction,].each do |model|
     test "#{model.name} telephone delivery accepts deadline minus one microsecond and rejects deadline and plus one" do
       transaction = model.create_transaction!(
-        actor_ref: "actor", session_ref: "browser", operation: "registration", telephone_candidate_ref: "candidate",
+        actor_ref: "actor", session_ref: "browser", operation: "sign_up", telephone_candidate_ref: "candidate",
       )
       code = transaction.issue_telephone_otp!(purpose: "sign_up")
       generation = transaction.otp_generation

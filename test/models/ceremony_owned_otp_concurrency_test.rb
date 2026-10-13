@@ -10,7 +10,7 @@ class CeremonyOwnedOtpConcurrencyTest < ActiveSupport::TestCase
     test "#{model.name} concurrent verification succeeds exactly once" do
       transaction = model.create_transaction!(
         actor_ref: "concurrent-actor", session_ref: "concurrent-browser",
-        operation: "registration", email_candidate_ref: "concurrent-candidate",
+        operation: "sign_up", email_candidate_ref: "concurrent-candidate",
       )
       code = transaction.issue_email_otp!(purpose: "sign_up")
       ready = Queue.new
@@ -26,7 +26,7 @@ class CeremonyOwnedOtpConcurrencyTest < ActiveSupport::TestCase
               release.pop
               results << local.verify_email_otp!(
                 code: code, purpose: "sign_up", actor_ref: "concurrent-actor",
-                session_ref: "concurrent-browser", operation: "registration", candidate_ref: "concurrent-candidate",
+                session_ref: "concurrent-browser", operation: "sign_up", candidate_ref: "concurrent-candidate",
               )
             end
           rescue StandardError => e
@@ -57,7 +57,7 @@ class CeremonyOwnedOtpConcurrencyTest < ActiveSupport::TestCase
     test "#{model.name} concurrent verification succeeds exactly once" do
       transaction = model.create_transaction!(
         actor_ref: "concurrent-actor", session_ref: "concurrent-browser",
-        operation: "registration", telephone_candidate_ref: "concurrent-candidate",
+        operation: "sign_up", telephone_candidate_ref: "concurrent-candidate",
       )
       code = transaction.issue_telephone_otp!(purpose: "sign_up")
       ready = Queue.new
@@ -73,7 +73,7 @@ class CeremonyOwnedOtpConcurrencyTest < ActiveSupport::TestCase
               release.pop
               results << local.verify_telephone_otp!(
                 code: code, purpose: "sign_up", actor_ref: "concurrent-actor",
-                session_ref: "concurrent-browser", operation: "registration", candidate_ref: "concurrent-candidate",
+                session_ref: "concurrent-browser", operation: "sign_up", candidate_ref: "concurrent-candidate",
               )
             end
           rescue StandardError => e

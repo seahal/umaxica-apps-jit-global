@@ -32,7 +32,7 @@ class EmailIdentifierPurger
           now = record.class.database_now
           return nil unless purge_permitted?(current, owner, now)
 
-          current.destroy!
+          current.purge_with_dead_history!
           current.dead_email_history
         end
       end

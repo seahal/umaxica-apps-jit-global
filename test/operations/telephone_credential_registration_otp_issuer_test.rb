@@ -3,6 +3,73 @@
 require "test_helper"
 
 class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
+  test "app Telephone registration retries a transaction reference collision in a savepoint" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor, discard_at: 1.day.from_now)
+    telephone = actor.client_telephones.create!(
+      raw_number: "+12025550149", confirm_policy: true, confirm_using_mfa: true,
+    )
+    token.rotate_refresh_token!
+    collision = "c" * 21
+    replacement = "d" * 21
+    existing_session = CredentialRegistrationOtpSessionValue.for(
+      surface: "app", channel: :telephone, transaction_ref: collision,
+      root_ref: token.public_id, browser_nonce: SecureRandom.urlsafe_base64(32),
+    )
+    ClientTelephoneCeremonyTransaction.create_transaction!(
+      transaction_id: collision, actor_ref: actor.public_id, session_ref: existing_session.dump,
+      operation: "registration", telephone_candidate_ref: telephone.public_id,
+      normalized_number_digest: telephone.number_digest, expires_at: 1.day.from_now,
+    )
+    generated = [collision, "g" * 21, replacement, "h" * 21]
+    generator = -> { generated.shift || raise(RuntimeError, "unexpected transaction reference generation") }
+
+    issued = nil
+    PublicId.stub(:generate, generator) do
+      issued = TelephoneCredentialRegistrationOtpIssuer.call(
+        actor: actor, token: token, telephone: telephone, browser_nonce: SecureRandom.urlsafe_base64(32),
+      )
+    end
+
+    assert_predicate issued, :success?
+    assert_equal replacement, issued.transaction.transaction_id
+    assert_equal "h" * 21, issued.transaction.grant_jti
+    assert_equal 2, ClientTelephoneCeremonyTransaction.where(actor_ref: actor.public_id).count
+  end
+
+  test "app Telephone registration retries a grant reference collision in a savepoint" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor, discard_at: 1.day.from_now)
+    telephone = actor.client_telephones.create!(
+      raw_number: "+12025550#{SecureRandom.random_number(100_000).to_s.rjust(5, "0")}",
+      confirm_policy: true, confirm_using_mfa: true,
+    )
+    token.rotate_refresh_token!
+    collision = "i" * 21
+    existing_session = CredentialRegistrationOtpSessionValue.for(
+      surface: "app", channel: :telephone, transaction_ref: "j" * 21,
+      root_ref: token.public_id, browser_nonce: SecureRandom.urlsafe_base64(32),
+    )
+    ClientTelephoneCeremonyTransaction.create_transaction!(
+      transaction_id: "j" * 21, grant_jti: collision, actor_ref: actor.public_id,
+      session_ref: existing_session.dump, operation: "registration", telephone_candidate_ref: telephone.public_id,
+      normalized_number_digest: telephone.number_digest, expires_at: 1.day.from_now,
+    )
+    generated = ["k" * 21, collision, "l" * 21, "m" * 21]
+    generator = -> { generated.shift || raise(RuntimeError, "unexpected grant reference generation") }
+
+    issued = nil
+    PublicId.stub(:generate, generator) do
+      issued = TelephoneCredentialRegistrationOtpIssuer.call(
+        actor: actor, token: token, telephone: telephone, browser_nonce: SecureRandom.urlsafe_base64(32),
+      )
+    end
+
+    assert_predicate issued, :success?
+    assert_equal "l" * 21, issued.transaction.transaction_id
+    assert_equal "m" * 21, issued.transaction.grant_jti
+  end
+
   test "org registration references an opaque candidate rather than a source database primary key" do
     actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
     token = OperatorToken.create!(staff: actor, discard_at: 1.day.from_now)
@@ -16,6 +83,7 @@ class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
     )
 
     assert_predicate issued, :success?
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, issued.transaction.transaction_id)
     reference = issued.transaction.reload.telephone_candidate_ref
 
     assert_equal 21, reference.length

@@ -45,8 +45,8 @@ class IdentityTotpCeremonyCandidateStore
 
     record =
       IdentityTotpCeremonyCandidate.connection_owner.connected_to(role: :writing) do
-        IdentityTotpCeremonyCandidate.create!(
-          ref: SecureRandom.uuid,
+        IdentityCeremonyCandidateRecord.create_with_generated_ref(
+          IdentityTotpCeremonyCandidate,
           digest: digest_for(private_key),
           surface: surface.to_s,
           actor_ref: actor_ref.to_s,

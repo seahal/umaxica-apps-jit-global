@@ -27,7 +27,7 @@ class SignInSequenceCarrier
 
     now = Time.current
     payload = {
-      "id" => SecureRandom.uuid,
+      "id" => PublicId.generate,
       "surface" => surface.to_s,
       "actor_type" => actor.class.name,
       "actor_id" => actor.id,

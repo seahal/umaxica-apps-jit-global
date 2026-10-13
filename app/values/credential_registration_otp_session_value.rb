@@ -11,9 +11,9 @@ CredentialRegistrationOtpSessionValue =
         end
         unless ascii_match?(
           transaction_ref,
-          /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/,
+          /\A(?:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[A-Za-z0-9_-]{21})\z/,
         )
-          raise ArgumentError, "registration transaction UUID required"
+          raise ArgumentError, "registration transaction reference required"
         end
         raise ArgumentError, "registration Root reference required" unless ascii_match?(
           root_ref,

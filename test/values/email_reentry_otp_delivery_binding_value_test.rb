@@ -3,8 +3,9 @@
 require "test_helper"
 
 class EmailReentryOtpDeliveryBindingValueTest < ActiveSupport::TestCase
-  test "email delivery requires both UUID fields with length neighbors and typed malformed partitions" do
+  test "email delivery accepts a NanoID or UUID transaction with a UUID generation" do
     reference = SecureRandom.uuid
+    nanoid_reference = "a" * 21
     generation = SecureRandom.uuid
     invalid_values = [nil, "", 0, false, reference[0...-1], "#{reference}x", " #{reference}",
                       "#{reference}\0", "\xFF", "not-a-uuid",]
@@ -28,6 +29,12 @@ class EmailReentryOtpDeliveryBindingValueTest < ActiveSupport::TestCase
     assert_equal generation, binding.email_otp_generation
     assert_predicate binding.email_ceremony_transaction_ref, :frozen?
     assert_predicate binding.email_otp_generation, :frozen?
+
+    nanoid_binding = EmailReentryOtpDeliveryBindingValue.for(
+      purpose: "recovery", email_ceremony_transaction_ref: nanoid_reference, email_otp_generation: generation,
+    )
+
+    assert_equal nanoid_reference, nanoid_binding.email_ceremony_transaction_ref
   end
 
   test "other purposes have no reentry binding and reject either stray reference rather than reuse proof" do

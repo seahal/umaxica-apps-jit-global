@@ -10,6 +10,7 @@ module StepUpSessionConsumable
 
   VERIFICATION_PURPOSES = %w(step_up reauthentication).freeze
   REGISTRATION_PURPOSES = %w(bootstrap credential_registration).freeze
+  MAX_CHALLENGE_REF_COLLISION_RETRIES = 3
 
   def revoke_authority!
     self.class.revoke_authority_for!(id: id)
@@ -61,13 +62,33 @@ module StepUpSessionConsumable
           deadline = [passkey_challenge_expires_at || (now + 10.minutes), transaction.expires_at].min
           raise ChallengeError, "challenge expired" if deadline <= now
 
+          persist_bound_passkey_challenge!(
+            challenge:, rp_id:, origin:, deadline:,
+          )
+        end
+      end
+    end
+  end
+
+  def persist_bound_passkey_challenge!(challenge:, rp_id:, origin:, deadline:)
+    retries = 0
+
+    loop do
+      reference = PublicId.generate
+      begin
+        self.class.transaction(requires_new: true) do
           update!(
-            passkey_challenge: challenge, passkey_challenge_ref: SecureRandom.uuid,
+            passkey_challenge: challenge, passkey_challenge_ref: reference,
             passkey_rp_id: rp_id, passkey_origin: origin,
             passkey_challenge_expires_at: deadline, passkey_challenge_consumed_at: nil,
           )
-          passkey_challenge_ref
         end
+        return reference
+      rescue ActiveRecord::RecordNotUnique => e
+        raise unless passkey_challenge_ref_constraint_names.include?(postgres_constraint_name(e))
+
+        retries += 1
+        raise if retries > MAX_CHALLENGE_REF_COLLISION_RETRIES
       end
     end
   end
@@ -110,6 +131,19 @@ module StepUpSessionConsumable
         status == "PENDING" && discard_at > now
       raise ChallengeError, "ceremony unavailable"
     end
+  end
+
+  def passkey_challenge_ref_constraint_names
+    self.class.lease_connection.schema_cache.indexes(self.class.table_name).filter_map do |index|
+      index.name if index.unique && index.where.nil? && index.columns == ["passkey_challenge_ref"]
+    end
+  end
+
+  def postgres_constraint_name(error)
+    result = error.cause&.result
+    return unless result
+
+    result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
   end
 
   class_methods do

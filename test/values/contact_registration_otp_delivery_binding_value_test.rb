@@ -61,7 +61,7 @@ class ContactRegistrationOtpDeliveryBindingValueTest < ActiveSupport::TestCase
     end
   end
 
-  test "transaction and generation require lower-case v4 UUIDs with RFC variant and valid ASCII-compatible encoding" do
+  test "generation remains a UUID while transaction references accept UUID or NanoID" do
     uuid = "12345678-1234-4000-8000-123456789abc"
     %w(8 9 a b).each do |variant|
       reference = uuid.sub("-8000-", "-#{variant}000-")
@@ -72,6 +72,19 @@ class ContactRegistrationOtpDeliveryBindingValueTest < ActiveSupport::TestCase
 
       assert_equal reference, value.contact_otp_generation
       assert_equal reference, value.contact_ceremony_transaction_ref
+    end
+    nanoid = "A1_b2-C3d4E5f6G7h8I9j"
+    value = EmailCredentialRegistrationOtpDeliveryBindingValue.for(
+      purpose: "credential_registration", contact_ceremony_transaction_ref: nanoid,
+      contact_otp_generation: uuid,
+    )
+
+    assert_equal nanoid, value.contact_ceremony_transaction_ref
+    assert_raises(ArgumentError) do
+      EmailCredentialRegistrationOtpDeliveryBindingValue.for(
+        purpose: "credential_registration", contact_ceremony_transaction_ref: uuid,
+        contact_otp_generation: nanoid,
+      )
     end
     [nil, "", " ", "transaction", uuid[0...35], uuid + "0", uuid.upcase,
      uuid.sub("-4000-", "-3000-"), uuid.sub("-4000-", "-5000-"),

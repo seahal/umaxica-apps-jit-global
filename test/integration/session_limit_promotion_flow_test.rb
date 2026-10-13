@@ -127,18 +127,16 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
           headers: fv5065,
         )
         clear_enqueued_jobs
-        OtpEmailNotifierRollout.stub(:enabled?, true) do
-          fv5064.post(
-            auth_app_sign_in_email_path(
-              ri: "jp", fb: SignInFlowBindingCodec.encode(
-                flow: fv5076.transaction, surface: "app", phase: "PRIMARY_PENDING",
-              ),
+        fv5064.post(
+          auth_app_sign_in_email_path(
+            ri: "jp", fb: SignInFlowBindingCodec.encode(
+              flow: fv5076.transaction, surface: "app", phase: "PRIMARY_PENDING",
             ),
-            params: { :user_email => { address: fv5072.address },
-                      "cf-turnstile-response" => "t", },
-            headers: fv5065,
-          )
-        end
+          ),
+          params: { :user_email => { address: fv5072.address },
+                    "cf-turnstile-response" => "t", },
+          headers: fv5065,
+        )
 
         assert_equal 302, fv5064.response.status
         fv5070 =
@@ -318,18 +316,16 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
           headers: fv5036,
         )
         clear_enqueued_jobs
-        OtpEmailNotifierRollout.stub(:enabled?, true) do
-          fv5035.post(
-            auth_app_sign_in_email_path(
-              ri: "jp", fb: SignInFlowBindingCodec.encode(
-                flow: fv5047.transaction, surface: "app", phase: "PRIMARY_PENDING",
-              ),
+        fv5035.post(
+          auth_app_sign_in_email_path(
+            ri: "jp", fb: SignInFlowBindingCodec.encode(
+              flow: fv5047.transaction, surface: "app", phase: "PRIMARY_PENDING",
             ),
-            params: { :user_email => { address: fv5043.address },
-                      "cf-turnstile-response" => "t", },
-            headers: fv5036,
-          )
-        end
+          ),
+          params: { :user_email => { address: fv5043.address },
+                    "cf-turnstile-response" => "t", },
+          headers: fv5036,
+        )
 
         assert_equal 302, fv5035.response.status
         fv5041 =
@@ -493,18 +489,16 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
           headers: fv5007,
         )
         clear_enqueued_jobs
-        OtpEmailNotifierRollout.stub(:enabled?, true) do
-          fv5006.post(
-            auth_app_sign_in_email_path(
-              ri: "jp", fb: SignInFlowBindingCodec.encode(
-                flow: fv5018.transaction, surface: "app", phase: "PRIMARY_PENDING",
-              ),
+        fv5006.post(
+          auth_app_sign_in_email_path(
+            ri: "jp", fb: SignInFlowBindingCodec.encode(
+              flow: fv5018.transaction, surface: "app", phase: "PRIMARY_PENDING",
             ),
-            params: { :user_email => { address: fv5014.address },
-                      "cf-turnstile-response" => "t", },
-            headers: fv5007,
-          )
-        end
+          ),
+          params: { :user_email => { address: fv5014.address },
+                    "cf-turnstile-response" => "t", },
+          headers: fv5007,
+        )
 
         assert_equal 302, fv5006.response.status
         fv5012 =

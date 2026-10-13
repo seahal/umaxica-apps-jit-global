@@ -16,10 +16,9 @@ module AuthEmailMfaHelper
 
     assert_response :found
 
-    delivery_class = OtpEmailNotifierRollout.enabled?(surface) ? OtpNotifierEmailDeliveryJob : OtpMailDeliveryJob
     delivery =
       ActiveJob::Base.queue_adapter.enqueued_jobs.reverse.find do |entry|
-        entry.fetch(:job) == delivery_class
+        entry.fetch(:job) == OtpNotifierEmailDeliveryJob
       end
     payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
     ceremony =

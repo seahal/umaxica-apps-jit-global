@@ -67,7 +67,12 @@ offline attacks.
 
 ---
 
-## Historical OTP/HOTP Security Guidance
+## Historical OTP/HOTP Security Guidance (not a current implementation recommendation)
+
+The remainder of this section preserves an older design discussion for traceability. Its examples
+describe identifier-owned HOTP storage and must not be used to design or restore the current
+Email/Telephone flow. The current contract uses independent channel policies and
+ceremony-owned keyed random-code verifiers as stated at the top of this document.
 
 ### Overview
 

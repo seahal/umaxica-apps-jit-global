@@ -4,6 +4,20 @@
 module EmailDeadIdentifierHistory
   public
 
+  def purge_with_dead_history!
+    @dead_email_history_purge = true
+    destroy!
+  ensure
+    @dead_email_history_purge = false
+  end
+
+  def destroy_without_dead_history!
+    @skip_dead_email_history = true
+    destroy!
+  ensure
+    @skip_dead_email_history = false
+  end
+
   def dead_email_history
     @dead_email_history if destroyed?
   end
@@ -11,7 +25,8 @@ module EmailDeadIdentifierHistory
   private
 
   def archive_dead_email_identifier
-    return unless persisted?
+    return unless should_archive_dead_email_identifier?
+
     raise ArgumentError, "email purge primary key changed" unless id == id_in_database
 
     history_model, owner_model, owner_key, realm =
@@ -61,6 +76,18 @@ module EmailDeadIdentifierHistory
         :detached_at => now, :created_at => now,
       )
     end
+  end
+
+  def should_archive_dead_email_identifier?
+    return false unless persisted?
+    return false if @skip_dead_email_history || destroyed_by_association
+    return false if respond_to?(:undeletable?) && undeletable?
+
+    unless @dead_email_history_purge
+      errors.add(:base, "email identifier destruction requires an explicit lifecycle operation")
+      throw(:abort)
+    end
+    true
   end
 
   def refuse_protected_email_destruction!(current)

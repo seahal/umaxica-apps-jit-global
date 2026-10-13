@@ -25,8 +25,8 @@ class CeremonyCandidateWriteRefusalsTest < ActiveSupport::TestCase
       expires_at: 10.minutes.from_now,
     }
 
-    IdentitySecretCredentialCeremonyCandidate.stub(
-      :create!, ->(**) { raise ActiveRecord::RecordNotUnique, "duplicate digest" },
+    IdentityCeremonyCandidateRecord.stub(
+      :create_with_generated_ref, ->(*) { raise ActiveRecord::RecordNotUnique, "duplicate digest" },
     ) do
       error =
         assert_raises(IdentitySecretCredentialCeremonyContract::Error) { store.store!(**arguments) }
@@ -53,8 +53,8 @@ class CeremonyCandidateWriteRefusalsTest < ActiveSupport::TestCase
   test "a TOTP candidate the database refuses is raised as a ceremony error" do
     store = IdentityTotpCeremonyCandidateStore.new
 
-    IdentityTotpCeremonyCandidate.stub(
-      :create!, ->(**) { raise ActiveRecord::RecordNotUnique, "duplicate digest" },
+    IdentityCeremonyCandidateRecord.stub(
+      :create_with_generated_ref, ->(*) { raise ActiveRecord::RecordNotUnique, "duplicate digest" },
     ) do
       error =
         assert_raises(IdentityTotpCeremonyContract::Error) do

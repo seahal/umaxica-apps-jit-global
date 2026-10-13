@@ -20,10 +20,51 @@ class LogoutTransactionTest < ActiveSupport::TestCase
 
     assert_match(/\A[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\z/, raw_token)
     assert_equal transaction.public_id, public_id
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.public_id)
     assert_predicate verifier, :present?
     assert_predicate transaction.token_digest, :present?
     assert_equal 48, transaction.token_digest.bytesize
     assert_not_equal verifier, transaction.token_digest
+  end
+
+  test "issue retries a collision on the public_id unique index" do
+    existing, = LogoutTransaction.issue!(issuer: "acme", audience: "sign_app", purpose: "sign_out")
+    generated = [existing.public_id, "freshlogoutpublicid12"]
+
+    Nanoid.stub(:generate, ->(**_args) { generated.shift }) do
+      transaction, = LogoutTransaction.issue!(issuer: "acme", audience: "sign_app", purpose: "sign_out")
+
+      assert_equal "freshlogoutpublicid12", transaction.public_id
+    end
+  end
+
+  test "issue stops after the bounded public_id collision retry budget" do
+    existing, = LogoutTransaction.issue!(issuer: "acme", audience: "sign_app", purpose: "sign_out")
+    attempts = 0
+    generator =
+      lambda do |**_args|
+        attempts += 1
+        existing.public_id
+      end
+
+    error =
+      assert_raises(ActiveRecord::RecordInvalid) do
+        Nanoid.stub(:generate, generator) do
+          LogoutTransaction.issue!(issuer: "acme", audience: "sign_app", purpose: "sign_out")
+        end
+      end
+
+    assert_equal PublicId::MAX_COLLISION_RETRIES + 1, attempts
+    assert_equal [:taken], error.record.errors.details[:public_id].map { |detail| detail.fetch(:error) }
+  end
+
+  test "issued public_id cannot be changed" do
+    transaction, = LogoutTransaction.issue!(issuer: "acme", audience: "sign_app", purpose: "sign_out")
+    original_public_id = transaction.public_id
+    transaction.public_id = "replacement-public-id"
+
+    assert_raises(ActiveRecord::RecordInvalid) { transaction.save! }
+    assert_equal original_public_id, transaction.reload.public_id
   end
 
   test "consume rejects mismatched or expired tokens" do

@@ -47,30 +47,31 @@ module OidcAuthorizationTransactionable
     def create_transaction!(surface:, intent:, client_id:, redirect_uri:, response_type:, scope:, state:, nonce:,
                             code_challenge:, code_challenge_method:, login_challenge:, login_challenge_expires_at:,
                             expires_at:, prompt: nil, max_age: nil, now: nil)
+      retries = 0
+
       connection_owner.connected_to(role: :writing) do
         decision_time = now || connection_owner.database_now
+        loop do
+          attributes = authorization_transaction_attributes(
+            transaction_id: PublicId.generate, surface: surface, intent: intent, client_id: client_id,
+            redirect_uri: redirect_uri, response_type: response_type, scope: scope, state: state,
+            nonce: nonce, code_challenge: code_challenge, code_challenge_method: code_challenge_method,
+            prompt: prompt, max_age: max_age, login_challenge: login_challenge,
+            login_challenge_expires_at: login_challenge_expires_at, expires_at: expires_at,
+            decision_time: decision_time,
+          )
 
-        create!(
-          transaction_id: SecureRandom.uuid,
-          surface: surface.to_s,
-          intent: intent.to_s,
-          client_id: client_id.to_s,
-          redirect_uri: redirect_uri.to_s,
-          response_type: response_type.to_s,
-          scope: scope.to_s,
-          state: state.to_s,
-          nonce: nonce.to_s,
-          code_challenge: code_challenge.to_s,
-          code_challenge_method: code_challenge_method.to_s,
-          oidc_prompt: prompt.presence,
-          oidc_max_age: max_age.presence,
-          login_challenge: login_challenge.to_s,
-          login_challenge_expires_at: login_challenge_expires_at,
-          expires_at: expires_at,
-          status: STATUS_PENDING,
-          created_at: decision_time,
-          updated_at: decision_time,
-        )
+          begin
+            return transaction(requires_new: true) { create!(attributes) }
+          rescue ActiveRecord::RecordInvalid => e
+            raise unless generated_reference_collision_validation?(e)
+          rescue ActiveRecord::RecordNotUnique => e
+            raise unless generated_reference_collision?(e)
+          end
+
+          retries += 1
+          raise if retries > PublicId::MAX_COLLISION_RETRIES
+        end
       end
     end
 
@@ -83,6 +84,49 @@ module OidcAuthorizationTransactionable
         OrgTicketRecord
       else
         ActiveRecord::Base
+      end
+    end
+
+    private
+
+    def authorization_transaction_attributes(transaction_id:, surface:, intent:, client_id:, redirect_uri:,
+                                             response_type:, scope:, state:, nonce:, code_challenge:,
+                                             code_challenge_method:, prompt:, max_age:, login_challenge:,
+                                             login_challenge_expires_at:, expires_at:, decision_time:)
+      {
+        transaction_id: transaction_id,
+        surface: surface.to_s,
+        intent: intent.to_s,
+        client_id: client_id.to_s,
+        redirect_uri: redirect_uri.to_s,
+        response_type: response_type.to_s,
+        scope: scope.to_s,
+        state: state.to_s,
+        nonce: nonce.to_s,
+        code_challenge: code_challenge.to_s,
+        code_challenge_method: code_challenge_method.to_s,
+        oidc_prompt: prompt.presence,
+        oidc_max_age: max_age.presence,
+        login_challenge: login_challenge.to_s,
+        login_challenge_expires_at: login_challenge_expires_at,
+        expires_at: expires_at,
+        status: STATUS_PENDING,
+        created_at: decision_time,
+        updated_at: decision_time,
+      }
+    end
+
+    def generated_reference_collision_validation?(error)
+      error.record.errors.of_kind?(:transaction_id, :taken)
+    end
+
+    def generated_reference_collision?(error)
+      result = error.cause&.result
+      return false unless result
+
+      constraint = result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+      lease_connection.schema_cache.indexes(table_name).any? do |index|
+        index.name == constraint && index.unique && index.where.nil? && index.columns == ["transaction_id"]
       end
     end
   end

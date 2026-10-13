@@ -61,7 +61,7 @@ module Base
           current_operator.with_lock do
             @staff_email = OperatorEmail.lock.find_by!(id: @staff_email.id, staff_id: current_operator.id)
             unless @staff_email.undeletable? || !AuthMethodGuard.can_remove_email?(current_operator, @staff_email)
-              @staff_email.destroy!
+              @staff_email.destroy_without_dead_history!
             end
           end
           redirect_to(

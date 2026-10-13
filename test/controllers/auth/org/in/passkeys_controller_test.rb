@@ -101,6 +101,10 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       URI.parse(response.location).query.to_s.split("&").any? { |pair| pair.start_with?("fb=") },
       "expected the Entra handoff to bind the next passkey page to its sign-in flow",
     )
+
+    transaction = session.fetch(OrgNormalSignInTransaction::SESSION_KEY)
+
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.fetch("public_id"))
     assert_redirected_to new_auth_org_sign_in_passkey_path(ri: "jp", **org_normal_sign_in_binding_params)
     assert_equal 0, OperatorToken.where(staff_id: @staff.id).count
   end

@@ -115,6 +115,8 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   test "show renders for pending_mfa user with MFA enabled" do
     establish_pending_mfa_via_email!
 
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, session[:pending_mfa].fetch("public_id"))
+
     follow_redirect!
 
     assert_response :success
@@ -269,10 +271,9 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
 
     assert_response :found
 
-    delivery_class = OtpEmailNotifierRollout.enabled?(:app) ? OtpNotifierEmailDeliveryJob : OtpMailDeliveryJob
     delivery =
       ActiveJob::Base.queue_adapter.enqueued_jobs.reverse.find do |entry|
-        entry.fetch(:job) == delivery_class
+        entry.fetch(:job) == OtpNotifierEmailDeliveryJob
       end
     payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
     ceremony = ClientAuthCeremonySession.find(payload.fetch(:auth_ceremony_session_ref))

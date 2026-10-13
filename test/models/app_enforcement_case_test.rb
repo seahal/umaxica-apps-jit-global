@@ -222,6 +222,27 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
     assert_predicate the_case.public_id, :present?
   end
 
+  test "an issued public_id cannot be changed" do
+    client = clients(:one)
+    operator = operators(:one)
+    the_case = AppEnforcementCase.create!(
+      kind: "cooldown",
+      duration_mode: "timed",
+      visibility: "visible",
+      release_mode: "automatic",
+      effective_at: Time.current,
+      expires_at: 1.day.from_now,
+      reason_code: "abuse",
+      principal_public_id: client.public_id,
+      applied_by_operator_public_id: operator.public_id,
+    )
+    original_public_id = the_case.public_id
+    the_case.public_id = "replacement-public-id"
+
+    assert_raises(ActiveRecord::RecordInvalid) { the_case.save! }
+    assert_equal original_public_id, the_case.reload.public_id
+  end
+
   test "apply! transitions a temporary_freeze with an access-blocking Principal Effect to active and locks the " \
        "account" do
     client = clients(:one)

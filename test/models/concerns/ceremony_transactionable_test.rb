@@ -59,6 +59,198 @@ class CeremonyTransactionableTest < ActiveSupport::TestCase
     end
   end
 
+  test "passkey ceremony transactions issue separate NanoID references" do
+    transaction = ClientPasskeyCeremonyTransaction.create_transaction!(
+      actor_ref: "passkey-actor-reference",
+      session_ref: "passkey-session-reference",
+      operation: "registration",
+      now: @now,
+    )
+
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.transaction_id)
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.grant_jti)
+    assert_not_equal transaction.transaction_id, transaction.grant_jti
+  end
+
+  test "passkey ceremony transactions retry generated transaction collisions" do
+    ClientPasskeyCeremonyTransaction.create_transaction!(
+      actor_ref: "passkey-collision-actor",
+      session_ref: "passkey-collision-session",
+      operation: "registration",
+      transaction_id: "a" * 21,
+      grant_jti: "existing-grant-reference",
+      now: @now,
+    )
+    generated = ["a" * 21, "first-grant-reference", "b" * 21, "second-grant-reference"]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        ClientPasskeyCeremonyTransaction.create_transaction!(
+          actor_ref: "passkey-new-actor",
+          session_ref: "passkey-new-session",
+          operation: "registration",
+          now: @now,
+        )
+      end
+
+    assert_equal "b" * 21, transaction.transaction_id
+    assert_equal "second-grant-reference", transaction.grant_jti
+  end
+
+  test "passkey ceremony transactions retry generated grant collisions" do
+    ClientPasskeyCeremonyTransaction.create_transaction!(
+      actor_ref: "passkey-grant-collision-actor",
+      session_ref: "passkey-grant-collision-session",
+      operation: "registration",
+      transaction_id: "existing-transaction-reference",
+      grant_jti: "i" * 21,
+      now: @now,
+    )
+    generated = ["first-transaction-reference", "i" * 21, "second-transaction-reference", "m" * 21]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        ClientPasskeyCeremonyTransaction.create_transaction!(
+          actor_ref: "passkey-new-grant-actor",
+          session_ref: "passkey-new-grant-session",
+          operation: "registration",
+          now: @now,
+        )
+      end
+
+    assert_equal "second-transaction-reference", transaction.transaction_id
+    assert_equal "m" * 21, transaction.grant_jti
+  end
+
+  test "email ceremony transactions issue separate NanoID references" do
+    transaction = ClientEmailCeremonyTransaction.create_transaction!(
+      actor_ref: "email-actor-reference",
+      session_ref: "email-session-reference",
+      operation: "registration",
+      now: @now,
+    )
+
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.transaction_id)
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.grant_jti)
+    assert_not_equal transaction.transaction_id, transaction.grant_jti
+  end
+
+  test "email ceremony transactions retry generated transaction collisions" do
+    ClientEmailCeremonyTransaction.create_transaction!(
+      actor_ref: "email-collision-actor",
+      session_ref: "email-collision-session",
+      operation: "registration",
+      transaction_id: "a" * 21,
+      grant_jti: "existing-email-grant-reference",
+      now: @now,
+    )
+    generated = ["a" * 21, "first-email-grant-reference", "b" * 21, "second-email-grant-reference"]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        ClientEmailCeremonyTransaction.create_transaction!(
+          actor_ref: "email-new-actor",
+          session_ref: "email-new-session",
+          operation: "registration",
+          now: @now,
+        )
+      end
+
+    assert_equal "b" * 21, transaction.transaction_id
+    assert_equal "second-email-grant-reference", transaction.grant_jti
+  end
+
+  test "email ceremony transactions retry generated grant collisions" do
+    ClientEmailCeremonyTransaction.create_transaction!(
+      actor_ref: "email-grant-collision-actor",
+      session_ref: "email-grant-collision-session",
+      operation: "registration",
+      transaction_id: "existing-email-transaction-reference",
+      grant_jti: "i" * 21,
+      now: @now,
+    )
+    generated = ["first-email-transaction-reference", "i" * 21,
+                 "second-email-transaction-reference", "m" * 21,]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        ClientEmailCeremonyTransaction.create_transaction!(
+          actor_ref: "email-new-grant-actor",
+          session_ref: "email-new-grant-session",
+          operation: "registration",
+          now: @now,
+        )
+      end
+
+    assert_equal "second-email-transaction-reference", transaction.transaction_id
+    assert_equal "m" * 21, transaction.grant_jti
+  end
+
+  test "telephone ceremony transactions issue separate NanoID references" do
+    transaction = ClientTelephoneCeremonyTransaction.create_transaction!(
+      actor_ref: "telephone-actor-reference",
+      session_ref: "telephone-session-reference",
+      operation: "registration",
+      now: @now,
+    )
+
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.transaction_id)
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.grant_jti)
+    assert_not_equal transaction.transaction_id, transaction.grant_jti
+  end
+
+  test "telephone ceremony transactions retry generated transaction collisions" do
+    ClientTelephoneCeremonyTransaction.create_transaction!(
+      actor_ref: "telephone-collision-actor",
+      session_ref: "telephone-collision-session",
+      operation: "registration",
+      transaction_id: "a" * 21,
+      grant_jti: "existing-telephone-grant-reference",
+      now: @now,
+    )
+    generated = ["a" * 21, "first-telephone-grant-reference", "b" * 21,
+                 "second-telephone-grant-reference",]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        ClientTelephoneCeremonyTransaction.create_transaction!(
+          actor_ref: "telephone-new-actor",
+          session_ref: "telephone-new-session",
+          operation: "registration",
+          now: @now,
+        )
+      end
+
+    assert_equal "b" * 21, transaction.transaction_id
+    assert_equal "second-telephone-grant-reference", transaction.grant_jti
+  end
+
+  test "telephone ceremony transactions retry generated grant collisions" do
+    ClientTelephoneCeremonyTransaction.create_transaction!(
+      actor_ref: "telephone-grant-collision-actor",
+      session_ref: "telephone-grant-collision-session",
+      operation: "registration",
+      transaction_id: "existing-telephone-transaction-reference",
+      grant_jti: "i" * 21,
+      now: @now,
+    )
+    generated = ["first-telephone-transaction-reference", "i" * 21,
+                 "second-telephone-transaction-reference", "m" * 21,]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        ClientTelephoneCeremonyTransaction.create_transaction!(
+          actor_ref: "telephone-new-grant-actor",
+          session_ref: "telephone-new-grant-session",
+          operation: "registration",
+          now: @now,
+        )
+      end
+
+    assert_equal "second-telephone-transaction-reference", transaction.transaction_id
+    assert_equal "m" * 21, transaction.grant_jti
+  end
+
   test "transaction classes consume a pending record exactly once" do
     travel_to(@now) do
       TRANSACTION_CLASSES.each_with_index do |transaction_class, index|
@@ -87,6 +279,92 @@ class CeremonyTransactionableTest < ActiveSupport::TestCase
         assert_match(/already consumed/, error.message)
       end
     end
+  end
+
+  test "email OTP issuance rejects a purpose that does not belong to the transaction operation" do
+    now = Time.current
+    transaction = ClientEmailCeremonyTransaction.create_transaction!(
+      actor_ref: "email-purpose-actor",
+      session_ref: "email-purpose-session",
+      operation: "sign_up",
+      email_candidate_ref: "email-purpose-candidate",
+      now: now,
+    )
+
+    error =
+      assert_raises(ArgumentError) do
+        transaction.issue_email_otp!(purpose: "withdrawal")
+      end
+
+    assert_equal "email OTP purpose does not match operation", error.message
+    transaction.reload
+
+    assert_nil transaction.otp_generation
+    assert_nil transaction.otp_verifier
+  end
+
+  test "email OTP issuance reloads operation before issuing" do
+    transaction = ClientEmailCeremonyTransaction.create_transaction!(
+      actor_ref: "email-stale-operation-actor",
+      session_ref: "email-stale-operation-session",
+      operation: "registration",
+      email_candidate_ref: "email-stale-operation-candidate",
+      normalized_email_digest: "e" * 64,
+      now: Time.current,
+    )
+    transaction.update_column(:operation, "withdrawal")
+
+    assert_raises(ArgumentError, "the locked row must supply the authoritative operation") do
+      transaction.issue_email_otp!(purpose: "credential_registration")
+    end
+
+    transaction.reload
+
+    assert_nil transaction.otp_generation
+    assert_nil transaction.otp_verifier
+  end
+
+  test "telephone OTP issuance rejects a purpose that does not belong to the transaction operation" do
+    now = Time.current
+    transaction = ClientTelephoneCeremonyTransaction.create_transaction!(
+      actor_ref: "telephone-purpose-actor",
+      session_ref: "telephone-purpose-session",
+      operation: "sign_up",
+      telephone_candidate_ref: "telephone-purpose-candidate",
+      now: now,
+    )
+
+    error =
+      assert_raises(ArgumentError) do
+        transaction.issue_telephone_otp!(purpose: "withdrawal")
+      end
+
+    assert_equal "telephone OTP purpose does not match operation", error.message
+    transaction.reload
+
+    assert_nil transaction.otp_generation
+    assert_nil transaction.otp_verifier
+  end
+
+  test "telephone OTP issuance reloads operation before issuing" do
+    transaction = ClientTelephoneCeremonyTransaction.create_transaction!(
+      actor_ref: "telephone-stale-operation-actor",
+      session_ref: "telephone-stale-operation-session",
+      operation: "registration",
+      telephone_candidate_ref: "telephone-stale-operation-candidate",
+      normalized_number_digest: "t" * 64,
+      now: Time.current,
+    )
+    transaction.update_column(:operation, "withdrawal")
+
+    assert_raises(ArgumentError, "the locked row must supply the authoritative operation") do
+      transaction.issue_telephone_otp!(purpose: "credential_registration")
+    end
+
+    transaction.reload
+
+    assert_nil transaction.otp_generation
+    assert_nil transaction.otp_verifier
   end
 
   test "transaction classes reject mismatched and incomplete consumed records" do

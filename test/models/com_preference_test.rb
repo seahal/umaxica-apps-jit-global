@@ -61,7 +61,7 @@ class ComPreferenceTest < ActiveSupport::TestCase
   end
 
   test "validates public_id maximum length" do
-    preference = ComPreference.new(public_id: "a" * 22)
+    preference = ComPreference.new(public_id: "a" * 26)
 
     assert_not preference.valid?
     assert preference.errors.of_kind?(:public_id, :too_long)

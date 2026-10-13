@@ -26,11 +26,12 @@ return if Rails.env.test?
 # would initialise there too and export into a host that does not resolve,
 # producing a steady trickle of exporter retry warnings.
 #
-# Two-argument fetch on purpose: this is a toggle with a meaningful off state,
-# not required configuration whose absence should stop the boot. The default is
-# off so that the no-agent environments above stay quiet without each having to
-# set the variable.
-return unless ENV.fetch("OPEN_TELEMETRY", "false") == "true"
+# This is an optional toggle with an explicit off state. Missing configuration
+# keeps no-agent environments quiet; an invalid non-empty value fails closed
+# rather than selecting a deployment mode implicitly.
+open_telemetry = ENV["OPEN_TELEMETRY"]
+return if open_telemetry.nil? || open_telemetry == "false"
+raise ArgumentError, "OPEN_TELEMETRY must be \"true\" or \"false\"" unless open_telemetry == "true"
 
 require "opentelemetry/sdk"
 require "opentelemetry/exporter/otlp"

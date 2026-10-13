@@ -22,6 +22,7 @@ module EnforcementCaseApplicable
                    verification_completed).freeze
   ACCESS_BLOCKING_KINDS = %w(temporary_freeze permanent_ban).freeze
   METHOD_REVOKING_EFFECTS = %w(unusable permanently_frozen).freeze
+  MAX_PUBLIC_ID_COLLISION_RETRIES = PublicId::MAX_COLLISION_RETRIES
 
   class ApprovalRequiredError < StandardError; end
 
@@ -43,8 +44,12 @@ module EnforcementCaseApplicable
     validates :principal_public_id, presence: true
     validates :applied_by_operator_public_id, presence: true
     validates :effective_at, presence: true
+    validate :public_id_immutable_after_create, on: :update
 
     before_validation :assign_public_id, on: :create
+    before_validation :refresh_generated_public_id_after_collision, on: :create
+    before_create :assign_public_id
+    around_create :retry_generated_public_id_collision
   end
 
   class_methods do
@@ -210,8 +215,55 @@ module EnforcementCaseApplicable
 
   private
 
+  def public_id_immutable_after_create
+    return unless persisted? && will_save_change_to_public_id?
+
+    errors.add(:public_id, "cannot be changed after creation")
+  end
+  private :public_id_immutable_after_create
+
   def assign_public_id
-    self.public_id ||= SecureRandom.urlsafe_base64(15)
+    return if public_id.present?
+
+    self.public_id = PublicId.generate
+    @public_id_generated_value = public_id
+  end
+
+  def refresh_generated_public_id_after_collision
+    return unless @public_id_generated_value == public_id
+    return unless self.class.exists?(public_id: public_id)
+
+    self.public_id = nil
+    assign_public_id
+  end
+
+  def retry_generated_public_id_collision
+    return yield unless @public_id_generated_value == public_id
+
+    retries = 0
+
+    begin
+      self.class.transaction(requires_new: true) { yield }
+    rescue ActiveRecord::RecordNotUnique => e
+      raise unless public_id_collision?(e)
+
+      retries += 1
+      raise if retries > MAX_PUBLIC_ID_COLLISION_RETRIES
+
+      self.public_id = nil
+      assign_public_id
+      retry
+    end
+  end
+
+  def public_id_collision?(error)
+    result = error.cause&.result
+    return false unless result
+
+    constraint = result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+    self.class.lease_connection.schema_cache.indexes(self.class.table_name).any? do |index|
+      index.name == constraint && index.unique && index.where.nil? && index.columns == ["public_id"]
+    end
   end
 
   def close_superseded!(association, key_columns)

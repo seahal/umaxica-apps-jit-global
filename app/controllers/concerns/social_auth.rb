@@ -78,7 +78,7 @@ module SocialAuth
     else
       session[SOCIAL_INTENT_SESSION_KEY] = intent
       session[SOCIAL_STARTED_AT_SESSION_KEY] = Time.current.to_i
-      session[SOCIAL_FLOW_ID_SESSION_KEY] = SecureRandom.hex(16)
+      session[SOCIAL_FLOW_ID_SESSION_KEY] = PublicId.generate
       session[SOCIAL_PROVIDER_SESSION_KEY] = provider
     end
     session[:social_auth_nonce] = SecureRandom.urlsafe_base64(32) if provider.to_s == "apple"

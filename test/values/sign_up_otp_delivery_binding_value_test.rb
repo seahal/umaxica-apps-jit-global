@@ -26,13 +26,15 @@ class SignUpOtpDeliveryBindingValueTest < ActiveSupport::TestCase
     end
   end
 
-  test "signup generation is an opaque v4 UUID and former unsigned decimal counters are never accepted" do
+  test "signup transaction accepts UUID or NanoID while generation remains an opaque v4 UUID" do
+    transaction_reference = "a" * 21
     reference = "12345678-1234-4000-8000-123456789abc"
     generation = "87654321-4321-4000-b000-cba987654321"
     value = TelephoneSignUpOtpDeliveryBindingValue.for_sms(
-      otp_binding: ["app", "sign_up", "flow", reference, generation],
+      otp_binding: ["app", "sign_up", "flow", transaction_reference, generation],
     )
 
+    assert_equal transaction_reference, value.transaction_ref
     assert_equal generation, value.generation
     # Decimal counter bounds are superseded, not UUID arithmetic boundaries.
     ["0", "1", "2", ((1 << 64) - 2).to_s, ((1 << 64) - 1).to_s,
@@ -41,13 +43,22 @@ class SignUpOtpDeliveryBindingValueTest < ActiveSupport::TestCase
         TelephoneSignUpOtpDeliveryBindingValue.for_sms(otp_binding: ["app", "sign_up", "flow", reference, invalid])
       end
     end
-    [3, 4].each do |index|
-      [nil, "", " ", [], {}, 0, false, "\xFF", reference.encode(Encoding::UTF_16LE),
-       reference[0...-1], "#{reference}x", "#{reference}\n", reference.upcase,
-       "12345678-1234-3000-8000-123456789abc", "12345678-1234-5000-8000-123456789abc",
-       "12345678-1234-4000-7000-123456789abc", "12345678-1234-4000-c000-123456789abc",].each do |invalid|
-        tuple = ["app", "sign_up", "flow", reference, generation]
-        tuple[index] = invalid
+    transaction_invalid = [
+      nil, "", " ", [], {}, 0, false, "\xFF", "a" * 20, "a" * 22,
+      "a/b", "a.b", "a\n", "é", transaction_reference.encode(Encoding::UTF_16LE),
+      "12345678-1234-3000-8000-123456789abc", "12345678-1234-5000-8000-123456789abc",
+      "12345678-1234-4000-7000-123456789abc", "12345678-1234-4000-c000-123456789abc",
+    ]
+    generation_invalid = [
+      nil, "", " ", [], {}, 0, false, "\xFF", generation.encode(Encoding::UTF_16LE),
+      generation[0...-1], "#{generation}x", "#{generation}\n", generation.upcase,
+      "12345678-1234-3000-8000-123456789abc", "12345678-1234-5000-8000-123456789abc",
+      "12345678-1234-4000-7000-123456789abc", "12345678-1234-4000-c000-123456789abc",
+    ]
+    [transaction_invalid, generation_invalid].each_with_index do |invalid_values, index|
+      invalid_values.each do |invalid|
+        tuple = ["app", "sign_up", "flow", transaction_reference, generation]
+        tuple[index + 3] = invalid
 
         assert_raises(ArgumentError) { TelephoneSignUpOtpDeliveryBindingValue.for_sms(otp_binding: tuple) }
       end
@@ -83,13 +94,16 @@ class SignUpOtpDeliveryBindingValueTest < ActiveSupport::TestCase
     end
   end
 
-  test "signup flow public reference retains length boundaries while transaction and generation require UUIDs" do
+  test "signup flow public reference retains length boundaries while transaction accepts NanoID or UUID" do
+    transaction_reference = "a" * 21
     reference = "12345678-1234-4000-8000-123456789abc"
     ["a", "aa", "a" * 20, "a" * 21].each do |flow|
-      sms = TelephoneSignUpOtpDeliveryBindingValue.for_sms(otp_binding: ["app", "sign_up", flow, reference, reference])
+      sms = TelephoneSignUpOtpDeliveryBindingValue.for_sms(
+        otp_binding: ["app", "sign_up", flow, transaction_reference, reference],
+      )
       email = EmailSignUpOtpDeliveryBindingValue.for(
         purpose: "sign_up", sign_up_flow_ref: flow,
-        sign_up_email_transaction_ref: reference, sign_up_email_otp_generation: reference,
+        sign_up_email_transaction_ref: transaction_reference, sign_up_email_otp_generation: reference,
       )
 
       assert_equal flow, sms.flow_ref
@@ -106,16 +120,28 @@ class SignUpOtpDeliveryBindingValueTest < ActiveSupport::TestCase
         )
       end
     end
-    %i(sign_up_email_transaction_ref sign_up_email_otp_generation).each do |key|
+    transaction_invalid = [
+      nil, "", " ", "1", [], {}, 0, false, "\xFF", transaction_reference.encode(Encoding::UTF_16LE),
+      "a" * 20, "a" * 22, "a/b", "a.b", "a\n", "é",
+      "12345678-1234-3000-8000-123456789abc", "12345678-1234-5000-8000-123456789abc",
+      "12345678-1234-4000-7000-123456789abc", "12345678-1234-4000-c000-123456789abc",
+    ]
+    generation_invalid = [
+      nil, "", " ", "1", [], {}, 0, false, "\xFF", reference.encode(Encoding::UTF_16LE),
+      reference[0...-1], "#{reference}x", "#{reference}\n", reference.upcase,
+      "12345678-1234-3000-8000-123456789abc", "12345678-1234-5000-8000-123456789abc",
+      "12345678-1234-4000-7000-123456789abc", "12345678-1234-4000-c000-123456789abc",
+    ]
+    [
+      [:sign_up_email_transaction_ref, transaction_invalid],
+      [:sign_up_email_otp_generation, generation_invalid],
+    ].each do |key, invalid_values|
       arguments = { purpose: "sign_up",
                     sign_up_flow_ref: "flow",
-                    sign_up_email_transaction_ref: reference,
+                    sign_up_email_transaction_ref: transaction_reference,
                     sign_up_email_otp_generation: reference, }
 
-      [nil, "", " ", "1", [], {}, 0, false, "\xFF", reference.encode(Encoding::UTF_16LE),
-       reference[0...-1], "#{reference}x", "#{reference}\n", reference.upcase,
-       "12345678-1234-3000-8000-123456789abc", "12345678-1234-5000-8000-123456789abc",
-       "12345678-1234-4000-7000-123456789abc", "12345678-1234-4000-c000-123456789abc",].each do |invalid|
+      invalid_values.each do |invalid|
         assert_raises(ArgumentError) { EmailSignUpOtpDeliveryBindingValue.for(**arguments.merge(key => invalid)) }
       end
     end

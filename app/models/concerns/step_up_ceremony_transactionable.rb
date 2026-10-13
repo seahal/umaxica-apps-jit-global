@@ -75,34 +75,40 @@ module StepUpCeremonyTransactionable
       raise ArgumentError, "unsupported ceremony purpose" unless PURPOSES.include?(purpose)
       raise ArgumentError, "legacy AAL requirements are unsupported" unless required_aal.to_s == StepUpRequirement::NO_AAL
 
+      transaction_id = transaction_id.presence
+      grant_jti = grant_jti.presence
+      generated_attributes = []
+      generated_attributes << :transaction_id if transaction_id.nil?
+      generated_attributes << :grant_jti if grant_jti.nil?
+      retries = 0
+
       connection_owner.connected_to(role: :writing) do
         now ||= database_now
-        create!(
-          purpose: purpose,
-          transaction_id: transaction_id.presence || SecureRandom.uuid,
-          surface: surface.to_s,
-          actor_ref: actor_ref,
-          session_ref: session_ref,
-          required_scope: required_scope.to_s,
-          # @deprecated `required_aal` is retained as a non-authoritative label until the removal
-          # ledger permits dropping the column. Explicit AAL demands never reach this writer.
-          required_aal: StepUpRequirement::NO_AAL,
-          step_up_required: step_up_required,
-          user_verification_required: user_verification_required,
-          full_reauthentication_required: full_reauthentication_required,
-          audience: audience.to_s.presence || "step_up:#{surface}",
-          token_binding: token_binding.to_s.presence || session_ref.to_s,
-          require_session_binding: require_session_binding,
-          tenant_ref: tenant_ref,
-          phishing_resistant_required: phishing_resistant_required,
-          allowed_methods: serialize_allowed_methods(allowed_methods),
-          resource_ref: resource_ref,
-          return_to: return_to,
-          grant_jti: grant_jti.presence || SecureRandom.uuid,
-          expires_at: expires_at || (now + DEFAULT_TTL),
-          created_at: now,
-          updated_at: now,
-        )
+        loop do
+          generated_transaction_id = transaction_id || PublicId.generate
+          generated_grant_jti = grant_jti || PublicId.generate
+          attributes = transaction_attributes(
+            purpose: purpose, transaction_id: generated_transaction_id, surface: surface,
+            actor_ref: actor_ref, session_ref: session_ref, required_scope: required_scope,
+            step_up_required: step_up_required, user_verification_required: user_verification_required,
+            full_reauthentication_required: full_reauthentication_required, audience: audience,
+            token_binding: token_binding, require_session_binding: require_session_binding,
+            tenant_ref: tenant_ref, phishing_resistant_required: phishing_resistant_required,
+            allowed_methods: allowed_methods, resource_ref: resource_ref, return_to: return_to,
+            grant_jti: generated_grant_jti, expires_at: expires_at, now: now,
+          )
+
+          begin
+            return transaction(requires_new: true) { create!(attributes) }
+          rescue ActiveRecord::RecordInvalid => e
+            raise unless generated_reference_collision_validation?(e, generated_attributes)
+          rescue ActiveRecord::RecordNotUnique => e
+            raise unless generated_reference_collision?(e, generated_attributes)
+          end
+
+          retries += 1
+          raise if retries > PublicId::MAX_COLLISION_RETRIES
+        end
       end
     end
 
@@ -129,6 +135,56 @@ module StepUpCeremonyTransactionable
         ComTicketRecord
       else
         ActiveRecord::Base
+      end
+    end
+
+    private
+
+    def transaction_attributes(purpose:, transaction_id:, surface:, actor_ref:, session_ref:, required_scope:,
+                               step_up_required:, user_verification_required:, full_reauthentication_required:,
+                               audience:, token_binding:, require_session_binding:, tenant_ref:,
+                               phishing_resistant_required:, allowed_methods:, resource_ref:, return_to:,
+                               grant_jti:, expires_at:, now:)
+      {
+        purpose: purpose,
+        transaction_id: transaction_id,
+        surface: surface.to_s,
+        actor_ref: actor_ref,
+        session_ref: session_ref,
+        required_scope: required_scope.to_s,
+        # @deprecated `required_aal` is retained as a non-authoritative label until the removal
+        # ledger permits dropping the column. Explicit AAL demands never reach this writer.
+        required_aal: StepUpRequirement::NO_AAL,
+        step_up_required: step_up_required,
+        user_verification_required: user_verification_required,
+        full_reauthentication_required: full_reauthentication_required,
+        audience: audience.to_s.presence || "step_up:#{surface}",
+        token_binding: token_binding.to_s.presence || session_ref.to_s,
+        require_session_binding: require_session_binding,
+        tenant_ref: tenant_ref,
+        phishing_resistant_required: phishing_resistant_required,
+        allowed_methods: serialize_allowed_methods(allowed_methods),
+        resource_ref: resource_ref,
+        return_to: return_to,
+        grant_jti: grant_jti,
+        expires_at: expires_at || (now + DEFAULT_TTL),
+        created_at: now,
+        updated_at: now,
+      }
+    end
+
+    def generated_reference_collision_validation?(error, generated_attributes)
+      generated_attributes.any? { |attribute| error.record.errors.of_kind?(attribute, :taken) }
+    end
+
+    def generated_reference_collision?(error, generated_attributes)
+      result = error.cause&.result
+      return false unless result
+
+      constraint = result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+      lease_connection.schema_cache.indexes(table_name).any? do |index|
+        index.name == constraint && index.unique && index.where.nil? && index.columns.one? &&
+          generated_attributes.include?(index.columns.first.to_sym)
       end
     end
   end

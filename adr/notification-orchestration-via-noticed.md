@@ -11,7 +11,7 @@ job arguments are all carried forward unchanged.
 ## Context
 
 Message delivery is routed by hand-written adapters under `app/adapters/`. `OtpAdapter.for` maps a
-surface and a channel to `OtpEmailAdapter` or `OtpTelephoneAdapter`, and `NoticeAdapter` and
+surface and a channel to `OtpEmailNotifierAdapter` or `OtpTelephoneAdapter`, and `NoticeAdapter` and
 `PromotionAdapter` do the same for their message kinds. Each adapter then calls a transport: a
 surface mailer, `OutboundSms`, or eventually `ApplicationPushNotification`.
 
@@ -72,13 +72,10 @@ in-app notification store that no feature has asked for.
 a missing parameter would be a silent no-op. Each notifier therefore validates its own arguments and
 raises `ArgumentError`.
 
-Migration is per surface behind a `:rollout` polarity feature flag registered in `FeatureFlags`:
-`otp_email_notifier_app`, `otp_email_notifier_com`, `otp_email_notifier_org`. An unset flag, an
-unwritten flag store, or an unreachable one all keep the shipped adapter path. This is the opposite
-polarity from the outbound suspensions, and deliberately so: losing a suspension flag must not take
-the product down, and losing a rollout flag must not move live traffic onto new code. The branch
-lives in `OtpAdapter.for`, the single point every OTP call site already passes through, so no call
-site changes during the rollout.
+The Noticed migration is complete in the current undeployed implementation. `OtpAdapter.for` maps
+each email surface directly to its concrete `OtpEmailNotifierAdapter`; no feature flag or unavailable
+flag store can silently return to a direct Action Mailer adapter. The telephone adapter remains the
+separate SMS transport boundary.
 
 ## Consequences
 
@@ -90,9 +87,10 @@ site changes during the rollout.
 - `Noticed::ApplicationJob` declares `discard_on ActiveJob::DeserializationError`, so a recipient
   destroyed between enqueue and perform drops the message. `ApplicationJob` behaves the same way
   today, so this is not a regression, but it is now a property of every notifier.
-- `OtpEmailAdapter`, `OtpEmailNotifierAdapter`, `OtpEmailNotifierRollout`, and the three rollout
-  flags are temporary. They are removed once every surface has baked and the call sites address the
-  notifiers directly.
+- `OtpEmailNotifierAdapter` is the single email adapter. The former `OtpEmailAdapter`,
+  `OtpEmailNotifierRollout`, and email rollout flags were removed after every production call site
+  was confirmed to use the central `OtpAdapter.for` boundary. Historical rollout evidence remains
+  in the repository history; it is not a runtime compatibility path.
 - `NoticeAdapter` and `PromotionAdapter` have no production callers. They are replaced rather than
   migrated.
 - SMS needs a custom delivery method calling `OutboundSms.deliver_now`, not `deliver_later`, because

@@ -4,6 +4,20 @@
 module TelephoneDeadIdentifierHistory
   public
 
+  def purge_with_dead_history!
+    @dead_telephone_history_purge = true
+    destroy!
+  ensure
+    @dead_telephone_history_purge = false
+  end
+
+  def destroy_without_dead_history!
+    @skip_dead_telephone_history = true
+    destroy!
+  ensure
+    @skip_dead_telephone_history = false
+  end
+
   def dead_telephone_history
     @dead_telephone_history if destroyed?
   end
@@ -11,7 +25,8 @@ module TelephoneDeadIdentifierHistory
   private
 
   def archive_dead_telephone_identifier
-    return unless persisted?
+    return unless should_archive_dead_telephone_identifier?
+
     raise ArgumentError, "telephone purge primary key changed" unless id == id_in_database
 
     history_model, owner_model, owner_key, realm =
@@ -59,6 +74,17 @@ module TelephoneDeadIdentifierHistory
         :detached_at => now, :created_at => now,
       )
     end
+  end
+
+  def should_archive_dead_telephone_identifier?
+    return false unless persisted?
+    return false if @skip_dead_telephone_history || destroyed_by_association
+
+    unless @dead_telephone_history_purge
+      errors.add(:base, "telephone identifier destruction requires an explicit lifecycle operation")
+      throw(:abort)
+    end
+    true
   end
 
   def refuse_retained_telephone_destruction!(current, now)

@@ -94,6 +94,8 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
 
       fetched = IdentitySocialCeremonyCandidateStore.fetch!(candidate.ref)
 
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, candidate.ref)
+      assert IdentitySocialCeremonyCandidate.valid_reference?(candidate.ref)
       assert_equal "candidate-google", fetched.callback_result.principal.subject
       assert_nil fetched.callback_result.credential_candidate
       assert_equal candidate.digest, fetched.digest
@@ -108,6 +110,47 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
         IdentitySocialCeremonyCandidateStore.fetch!(candidate.ref)
       end
     end
+  end
+
+  test "candidate reference contract accepts new NanoID and retained UUID values only" do
+    assert IdentitySocialCeremonyCandidate.valid_reference?("a" * 21)
+    assert IdentitySocialCeremonyCandidate.valid_reference?(SecureRandom.uuid)
+    assert_not IdentitySocialCeremonyCandidate.valid_reference?("short")
+    assert_not IdentitySocialCeremonyCandidate.valid_reference?("a" * 22)
+    assert_not IdentitySocialCeremonyCandidate.valid_reference?("candidate/ref")
+  end
+
+  test "candidate store retries a generated ref collision without changing the callback binding" do
+    callback_result = ExternalAuthentication::CallbackResult.verified(
+      principal: ExternalAuthentication::VerifiedPrincipal.new(
+        provider: "google",
+        subject: "collision-google",
+        issuer: "https://accounts.google.com",
+        audience: "google-client-id",
+        verified_at: @now,
+        verification_authority: "omniauth-google-oauth2/contract",
+      ),
+      credential_candidate: nil,
+    )
+    existing = IdentitySocialCeremonyCandidateStore.store!(
+      surface: "app", actor_ref: "anonymous", session_ref: "collision-session-1",
+      transaction_id: "collision-transaction-1", operation: "login", provider: "google",
+      callback_result: callback_result, expires_at: @now + 5.minutes,
+    )
+    generated = [existing.ref, "b" * 21]
+
+    replacement =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        IdentitySocialCeremonyCandidateStore.store!(
+          surface: "app", actor_ref: "anonymous", session_ref: "collision-session-2",
+          transaction_id: "collision-transaction-2", operation: "login", provider: "google",
+          callback_result: callback_result, expires_at: @now + 5.minutes,
+        )
+      end
+
+    assert_equal "b" * 21, replacement.ref
+    assert_equal "collision-google", replacement.callback_result.principal.subject
+    assert_equal 2, IdentitySocialCeremonyCandidate.count
   end
 
   [-1, 0, 1].each do |offset|

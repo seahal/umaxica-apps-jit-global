@@ -86,10 +86,8 @@ class ComSessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
 
     assert_response :see_other
     clear_enqueued_jobs
-    OtpEmailNotifierRollout.stub(:enabled?, true) do
-      post auth_com_sign_in_email_url(ri: "jp", fb: primary_binding),
-           params: { :user_email => { address: email.address }, "cf-turnstile-response" => "t" }
-    end
+    post auth_com_sign_in_email_url(ri: "jp", fb: primary_binding),
+         params: { :user_email => { address: email.address }, "cf-turnstile-response" => "t" }
 
     assert_response :redirect
     job = enqueued_jobs.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }

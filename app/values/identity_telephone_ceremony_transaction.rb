@@ -10,8 +10,8 @@ class IdentityTelephoneCeremonyTransaction
               :result_jti, :telephone_candidate_ref, :normalized_number_digest, :expires_at, :consumed_at,
               :created_at
 
-  def initialize(surface:, actor_ref:, session_ref:, operation:, transaction_id: SecureRandom.uuid,
-                 grant_jti: SecureRandom.uuid, status: STATUS_PENDING, result_jti: nil,
+  def initialize(surface:, actor_ref:, session_ref:, operation:, transaction_id: PublicId.generate,
+                 grant_jti: PublicId.generate, status: STATUS_PENDING, result_jti: nil,
                  telephone_candidate_ref: nil, normalized_number_digest: nil, expires_at: nil,
                  consumed_at: nil, created_at: Time.current)
     @surface = surface.to_s

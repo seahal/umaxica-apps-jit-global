@@ -114,7 +114,6 @@ Umaxica/ExplicitMethodVisibility:
   app/adapters/notice_adapter.rb: 2
   app/adapters/notice_email_adapter.rb: 1
   app/adapters/otp_adapter.rb: 2
-  app/adapters/otp_email_adapter.rb: 1
   app/adapters/otp_email_notifier_adapter.rb: 1
   app/adapters/otp_telephone_adapter.rb: 1
   app/adapters/promotion_adapter.rb: 2
@@ -1258,7 +1257,6 @@ Umaxica/ExplicitMethodVisibility:
   app/services/org_operator_lifecycle_invitation_acceptance.rb: 2
   app/services/org_operator_lifecycle_reject.rb: 2
   app/services/org_operator_lifecycle_request_create.rb: 2
-  app/services/otp_email_notifier_rollout.rb: 2
   app/services/outage_service.rb: 1
   app/services/outbound_channel_suspension.rb: 2
   app/services/outbound_sms.rb: 6

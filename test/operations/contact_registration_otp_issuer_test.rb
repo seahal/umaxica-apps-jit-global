@@ -64,6 +64,7 @@ class ContactRegistrationOtpIssuerTest < ActiveSupport::TestCase
         assert_equal surface, transaction.surface
         assert_equal "credential_registration", transaction.purpose
         assert_equal "registration", transaction.operation
+        assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.transaction_id)
         assert_withheld("Issuance must bind the original browser and Root") {
           transaction.session_ref == expected_session
         }

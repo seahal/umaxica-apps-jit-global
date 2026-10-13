@@ -15,10 +15,6 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
     clear_enqueued_jobs
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
-    @notifier_app_enabled = Flipper.enabled?(:otp_email_notifier_app)
-    @notifier_com_enabled = Flipper.enabled?(:otp_email_notifier_com)
-    Flipper.enable(:otp_email_notifier_app)
-    Flipper.enable(:otp_email_notifier_com)
     ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
     VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
     ClientSessionLimitResolutionState::DEFAULTS.each do |id|
@@ -46,8 +42,6 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
 
   teardown do
     ActionController::Base.allow_forgery_protection = @previous_forgery_protection
-    Flipper.disable(:otp_email_notifier_app) unless @notifier_app_enabled
-    Flipper.disable(:otp_email_notifier_com) unless @notifier_com_enabled
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
   end

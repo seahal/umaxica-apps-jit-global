@@ -431,8 +431,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :redirect
     assert_equal email.id, session[:user_email_authentication_id]
 
-    delivery_class = OtpEmailNotifierRollout.enabled?(:com) ? OtpNotifierEmailDeliveryJob : OtpMailDeliveryJob
-    delivery = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == delivery_class }
+    delivery = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
     payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
 
     ceremony = VisitorAuthCeremonySession.find(payload.fetch(:auth_ceremony_session_ref))
@@ -495,8 +494,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :redirect
 
-    delivery_class = OtpEmailNotifierRollout.enabled?(:com) ? OtpNotifierEmailDeliveryJob : OtpMailDeliveryJob
-    delivery = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == delivery_class }
+    delivery = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
     payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
 
     ceremony = VisitorAuthCeremonySession.find(payload.fetch(:auth_ceremony_session_ref))

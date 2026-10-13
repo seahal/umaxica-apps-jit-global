@@ -50,7 +50,7 @@ class AuditRecordIntegrityTest < ActiveSupport::TestCase
     )
 
     assert_difference -> { Chronicle.where(action: "notification.delivery.email.enqueued").count }, 1 do
-      OtpEmailAdapter.new(Email::App::OtpMailer).deliver(
+      OtpAdapter.for(surface: :app, channel: :email).deliver(
         record: email,
         otp_code: "123456",
         purpose: :sign_in,

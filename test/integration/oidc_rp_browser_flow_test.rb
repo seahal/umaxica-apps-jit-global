@@ -315,7 +315,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
         delivery_job =
           enqueued_jobs.reverse.find do |job|
-            next false unless job.fetch(:job) == OtpMailDeliveryJob
+            next false unless job.fetch(:job) == OtpNotifierEmailDeliveryJob
 
             delivery = ActiveJob::Arguments.deserialize(job.fetch(:args)).last.fetch(:params)
             delivery.fetch(:auth_ceremony_session_ref) == ceremony.id.to_s

@@ -817,6 +817,7 @@ en:
     code: Code
     code_challenge: Code challenge
     code_challenge_method: Code challenge method
+    transaction_id: Transaction ID
     com_preference_languages: Language preferences
     com_preference_regions: Region preferences
     com_preference_themes: Theme preferences
@@ -887,6 +888,7 @@ en:
     redirect_url: Redirect URL
     request_host: Request host
     response_mode: Response mode
+    grant_jti: Grant JTI
     result_jti: Result JTI
     role: Role
     secret_credential_value: Secret

@@ -50,6 +50,7 @@ class IdentityPasskeyRegistrationCommittersTest < ActiveSupport::TestCase
     @transaction.reload
     candidate = IdentityPasskeyCeremonyCandidate.find_by!(step_up_ceremony_transaction_ref: @transaction.transaction_id)
 
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, candidate.ref)
     assert_equal "verified", @transaction.status
     assert_equal "passkey", @transaction.method
     assert_equal "none", @transaction.aal

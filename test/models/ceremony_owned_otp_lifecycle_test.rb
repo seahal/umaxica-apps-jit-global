@@ -7,23 +7,23 @@ class CeremonyOwnedOtpLifecycleTest < ActiveSupport::TestCase
     test "#{model.name} accepts a random code exactly once and rejects malformed input" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser",
-        operation: "registration", email_candidate_ref: "candidate",
+        operation: "sign_up", email_candidate_ref: "candidate",
       )
       code = transaction.issue_email_otp!(purpose: "sign_up")
 
       [nil, "", " ", "12345", "1234567", "12345\0", "\xFF", 0, false].each do |input|
         assert_not transaction.verify_email_otp!(
           code: input, purpose: "sign_up", actor_ref: "actor",
-          session_ref: "browser", operation: "registration", candidate_ref: "candidate",
+          session_ref: "browser", operation: "sign_up", candidate_ref: "candidate",
         )
       end
       assert transaction.verify_email_otp!(
         code: code, purpose: "sign_up", actor_ref: "actor",
-        session_ref: "browser", operation: "registration", candidate_ref: "candidate",
+        session_ref: "browser", operation: "sign_up", candidate_ref: "candidate",
       )
       assert_not transaction.verify_email_otp!(
         code: code, purpose: "sign_up", actor_ref: "actor",
-        session_ref: "browser", operation: "registration", candidate_ref: "candidate",
+        session_ref: "browser", operation: "sign_up", candidate_ref: "candidate",
       )
       assert_nil transaction.reload.otp_verifier
       assert_raises(ArgumentError) { transaction.issue_email_otp!(purpose: "sign_up") }
@@ -32,7 +32,7 @@ class CeremonyOwnedOtpLifecycleTest < ActiveSupport::TestCase
     test "#{model.name} expired parent transaction cannot verify or issue" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser",
-        operation: "registration", email_candidate_ref: "candidate",
+        operation: "withdrawal", email_candidate_ref: "candidate",
       )
       code = transaction.issue_email_otp!(purpose: "withdrawal")
       deadline = transaction.reload.otp_expires_at
@@ -43,7 +43,7 @@ class CeremonyOwnedOtpLifecycleTest < ActiveSupport::TestCase
 
       assert_not transaction.verify_email_otp!(
         code: code, purpose: "withdrawal", actor_ref: "actor",
-        session_ref: "browser", operation: "registration", candidate_ref: "candidate",
+        session_ref: "browser", operation: "withdrawal", candidate_ref: "candidate",
       )
       assert_nil transaction.reload.otp_consumed_at
       assert_operator deadline, :>, transaction.class.database_now
@@ -53,7 +53,7 @@ class CeremonyOwnedOtpLifecycleTest < ActiveSupport::TestCase
     test "#{model.name} cancel removes verifier and cannot be reopened by resend" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser",
-        operation: "registration", email_candidate_ref: "candidate",
+        operation: "recovery", email_candidate_ref: "candidate",
       )
       code = transaction.issue_email_otp!(purpose: "recovery")
 
@@ -62,7 +62,7 @@ class CeremonyOwnedOtpLifecycleTest < ActiveSupport::TestCase
       assert_nil transaction.reload.otp_verifier
       assert_not transaction.verify_email_otp!(
         code: code, purpose: "recovery", actor_ref: "actor",
-        session_ref: "browser", operation: "registration", candidate_ref: "candidate",
+        session_ref: "browser", operation: "recovery", candidate_ref: "candidate",
       )
       assert_raises(ArgumentError) { transaction.issue_email_otp!(purpose: "recovery") }
     end
@@ -72,23 +72,23 @@ class CeremonyOwnedOtpLifecycleTest < ActiveSupport::TestCase
     test "#{model.name} accepts a random code exactly once and rejects malformed input" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser",
-        operation: "registration", telephone_candidate_ref: "candidate",
+        operation: "sign_up", telephone_candidate_ref: "candidate",
       )
       code = transaction.issue_telephone_otp!(purpose: "sign_up")
 
       [nil, "", " ", "12345", "1234567", "12345\0", "\xFF", 0, false].each do |input|
         assert_not transaction.verify_telephone_otp!(
           code: input, purpose: "sign_up", actor_ref: "actor",
-          session_ref: "browser", operation: "registration", candidate_ref: "candidate",
+          session_ref: "browser", operation: "sign_up", candidate_ref: "candidate",
         )
       end
       assert transaction.verify_telephone_otp!(
         code: code, purpose: "sign_up", actor_ref: "actor",
-        session_ref: "browser", operation: "registration", candidate_ref: "candidate",
+        session_ref: "browser", operation: "sign_up", candidate_ref: "candidate",
       )
       assert_not transaction.verify_telephone_otp!(
         code: code, purpose: "sign_up", actor_ref: "actor",
-        session_ref: "browser", operation: "registration", candidate_ref: "candidate",
+        session_ref: "browser", operation: "sign_up", candidate_ref: "candidate",
       )
       assert_nil transaction.reload.otp_verifier
       assert_raises(ArgumentError) { transaction.issue_telephone_otp!(purpose: "sign_up") }
@@ -97,7 +97,7 @@ class CeremonyOwnedOtpLifecycleTest < ActiveSupport::TestCase
     test "#{model.name} expired parent transaction cannot verify or issue" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser",
-        operation: "registration", telephone_candidate_ref: "candidate",
+        operation: "withdrawal", telephone_candidate_ref: "candidate",
       )
       code = transaction.issue_telephone_otp!(purpose: "withdrawal")
       deadline = transaction.reload.otp_expires_at
@@ -108,7 +108,7 @@ class CeremonyOwnedOtpLifecycleTest < ActiveSupport::TestCase
 
       assert_not transaction.verify_telephone_otp!(
         code: code, purpose: "withdrawal", actor_ref: "actor",
-        session_ref: "browser", operation: "registration", candidate_ref: "candidate",
+        session_ref: "browser", operation: "withdrawal", candidate_ref: "candidate",
       )
       assert_nil transaction.reload.otp_consumed_at
       assert_operator deadline, :>, transaction.class.database_now
@@ -118,7 +118,7 @@ class CeremonyOwnedOtpLifecycleTest < ActiveSupport::TestCase
     test "#{model.name} cancel removes verifier and cannot be reopened by resend" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "browser",
-        operation: "registration", telephone_candidate_ref: "candidate",
+        operation: "recovery", telephone_candidate_ref: "candidate",
       )
       code = transaction.issue_telephone_otp!(purpose: "recovery")
 
@@ -127,7 +127,7 @@ class CeremonyOwnedOtpLifecycleTest < ActiveSupport::TestCase
       assert_nil transaction.reload.otp_verifier
       assert_not transaction.verify_telephone_otp!(
         code: code, purpose: "recovery", actor_ref: "actor",
-        session_ref: "browser", operation: "registration", candidate_ref: "candidate",
+        session_ref: "browser", operation: "recovery", candidate_ref: "candidate",
       )
       assert_raises(ArgumentError) { transaction.issue_telephone_otp!(purpose: "recovery") }
     end

@@ -133,6 +133,7 @@ class IdentityTotpCeremonyContractTest < ActiveSupport::TestCase
 
       fetched = IdentityTotpCeremonyCandidateStore.fetch!(candidate.ref)
 
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, candidate.ref)
       assert_equal candidate.ref, fetched.ref
       assert_equal candidate.digest, fetched.digest
       assert_equal "totp-private-key", fetched.private_key
@@ -148,6 +149,35 @@ class IdentityTotpCeremonyContractTest < ActiveSupport::TestCase
           IdentityTotpCeremonyCandidateStore.fetch!(candidate.ref)
         end
       assert_includes error.message, "candidate is not found"
+    end
+  end
+
+  test "TOTP candidate store retries a collision on the ref unique index" do
+    travel_to @now do
+      existing = IdentityTotpCeremonyCandidateStore.store!(
+        surface: "app",
+        actor_ref: "collision-actor",
+        session_ref: "collision-session-1",
+        private_key: "collision-key-1",
+        title: "Authenticator",
+        last_otp_at: @now.to_i,
+        expires_at: @now + 5.minutes,
+      )
+      generated = [existing.ref, "freshtotpref123456789"]
+
+      PublicId.stub(:generate, -> { generated.shift }) do
+        candidate = IdentityTotpCeremonyCandidateStore.store!(
+          surface: "app",
+          actor_ref: "collision-actor",
+          session_ref: "collision-session-2",
+          private_key: "collision-key-2",
+          title: "Authenticator",
+          last_otp_at: @now.to_i,
+          expires_at: @now + 5.minutes,
+        )
+
+        assert_equal "freshtotpref123456789", candidate.ref
+      end
     end
   end
 

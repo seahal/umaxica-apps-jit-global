@@ -131,6 +131,8 @@ class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
 
       assert_predicate issued, :success?
       assert_instance_of transaction_model, issued.transaction
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, issued.transaction.transaction_id)
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, issued.transaction.grant_jti)
       assert_match(/\A[0-9]{6}\z/, issued.code)
       assert_not_includes issued.inspect, issued.code
       assert_equal "registration", issued.transaction.operation
@@ -163,5 +165,72 @@ class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
       )
       assert_nil issued.transaction.reload.otp_consumed_at
     end
+  end
+
+  test "app Email registration retries a transaction reference collision in a savepoint" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor, discard_at: 1.day.from_now)
+    email = actor.client_emails.create!(
+      raw_address: "collision-#{SecureRandom.hex(8)}@example.test", confirm_policy: true, otp_attempts_count: 1,
+    )
+    token.rotate_refresh_token!
+    collision = "a" * 21
+    replacement = "b" * 21
+    existing_session = CredentialRegistrationOtpSessionValue.for(
+      surface: "app", channel: :email, transaction_ref: collision,
+      root_ref: token.public_id, browser_nonce: SecureRandom.urlsafe_base64(32),
+    )
+    ClientEmailCeremonyTransaction.create_transaction!(
+      transaction_id: collision, actor_ref: actor.public_id, session_ref: existing_session.dump,
+      operation: "registration", email_candidate_ref: email.public_id,
+      normalized_email_digest: email.address_digest, expires_at: 1.day.from_now,
+    )
+    generated = [collision, "g" * 21, replacement, "h" * 21]
+    generator = -> { generated.shift || raise(RuntimeError, "unexpected transaction reference generation") }
+
+    issued = nil
+    PublicId.stub(:generate, generator) do
+      issued = EmailCredentialRegistrationOtpIssuer.call(
+        actor: actor, token: token, email: email, browser_nonce: SecureRandom.urlsafe_base64(32),
+      )
+    end
+
+    assert_predicate issued, :success?
+    assert_equal replacement, issued.transaction.transaction_id
+    assert_equal "h" * 21, issued.transaction.grant_jti
+    assert_equal 2, ClientEmailCeremonyTransaction.where(actor_ref: actor.public_id).count
+  end
+
+  test "app Email registration retries a grant reference collision in a savepoint" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor, discard_at: 1.day.from_now)
+    email = actor.client_emails.create!(
+      raw_address: "grant-collision-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
+      otp_attempts_count: 1,
+    )
+    token.rotate_refresh_token!
+    collision = "i" * 21
+    existing_session = CredentialRegistrationOtpSessionValue.for(
+      surface: "app", channel: :email, transaction_ref: "j" * 21,
+      root_ref: token.public_id, browser_nonce: SecureRandom.urlsafe_base64(32),
+    )
+    ClientEmailCeremonyTransaction.create_transaction!(
+      transaction_id: "j" * 21, grant_jti: collision, actor_ref: actor.public_id,
+      session_ref: existing_session.dump, operation: "registration", email_candidate_ref: email.public_id,
+      normalized_email_digest: email.address_digest, expires_at: 1.day.from_now,
+    )
+    generated = ["k" * 21, collision, "l" * 21, "m" * 21]
+    generator = -> { generated.shift || raise(RuntimeError, "unexpected grant reference generation") }
+
+    issued = nil
+    PublicId.stub(:generate, generator) do
+      issued = EmailCredentialRegistrationOtpIssuer.call(
+        actor: actor, token: token, email: email, browser_nonce: SecureRandom.urlsafe_base64(32),
+      )
+    end
+
+    assert_predicate issued, :success?
+    assert_equal "l" * 21, issued.transaction.transaction_id
+    assert_equal "m" * 21, issued.transaction.grant_jti
   end
 end

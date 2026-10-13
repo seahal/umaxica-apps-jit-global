@@ -1,6 +1,7 @@
 # OTP Security Boundary
 
-Status: partial hardening recorded on 2026-09-21
+Status: historical audit material with the current ownership boundary recorded below. Historical
+counts and descriptions are revision-scoped and are not current acceptance results.
 
 > Contract supersession (2026-10-07): the record-owned HOTP and shared stateful policy below are
 > historical, not the current recommendation. See `adr/realm-separated-identifiers-and-dead-history.md`
@@ -37,12 +38,30 @@ transaction/generation tuple inside the encrypted version-three SMS envelope. Ca
 expiry and superseded generations refuse transport. Generic SMS and remaining credential
 registration delivery have separate purposes; neither is a signup HOTP fallback.
 
-This does not certify complete OTP migration. Authenticated credential-registration and remaining
-legacy dependencies are still being replaced; full-suite/gate verification is not complete.
-See `adr/realm-separated-identifiers-and-dead-history.md` for the current contract and retained
+This does not certify complete route/provider acceptance. See
+`adr/realm-separated-identifiers-and-dead-history.md` for the current contract and retained
 implementation boundaries.
 
-## Historical implementation guarantees (2026-09-21)
+## Current local ownership boundary
+
+The current checkout keeps Email and Telephone stateful policy separate. Their identifier rows own
+failure counters, lockout and channel-specific resend/cooldown timing; they do not own a reusable
+OTP secret, counter or ceremony proof. Concrete Email and Telephone ceremony transactions own the
+short-lived keyed random-code verifier, generation, purpose, actor/session/candidate binding,
+expiry, receipt and terminal state. Verification and delivery use row locks and constant-time
+comparison, and successful consumption is single-use. A purpose/operation mismatch is refused
+before a new code or verifier is written.
+
+Authentication Email OTP uses the admitted-session `AuthEmailOtpChallenge` contract rather than
+the identifier row. Step-Up Email OTP remains a separate Step-Up transaction. The old
+`CommonOtp`/`OtpLockable` material below is retained only to explain the historical audit and
+superseded implementation; it must not be copied into current code or used as evidence that the
+current checkout stores identifier-owned HOTP material.
+
+Current route/provider applicability, live external delivery, provider-side observability and
+independent acceptance remain unverified unless a revision-scoped evidence record says otherwise.
+
+## Historical implementation guarantees (2026-09-21; superseded runtime description)
 
 - Authentication OTPs use a ten-minute maximum lifetime.
 - Signup confirmation codes use the same ten-minute lifetime, including SMS.

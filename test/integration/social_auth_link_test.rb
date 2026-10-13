@@ -157,6 +157,13 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
         post(fx0_continue_path, headers: fx0_headers)
         fx0_rails_cookie_key = Rails.application.config.session_options.fetch(:key)
         fx0_rails_cookie = response.cookies.fetch(fx0_rails_cookie_key)
+        decoded_session = ActionDispatch::Cookies::CookieJar.build(request, request.cookies)
+        decoded_session[fx0_rails_cookie_key] = fx0_rails_cookie
+
+        assert_match(
+          /\A[A-Za-z0-9_-]{21}\z/,
+          decoded_session.encrypted[fx0_rails_cookie_key].fetch("social_auth_flow_id"),
+        )
         fx0_user_headers["Cookie"] = [
           fx0_user_headers.fetch("Cookie"),
           "#{fx0_rails_cookie_key}=#{Rack::Utils.escape(fx0_rails_cookie)}",

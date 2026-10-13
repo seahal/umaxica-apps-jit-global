@@ -74,13 +74,13 @@ class CeremonyOtpVerificationReceiptTest < ActiveSupport::TestCase
       transaction =
         if channel == "email"
           model.create_transaction!(
-            actor_ref: "receipt-owner", session_ref: "receipt-browser", operation: "credential_registration",
+            actor_ref: "receipt-owner", session_ref: "receipt-browser", operation: "registration",
             email_candidate_ref: "receipt-candidate", normalized_email_digest: "a" * 64,
             expires_at: now + 10.minutes,
           )
         else
           model.create_transaction!(
-            actor_ref: "receipt-owner", session_ref: "receipt-browser", operation: "credential_registration",
+            actor_ref: "receipt-owner", session_ref: "receipt-browser", operation: "registration",
             telephone_candidate_ref: "receipt-candidate", normalized_number_digest: "a" * 64,
             expires_at: now + 10.minutes,
           )
@@ -89,7 +89,7 @@ class CeremonyOtpVerificationReceiptTest < ActiveSupport::TestCase
         purpose: "credential_registration",
         actor_ref: "receipt-owner",
         session_ref: "receipt-browser",
-        operation: "credential_registration",
+        operation: "registration",
         candidate_ref: "receipt-candidate",
       }
       code =

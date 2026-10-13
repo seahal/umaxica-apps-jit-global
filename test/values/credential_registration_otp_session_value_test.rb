@@ -27,6 +27,15 @@ class CredentialRegistrationOtpSessionValueTest < ActiveSupport::TestCase
     end
   end
 
+  test "registration session accepts an issued NanoID transaction reference" do
+    binding = CredentialRegistrationOtpSessionValue.for(
+      surface: "app", channel: :email, transaction_ref: "A1_b2-C3d4E5f6G7h8I9j",
+      root_ref: "original-root", browser_nonce: SecureRandom.urlsafe_base64(32),
+    )
+
+    assert_predicate binding, :frozen?
+  end
+
   test "registration session rejects typed malformed NUL and length neighbors without plain Root fallback" do
     arguments = {
       surface: "app",

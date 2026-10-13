@@ -701,7 +701,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       description: "Test Passkey",
     )
 
-    email.destroy!
+    email.destroy_without_dead_history!
 
     http_headers_5 =
       begin

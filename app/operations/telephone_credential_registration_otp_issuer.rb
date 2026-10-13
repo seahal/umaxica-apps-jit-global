@@ -5,12 +5,7 @@ class TelephoneCredentialRegistrationOtpIssuer
     public
 
     def call(actor:, token:, telephone:, browser_nonce:)
-      surface, transaction_model, pending_status = components(actor, token, telephone)
-      reference = SecureRandom.uuid
-      session = CredentialRegistrationOtpSessionValue.for(
-        surface: surface, channel: :telephone, transaction_ref: reference,
-        root_ref: token.public_id, browser_nonce: browser_nonce,
-      )
+      _surface, transaction_model, pending_status = components(actor, token, telephone)
       actor.class.connection_class_for_self.connected_to(role: :writing) do
         actor.with_lock do
           transaction_model.connection_owner.connected_to(role: :writing) do
@@ -18,7 +13,7 @@ class TelephoneCredentialRegistrationOtpIssuer
               token.with_lock do
                 telephone.with_lock do
                   issue_locked(
-                    actor, token, telephone, transaction_model, pending_status, reference, session, browser_nonce,
+                    actor, token, telephone, transaction_model, pending_status, browser_nonce,
                   )
                 end
               end
@@ -42,7 +37,7 @@ class TelephoneCredentialRegistrationOtpIssuer
       end
     end
 
-    def issue_locked(actor, token, telephone, transaction_model, pending_status, reference, session, browser_nonce)
+    def issue_locked(actor, token, telephone, transaction_model, pending_status, browser_nonce)
       ticket_now = transaction_model.database_now
       source_now = telephone.class.database_now
       unless current_binding?(actor, token, telephone, pending_status, ticket_now, source_now)
@@ -54,15 +49,59 @@ class TelephoneCredentialRegistrationOtpIssuer
       end
 
       cancel_original_browser_challenges!(actor, token, telephone, transaction_model, browser_nonce)
-      transaction = transaction_model.create_transaction!(
-        transaction_id: reference, actor_ref: actor.public_id, session_ref: session.dump,
-        operation: "registration", telephone_candidate_ref: candidate_ref(telephone),
-        normalized_number_digest: telephone.number_digest, now: ticket_now,
+      transaction = create_transaction_with_generated_reference!(
+        surface: transaction_model.ceremony_surface, transaction_model: transaction_model,
+        actor: actor, token: token, telephone: telephone, browser_nonce: browser_nonce, now: ticket_now,
         expires_at: [ticket_now + IdentityTelephoneCeremonyTransaction::DEFAULT_TTL, token.discard_at].min,
       )
       code = transaction.issue_telephone_otp!(purpose: "credential_registration")
       telephone.update!(otp_last_sent_at: source_now)
       result(:issued, transaction: transaction, code: code.freeze)
+    end
+
+    def create_transaction_with_generated_reference!(surface:, transaction_model:, actor:, token:, telephone:,
+                                                     browser_nonce:, now:, expires_at:)
+      retries = 0
+
+      loop do
+        begin
+          transaction_model.transaction(requires_new: true) do
+            transaction_ref = PublicId.generate
+            session = CredentialRegistrationOtpSessionValue.for(
+              surface: surface, channel: :telephone, transaction_ref: transaction_ref,
+              root_ref: token.public_id, browser_nonce: browser_nonce,
+            )
+            return transaction_model.create_transaction!(
+              transaction_id: transaction_ref, grant_jti: PublicId.generate,
+              actor_ref: actor.public_id, session_ref: session.dump,
+              operation: "registration", telephone_candidate_ref: candidate_ref(telephone),
+              normalized_number_digest: telephone.number_digest, now: now, expires_at: expires_at,
+            )
+          end
+        rescue ActiveRecord::RecordInvalid => e
+          raise unless generated_reference_collision_validation?(e)
+        rescue ActiveRecord::RecordNotUnique => e
+          raise unless generated_reference_collision?(transaction_model, e)
+        end
+
+        retries += 1
+        raise if retries > PublicId::MAX_COLLISION_RETRIES
+      end
+    end
+
+    def generated_reference_collision_validation?(error)
+      %i(transaction_id grant_jti).any? { |attribute| error.record.errors.of_kind?(attribute, :taken) }
+    end
+
+    def generated_reference_collision?(transaction_model, error)
+      result = error.cause&.result
+      return false unless result
+
+      constraint = result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+      transaction_model.lease_connection.schema_cache.indexes(transaction_model.table_name).any? do |index|
+        index.name == constraint && index.unique && index.where.nil? &&
+          index.columns.one? && %w(transaction_id grant_jti).include?(index.columns.first)
+      end
     end
 
     def cancel_original_browser_challenges!(actor, token, telephone, transaction_model, browser_nonce)

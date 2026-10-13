@@ -20,16 +20,26 @@ TelephoneCredentialRegistrationOtpDeliveryBindingValue =
           raise ArgumentError, "ORG Telephone registration requires an opaque candidate ID"
         end
 
-        [transaction_ref, generation].each do |reference|
-          unless reference.is_a?(String) && reference.encoding.ascii_compatible? && reference.valid_encoding? &&
-              reference.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/)
-            raise ArgumentError, "Telephone registration delivery UUID references required"
-          end
+        unless valid_reference?(
+          transaction_ref,
+          /\A(?:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[A-Za-z0-9_-]{21})\z/,
+        )
+          raise ArgumentError, "Telephone registration delivery transaction reference required"
         end
+        unless valid_reference?(generation, /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/)
+          raise ArgumentError, "Telephone registration delivery generation UUID required"
+        end
+
         new(
           surface: surface.dup.freeze, purpose: purpose.dup.freeze, transaction_ref: transaction_ref.dup.freeze,
           candidate_ref: candidate_ref.dup.freeze, generation: generation.dup.freeze,
         )
+      end
+
+      private
+
+      def valid_reference?(value, pattern)
+        value.is_a?(String) && value.encoding.ascii_compatible? && value.valid_encoding? && value.match?(pattern)
       end
     end
 

@@ -38,6 +38,7 @@
 #  fk_rails_...  (user_id => clients.id) ON DELETE => cascade
 #
 class ClientPreference < AppPrincipalRecord
+  include ::PublicId
   include ::PreferenceExplicitFields
 
   belongs_to :user, class_name: "Client", inverse_of: :user_preference
@@ -92,20 +93,13 @@ class ClientPreference < AppPrincipalRecord
   validates :functional, inclusion: { in: [true, false] }
   validates :performant, inclusion: { in: [true, false] }
   validates :targetable, inclusion: { in: [true, false] }
-  validates :public_id, presence: true, length: { maximum: 21 }, uniqueness: true
-
   after_initialize :set_defaults
-  before_validation :generate_public_id, on: :create
 
   def adult_content_gate
     client_preference_adult_content_gate&.option&.name || "nothing"
   end
 
   private
-
-  def generate_public_id
-    self.public_id = PublicId.generate if public_id.blank?
-  end
 
   def set_defaults
     return unless new_record?

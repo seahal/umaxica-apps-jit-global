@@ -52,22 +52,35 @@ module EmailCeremonyTransactionable
     def create_transaction!(surface: ceremony_surface, actor_ref:, session_ref:, operation:, transaction_id: nil,
                             grant_jti: nil, email_candidate_ref: nil, normalized_email_digest: nil,
                             expires_at: nil, now: Time.current, evp_nonce_digest: nil, evp_outcome: nil)
+      transaction_id = transaction_id.presence
+      grant_jti = grant_jti.presence
+      generated_attributes = []
+      generated_attributes << :transaction_id if transaction_id.nil?
+      generated_attributes << :grant_jti if grant_jti.nil?
+      retries = 0
+
       connection_owner.connected_to(role: :writing) do
-        create!(
-          transaction_id: transaction_id.presence || SecureRandom.uuid,
-          surface: surface.to_s,
-          actor_ref: actor_ref,
-          session_ref: session_ref,
-          operation: operation,
-          grant_jti: grant_jti.presence || SecureRandom.uuid,
-          email_candidate_ref: email_candidate_ref,
-          normalized_email_digest: normalized_email_digest,
-          evp_nonce_digest: evp_nonce_digest,
-          evp_outcome: evp_outcome,
-          expires_at: expires_at || (now + DEFAULT_TTL),
-          created_at: now,
-          updated_at: now,
-        )
+        loop do
+          generated_transaction_id = transaction_id || PublicId.generate
+          generated_grant_jti = grant_jti || PublicId.generate
+          attributes = email_transaction_attributes(
+            transaction_id: generated_transaction_id, surface: surface, actor_ref: actor_ref,
+            session_ref: session_ref, operation: operation, grant_jti: generated_grant_jti,
+            email_candidate_ref: email_candidate_ref, normalized_email_digest: normalized_email_digest,
+            evp_nonce_digest: evp_nonce_digest, evp_outcome: evp_outcome, expires_at: expires_at, now: now,
+          )
+
+          begin
+            return transaction(requires_new: true) { create!(attributes) }
+          rescue ActiveRecord::RecordInvalid => e
+            raise unless generated_reference_collision_validation?(e, generated_attributes)
+          rescue ActiveRecord::RecordNotUnique => e
+            raise unless generated_reference_collision?(e, generated_attributes)
+          end
+
+          retries += 1
+          raise if retries > PublicId::MAX_COLLISION_RETRIES
+        end
       end
     end
 
@@ -80,6 +93,43 @@ module EmailCeremonyTransactionable
         ComTicketRecord
       else
         ActiveRecord::Base
+      end
+    end
+
+    private
+
+    def email_transaction_attributes(transaction_id:, surface:, actor_ref:, session_ref:, operation:, grant_jti:,
+                                     email_candidate_ref:, normalized_email_digest:, evp_nonce_digest:, evp_outcome:,
+                                     expires_at:, now:)
+      {
+        transaction_id: transaction_id,
+        surface: surface.to_s,
+        actor_ref: actor_ref,
+        session_ref: session_ref,
+        operation: operation,
+        grant_jti: grant_jti,
+        email_candidate_ref: email_candidate_ref,
+        normalized_email_digest: normalized_email_digest,
+        evp_nonce_digest: evp_nonce_digest,
+        evp_outcome: evp_outcome,
+        expires_at: expires_at || (now + DEFAULT_TTL),
+        created_at: now,
+        updated_at: now,
+      }
+    end
+
+    def generated_reference_collision_validation?(error, generated_attributes)
+      generated_attributes.any? { |attribute| error.record.errors.of_kind?(attribute, :taken) }
+    end
+
+    def generated_reference_collision?(error, generated_attributes)
+      result = error.cause&.result
+      return false unless result
+
+      constraint = result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+      lease_connection.schema_cache.indexes(table_name).any? do |index|
+        index.name == constraint && index.unique && index.where.nil? && index.columns.one? &&
+          generated_attributes.include?(index.columns.first.to_sym)
       end
     end
   end

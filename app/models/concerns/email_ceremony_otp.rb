@@ -3,6 +3,13 @@
 # Requires self.class.connection_owner and self.class.database_now from the concrete Email ceremony.
 module EmailCeremonyOtp
   OTP_PURPOSES = %w(sign_up sign_in recovery withdrawal credential_registration).freeze
+  OTP_PURPOSE_OPERATIONS = {
+    "sign_up" => %w(sign_up),
+    "sign_in" => %w(sign_in),
+    "recovery" => %w(recovery),
+    "withdrawal" => %w(withdrawal),
+    "credential_registration" => %w(registration replacement),
+  }.freeze
   OTP_TTL = 5.minutes
   OTP_VERIFIER_KEYS = {
     "app" => "APP_EMAIL_OTP_VERIFIER_KEY",
@@ -14,7 +21,8 @@ module EmailCeremonyOtp
 
   def email_otp_deliverable?(generation:, at:)
     generation.is_a?(String) && generation.present? && generation == otp_generation &&
-      status == "pending" && consumed_at.nil? && email_otp_deadlines_finite? && expires_at > at &&
+      status == "pending" && consumed_at.nil? && otp_purpose_operation_valid? &&
+      email_otp_deadlines_finite? && expires_at > at &&
       otp_consumed_at.nil? && otp_cancelled_at.nil? && otp_verifier.present? &&
       otp_expires_at && otp_expires_at > at
   end
@@ -30,6 +38,8 @@ module EmailCeremonyOtp
           raise ArgumentError, "email OTP ceremony is unavailable"
         end
         raise ArgumentError, "email OTP candidate is missing" if email_candidate_ref.blank?
+        raise ArgumentError,
+              "email OTP purpose does not match operation" unless otp_purpose_operation_valid?(purpose: purpose)
         raise ArgumentError, "email OTP purpose cannot change" if self.purpose && self.purpose != purpose
 
         issue_email_otp_locked!(purpose: purpose, deadline: [now + OTP_TTL, expires_at].min)
@@ -75,6 +85,7 @@ module EmailCeremonyOtp
         return false unless email_otp_deliverable?(generation: otp_generation, at: now)
         return false unless self.purpose == purpose && self.actor_ref == actor_ref && self.session_ref == session_ref
         return false unless self.operation == operation && email_candidate_ref == candidate_ref
+        return false unless otp_purpose_operation_valid?(purpose: purpose, operation: operation)
 
         valid = ActiveSupport::SecurityUtils.secure_compare(otp_verifier, email_otp_digest(code))
         return false if block_given? && !yield(valid)
@@ -130,6 +141,7 @@ module EmailCeremonyOtp
   def email_otp_evidence_matches?(code:, purpose:, actor_ref:, session_ref:, operation:, candidate_ref:,
                                   finalized_registration:)
     return false unless valid_email_otp_code?(code)
+    return false unless otp_purpose_operation_valid?(purpose: purpose, operation: operation)
 
     self.class.connection_owner.connected_to(role: :writing) do
       with_lock do
@@ -152,6 +164,10 @@ module EmailCeremonyOtp
   def email_otp_receipt_parent_available?(finalized_registration, now)
     (status == "pending" && consumed_at.nil?) ||
       (finalized_registration && status == "consumed" && consumed_at && consumed_at <= now)
+  end
+
+  def otp_purpose_operation_valid?(purpose: self.purpose, operation: self.operation)
+    OTP_PURPOSE_OPERATIONS.fetch(purpose.to_s, []).include?(operation.to_s)
   end
 
   def issue_email_otp_locked!(purpose:, deadline:)

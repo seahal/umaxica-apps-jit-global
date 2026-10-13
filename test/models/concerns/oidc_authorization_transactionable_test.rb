@@ -172,6 +172,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
   test "create_transaction! persists a transaction and authorize_params mirrors the public contract" do
     transaction = create_transaction(ClientOidcAuthorizationTransaction, surface: "app")
 
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.transaction_id)
     assert_equal "pending", transaction.status
     assert_equal(
       {
@@ -186,6 +187,19 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
       },
       transaction.authorize_params,
     )
+  end
+
+  test "retries a generated OIDC transaction reference collision at the database boundary" do
+    existing = create_transaction(ClientOidcAuthorizationTransaction, surface: "app", unique: "collision-existing")
+    existing.update!(transaction_id: "a" * 21)
+    generated = ["a" * 21, "b" * 21]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        create_transaction(ClientOidcAuthorizationTransaction, surface: "app", unique: "collision-new")
+      end
+
+    assert_equal "b" * 21, transaction.transaction_id
   end
 
   test "persists prompt and max_age across authorization transaction resume" do

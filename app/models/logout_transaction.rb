@@ -23,24 +23,46 @@
 class LogoutTransaction < AppTicketRecord
   include OneTimeUrlTokenShared
 
+  MAX_PUBLIC_ID_COLLISION_RETRIES = PublicId::MAX_COLLISION_RETRIES
+  PUBLIC_ID_UNIQUE_INDEX = "index_logout_transactions_on_public_id"
+
   Result = Data.define(:status)
 
   validates :public_id, :token_digest, :issuer, :audience, :purpose, :expires_at, presence: true
   validates :public_id, :token_digest, uniqueness: true
+  validate :public_id_immutable_after_create, on: :update
 
   def self.issue!(issuer:, audience:, purpose:, expires_in: 2.minutes, now: Time.current)
-    transaction do
-      public_id = SecureRandom.urlsafe_base64(16)
-      raw_token, verifier = generate_one_time_url_token(public_id: public_id)
-      transaction_record = create!(
-        public_id: public_id,
-        issuer: issuer.to_s,
-        audience: audience.to_s,
-        purpose: purpose.to_s,
-        expires_at: now + expires_in,
-        token_digest: digest_one_time_url_verifier(verifier),
-      )
-      [transaction_record, raw_token]
+    retries = 0
+
+    begin
+      transaction(requires_new: true) do
+        public_id = PublicId.generate
+        raw_token, verifier = generate_one_time_url_token(public_id: public_id)
+        transaction_record = create!(
+          public_id: public_id,
+          issuer: issuer.to_s,
+          audience: audience.to_s,
+          purpose: purpose.to_s,
+          expires_at: now + expires_in,
+          token_digest: digest_one_time_url_verifier(verifier),
+        )
+        [transaction_record, raw_token]
+      end
+    rescue ActiveRecord::RecordInvalid => e
+      raise unless public_id_collision_validation?(e)
+
+      retries += 1
+      raise if retries > MAX_PUBLIC_ID_COLLISION_RETRIES
+
+      retry
+    rescue ActiveRecord::RecordNotUnique => e
+      raise unless public_id_collision?(e)
+
+      retries += 1
+      raise if retries > MAX_PUBLIC_ID_COLLISION_RETRIES
+
+      retry
     end
   end
 
@@ -107,6 +129,26 @@ class LogoutTransaction < AppTicketRecord
   end
 
   private
+
+  def public_id_immutable_after_create
+    return unless persisted? && will_save_change_to_public_id?
+
+    errors.add(:public_id, "cannot be changed after creation")
+  end
+  private :public_id_immutable_after_create
+
+  def self.public_id_collision_validation?(error)
+    error.record.errors.of_kind?(:public_id, :taken)
+  end
+  private_class_method :public_id_collision_validation?
+
+  def self.public_id_collision?(error)
+    result = error.cause&.result
+    return false unless result
+
+    result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME) == PUBLIC_ID_UNIQUE_INDEX
+  end
+  private_class_method :public_id_collision?
 
   def consumption_result(status)
     Result.new(status)

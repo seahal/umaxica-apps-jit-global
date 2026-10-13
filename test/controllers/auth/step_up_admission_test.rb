@@ -504,6 +504,7 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal record.reload.passkey_challenge_ref, response.parsed_body.fetch("challenge_id")
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, record.passkey_challenge_ref)
     assert_equal "required", response.parsed_body.fetch("options").fetch("userVerification")
     assert_equal "pending", issuance.transaction.reload.status
     assert_nil token.reload.last_step_up_at

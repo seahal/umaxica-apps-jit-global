@@ -5,7 +5,7 @@ require "test_helper"
 class CeremonyOwnedOtpTest < ActiveSupport::TestCase
   test "email proof is owned by its ceremony and rejects session actor purpose operation and candidate substitution" do
     transaction = ClientEmailCeremonyTransaction.create_transaction!(
-      actor_ref: "actor-1", session_ref: "session-1", operation: "registration",
+      actor_ref: "actor-1", session_ref: "session-1", operation: "sign_up",
       email_candidate_ref: "candidate-1",
     )
     code = transaction.issue_email_otp!(purpose: "sign_up")
@@ -14,7 +14,7 @@ class CeremonyOwnedOtpTest < ActiveSupport::TestCase
     assert_not_equal code, transaction.reload.otp_verifier
     assert_not transaction.verify_email_otp!(
       code: code, purpose: "sign_in", actor_ref: "actor-1",
-      session_ref: "session-1", operation: "registration", candidate_ref: "candidate-1",
+      session_ref: "session-1", operation: "sign_up", candidate_ref: "candidate-1",
     )
     assert_not transaction.verify_email_otp!(
       code: code, purpose: "sign_up", actor_ref: "actor-2",
@@ -22,7 +22,7 @@ class CeremonyOwnedOtpTest < ActiveSupport::TestCase
     )
     assert_not transaction.verify_email_otp!(
       code: code, purpose: "sign_up", actor_ref: "actor-1",
-      session_ref: "session-2", operation: "registration", candidate_ref: "candidate-1",
+      session_ref: "session-2", operation: "sign_up", candidate_ref: "candidate-1",
     )
     assert_not transaction.verify_email_otp!(
       code: code, purpose: "sign_up", actor_ref: "actor-1",
@@ -30,15 +30,15 @@ class CeremonyOwnedOtpTest < ActiveSupport::TestCase
     )
     assert_not transaction.verify_email_otp!(
       code: code, purpose: "sign_up", actor_ref: "actor-1",
-      session_ref: "session-1", operation: "registration", candidate_ref: "candidate-2",
+      session_ref: "session-1", operation: "sign_up", candidate_ref: "candidate-2",
     )
     assert transaction.verify_email_otp!(
       code: code, purpose: "sign_up", actor_ref: "actor-1",
-      session_ref: "session-1", operation: "registration", candidate_ref: "candidate-1",
+      session_ref: "session-1", operation: "sign_up", candidate_ref: "candidate-1",
     )
     assert_not transaction.verify_email_otp!(
       code: code, purpose: "sign_up", actor_ref: "actor-1",
-      session_ref: "session-1", operation: "registration", candidate_ref: "candidate-1",
+      session_ref: "session-1", operation: "sign_up", candidate_ref: "candidate-1",
     )
     assert transaction.reload.otp_consumed_at
   end

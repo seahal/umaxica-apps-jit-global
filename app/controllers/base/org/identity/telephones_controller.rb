@@ -59,7 +59,9 @@ module Base
 
           current_operator.with_lock do
             telephone = OperatorTelephone.lock.find_by!(id: telephone.id, staff_id: current_operator.id)
-            telephone.destroy! if AuthMethodGuard.can_remove_telephone?(current_operator, telephone)
+            if AuthMethodGuard.can_remove_telephone?(current_operator, telephone)
+              telephone.destroy_without_dead_history!
+            end
           end
           redirect_to(
             base_org_identity_telephones_path(ri: params[:ri]),

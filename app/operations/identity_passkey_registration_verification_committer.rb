@@ -125,8 +125,8 @@ class IdentityPasskeyRegistrationVerificationCommitter
               refuse!("passkey registration unavailable")
             end
 
-            candidate = candidate_class.create!(
-              ref: SecureRandom.uuid,
+            candidate = IdentityCeremonyCandidateRecord.create_with_generated_ref(
+              candidate_class,
               digest: candidate_class.digest_for(**material),
               surface: binding.fetch(:surface), actor_ref: actor.public_id, session_ref: token.public_id,
               step_up_ceremony_transaction_ref: transaction.transaction_id,

@@ -34,10 +34,39 @@ class IdentityStepUpCeremonyAcmeTransactionTest < ActiveSupport::TestCase
 
       assert_equal issuance.transaction.transaction_id, grant["transaction_id"]
       assert_equal issuance.transaction.grant_jti, grant["jti"]
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, issuance.transaction.transaction_id)
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, issuance.transaction.grant_jti)
+      assert_not_equal issuance.transaction.transaction_id, issuance.transaction.grant_jti
       assert_equal @client.public_id, grant["actor_ref"]
       assert_equal @token.public_id, grant["session_ref"]
       assert_equal %w(totp passkey), grant["allowed_methods"]
     end
+  end
+
+  test "retries a generated step-up transaction reference collision at the database boundary" do
+    create_transaction!("a" * 21, expires_at: nil, grant_jti: "e" * 21)
+    generated = ["a" * 21, "g" * 21, "b" * 21, "h" * 21]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        create_transaction!(nil, expires_at: nil)
+      end
+
+    assert_equal "b" * 21, transaction.transaction_id
+    assert_equal "h" * 21, transaction.grant_jti
+  end
+
+  test "retries a generated step-up grant reference collision at the database boundary" do
+    create_transaction!("j" * 21, expires_at: nil, grant_jti: "i" * 21)
+    generated = ["k" * 21, "i" * 21, "l" * 21, "m" * 21]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        create_transaction!(nil, expires_at: nil)
+      end
+
+    assert_equal "l" * 21, transaction.transaction_id
+    assert_equal "m" * 21, transaction.grant_jti
   end
 
   test "transaction scopes and purger retain recent records and purge old records" do
@@ -122,7 +151,7 @@ class IdentityStepUpCeremonyAcmeTransactionTest < ActiveSupport::TestCase
     )
   end
 
-  def create_transaction!(transaction_id, expires_at:)
+  def create_transaction!(transaction_id, expires_at:, grant_jti: nil)
     ClientStepUpCeremonyTransaction.create_transaction!(
       surface: "app",
       actor_ref: @client.public_id,
@@ -134,6 +163,7 @@ class IdentityStepUpCeremonyAcmeTransactionTest < ActiveSupport::TestCase
       audience: "step_up:app", token_binding: @token.public_id, require_session_binding: true,
       allowed_methods: %w(totp passkey),
       transaction_id: transaction_id,
+      grant_jti: grant_jti,
       expires_at: expires_at,
       now: @now,
     )

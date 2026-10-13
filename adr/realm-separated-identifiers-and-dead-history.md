@@ -333,6 +333,37 @@ after refreshing the locked Ticket, preventing stale model snapshots from admitt
 Malformed encoding is refused before Rails blank/format predicates. This admission hardening does
 not complete the outstanding migration of signup proof out of identifier rows.
 
+## OTP purpose and operation binding
+
+Email and Telephone ceremony OTPs are issued only when the requested purpose belongs to the
+transaction's authoritative operation. The current mapping is `sign_up` to `sign_up`, `sign_in` to
+`sign_in`, `recovery` to `recovery`, `withdrawal` to `withdrawal`, and
+`credential_registration` to the concrete `registration` or `replacement` operation. The mapping is
+defined independently in the Email and Telephone proof concerns; it does not reintroduce a shared
+stateful channel policy.
+
+The check is performed after the ceremony row is locked and reloaded, before a new code, generation or
+verifier is written. Delivery, verification and retained-evidence lookup apply the same pair check.
+Consequently, a persisted or stale cross-purpose operation cannot issue or consume a proof, and a
+purpose mismatch leaves the transaction's proof fields unchanged. Direct database rows with an invalid
+pair are rejected at every OTP use boundary; this runtime guard is not claimed as a universal database
+CHECK constraint.
+
+## Self-controlled TOTP ceremony references
+
+The APP TOTP enrollment transaction's `transaction_id` and `grant_jti` are self-controlled, non-secret
+ceremony identities. New values are issued independently through the shared NanoID-21 `PublicId`
+generator; they remain distinct from OTP generations, TOTP secrets, result identities, protocol
+claims and database primary keys. Explicit references supplied by an authorized internal caller are
+preserved rather than regenerated.
+
+The TOTP transaction factory retries only a database collision on the exact single-column unique
+B-tree for a value it generated, within the repository collision budget and a savepoint. Explicit
+reference collisions, unrelated uniqueness failures and exhausted retries remain errors. This
+changes only newly issued TOTP ceremony references and preserves their existing surface, actor,
+session, operation, candidate and parent bindings; result `jti` and authenticator/protocol values
+remain separately classified contracts.
+
 ## Irreversible history boundary
 
 The six independent models are `ClientEmailHistory`, `VisitorEmailHistory`, `OperatorEmailHistory`,
@@ -355,13 +386,18 @@ fingerprint from normalized PII, insert history, physically delete the identifie
 same owning database transaction. Logical deletion and recoverable retention do not create history.
 History cannot restore or reactivate an identifier; later reuse can create additional history rows.
 
-Ordinary model destruction and the dedicated channel purgers use independent Email and Telephone
-archive callbacks, explicitly registered by each concrete model. The callback locks the persisted
-owner and freshly loaded Source row, rejecting unsaved owner/primary-key substitutions and deriving
-the fingerprint from database PII rather than unsaved caller edits. A scheduled recoverable or
-retained row cannot bypass its deadlines through ordinary destruction. Protected Email, existing
-legal holds and enforcement protections refuse deletion without retaining a history-only result. A
-later destruction refusal rolls back the inserted history. Due ORG whole-Identity erasure now locks
+The six concrete identifier models expose two explicit destruction boundaries. The dedicated channel
+purgers call `purge_with_dead_history!`; this is the only identifier-level operation that authorizes
+the archive callback to lock the persisted owner and freshly loaded Source row, reject unsaved
+owner/primary-key substitutions, derive the fingerprint from database PII rather than unsaved
+caller edits, insert one history row and delete the Source in the same owning-database transaction.
+Normal user-facing identifier removal calls `destroy_without_dead_history!`, and owner-dependent
+whole-Identity erasure bypasses creation of a new history row because that separate erasure contract
+deletes the owner's existing histories explicitly. An unmarked direct destruction of a persisted
+identifier aborts instead of silently deleting it without history. A scheduled recoverable or
+retained row cannot bypass its deadlines through either path. Protected Email, existing legal holds
+and enforcement protections refuse deletion without retaining a history-only result. A later
+destruction refusal rolls back the inserted history. Due ORG whole-Identity erasure now locks
 and reloads the Operator, rechecks both retention deadlines and enforcement, and performs identifier
 purge, deletion of that Operator's two history collections and Operator deletion in one Zenith
 transaction. Protected Email refuses the transaction, retaining both the Identity and its existing

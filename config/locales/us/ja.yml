@@ -783,6 +783,7 @@ ja:
     code: コード
     code_challenge: コードチャレンジ
     code_challenge_method: コードチャレンジ方式
+    transaction_id: トランザクションID
     com_preference_languages: 言語設定
     com_preference_regions: 地域設定
     com_preference_themes: テーマ設定
@@ -853,6 +854,7 @@ ja:
     redirect_url: リダイレクトURL
     request_host: リクエストホスト
     response_mode: レスポンスモード
+    grant_jti: Grant JTI
     result_jti: 結果JTI
     role: ロール
     secret_credential_value: シークレット

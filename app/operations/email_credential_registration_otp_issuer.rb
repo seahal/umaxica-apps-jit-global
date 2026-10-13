@@ -10,11 +10,6 @@ class EmailCredentialRegistrationOtpIssuer
         raise ArgumentError, "ORG Email registration does not accept bootstrap permission"
       end
 
-      transaction_ref = SecureRandom.uuid
-      session_binding = CredentialRegistrationOtpSessionValue.for(
-        surface: surface, channel: :email, transaction_ref: transaction_ref,
-        root_ref: token.public_id, browser_nonce: browser_nonce,
-      )
       actor.class.connection_class_for_self.connected_to(role: :writing) do
         actor.with_lock do
           transaction_model.connection_owner.connected_to(role: :writing) do
@@ -27,14 +22,12 @@ class EmailCredentialRegistrationOtpIssuer
                       browser_nonce: browser_nonce,
                     ) do
                       issue_locked(
-                        actor, token, email, transaction_model, pending_status, transaction_ref, session_binding,
-                        browser_nonce, bootstrap_transaction,
+                        actor, token, email, transaction_model, pending_status, browser_nonce, bootstrap_transaction,
                       )
                     end || result(:unavailable)
                   else
                     issue_locked(
-                      actor, token, email, transaction_model, pending_status, transaction_ref, session_binding,
-                      browser_nonce,
+                      actor, token, email, transaction_model, pending_status, browser_nonce,
                     )
                   end
                 end
@@ -59,8 +52,7 @@ class EmailCredentialRegistrationOtpIssuer
       end
     end
 
-    def issue_locked(actor, token, email, transaction_model, pending_status, transaction_ref, session_binding,
-                     browser_nonce, bootstrap_transaction = nil)
+    def issue_locked(actor, token, email, transaction_model, pending_status, browser_nonce, bootstrap_transaction = nil)
       ticket_now = transaction_model.database_now
       source_now = email.class.database_now
       return result(:unavailable) unless current_binding?(actor, token, email, pending_status, ticket_now, source_now)
@@ -68,10 +60,10 @@ class EmailCredentialRegistrationOtpIssuer
       return result(:rate_limited) if email.otp_cooldown_active?(now: source_now)
 
       cancel_original_browser_challenges!(actor, token, email, transaction_model, browser_nonce)
-      transaction = transaction_model.create_transaction!(
-        transaction_id: transaction_ref, actor_ref: actor.public_id, session_ref: session_binding.dump,
-        operation: "registration", email_candidate_ref: email.public_id, normalized_email_digest: email.address_digest,
-        now: ticket_now, expires_at: [ticket_now + EmailCeremonyTransactionable::DEFAULT_TTL, token.discard_at].min,
+      transaction = create_transaction_with_generated_reference!(
+        surface: transaction_model.ceremony_surface, transaction_model: transaction_model,
+        actor: actor, token: token, email: email, browser_nonce: browser_nonce, now: ticket_now,
+        expires_at: [ticket_now + EmailCeremonyTransactionable::DEFAULT_TTL, token.discard_at].min,
       )
       if bootstrap_transaction
         transaction.update!(
@@ -82,6 +74,51 @@ class EmailCredentialRegistrationOtpIssuer
       code = transaction.issue_email_otp!(purpose: "credential_registration")
       email.update!(otp_last_sent_at: source_now)
       result(:issued, transaction: transaction, code: code.freeze)
+    end
+
+    def create_transaction_with_generated_reference!(surface:, transaction_model:, actor:, token:, email:,
+                                                     browser_nonce:, now:, expires_at:)
+      retries = 0
+
+      loop do
+        begin
+          transaction_model.transaction(requires_new: true) do
+            transaction_ref = PublicId.generate
+            session_binding = CredentialRegistrationOtpSessionValue.for(
+              surface: surface, channel: :email, transaction_ref: transaction_ref,
+              root_ref: token.public_id, browser_nonce: browser_nonce,
+            )
+            return transaction_model.create_transaction!(
+              transaction_id: transaction_ref, grant_jti: PublicId.generate,
+              actor_ref: actor.public_id, session_ref: session_binding.dump,
+              operation: "registration", email_candidate_ref: email.public_id,
+              normalized_email_digest: email.address_digest, now: now, expires_at: expires_at,
+            )
+          end
+        rescue ActiveRecord::RecordInvalid => e
+          raise unless generated_reference_collision_validation?(e)
+        rescue ActiveRecord::RecordNotUnique => e
+          raise unless generated_reference_collision?(transaction_model, e)
+        end
+
+        retries += 1
+        raise if retries > PublicId::MAX_COLLISION_RETRIES
+      end
+    end
+
+    def generated_reference_collision_validation?(error)
+      %i(transaction_id grant_jti).any? { |attribute| error.record.errors.of_kind?(attribute, :taken) }
+    end
+
+    def generated_reference_collision?(transaction_model, error)
+      result = error.cause&.result
+      return false unless result
+
+      constraint = result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+      transaction_model.lease_connection.schema_cache.indexes(transaction_model.table_name).any? do |index|
+        index.name == constraint && index.unique && index.where.nil? &&
+          index.columns.one? && %w(transaction_id grant_jti).include?(index.columns.first)
+      end
     end
 
     def cancel_original_browser_challenges!(actor, token, email, transaction_model, browser_nonce)

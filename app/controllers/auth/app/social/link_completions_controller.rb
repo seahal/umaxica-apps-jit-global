@@ -18,7 +18,7 @@ module Auth
           response.headers["Referrer-Policy"] = "no-referrer"
           response.headers["Content-Security-Policy"] = "frame-ancestors 'none'; form-action 'self'"
           reference = params[:candidate_ref]
-          unless reference.is_a?(String) && reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
+          unless IdentitySocialCeremonyCandidate.valid_reference?(reference)
             raise ActionController::BadRequest
           end
 

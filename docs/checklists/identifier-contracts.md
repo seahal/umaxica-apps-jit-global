@@ -36,7 +36,8 @@ criterion.
 - Basis: I03/I06/I07. Scope: self-controlled non-secret opaque IDs, regardless of column name.
 - Given an ordinary new resource, create it through normal, validation-disabled and bulk writers.
   New IDs use the one approved CSPRNG-backed NanoID mechanism, length 21 and the library alphabet;
-  standard string/varchar capacity is 25. Ordinary clients cannot supply their own resource
+  standard string/varchar capacity is 25. The shared `PublicId` model boundary enforces that storage
+  maximum separately from the 21-character generator. Ordinary clients cannot supply their own resource
   identity. Explicit authorized imports have a separate contract. Read/update does not regenerate a
   missing ID.
 - Empty/whitespace/NULL/oversized values are refused as applicable to the classified role. Test new
@@ -683,5 +684,57 @@ criterion.
   proof/session boundaries remain separate. Static checks do not prove concurrent committed
   collision behavior or live SMS delivery behavior.
 - This criterion does not classify Telephone OTP generation, delivery/proof values, result
-  identities, protocol/session identifiers, the legacy value-object defaults or other unclassified
-  ceremony issuers. Current evidence is revision-scoped and is not a permanent PASS for future code.
+  identities, protocol/session identifiers or other unclassified ceremony issuers. The legacy
+  value-object defaults now use the shared NanoID-21 issuer as well; explicitly supplied UUID-v4
+  transaction and grant values remain readable during the bounded transition. Current evidence is
+  revision-scoped and is not a permanent PASS for future code.
+
+## ID-3p — Social candidate capability references
+
+- Basis: I04/I06/I07/I10 and ID-3; scope: the APP Social link candidate store, link-completion
+  request boundary and the candidate's verified callback/result consumers. Provider subject values,
+  OAuth/OIDC state, signed result identities and transaction/grant references remain separate
+  contracts.
+- Given a newly stored Social candidate, its self-controlled non-secret `ref` is a NanoID-21 value
+  generated through the shared public-ID mechanism. An already issued UUID-v4 candidate remains
+  readable during this bounded transition; no existing candidate is rewritten and no shared UUID
+  admission pattern is widened for unrelated flows.
+- A link-completion request accepts only a strict Social candidate reference: the new NanoID-21
+  form or the retained UUID-v4 form. Missing, malformed, cross-purpose or unknown references are
+  rejected without a lookup fallback to another identity column. Provider callback verification,
+  actor/session binding, expiry and one-shot consumption remain authoritative.
+- A generated collision may be retried only for the concrete candidate table's named, single-column
+  `ref` unique B-tree index. Each retry uses a fresh value inside a savepoint and the finite shared
+  collision budget. Caller-supplied legacy values, unrelated validation or uniqueness failures and
+  exhausted retries remain explicit failures; provider values and candidate capability references
+  are never substituted for transaction or result identities.
+- Check: `test/services/identity/social_ceremony_contract_test.rb`,
+  `test/integration/acme_social_link_completion_test.rb` and
+  `test/integration/social_auth_link_test.rb`, plus direct inspection of
+  `IdentitySocialCeremonyCandidateStore` and
+  `Auth::App::Social::LinkCompletionsController`. Static checks do not prove concurrent committed
+  collision behavior or live provider behavior. Evidence is revision-scoped and is not a permanent
+  PASS for future code.
+
+## ID-3q — Step-Up passkey challenge references
+
+- Basis: I04/I06/I07/I10 and ID-3; scope: the APP, COM and ORG Step-Up session
+  `passkey_challenge_ref` issuance and its row-bound WebAuthn admission. This reference is a
+  server-generated, non-secret, expiring workflow-state identity. The WebAuthn challenge,
+  relying-party/origin values, credential identity, session binding and result identities retain
+  separate contracts.
+- Given a new Step-Up passkey challenge, `passkey_challenge_ref` is a NanoID-21 value issued by the
+  shared `PublicId` mechanism. Existing opaque UUID-v4 references remain readable through the exact
+  row-bound lookup; no existing value is rewritten and no protocol challenge is reformatted.
+- A generated reference collision may be retried only when the concrete session table reports its
+  named, single-column, non-partial unique B-tree index for `passkey_challenge_ref`. Each retry uses
+  a fresh value inside a savepoint and the finite challenge-reference retry budget. Unrelated
+  validation or uniqueness failures, malformed bindings, cross-surface references and exhausted
+  retries remain explicit failures; no fallback lookup or new challenge is authorized by the
+  reference alone.
+- Check: the public Step-Up admission tests and
+  `test/models/step_up_passkey_challenge_test.rb`, plus direct inspection of
+  `StepUpSessionConsumable`. Verification must also confirm that challenge bytes, RP/origin,
+  expiry, burn and session-issuance boundaries are unchanged. Static checks do not prove committed
+  concurrent collision behavior or live WebAuthn-provider behavior. Evidence is revision-scoped and
+  is not a permanent PASS for future code.

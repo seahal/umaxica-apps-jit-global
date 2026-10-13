@@ -90,10 +90,9 @@ module Auth::App::In
         email = @user.client_emails.first
         post auth_app_sign_in_email_path(fb: @primary_sign_in_binding),
              params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test-only", :ri => "jp" }
-        delivery_class = OtpEmailNotifierRollout.enabled?(:app) ? OtpNotifierEmailDeliveryJob : OtpMailDeliveryJob
         delivery =
           ActiveJob::Base.queue_adapter.enqueued_jobs.reverse.find do |entry|
-            entry.fetch(:job) == delivery_class
+            entry.fetch(:job) == OtpNotifierEmailDeliveryJob
           end
         payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
         code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))

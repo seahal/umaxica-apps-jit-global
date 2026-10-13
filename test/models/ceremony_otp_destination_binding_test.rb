@@ -7,7 +7,7 @@ class CeremonyOtpDestinationBindingTest < ActiveSupport::TestCase
    OperatorEmailCeremonyTransaction,].each do |model|
     test "#{model.name} email proof cannot authenticate a replaced destination digest" do
       transaction = model.create_transaction!(
-        actor_ref: "actor", session_ref: "browser", operation: "registration",
+        actor_ref: "actor", session_ref: "browser", operation: "sign_up",
         email_candidate_ref: "candidate", normalized_email_digest: SecureRandom.hex(32),
       )
       code = transaction.issue_email_otp!(purpose: "sign_up")
@@ -21,7 +21,7 @@ class CeremonyOtpDestinationBindingTest < ActiveSupport::TestCase
 
       assert_not transaction.verify_email_otp!(
         code: code, purpose: "sign_up", actor_ref: "actor", session_ref: "browser",
-        operation: "registration", candidate_ref: "candidate",
+        operation: "sign_up", candidate_ref: "candidate",
       )
       assert_nil transaction.reload.otp_consumed_at
     end
@@ -31,7 +31,7 @@ class CeremonyOtpDestinationBindingTest < ActiveSupport::TestCase
    OperatorTelephoneCeremonyTransaction,].each do |model|
     test "#{model.name} telephone proof cannot authenticate a replaced destination digest" do
       transaction = model.create_transaction!(
-        actor_ref: "actor", session_ref: "browser", operation: "registration",
+        actor_ref: "actor", session_ref: "browser", operation: "sign_up",
         telephone_candidate_ref: "candidate", normalized_number_digest: SecureRandom.hex(32),
       )
       code = transaction.issue_telephone_otp!(purpose: "sign_up")
@@ -45,7 +45,7 @@ class CeremonyOtpDestinationBindingTest < ActiveSupport::TestCase
 
       assert_not transaction.verify_telephone_otp!(
         code: code, purpose: "sign_up", actor_ref: "actor", session_ref: "browser",
-        operation: "registration", candidate_ref: "candidate",
+        operation: "sign_up", candidate_ref: "candidate",
       )
       assert_nil transaction.reload.otp_consumed_at
     end

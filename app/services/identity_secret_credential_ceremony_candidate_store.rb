@@ -40,9 +40,12 @@ class IdentitySecretCredentialCeremonyCandidateStore
     enabled_value = ActiveModel::Type::Boolean.new.cast(enabled)
     record =
       IdentitySecretCredentialCeremonyCandidate.connection_owner.connected_to(role: :writing) do
-        IdentitySecretCredentialCeremonyCandidate.create!(
-          ref: SecureRandom.uuid,
-          digest: digest_for(surface, actor_ref, session_ref, transaction_id, operation, password_digest),
+        IdentityCeremonyCandidateRecord.create_with_generated_ref(
+          IdentitySecretCredentialCeremonyCandidate,
+          digest: digest_for(
+            surface, actor_ref, session_ref,
+            transaction_id, operation, password_digest,
+          ),
           surface: surface.to_s,
           actor_ref: actor_ref.to_s,
           session_ref: session_ref.to_s,

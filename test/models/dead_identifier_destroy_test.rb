@@ -12,15 +12,26 @@ class DeadIdentifierDestroyTest < ActiveSupport::TestCase
         when "org" then [OperatorEmail, OperatorEmailHistory, :staff_id, operators(:one)]
         end
       address = "direct-dead-#{SecureRandom.hex(8)}@example.com"
-      record = model.create!(owner_key => owner.id, :raw_address => address, :confirm_policy => true)
+      attributes = {
+        owner_key => owner.id,
+        :raw_address => address,
+        :confirm_policy => true,
+        :created_at => 3.days.ago,
+      }
+      if realm == "org"
+        owner.update!(discard_at: owner.created_at, purge_eligible_at: owner.created_at)
+      else
+        attributes.merge!(discard_at: 2.days.ago, purge_eligible_at: 1.day.ago)
+      end
+      record = model.create!(attributes)
       record.address = "unsaved-other@example.com"
       count = history_model.count
-      record.destroy!
+      history = EmailIdentifierPurger.call(record: record)
 
       assert_equal count + 1, history_model.count
       assert_not model.exists?(record.id)
-      assert record.dead_email_history.matches_identifier?(address)
-      assert_not record.dead_email_history.matches_identifier?("unsaved-other@example.com")
+      assert history.matches_identifier?(address)
+      assert_not history.matches_identifier?("unsaved-other@example.com")
     end
 
     test "#{realm} telephone destruction atomically archives database PII rather than unsaved PII" do
@@ -31,18 +42,86 @@ class DeadIdentifierDestroyTest < ActiveSupport::TestCase
         when "org" then [OperatorTelephone, OperatorTelephoneHistory, :staff_id, operators(:one)]
         end
       number = "+819012399912"
-      record = model.create!(
-        owner_key => owner.id, :raw_number => number, :confirm_policy => true, :confirm_using_mfa => true,
-      )
+      attributes = {
+        owner_key => owner.id,
+        :raw_number => number,
+        :confirm_policy => true,
+        :confirm_using_mfa => true,
+        :created_at => 3.days.ago,
+      }
+      if realm == "org"
+        owner.update!(discard_at: owner.created_at, purge_eligible_at: owner.created_at)
+      else
+        attributes.merge!(discard_at: 2.days.ago, purge_eligible_at: 1.day.ago)
+      end
+      record = model.create!(attributes)
       record.number = "+819012399913"
       count = history_model.count
-      record.destroy!
+      history = TelephoneIdentifierPurger.call(record: record)
 
       assert_equal count + 1, history_model.count
       assert_not model.exists?(record.id)
-      assert record.dead_telephone_history.matches_identifier?(number)
-      assert_not record.dead_telephone_history.matches_identifier?("+819012399913")
+      assert history.matches_identifier?(number)
+      assert_not history.matches_identifier?("+819012399913")
     end
+  end
+
+  %w(app com org).each do |realm|
+    test "#{realm} ordinary identifier removal bypasses dead history explicitly" do
+      model, history_model, owner_key, owner, attributes =
+        case realm
+        when "app"
+          [ClientEmail, ClientEmailHistory, :user_id, clients(:one),
+           { raw_address: "ordinary-remove-#{SecureRandom.hex(8)}@example.test", confirm_policy: true },]
+        when "com"
+          [VisitorEmail, VisitorEmailHistory, :visitor_id, visitors(:reserved_visitor),
+           { raw_address: "ordinary-remove-#{SecureRandom.hex(8)}@example.test", confirm_policy: true },]
+        when "org"
+          [OperatorEmail, OperatorEmailHistory, :staff_id, operators(:one),
+           { raw_address: "ordinary-remove-#{SecureRandom.hex(8)}@example.test", confirm_policy: true },]
+        end
+      record = model.create!(attributes.merge(owner_key => owner.id))
+      count = history_model.count
+
+      record.destroy_without_dead_history!
+
+      assert_not model.exists?(record.id)
+      assert_equal count, history_model.count
+    end
+
+    test "#{realm} ordinary telephone removal bypasses dead history explicitly" do
+      model, history_model, owner_key, owner, attributes =
+        case realm
+        when "app"
+          [ClientTelephone, ClientTelephoneHistory, :user_id, clients(:one),
+           { raw_number: "+819012399916", confirm_policy: true, confirm_using_mfa: true },]
+        when "com"
+          [VisitorTelephone, VisitorTelephoneHistory, :visitor_id, visitors(:reserved_visitor),
+           { raw_number: "+819012399917", confirm_policy: true, confirm_using_mfa: true },]
+        when "org"
+          [OperatorTelephone, OperatorTelephoneHistory, :staff_id, operators(:one),
+           { raw_number: "+819012399918", confirm_policy: true, confirm_using_mfa: true },]
+        end
+      record = model.create!(attributes.merge(owner_key => owner.id))
+      count = history_model.count
+
+      record.destroy_without_dead_history!
+
+      assert_not model.exists?(record.id)
+      assert_equal count, history_model.count
+    end
+  end
+
+  test "unmarked irreversible destruction refuses to create dead history" do
+    record = ClientEmail.create!(
+      user: clients(:one), raw_address: "unmarked-dead@example.test", confirm_policy: true,
+      created_at: 3.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.ago,
+    )
+    count = ClientEmailHistory.count
+
+    assert_raises(ActiveRecord::RecordNotDestroyed) { record.destroy! }
+    assert ClientEmail.exists?(record.id)
+    assert_equal count, ClientEmailHistory.count
   end
 
   test "a live owner's legal hold refuses ordinary email and telephone destruction without histories" do

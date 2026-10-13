@@ -49,9 +49,10 @@ class EmailReentryOtpIssuer
         now = email.class.database_now
         next nil if email.locked?(now: now) || email.otp_cooldown_active?(now: now)
 
-        transaction = transaction_model.create_transaction!(
-          actor_ref: owner_reference(email), session_ref: session_ref, operation: operation,
-          email_candidate_ref: email.public_id, normalized_email_digest: email.address_digest,
+        transaction = create_transaction_with_generated_references!(
+          transaction_model: transaction_model, actor_ref: owner_reference(email), session_ref: session_ref,
+          operation: operation, email_candidate_ref: email.public_id,
+          normalized_email_digest: email.address_digest,
         )
         code = transaction.issue_email_otp!(purpose: operation)
         email.update!(otp_last_sent_at: now)
@@ -65,6 +66,45 @@ class EmailReentryOtpIssuer
       when VisitorEmail then email.visitor.public_id
       when OperatorEmail then email.staff.public_id
       else raise ArgumentError, "unsupported reentry email identifier"
+      end
+    end
+
+    def create_transaction_with_generated_references!(transaction_model:, actor_ref:, session_ref:, operation:,
+                                                      email_candidate_ref:, normalized_email_digest:)
+      retries = 0
+
+      loop do
+        begin
+          return transaction_model.transaction(requires_new: true) do
+            transaction_model.create_transaction!(
+              transaction_id: PublicId.generate, grant_jti: PublicId.generate,
+              actor_ref: actor_ref, session_ref: session_ref, operation: operation,
+              email_candidate_ref: email_candidate_ref, normalized_email_digest: normalized_email_digest,
+            )
+          end
+        rescue ActiveRecord::RecordInvalid => e
+          raise unless generated_reference_collision_validation?(e)
+        rescue ActiveRecord::RecordNotUnique => e
+          raise unless generated_reference_collision?(transaction_model, e)
+        end
+
+        retries += 1
+        raise if retries > PublicId::MAX_COLLISION_RETRIES
+      end
+    end
+
+    def generated_reference_collision_validation?(error)
+      %i(transaction_id grant_jti).any? { |attribute| error.record.errors.of_kind?(attribute, :taken) }
+    end
+
+    def generated_reference_collision?(transaction_model, error)
+      result = error.cause&.result
+      return false unless result
+
+      constraint = result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+      transaction_model.lease_connection.schema_cache.indexes(transaction_model.table_name).any? do |index|
+        index.name == constraint && index.unique && index.where.nil? &&
+          index.columns.one? && %w(transaction_id grant_jti).include?(index.columns.first)
       end
     end
   end

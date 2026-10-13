@@ -34,6 +34,8 @@ class IdentityTelephoneCeremonyTransactionCoverageTest < ActiveSupport::TestCase
       assert_equal "actor-1", transaction.grant_claims["actor_ref"]
       assert_equal "candidate-1", transaction.grant_claims["telephone_candidate_ref"]
       assert_equal "digest-1", transaction.grant_claims["normalized_number_digest"]
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.transaction_id)
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.grant_jti)
 
       consumed = transaction.consume(result_jti: "result-1", consumed_at: created_at + 1.minute)
 

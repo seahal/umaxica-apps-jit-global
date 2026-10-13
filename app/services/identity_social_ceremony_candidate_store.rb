@@ -48,8 +48,8 @@ class IdentitySocialCeremonyCandidateStore
     payload = payload_for(callback_result)
     record =
       IdentitySocialCeremonyCandidate.connection_owner.connected_to(role: :writing) do
-        IdentitySocialCeremonyCandidate.create!(
-          ref: SecureRandom.uuid,
+        IdentityCeremonyCandidateRecord.create_with_generated_ref(
+          IdentitySocialCeremonyCandidate,
           digest: digest_for(
             surface, actor_ref, session_ref, transaction_id, operation, provider,
             callback_result.principal,

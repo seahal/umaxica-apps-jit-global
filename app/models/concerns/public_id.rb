@@ -8,6 +8,7 @@ module PublicId
   extend ActiveSupport::Concern
 
   GENERATION_SIZE = 21
+  STORAGE_SIZE = 25
   MAX_COLLISION_RETRIES = 3
 
   class << self
@@ -22,10 +23,11 @@ module PublicId
   included do
     before_create :generate_public_id
     before_validation :generate_public_id, on: :create
+    before_validation :refresh_generated_public_id_after_collision, on: :create
     around_create :retry_public_id_collision
     validate :public_id_immutable_after_create, on: :update
 
-    validates :public_id, presence: true, length: { maximum: GENERATION_SIZE }, uniqueness: true
+    validates :public_id, presence: true, length: { maximum: STORAGE_SIZE }, uniqueness: true
   end
 
   public
@@ -63,6 +65,14 @@ module PublicId
       generate_public_id
       retry
     end
+  end
+
+  def refresh_generated_public_id_after_collision
+    return unless @public_id_generated_value == public_id
+    return unless self.class.exists?(public_id: public_id)
+
+    self.public_id = nil
+    generate_public_id
   end
 
   def public_id_immutable_after_create

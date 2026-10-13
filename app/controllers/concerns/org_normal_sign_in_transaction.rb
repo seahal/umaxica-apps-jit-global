@@ -34,7 +34,7 @@ module OrgNormalSignInTransaction
   # the transaction's public id purely so the caller can log it.
   def issue_org_normal_sign_in_transaction!(operator:, entra_identity_id:, pt: nil, ri: nil)
     now = Time.current
-    public_id = SecureRandom.hex(16)
+    public_id = PublicId.generate
 
     session[SESSION_KEY] = {
       "public_id" => public_id,

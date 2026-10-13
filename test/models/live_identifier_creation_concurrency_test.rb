@@ -72,7 +72,7 @@ class LiveIdentifierCreationConcurrencyTest < ActiveSupport::TestCase
     ensure
       threads&.each { |thread| thread.join if thread.alive? }
       owners&.each do |owner|
-        model.where(owner_key => owner.id).find_each(&:destroy!)
+        model.where(owner_key => owner.id).find_each(&:destroy_without_dead_history!)
         history_model.where(owner_key => owner.id).find_each(&:destroy!)
         owner.reload.update!(discard_at: owner.created_at, purge_eligible_at: owner.created_at)
         owner.destroy!

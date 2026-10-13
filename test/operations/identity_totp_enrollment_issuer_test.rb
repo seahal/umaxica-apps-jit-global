@@ -7,6 +7,62 @@ class IdentityTotpEnrollmentIssuerTest < ActiveSupport::TestCase
   self.fixture_table_names = []
   fixtures :clients, :client_statuses
 
+  test "TOTP ceremony transaction factory issues separate NanoID references" do
+    actor = clients(:one)
+    token = ClientToken.create!(user: actor)
+    generated = ["a" * 21, "b" * 21]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        ClientTotpCeremonyTransaction.create_transaction!(
+          actor_ref: actor.public_id, session_ref: token.public_id, operation: "registration",
+        )
+      end
+
+    assert_equal "a" * 21, transaction.transaction_id
+    assert_equal "b" * 21, transaction.grant_jti
+    assert_not_equal transaction.transaction_id, transaction.grant_jti
+  end
+
+  test "enrollment retries a child transaction reference collision in a savepoint" do
+    actor = clients(:one)
+    token = ClientToken.create!(user: actor)
+    transaction = ClientStepUpCeremonyTransaction.create_transaction!(
+      actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
+      required_scope: "settings_totp", step_up_required: false, allowed_methods: ["totp"],
+    )
+    record = ClientStepUpSession.create!(
+      user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
+      step_up_ceremony_transaction_ref: transaction.transaction_id, discard_at: transaction.expires_at,
+    )
+    unrelated_parent = ClientStepUpCeremonyTransaction.create_transaction!(
+      actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
+      required_scope: "settings_totp", step_up_required: false, allowed_methods: ["totp"],
+    )
+    collision = "a" * 21
+    replacement = "b" * 21
+    ClientTotpCeremonyTransaction.create_transaction!(
+      transaction_id: collision, actor_ref: actor.public_id, session_ref: token.public_id,
+      operation: "registration", expires_at: 10.minutes.from_now,
+      credential_candidate_ref: "existing-candidate", credential_candidate_digest: "existing-digest",
+      step_up_ceremony_transaction_ref: unrelated_parent.transaction_id,
+    )
+    generated = ["c" * 21, collision, "d" * 21, replacement, "e" * 21]
+    generator = -> { generated.shift || raise(RuntimeError, "unexpected TOTP reference generation") }
+
+    candidate = nil
+    PublicId.stub(:generate, generator) do
+      candidate = IdentityTotpEnrollmentIssuer.call!(actor: actor, token: token, transaction: transaction)
+    end
+
+    child = ClientTotpCeremonyTransaction.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
+
+    assert_predicate record.reload, :persisted?
+    assert_equal replacement, child.transaction_id
+    assert_equal candidate.ref, child.credential_candidate_ref
+    assert_equal 2, ClientTotpCeremonyTransaction.count
+  end
+
   test "pending encrypted enrollment retains its exact permission and never creates a credential" do
     actor = clients(:one)
     token = ClientToken.create!(user: actor)
@@ -23,6 +79,7 @@ class IdentityTotpEnrollmentIssuerTest < ActiveSupport::TestCase
     repeated = IdentityTotpEnrollmentIssuer.call!(actor: actor, token: token, transaction: transaction)
 
     assert_equal candidate.id, repeated.id
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, candidate.ref)
     assert_nil candidate.last_otp_at
     assert_operator candidate.expires_at, :<=, transaction.expires_at
     assert_equal transaction.transaction_id, candidate.step_up_ceremony_transaction_ref
@@ -33,6 +90,11 @@ class IdentityTotpEnrollmentIssuerTest < ActiveSupport::TestCase
 
     assert_not_includes stored[:stored_secret], candidate.private_key
     assert_equal candidate.private_key, candidate.reload.private_key
+    child = ClientTotpCeremonyTransaction.find_by!(
+      step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, child.transaction_id)
     assert_equal 1, ClientTotpCeremonyTransaction.where(
       step_up_ceremony_transaction_ref: transaction.transaction_id,
     ).count

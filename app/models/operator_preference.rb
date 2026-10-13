@@ -38,6 +38,7 @@
 #  fk_rails_...  (staff_id => operators.id)
 #
 class OperatorPreference < OrgPrincipalRecord
+  include ::PublicId
   include ::PreferenceExplicitFields
 
   belongs_to :staff, inverse_of: :staff_preference, class_name: "Operator"
@@ -88,20 +89,13 @@ class OperatorPreference < OrgPrincipalRecord
   validates :functional, inclusion: { in: [true, false] }
   validates :performant, inclusion: { in: [true, false] }
   validates :targetable, inclusion: { in: [true, false] }
-  validates :public_id, presence: true, length: { maximum: 21 }, uniqueness: true
-
   after_initialize :set_defaults
-  before_validation :generate_public_id, on: :create
 
   def adult_content_gate
     operator_preference_adult_content_gate&.option&.name || "nothing"
   end
 
   private
-
-  def generate_public_id
-    self.public_id = PublicId.generate if public_id.blank?
-  end
 
   # New records get explicit non-consent defaults so a nil never reaches a
   # boolean consent column.
