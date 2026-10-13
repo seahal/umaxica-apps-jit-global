@@ -34,7 +34,12 @@ module OidcRpLogoutAuthority
     current_transaction = transaction
     @logout_transaction = current_transaction
     if current_transaction.expected_step == AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED
-      current_transaction = revoke_browser_rp_authority!(current_transaction)
+      session_record = find_browser_rp_logout_session(current_transaction)
+      unless session_record && browser_rp_logout_authority_matches?(current_transaction, session_record)
+        return reject_oidc_logout_challenge!("authority_mismatch")
+      end
+
+      current_transaction = revoke_browser_rp_authority!(current_transaction, session_record)
     end
 
     if current_transaction.expected_step == AcmeLogoutTransaction::STEP_AUTHORITY_CLEANUP_ISSUED
@@ -66,10 +71,7 @@ module OidcRpLogoutAuthority
     nil
   end
 
-  def revoke_browser_rp_authority!(transaction)
-    session_record = find_browser_rp_logout_session(transaction)
-    raise ActiveRecord::RecordNotFound unless session_record
-
+  def revoke_browser_rp_authority!(transaction, session_record)
     root_token = session_record.parent_token
     raise RpSession::IssuanceRejected, "Browser Session current root token is missing" unless root_token
 
@@ -81,6 +83,21 @@ module OidcRpLogoutAuthority
       reason: "rp_initiated_logout",
     )
     advance_browser_rp_logout!(transaction, AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED)
+  end
+
+  def browser_rp_logout_authority_matches?(transaction, session_record)
+    target_resource = browser_rp_logout_resource(session_record)
+    return false unless transaction.actor_ref == target_resource.public_id
+
+    authority_resource = current_resource
+    resource_matches = authority_resource&.class == target_resource.class && authority_resource.id == target_resource.id
+    return false unless resource_matches
+
+    authority_token = current_session
+    target_root_token = session_record.parent_token
+    return false unless authority_token && target_root_token && authority_token.class == target_root_token.class
+
+    authority_token.device_session_id.present? && authority_token.device_session_id == session_record.device_session_id
   end
 
   def clear_base_authority_cookies!
