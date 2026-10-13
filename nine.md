@@ -3626,3 +3626,254 @@ Compose recreation, effective read-only mounts, Alloy syntax/runtime processing,
 sinks, production deployment acceptance and the separate remediation owner/security-review closure
 remain NOT_RUN or open. No CI, Podman, production, shared destructive operation or remote
 synchronization was used.
+
+### 16.86 Resume update — OTP purpose/operation binding and lock-time revalidation (P3b/P3c, 2026-10-12)
+
+Following Sections 5.3, 16 and 14.2, the next executable proof-integrity slice bound the requested
+Email and Telephone OTP purpose to the ceremony transaction's authoritative operation. The concrete
+mapping is `sign_up`→`sign_up`, `sign_in`→`sign_in`, `recovery`→`recovery`,
+`withdrawal`→`withdrawal`, and `credential_registration`→`registration` or `replacement`. This
+mapping remains duplicated by channel so Email and Telephone do not regain a shared stateful policy.
+
+Issuance now checks the operation after the row lock has reloaded the authoritative record, before a
+new code, generation or verifier is written. Delivery, verification and retained-evidence lookup
+reject the same mismatch. A stale in-memory operation and a direct persisted mismatch therefore
+leave the proof fields unchanged; the existing actor, session, candidate, expiry, terminal and
+single-use checks remain in force. No database CHECK or cross-purpose fallback was added.
+
+The first Red collection reached the public issuance boundary with
+`17 runs, 253 assertions, 2 failures, 0 errors, 0 skips`; the Green focused collection passed
+`41 runs, 943 assertions, 0 failures, 0 errors, 0 skips`, and the lock-time revalidation collection
+passed `31 runs, 517 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop passed for the two
+concerns and their tests. Gate 2 was re-established after the final code change: Rails passed
+`15198 runs, 128490 assertions, 0 failures, 0 errors, 0 skips` with four workers against the
+run-owned twenty-database manifest, and Vitest passed `99 files, 1140 tests`. The exact commands and
+dirty-worktree boundary are recorded in
+[`Q7R1`](evidence/2026-10-12-p3b-purpose-operation-binding-Q7R1.md).
+
+This closes the implemented purpose/operation guard for the exercised Email and Telephone ceremony
+boundaries. It does not close the full applicable-route/provider matrix, every source/fixture/
+constraint retirement cell, D-11's complete committed-transaction campaign, or the user-excluded
+independent acceptance investigation. No CI, Podman, production, shared destructive operation or
+remote synchronization was used.
+
+### 16.87 Resume update — TOTP ceremony reference generation (P2, 2026-10-12)
+
+Following Sections 5.3, 16 and 14.2, the next independent P2 slice classified the APP TOTP
+enrollment factory's `transaction_id` and `grant_jti` as self-controlled, non-secret ceremony
+identities. The factory now issues separate NanoID-21 values through `PublicId.generate`, retries
+only a collision on the exact generated single-column unique B-tree inside a savepoint and the
+finite collision budget, and leaves explicit references and unrelated failures unchanged. The
+enrollment issuer now delegates this boundary instead of maintaining a second retry loop. Result
+`jti`, OTP generation, TOTP secret, protocol and authenticator values remain separate contracts.
+
+The initial Red reached the public factory boundary and observed the former UUID generation:
+`5 runs, 33 assertions, 1 failure, 0 errors, 0 skips`. The focused TOTP collection passed
+`43 runs, 398 assertions, 0 failures, 0 errors, 0 skips`; targeted RuboCop passed. Gate 2 then ran
+the run-owned twenty-database Rails suite with four workers and passed
+`15199 runs, 128493 assertions, 0 failures, 0 errors, 0 skips`; Vitest passed
+`99 files, 1140 tests`. Exact commands, tested HEAD, dirty-worktree boundary and limits are recorded
+in [`R2T6`](evidence/2026-10-12-totp-ceremony-references-R2T6.md).
+
+This closes only the APP TOTP transaction/grant reference issuer and its exact generated-collision
+boundary. It does not close result `jti` or protocol identifiers, the remaining purpose/provider
+applicability matrix, the physical-purge matrix, D-11 committed-transaction isolation, operational
+cutovers, host-managed Alloy runtime verification, privacy-retention decisions or the user-excluded
+independent acceptance investigation. No CI, Podman, production, shared destructive operation or
+remote synchronization was used.
+
+### 16.88 Resume update — Social candidate capability references (P2, 2026-10-12)
+
+Following Sections 5.3, 16 and 14.2, the next P2 slice completed the previously held Social
+candidate consumer boundary. `IdentitySocialCeremonyCandidateStore` now issues newly generated
+candidate `ref` values through the shared `IdentityCeremonyCandidateRecord` factory, so new
+self-controlled candidate references are NanoID-21 values. Existing UUID-v4 candidate rows remain
+readable and usable during the bounded transition; they are not rewritten.
+
+The APP Social link-completion controller now validates candidate references with a Social-specific
+strict contract accepting only NanoID-21 or the retained UUID-v4 form. The unrelated global
+`AuthAdmissionBinding::REFERENCE_PATTERN` was not widened. Provider subjects, OAuth/OIDC state,
+callback payloads, Social transaction/grant references and result identities remain separate
+contracts. Generated `ref` collisions retry only the named candidate single-column unique B-tree
+constraint through the shared savepoint and finite-budget mechanism; unrelated failures remain
+explicit errors.
+
+The initial Red reached the former UUID issuer and missing consumer predicate:
+`14 runs, 146 assertions, 1 failure, 1 error, 0 skips`. The focused Social contract and link
+integration collection passed `35 runs, 303 assertions, 0 failures, 0 errors, 0 skips`; targeted
+RuboCop passed. Gate 2 then ran the run-owned twenty-database Rails suite with four workers and
+passed `15201 runs, 128498 assertions, 0 failures, 0 errors, 0 skips`; Vitest passed
+`99 files, 1140 tests`. Exact commands, tested HEAD, dirty-worktree boundary and limits are recorded
+in [`K6P4`](evidence/2026-10-12-social-candidate-references-K6P4.md).
+
+This closes only the Social candidate reference issuer, strict reader boundary and exact generated
+collision path. It does not close the remaining ceremony-purpose/provider matrix, physical-purge
+matrix, D-11 committed-transaction isolation, operational cutovers, host-managed Alloy runtime
+verification, privacy-retention decisions or the user-excluded independent acceptance investigation.
+No CI, Podman, production, shared destructive operation or remote synchronization was used.
+
+### 16.89 Resume update — Public ID generation and storage capacity (P2, 2026-10-12)
+
+Following Sections 5.3, 16 and 14.2, the next P2 foundation slice corrected the shared `PublicId`
+boundary's conflation of issuance length and compatibility storage capacity. New values remain
+generated at NanoID-21 through the existing CSPRNG-backed mechanism. Explicit existing values may
+use the documented maximum storage capacity of 25 characters, while values over 25 are refused by
+model validation. Narrower database columns and named schema capacity checks remain authoritative;
+this change did not widen or narrow any column, rewrite an existing value, add a fallback, or change
+the generator alphabet.
+
+The new Red case reached the public model boundary and failed because the former concern rejected a
+25-character compatibility value. The focused public-ID/capacity collection passed
+`66 runs, 201 assertions, 0 failures, 0 errors, 0 skips`; after the boundary regressions were
+corrected to use a 26-character value, the final focused collection passed
+`122 runs, 337 assertions, 0 failures, 0 errors, 0 skips`. Targeted RuboCop reported five files
+inspected with no offenses. The required post-slice Gate 2 then passed Rails with
+`15203 runs, 128507 assertions, 0 failures, 0 errors, 0 skips` using four workers and the run-owned
+twenty-database manifest, and Vitest with `99 files passed, 1140 tests passed`. The first
+post-change Rails run exposed three stale test expectations; they were corrected and the full gate
+was rerun. Evidence is recorded in [`P5M8`](evidence/2026-10-12-public-id-storage-capacity-P5M8.md).
+No acceptance condition is claimed complete by this entry.
+
+### 16.90 Resume update — telephone ceremony value-object issuer (P2, 2026-10-12)
+
+The next reversible P2 slice addressed the remaining self-controlled default in the legacy
+`IdentityTelephoneCeremonyTransaction` value object. Omitted `transaction_id` and `grant_jti` now
+use the shared `PublicId.generate` NanoID-21 issuer; explicitly supplied existing values remain
+unchanged. Result identities, OTP generations, protocol values and caller-supplied legacy references
+remain separate contracts. The Red test failed against the former UUID defaults with
+`3 runs, 19 assertions, 1 failure`; the Green focused collection passed
+`3 runs, 26 assertions, 0 failures, 0 errors, 0 skips`, and targeted RuboCop passed for both changed
+files. The required post-slice Gate 2 then passed Rails with
+`15203 runs, 128507 assertions, 0 failures, 0 errors, 0 skips` using four workers and the run-owned
+twenty-writer manifest, and Vitest with `99` files / `1140` tests. Evidence is recorded in
+[`T9Q2`](evidence/2026-10-12-telephone-value-issuer-T9Q2.md).
+
+This closes only that value-object issuer boundary. It does not claim the user-excluded independent
+acceptance work or close the remaining protocol/provider classification, operational cutover,
+privacy-retention, historical HMAC rollback, host-runtime or D-11 acceptance boundaries.
+
+### 16.91 Resume update — Step-Up passkey challenge reference issuer (P2, 2026-10-13)
+
+Following Sections 5.3, 16 and 14.2, the next reversible P2 slice classified `passkey_challenge_ref`
+on the APP, COM and ORG Step-Up session rows as a server-generated, non-secret workflow-state
+reference. New references now use the shared `PublicId.generate` NanoID-21 issuer. Existing opaque
+UUID-v4 references remain readable through the existing exact row-bound comparison; the WebAuthn
+`passkey_challenge` value, RP/origin binding, expiry and burn semantics were not changed.
+
+The issuer keeps each table's existing named single-column unique B-tree as the final collision
+guarantee. Only a collision on that exact index is retried, inside a savepoint and within the finite
+`MAX_CHALLENGE_REF_COLLISION_RETRIES` budget; unrelated uniqueness and validation errors propagate.
+The Red public-boundary assertion failed against a UUID reference
+(`9 runs, 132 assertions, 1 failure, 0 errors, 0 skips`). The focused public-boundary/model
+collection then passed `37 runs, 477 assertions, 0 failures, 0 errors, 0 skips`, and targeted
+RuboCop passed for the three changed Ruby files. The required post-slice Rails/Vitest Gate 2 passed
+`15204 runs, 128512 assertions, 0 failures, 0 errors, 0 skips` with four workers against the
+run-owned twenty-database manifest, and Vitest passed `99 files, 1140 tests`.
+
+Evidence is recorded in
+[`evidence/2026-10-13-step-up-challenge-reference-P7N4.md`](evidence/2026-10-13-step-up-challenge-reference-P7N4.md).
+The durable identifier criterion for this boundary is `ID-3q` in
+[`docs/checklists/identifier-contracts.md`](docs/checklists/identifier-contracts.md). This closes
+only the Step-Up challenge-reference issuer boundary. It does not close the user-excluded
+independent acceptance work, protocol/provider classification, full route applicability matrix,
+physical-purge matrix, D-11 committed-transaction campaign, operational cutovers, privacy-retention
+decisions, historical HMAC rollback, or host-managed Alloy runtime verification.
+
+### 16.92 Resume update — identifier transport classification alignment (P2, 2026-10-13)
+
+Following Sections 5.3, 16 and 14.2, the next safe slice reconciled the identifier reference with
+the implementation completed in 16.90. The `IdentityTelephoneCeremonyTransaction` value object is
+not a persisted issuer; omitted `transaction_id` and `grant_jti` defaults now use the shared
+NanoID-21 mechanism, while explicit caller-supplied values remain unchanged. The reference now
+points to its focused coverage instead of describing those defaults as an unresolved unclassified
+contract.
+
+The same review classified the remaining UUID-valued social and local result references as
+short-lived Valkey receiver capabilities. They are not durable resource identifiers or signed result
+evidence, and their current receivers deliberately share the strict UUID-v4 admission transport
+contract. No format change was made without a consumer-specific transport decision; no cross-surface
+lookup or weaker fallback was introduced. The clarification is recorded in
+[`adr/identifier-contract.md`](adr/identifier-contract.md). The reference also narrows the generic
+"unclassified issuers" wording to result, proof, protocol, capability, operation and audit values
+that still require their own purpose and consumer review.
+
+This was a documentation-only alignment slice; no application code, schema, migration, test fixture
+or acceptance status changed. `git diff --check`, the repository knowledge checker and the
+referenced-path check passed. The command output and worktree boundary are recorded in
+[`R4K1`](evidence/2026-10-13-identifier-transport-docs-R4K1.md). It does not close the user-excluded
+independent acceptance work, the full ceremony route matrix, physical-purge matrix, D-11
+committed-transaction campaign, operational cutovers, privacy-retention decisions, historical HMAC
+rollback or host-managed Alloy runtime verification.
+
+### 16.93 Resume update — OTP security-document ownership alignment (P3d/P13, 2026-10-13)
+
+Following Sections 5.3, 16 and 14.2, the current security documentation was reconciled with the OTP
+ownership already present in the checkout. The Email sign-in boundary now distinguishes its older
+source snapshot from the current local implementation: Email and Telephone ceremony transactions own
+keyed random-code verifiers, independent channel policies retain identifier failure/cooldown state,
+admitted authentication Email OTP uses `AuthEmailOtpChallenge`, and Step-Up Email OTP remains a
+separate transaction contract. The snapshot's `CommonOtp`/`OtpLockable` material and the generic
+HOTP examples are explicitly historical and are not a recommendation to restore identifier-owned
+proof.
+
+This was a documentation-only P3d/P13 slice. No application, schema, migration, test fixture,
+secret, route, or acceptance status changed. The plan and security documents now point readers to
+the current contract while preserving historical evidence and its limits. `git diff --check`,
+`scripts/check-repository-knowledge`, and the referenced-path check passed; the command record and
+dirty-worktree boundary are in [`O5L7`](evidence/2026-10-13-otp-security-docs-O5L7.md). The full
+route/provider matrix, physical-purge matrix, D-11 committed-transaction campaign, operational
+cutovers, privacy-retention decisions, historical HMAC rollback, host-managed Alloy runtime
+verification and user-excluded independent acceptance remain open.
+
+### 16.94 Resume update — identifier inventory and executable-slice recheck (P2/P12a/P3d/P11a, 2026-10-13)
+
+Following Sections 5.3, 16 and 14.2, the current run-owned PostgreSQL manifest was rechecked before
+selecting another implementation slice. The read-only `identifiers:inventory` scan covered 20 writer
+connections and 892 tables. It reported zero missing or composite primary keys, zero Hash indexes,
+zero invalid indexes and zero unready indexes; the only non-bigint primary keys were the Rails-owned
+`schema_migrations` and `ar_internal_metadata` tables.
+
+The catalog contained 238 `public_id` columns: 183 `varchar(21)`, 52 unbounded `varchar`, one
+`varchar(255)` app principal value, one `varchar(25)` ORG telephone value and one `varchar(16)` ORG
+human code. Existing P12a checks cover the reviewed self-controlled candidates and preference /
+principal targets. The only two unbounded names outside that reviewed inventory remain
+`app_zenith.legacy_replaced_clients.public_id` and
+`org_zenith.legacy_operator_department_accounts.public_id`; retained foreign-key and historical
+ownership paths keep both held for a separate consumer/retention decision. No value was rewritten,
+truncated, narrowed or reissued.
+
+The required local focused Minitest sample passed
+`108 runs, 735 assertions, 0 failures, 0 errors, 0 skips` with four workers against the run-owned
+twenty-database manifest. It exercised the current public-ID capacity checks, retired
+identifier-proof boundary and dead-identifier purge lifecycle. The full command and limits are
+recorded in [`H4Q7`](evidence/2026-10-13-resume-identifier-recheck-H4Q7.md).
+
+This recheck found no further reversible application slice that can be changed safely without
+inventing a domain meaning, widening approved trigger/SQL authority, narrowing a retained legacy
+identifier or activating an operational cutover. Remaining implementation boundaries are the two
+retained legacy identifier tables, all-table DB-level immutability where no approved mechanism
+exists, D-11 committed-transaction isolation, P10b/P12b writer-controlled cutover, privacy-
+retention policy, historical HMAC-role rollback and host Alloy recreation/runtime verification.
+Acceptance matrices and independent acceptance remain explicitly unclaimed; this entry does not mark
+them complete.
+
+### 16.95 Resume update — post-recheck implementation gates (2026-10-13)
+
+After the 16.94 identifier inventory and focused sample, the required local full gates were rerun
+against the same run-owned twenty-database manifest. Rails completed with
+`15,204 runs, 128,522 assertions, 0 failures, 0 errors, 0 skips` using four workers. Vitest
+completed with `99` files and `1,140` tests. `bin/rubocop` inspected 5,380 files with no offenses;
+`git diff --check` and `scripts/check-repository-knowledge` passed. Brakeman was unavailable as a
+local command and is therefore unverified; no success is claimed for it.
+
+These gates verify the current implementation state after the recheck. They do not close the
+independent acceptance work or the remaining held boundaries listed in 16.94: D-11 committed-
+transaction isolation, host-managed Alloy recreation/runtime verification, P10b/P12b writer-
+controlled cutover, privacy-retention policy, historical HMAC-role rollback, the two retained legacy
+identifier tables and all-table database-level immutability where no approved mechanism exists. No
+new application or schema change was made in this recheck.
+
+The additional local JavaScript checks also passed: `bun run format:check`, `bun run lint`,
+`bun run typecheck`, `bun run deadcode` and `bun run openapi:lint`. The dead-code command emitted
+only its existing configuration hints. No CI, OpenAPI bundle verification, deployment, host
+recreation or external-service check was performed, and those boundaries remain unverified.
