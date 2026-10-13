@@ -23,3 +23,24 @@ it("uses the server document language instead of the browser language and follow
   document.documentElement.lang = "en";
   await waitFor(() => expect(screen.getByRole("status").textContent).toBe("en"));
 });
+
+it("uses browser locale detection when the document language is empty, including after a change", async () => {
+  document.documentElement.lang = "";
+  const { rerender } = render(
+    <DocumentLocale>
+      <LocaleConsumer />
+    </DocumentLocale>,
+  );
+  const detected = screen.getByRole("status").textContent;
+  expect(detected).toBeTruthy();
+  document.documentElement.lang = "ja";
+  await waitFor(() => expect(screen.getByRole("status").textContent).toBe("ja"));
+  document.documentElement.lang = "";
+  await waitFor(() => expect(screen.getByRole("status").textContent).toBe(detected));
+  rerender(
+    <DocumentLocale>
+      <LocaleConsumer />
+    </DocumentLocale>,
+  );
+  expect(screen.getByRole("status").textContent).toBe(detected);
+});

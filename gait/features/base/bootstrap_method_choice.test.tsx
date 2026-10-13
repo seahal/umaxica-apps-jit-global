@@ -97,3 +97,15 @@ describe("BootstrapMethodChoice", () => {
     );
   });
 });
+
+it("preserves the selected setup intent when the CSRF field is absent", () => {
+  const { container } = render(<BootstrapMethodChoice {...props} />);
+  const form = container.querySelector("form")!;
+  form.querySelector('input[name="authenticity_token"]')?.remove();
+  fireEvent.submit(form);
+  expect(Object.fromEntries(new FormData(form))).toEqual({
+    scope: "settings_telephone",
+    pt: "signed-target",
+  });
+  expect(screen.getByRole("button", { name: "Email" }).getAttribute("value")).toBe("email_otp");
+});

@@ -254,3 +254,22 @@ test("uses the Rails-translated footer name without changing its document destin
     "https://umaxica.com/about",
   );
 });
+
+test("renders the page when optional landmark translation metadata is absent", () => {
+  document
+    .querySelectorAll('meta[name="ui-footer"], meta[name="ui-information"]')
+    .forEach((meta) => meta.remove());
+  page.props.chrome = {
+    ...minimalChrome,
+    banner: { title: null, body: "Information body" },
+    footer_navigation: [{ label: "Home", href: "/" }],
+  };
+  renderTree(
+    <SurfaceLayout>
+      <p>Page content</p>
+    </SurfaceLayout>,
+  );
+  expect(screen.getByRole("main").textContent).toContain("Page content");
+  expect(screen.getByRole("navigation").getAttribute("aria-label")).toBeNull();
+  expect(screen.getByText("Information body")).toBeTruthy();
+});
