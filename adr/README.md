@@ -30,10 +30,10 @@ Current org federated sign-in decision:
 
 Current identity authority decision:
 
-- `adr/email-sign-in-otp-ceremony-binding-and-risk-acceptance.md` — accepted APP/COM Email
-  Sign-In ceremony/continuity binding target, one-time consumption and resend invariants, and
-  limited browser-secret theft/external-mailbox risk acceptances (2026-10-11); conformity is
-  unverified and implementation remains deferred under the Auth workflow freeze.
+- `adr/email-sign-in-otp-ceremony-binding-and-risk-acceptance.md` — accepted APP/COM Email Sign-In
+  ceremony/continuity binding target, one-time consumption and resend invariants, and limited
+  browser-secret theft/external-mailbox risk acceptances (2026-10-11); conformity is unverified and
+  implementation remains deferred under the Auth workflow freeze.
 
 - `adr/jump-directed-rails-handoff-contract.md` — current same-TLD Jump graph, Auth issuer naming,
   Palm browser/native handoff, development trust prerequisites, and rollout boundaries.
@@ -52,13 +52,20 @@ Current identity authority decision:
   implementation now; `auth.*` origins and Xper apex origins stay stable; the redesign is retained
   as backlog.
 
+Current participation change (target contract; runtime not yet migrated):
+
+- `adr/tech-and-palm-browser-rp-participation.md` — Tech (`tech-org`, operator, `tech.umaxica.org`,
+  requires `tech.access`) is admitted as a first-party browser RP, and Palm (`palm-app`) changes
+  from native RP to first-party browser RP with its native role retired. Answers the
+  Reclassification Rule of `adr/oidc-oauth-participation-allowlist-and-non-participant-surfaces.md`.
+
 Current sign-out decision (target contract; runtime not yet migrated):
 
-- `adr/first-party-sign-out-shared-database-without-backchannel-logout.md` — the parent
-  session on the realm Ticket writer is the single source of truth; a global sign-out revokes the
-  parent and all of its RP session rows in one transaction, and a confirmed COMMIT is the point of
-  no return. Back-Channel Logout is not used between the IdP and first-party RPs and must not be
-  reintroduced without a new ADR. The rejected design is recorded in
+- `adr/first-party-sign-out-shared-database-without-backchannel-logout.md` — the parent session on
+  the realm Ticket writer is the single source of truth; a global sign-out revokes the parent and
+  all of its RP session rows in one transaction, and a confirmed COMMIT is the point of no return.
+  Back-Channel Logout is not used between the IdP and first-party RPs and must not be reintroduced
+  without a new ADR. The rejected design is recorded in
   `research/2026-10-13-first-party-backchannel-logout-rejected-design.md`.
 
 Current IdP flow lifecycle decisions (target contract; runtime not yet migrated):

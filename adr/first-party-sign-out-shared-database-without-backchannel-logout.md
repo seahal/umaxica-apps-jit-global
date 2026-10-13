@@ -28,18 +28,18 @@ irreversible commit point, and "a hint identifies a session; it is not authority
   same role OP, AS or Authority.
 - **RP**: a first-party relying party served by this application: Core, Warp, Edit, Palm, Tech and
   the Base Self-RP clients.
-- **Parent**: the IdP Browser Session, that is, a Device Session and its current root token.
-  Every RP session row belongs to exactly one parent.
+- **Parent**: the IdP Browser Session, that is, a Device Session and its current root token. Every
+  RP session row belongs to exactly one parent.
 - **BCL**: OpenID Connect Back-Channel Logout 1.0, in which the IdP posts a signed Logout Token to
   each RP server so the RP ends the session named by `sid`.
 
 ## Context
 
-Sign-out started as a repository-specific design: short-lived access tokens, and a gate that
-refuses to issue a new access token once the parent is revoked. To move closer to published
-standards, BCL was added and then elaborated over several planning rounds. The plan grew a
-request-owned sender with a time budget, retry rules, partial-delivery states, a stored delivery
-outcome and acceptance-time measurement. `research/2026-10-13-first-party-backchannel-logout-rejected-design.md`
+Sign-out started as a repository-specific design: short-lived access tokens, and a gate that refuses
+to issue a new access token once the parent is revoked. To move closer to published standards, BCL
+was added and then elaborated over several planning rounds. The plan grew a request-owned sender
+with a time budget, retry rules, partial-delivery states, a stored delivery outcome and
+acceptance-time measurement. `research/2026-10-13-first-party-backchannel-logout-rejected-design.md`
 records that design and why each part followed from the one before.
 
 Reviewing the plan against the code showed that the premise did not match this system:
@@ -66,8 +66,8 @@ Reviewing the plan against the code showed that the premise did not match this s
    checking the result.
 
 The BCL specification does not exclude a deployment in which IdP and RPs share an application. The
-reason for this decision is therefore not that BCL is inapplicable. It is that BCL is redundant
-here and makes the outcome of sign-out depend on a network exchange that the system does not need.
+reason for this decision is therefore not that BCL is inapplicable. It is that BCL is redundant here
+and makes the outcome of sign-out depend on a network exchange that the system does not need.
 
 ## Decision
 
@@ -75,8 +75,8 @@ here and makes the outcome of sign-out depend on a network exchange that the sys
    the parent's state on its realm Ticket writer. RPs decide acceptance from that state on every
    request and every refresh, not from their own cookie or their own row alone.
 2. **Sign-out is IdP-first and commits once.** A global sign-out revokes one authenticated current
-   parent and, in the same database transaction, every unrevoked RP session row of that parent.
-   The transaction contains no HTTP call, job enqueue or write to another database.
+   parent and, in the same database transaction, every unrevoked RP session row of that parent. The
+   transaction contains no HTTP call, job enqueue or write to another database.
 3. **Confirmed COMMIT is the point of no return.** After it, the parent is never restored, the user
    is not signed in again automatically, and no later failure is reported as a sign-out failure.
    Before it, nothing is revoked. A COMMIT whose response is lost is resolved by re-reading the
@@ -84,12 +84,13 @@ here and makes the outcome of sign-out depend on a network exchange that the sys
 4. **No BCL between the IdP and first-party RPs.** The IdP does not send Logout Tokens to them and
    they do not expose receivers. The discovery document and client registrations must not declare
    BCL support. The existing sender, receivers and declarations are removed once it is confirmed
-   that no party other than the IdP's own legacy path depends on them; they are not left in place
-   as a disabled or dormant path.
+   that no party other than the IdP's own legacy path depends on them; they are not left in place as
+   a disabled or dormant path.
 5. **Authority is separate from identification.** The IdP revokes a parent only for the current IdP
    session that owns it. A challenge, a URL parameter or an `id_token_hint` never authorizes
-   revocation by itself. An RP credential can end only that RP's own session; when the IdP has no
-   matching session, sign-out ends the initiating RP session only and says so.
+   revocation by itself. When the IdP has no session, or its session is not the parent the sign-out
+   was started for, nothing is revoked anywhere: the IdP answers with a plain error and stops. There
+   is no path that ends one RP session alone (amended 2026-10-13, see below).
 6. **Priorities.** IdP sign-out is mandatory. Cleanup at the initiating RP is desirable, and its
    failure neither changes the result nor triggers a retry or a new sign-in. For other RPs the
    guarantee is refusal at their next authentication check; removing their cookies and switching
@@ -97,6 +98,17 @@ here and makes the outcome of sign-out depend on a network exchange that the sys
 7. **The standards-shaped browser flow is kept.** The RP sends the browser to the IdP end-session
    endpoint, the IdP confirms, and the browser returns to an exactly registered URI. GET never
    mutates; a CSRF-protected POST confirms.
+
+## Amendment: no single-service sign-out (2026-10-13)
+
+The first version of this ADR, written earlier the same day, let the initiating RP end its own
+session when the IdP had no matching session. The user withdrew that path before any implementation.
+Reasons given: building a path in which an RP session completes a sign-out while the IdP is signed
+out is dangerous, and such an RP session stops being accepted shortly anyway, because every RP
+request depends on the parent. Accepted consequence: when the parent is still alive but the browser
+holds no IdP session for it, the user cannot sign out from the RP and stays signed in there until
+the parent ends or expires. Do not add a single-service sign-out to cover that case without a new
+ADR.
 
 ## Conditions on this decision
 
@@ -115,8 +127,8 @@ The decision is safe only while these hold. They are obligations, not assumption
 
 - Do not add `backchannel_logout_uri` or `backchannel_logout_supported` back to registrations or
   discovery for first-party clients.
-- Do not make the result of sign-out, or the redirect that follows it, wait on an HTTP exchange
-  with an RP.
+- Do not make the result of sign-out, or the redirect that follows it, wait on an HTTP exchange with
+  an RP.
 - Do not add a delivery queue, delivery ledger, retry budget or partial-delivery state to
   first-party sign-out.
 - Do not leave sibling RP rows unrevoked "until notified".
@@ -138,18 +150,19 @@ extension under a new ADR, with these constraints carried over:
 
 ## Consequences
 
-- Sign-out has one outcome that matters, the COMMIT, and three observable results: committed,
-  rolled back, unknown. Notification timeouts, retries and partial delivery do not exist.
-- Sibling RP rows become revoked at the same instant as the parent, so stored state matches what
-  the acceptance checks already enforced.
+- Sign-out has one outcome that matters, the COMMIT, and three observable results: committed, rolled
+  back, unknown. A request that cannot be authorized ends in an error and changes nothing.
+  Notification timeouts, retries and partial delivery do not exist.
+- Sibling RP rows become revoked at the same instant as the parent, so stored state matches what the
+  acceptance checks already enforced.
 - The parent sign-out primitive must become one transaction. Today it writes the sign-out flow
   record, the Device Session and the tokens without one enclosing transaction and falls back to
   token-only revocation after a Device Session failure. That primitive also serves ordinary
   sign-out, so its other callers are affected by the change.
 - Until the removal is implemented, the defective receivers remain reachable. Removing them is not
   optional follow-up work.
-- An open screen at another RP keeps showing what it already rendered until it next communicates.
-  An optional check when a page becomes visible again can shorten this. It must not refresh session
+- An open screen at another RP keeps showing what it already rendered until it next communicates. An
+  optional check when a page becomes visible again can shorten this. It must not refresh session
   activity, or it would defeat idle expiry.
 - A stateless token accepted somewhere without a parent check would remain usable until its expiry
   (five minutes plus thirty seconds of leeway at the time of writing). The authentication-path
@@ -160,10 +173,10 @@ extension under a new ADR, with these constraints carried over:
 
 ## Alternatives considered
 
-- **Synchronous BCL from the sign-out request, then redirect.** The withdrawn plan. Rejected for
-  the reasons in Context items 3–5.
-- **Asynchronous BCL through a background job.** Removes the waiting but keeps a second, weaker
-  path to an effect the transaction already achieves, and keeps the receivers.
+- **Synchronous BCL from the sign-out request, then redirect.** The withdrawn plan. Rejected for the
+  reasons in Context items 3–5.
+- **Asynchronous BCL through a background job.** Removes the waiting but keeps a second, weaker path
+  to an effect the transaction already achieves, and keeps the receivers.
 - **Front-channel logout, redirect chains across RPs, cross-origin cookie operations, server push
   and periodic polling.** See the "Methods not used" section of the research record.
 - **Keep the BCL code disabled for later.** Rejected under
@@ -173,7 +186,7 @@ extension under a new ADR, with these constraints carried over:
 ## Standards and assurance limits
 
 Relevant specifications: OpenID Connect RP-Initiated Logout 1.0, OpenID Connect Back-Channel Logout
-1.0, RFC 7009 and RFC 8725. This ADR claims only that RP-Initiated Logout's browser flow is kept
-and that BCL, an optional extension, is not offered. It makes no conformance claim. The escalation
+1.0, RFC 7009 and RFC 8725. This ADR claims only that RP-Initiated Logout's browser flow is kept and
+that BCL, an optional extension, is not offered. It makes no conformance claim. The escalation
 ruling was issued from a description of the system, without reading the code, and certifies no
 implementation.

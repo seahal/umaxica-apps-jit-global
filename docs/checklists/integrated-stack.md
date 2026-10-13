@@ -6,11 +6,12 @@ realm-separated contact identifiers/OTP/dead history. The domain criteria below 
 and how to judge it; they are neither a progress log nor a new source of business-policy authority.
 They preserve the user-approved contracts and applicable ADRs. Existing code never weakens them.
 
-Luna's single executable instruction is [nine.md](../../nine.md). An investigator can start here
-without that prompt or chat: the domain criteria retain the expectations, exceptions, sources and
-inspection methods. One-time procedure/migration criteria live in the owning change document, not in
-permanent behavior checkboxes. This index is a crosswalk for this accepted change, not a global
-requirement registry, new harness, DSL or test runner.
+Luna's single executable instruction was `nine.md` in the repository root; it was removed from the
+working tree after that delivery was accepted and remains in Git history. An investigator can start
+here without that prompt or chat: the domain criteria retain the expectations, exceptions, sources
+and inspection methods. One-time procedure/migration criteria live in the owning change document,
+not in permanent behavior checkboxes. This index is a crosswalk for this accepted change, not a
+global requirement registry, new harness, DSL or test runner.
 
 ## Domain and process owners
 

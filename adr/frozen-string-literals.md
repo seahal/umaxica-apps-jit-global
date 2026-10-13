@@ -6,9 +6,9 @@ Accepted. The planning record for this cycle states that the user accepted this 
 2026-10-11; this document was written on 2026-10-13 and that date is carried over from the planning
 record, not re-verified here.
 
-This is a **target contract; the repository does not yet conform**. Writing this ADR changed no
-Ruby file and no RuboCop configuration. It is the single authority for this topic: do not create a
-second ADR, rule or plan that restates or varies it; amend this one.
+This is a **target contract; the repository does not yet conform**. Writing this ADR changed no Ruby
+file and no RuboCop configuration. It is the single authority for this topic: do not create a second
+ADR, rule or plan that restates or varies it; amend this one.
 
 ## Context
 
@@ -16,17 +16,17 @@ second ADR, rule or plan that restates or varies it; amend this one.
 mutated by accident then raises at the point of the mistake instead of silently changing a value
 shared with other callers. It also removes a per-evaluation allocation for each literal.
 
-RuboCop already runs `Style/FrozenStringLiteralComment` with `EnforcedStyle: always`, so most of
-the codebase carries the comment. The rule nevertheless has gaps. Measured at commit
+RuboCop already runs `Style/FrozenStringLiteralComment` with `EnforcedStyle: always`, so most of the
+codebase carries the comment. The rule nevertheless has gaps. Measured at commit
 `4828aeedd141b54163236672890799b9b01128c2` over tracked `*.rb`, `*.rake`, `*.ru`, `Rakefile`,
 `Gemfile` and `bin/*`, 108 files lack the `true` directive:
 
-| Group | Files | Why the cop did not catch them |
-| --- | --- | --- |
-| Migrations under `db/*_migrate/` | 84 | `.rubocop.yml` excludes `db/**/*_migrate/**/*.rb` from every cop |
-| Executables under `bin/` | 12 | `.rubocop.yml` excludes `bin/**/*` from every cop |
-| `config.ru` | 1 | not matched by the configured `Include` patterns |
-| Empty test files | 11 | zero-byte files; the cop has nothing to inspect |
+| Group                            | Files | Why the cop did not catch them                                   |
+| -------------------------------- | ----- | ---------------------------------------------------------------- |
+| Migrations under `db/*_migrate/` | 84    | `.rubocop.yml` excludes `db/**/*_migrate/**/*.rb` from every cop |
+| Executables under `bin/`         | 12    | `.rubocop.yml` excludes `bin/**/*` from every cop                |
+| `config.ru`                      | 1     | not matched by the configured `Include` patterns                 |
+| Empty test files                 | 11    | zero-byte files; the cop has nothing to inspect                  |
 
 Two further weaknesses: the `always` style accepts `# frozen_string_literal: false`, and nothing
 checks files that generators create after the fact.
@@ -34,8 +34,8 @@ checks files that generators create after the fact.
 ## Decision
 
 1. **Every Ruby file this repository owns begins with exactly one `# frozen_string_literal: true`
-   directive**, placed where Ruby honours it: in the leading comment block before any code, after
-   a shebang line when there is one. Other leading magic comments such as `# typed:` may precede or
+   directive**, placed where Ruby honours it: in the leading comment block before any code, after a
+   shebang line when there is one. Other leading magic comments such as `# typed:` may precede or
    follow it as the existing files already do.
 2. **"Owned" means authored and maintained here**: application code, tests, configuration,
    initializers, Rake tasks, `Rakefile`, `Gemfile`, `config.ru`, executables under `bin/`, scripts
@@ -49,13 +49,14 @@ checks files that generators create after the fact.
    fails under frozen literals because it mutates a literal, the fix is an explicit mutable
    allocation at that site (`+""`, `String.new`, `.dup`). The fix preserves behavior. It is not
    permission to redesign the file.
-5. **No global switch and no third-party patch.** Frozen literals are not enabled through
-   `RUBYOPT`, `--enable-frozen-string-literal` or any process-wide setting, and no gem is patched to
-   tolerate them. The directive is per file so that ownership stays visible in the file.
+5. **No global switch and no third-party patch.** Frozen literals are not enabled through `RUBYOPT`,
+   `--enable-frozen-string-literal` or any process-wide setting, and no gem is patched to tolerate
+   them. The directive is per file so that ownership stays visible in the file.
 6. **RuboCop enforces the directive with `EnforcedStyle: always_true`** for every owned file. The
    blanket exclusions that currently hide migrations and `bin/` are narrowed for this cop, so the
-   cop inspects them while other cops may stay excluded there. Inline disabling of this cop is not
-   used. Both the local CI entry point and the GitHub Actions lint job run it.
+   cop inspects them while other cops may stay excluded there. If the global exclusions cannot be
+   narrowed for one cop, the check runs with its own configuration and invocation. Inline disabling
+   of this cop is not used. Both the local CI entry point and the GitHub Actions lint job run it.
 7. **Generated files conform before they are committed.** A generator template or post-generation
    step that produces a Ruby file without the directive is corrected at the source.
 8. **This decision is not reversed file by file.** Removing the directive from an owned file, or
@@ -67,9 +68,13 @@ checks files that generators create after the fact.
   deliberately wrong file (missing directive, `false`, directive below the first statement, inline
   disable) is rejected. This is observed by running the cop, not by a test whose subject is the
   RuboCop configuration.
-- Runtime, migrations: a complete drop, create and migrate of the development databases succeeds.
-  The user selected this as the migration compatibility criterion and authorized it for the
-  databases this repository defines for local development and test.
+- Runtime, migrations: every migration runs from scratch on an isolated disposable database fleet
+  whose ownership and connection targets are verified
+  (`scripts/postgresql-rebuild-isolated-test-fleet`). The ordinary development databases are not
+  reset for this. Narrowing recorded on 2026-10-13: the first version of this ADR named a complete
+  drop, create and migrate of the development databases as the method the user had approved; the
+  method was then limited to the isolated fleet. The isolated fleet was not the only approved method
+  from the start.
 - Runtime, application: the existing test suite and a development boot pass with the directives in
   place.
 
@@ -84,13 +89,14 @@ behavior, which keeps its own tests.
   must not switch on unrelated cops for migrations or executables as a side effect.
 - Applied migrations will differ textually from what was run in other environments by one comment
   line. Their effect is identical, and environments that already ran them are not affected.
-- The eleven empty test files are deleted when this decision is implemented (user decision,
-  2026-10-13). They contain no test, so nothing is lost, and an empty file is not given a directive.
+- The eleven empty test files counted above were deleted on 2026-10-13 by user decision, ahead of
+  the rest of the implementation. They contained no test. 97 files remain to be brought into
+  conformance.
 
 ## Alternatives considered
 
-- **Process-wide frozen literals.** Rejected: it would also freeze literals in third-party code
-  that this repository does not own and cannot fix, and it hides the contract from the file.
+- **Process-wide frozen literals.** Rejected: it would also freeze literals in third-party code that
+  this repository does not own and cannot fix, and it hides the contract from the file.
 - **Leave migrations out.** Rejected: migrations are owned Ruby that runs in every environment
   rebuild; excluding them keeps an unowned corner where the rule silently does not apply.
 - **Keep `EnforcedStyle: always`.** Rejected: it accepts an explicit `false`.
