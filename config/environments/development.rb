@@ -161,6 +161,7 @@ Rails.application.configure do
   boot_config_hosts = [
     boot_hosts.sign_origins,
     boot_hosts.core_origins,
+    boot_hosts.tech_staff,
     boot_hosts.base_origins,
     boot_hosts.xper_origins,
     boot_hosts.palm_service,
@@ -224,6 +225,7 @@ Rails.application.configure do
     palm.app.localhost:3000
     guid.net.localhost:3000
     edit.org.localhost:3000
+    tech.org.localhost:3000
     mission.core.dev.localhost:3000
     mission.core.dev.localhost:3001
     flipper.core.dev.localhost:3000
@@ -272,6 +274,7 @@ Rails.application.configure do
     PRIVATE_INFO_CORPORATE_URL
     PRIVATE_GUID_SERVICE_URL
     PRIVATE_EDIT_STAFF_URL
+    PRIVATE_TECH_STAFF_URL
     PRIVATE_MISSION_URL
     PRIVATE_FLIPPER_URL
     PRIVATE_BLAZER_URL
@@ -308,6 +311,7 @@ Rails.application.configure do
     PUBLIC_INFO_STAFF_URL
     PUBLIC_GUID_SERVICE_URL
     PUBLIC_EDIT_STAFF_URL
+    PUBLIC_TECH_STAFF_URL
     PUBLIC_MISSION_URL
     PUBLIC_FLIPPER_URL
     PUBLIC_BLAZER_URL

@@ -60,6 +60,7 @@ module FqdnAvailabilityRegistry
       [hosts.edit_staff.host, ENV["PUBLIC_EDIT_STAFF_URL"], ENV["PRIVATE_EDIT_STAFF_URL"],
        "edit.umaxica.org", "edit.org.localhost",]
     },
+    tech_staff: ->(hosts) { [hosts.tech_staff.host, ENV["PRIVATE_TECH_STAFF_URL"], "tech.org.localhost"] },
     mission: lambda { |_hosts|
       [ENV["PUBLIC_MISSION_URL"], ENV["PRIVATE_MISSION_URL"], "mission.core.dev.localhost"]
     },

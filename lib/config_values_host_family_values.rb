@@ -36,6 +36,7 @@ module ConfigValues
       :info_staff,
       :guid_service,
       :edit_staff,
+      :tech_staff,
     ) do
       def acme_origins
         [acme_service, acme_corporate, acme_staff]
@@ -169,6 +170,7 @@ class << ConfigValues::HostFamilyValues
       palm_service: origin(
         env, "PALM_SERVICE_URL", development_host(production, "palm-jp.umaxica.app"), production: production,
       ),
+      tech_staff: required_origin(env, "PUBLIC_TECH_STAFF_URL", production: production),
       help_service: origin(
         env, "HELP_SERVICE_URL", development_host(production, "help.app.localhost"), production: production,
       ),
@@ -296,6 +298,17 @@ class << ConfigValues::HostFamilyValues
     raise KeyError, "Missing required ENV key: #{key}"
   end
 
+  # Tech's host has no development-only fallback; its value belongs in each environment.
+  def required_origin(env, key, production:)
+    raw = env.fetch(key)
+    allow_localhost = !production
+    uri = raw.match?(%r{\Ahttps?://}) ? raw : "https://#{raw}"
+    ConfigValues.build(uri, allow_localhost: allow_localhost)
+  rescue KeyError
+    raise KeyError, "Missing required ENV key: #{key}"
+  end
+
   private :host_family_origins, :host_family_primary_origins, :host_family_secondary_origins,
-          :host_family_content_origins, :host_family_utility_origins, :guid_key, :edit_key
+          :host_family_content_origins, :host_family_utility_origins, :guid_key, :edit_key,
+          :required_origin
 end

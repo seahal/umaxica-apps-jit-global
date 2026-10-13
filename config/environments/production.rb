@@ -173,6 +173,7 @@ Rails.application.configure do
     boot_hosts.core_service.host,
     boot_hosts.core_corporate.host,
     boot_hosts.core_staff.host,
+    boot_hosts.tech_staff.host,
     "auth.umaxica.app",
     "auth.umaxica.com",
     "auth.umaxica.org",
