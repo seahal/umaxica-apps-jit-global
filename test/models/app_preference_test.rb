@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -44,11 +45,16 @@
 #  fk_rails_...                             (replaced_by_id => app_preferences.id) ON DELETE => nullify
 #
 
-# frozen_string_literal: true
 
 require "test_helper"
 
 class AppPreferenceTest < ActiveSupport::TestCase
+  PREFERENCE_CHILD_ASSOCIATIONS = %i(app_preference_cookie app_preference_region app_preference_timezone
+                                     app_preference_language app_preference_theme app_preference_currency
+                                     app_preference_date_format app_preference_time_format app_preference_motion
+                                     app_preference_density app_preference_page_size app_preference_adult_content_gate
+                                     app_preference_chronicles replacements).freeze
+
   setup do
     AppPreferenceStatus.ensure_defaults!
   end
@@ -76,15 +82,20 @@ class AppPreferenceTest < ActiveSupport::TestCase
 
   test "has one app_preference_cookie" do
     preference = AppPreference.create!
+    preference = AppPreference.includes(:app_preference_cookie).find(preference.id)
     cookie = preference.create_app_preference_cookie!
 
-    assert_equal cookie, preference.app_preference_cookie
+    loaded_preference = AppPreference.includes(:app_preference_cookie).find(preference.id)
+
+    assert_equal cookie, loaded_preference.app_preference_cookie
   end
 
   test "destroys app_preference_cookie when destroyed" do
     preference = AppPreference.create!
+    preference = AppPreference.includes(:app_preference_cookie).find(preference.id)
     cookie = preference.create_app_preference_cookie!
     cookie_id = cookie.id
+    preference = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil AppPreferenceCookie.find_by(id: cookie_id)
@@ -93,16 +104,21 @@ class AppPreferenceTest < ActiveSupport::TestCase
   test "has one app_preference_region" do
     preference = AppPreference.create!
     option = app_preference_region_options(:jp)
+    preference = AppPreference.includes(:app_preference_region).find(preference.id)
     region = preference.create_app_preference_region!(option: option)
 
-    assert_equal region, preference.app_preference_region
+    loaded_preference = AppPreference.includes(:app_preference_region).find(preference.id)
+
+    assert_equal region, loaded_preference.app_preference_region
   end
 
   test "destroys app_preference_region when destroyed" do
     preference = AppPreference.create!
     option = app_preference_region_options(:jp)
+    preference = AppPreference.includes(:app_preference_region).find(preference.id)
     region = preference.create_app_preference_region!(option: option)
     region_id = region.id
+    preference = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil AppPreferenceRegion.find_by(id: region_id)
@@ -111,16 +127,21 @@ class AppPreferenceTest < ActiveSupport::TestCase
   test "has one app_preference_timezone" do
     preference = AppPreference.create!
     option = app_preference_timezone_options(:asia_tokyo)
+    preference = AppPreference.includes(:app_preference_timezone).find(preference.id)
     timezone = preference.create_app_preference_timezone!(option: option)
 
-    assert_equal timezone, preference.app_preference_timezone
+    loaded_preference = AppPreference.includes(:app_preference_timezone).find(preference.id)
+
+    assert_equal timezone, loaded_preference.app_preference_timezone
   end
 
   test "destroys app_preference_timezone when destroyed" do
     preference = AppPreference.create!
     option = app_preference_timezone_options(:asia_tokyo)
+    preference = AppPreference.includes(:app_preference_timezone).find(preference.id)
     timezone = preference.create_app_preference_timezone!(option: option)
     timezone_id = timezone.id
+    preference = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil AppPreferenceTimezone.find_by(id: timezone_id)
@@ -129,16 +150,21 @@ class AppPreferenceTest < ActiveSupport::TestCase
   test "has one app_preference_language" do
     preference = AppPreference.create!
     option = app_preference_language_options(:ja)
+    preference = AppPreference.includes(:app_preference_language).find(preference.id)
     language = preference.create_app_preference_language!(option: option)
 
-    assert_equal language, preference.app_preference_language
+    loaded_preference = AppPreference.includes(:app_preference_language).find(preference.id)
+
+    assert_equal language, loaded_preference.app_preference_language
   end
 
   test "destroys app_preference_language when destroyed" do
     preference = AppPreference.create!
     option = app_preference_language_options(:ja)
+    preference = AppPreference.includes(:app_preference_language).find(preference.id)
     language = preference.create_app_preference_language!(option: option)
     language_id = language.id
+    preference = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil AppPreferenceLanguage.find_by(id: language_id)
@@ -147,16 +173,21 @@ class AppPreferenceTest < ActiveSupport::TestCase
   test "has one app_preference_theme" do
     preference = AppPreference.create!
     option = app_preference_theme_options(:light)
+    preference = AppPreference.includes(:app_preference_theme).find(preference.id)
     theme = preference.create_app_preference_theme!(option: option)
 
-    assert_equal theme, preference.app_preference_theme
+    loaded_preference = AppPreference.includes(:app_preference_theme).find(preference.id)
+
+    assert_equal theme, loaded_preference.app_preference_theme
   end
 
   test "destroys app_preference_theme when destroyed" do
     preference = AppPreference.create!
     option = app_preference_theme_options(:light)
+    preference = AppPreference.includes(:app_preference_theme).find(preference.id)
     theme = preference.create_app_preference_theme!(option: option)
     theme_id = theme.id
+    preference = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil AppPreferenceTheme.find_by(id: theme_id)
@@ -281,6 +312,7 @@ class AppPreferenceTest < ActiveSupport::TestCase
       token_digest: digest,
       jti: SecureRandom.uuid,
     )
+    preference = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
 
     child_records =
       {
@@ -301,10 +333,11 @@ class AppPreferenceTest < ActiveSupport::TestCase
       }
 
     rotated = AppPreference.rotate!(presented_digest: digest, now: Time.current)
+    rotated = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(rotated.id)
 
     child_records.each do |association_name, child|
       assert_equal rotated.id, child.reload.preference_id, "#{association_name} should move to replacement"
-      assert_equal child.id, rotated.reload.public_send(association_name).id
+      assert_equal child.id, rotated.public_send(association_name).id
     end
     assert_equal rotated.id, preference.reload.replaced_by_id
   end

@@ -24,6 +24,6 @@ class AvatarFollowPolicy < ApplicationPolicy
   def active_avatar?(avatar)
     return false unless avatar.is_a?(Avatar)
 
-    avatar.lifecycle_state&.key == "active" && avatar.accessible?
+    AvatarLifecycleState.exists?(id: avatar.lifecycle_state_id, key: "active") && avatar.accessible?
   end
 end

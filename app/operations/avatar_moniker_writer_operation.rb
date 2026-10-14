@@ -27,7 +27,7 @@ class AvatarMonikerWriterOperation < ApplicationService
 
     Avatar.transaction do
       avatar.with_lock do
-        current = avatar.current_avatar_moniker
+        current = AvatarMoniker.current.find_by(avatar_id: avatar.id)
         assert_expected_current_state!(current)
 
         # A finite interval lets the full model validation check the moniker without treating

@@ -312,7 +312,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       assert_nil transaction.otp_verifier
       flow.reload
       get auth_app_sign_up_guard_telephone_path(ri: "jp", fb: flow_binding)
-      actor = telephone.user
+      actor = Client.find(telephone.user_id)
       now = Client.database_now
       active_count.times do
         # Holdings are setup facts; the HTTP registration allocates its own batch.
@@ -396,7 +396,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
         nonce = SignUpSessionState.for(session, surface: :app).cycle_payload.stringify_keys.fetch("nonce")
         ClientSecretPresentationIssuer.prepare_for_sign_up!(flow: flow, nonce: nonce, issuance: issuance)
         issuance.reload.update!(encrypted_payload: nil)
-        passkey_ids = actor.client_passkeys.pluck(:public_id)
+        passkey_ids = ClientPasskey.where(user_id: actor.id).pluck(:public_id)
         assert_no_difference ["ClientSecretCredential.count", "ClientPasskey.count", "ClientToken.count"] do
           post auth_app_sign_up_check_telephone_secret_path(ri: "jp", fb: flow_binding),
                headers: headers.merge("X-CSRF-Token" => csrf)
@@ -404,7 +404,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
 
         assert_not flow.reload.requirement_cleared?(:passkey)
         assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, actor.reload.status_id
-        assert_equal passkey_ids, actor.client_passkeys.pluck(:public_id)
+        assert_equal passkey_ids, ClientPasskey.where(user_id: actor.id).pluck(:public_id)
         assert_not_nil issuance.reload.canceled_at
         assert_equal 0, ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).reserved_count
         assert_response :gone
@@ -450,7 +450,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       assert_equal active_count + expected_count,
                    ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).active_count
       values.each { |value| assert_nil ClientSecretLookupQuery.call(client: actor, secret: value) }
-      assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, telephone.user.reload.status_id
+      assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, Client.find(telephone.user_id).status_id
       get auth_app_sign_up_check_telephone_birthdate_path(ri: "jp", fb: flow_binding)
 
       assert_response :success
@@ -488,7 +488,9 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
         assert_nil issuance.encrypted_payload
         assert_operator issuance.discard_at, :<=, Client.database_now + 1.day
         values.each { |value| assert_nil ClientSecretLookupQuery.call(client: actor, secret: value) }
-        assert_equal 0, ClientSecretCapacityQuery.call(client: telephone.user, at: Client.database_now).active_count
+        assert_equal 0,
+                     ClientSecretCapacityQuery.call(client: Client.find(telephone.user_id), at: Client.database_now)
+                       .active_count
         reason = (outcome == :canceled) ? "flow_canceled" : "flow_expired"
 
         assert_equal 2, ClientSecretAuditOutbox.where(
@@ -516,7 +518,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       assert_equal actor.public_id, contact_intent.owner_ref
       assert_nil contact_intent.actor_ref
       assert_nil contact_intent.acknowledged_at
-      assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, telephone.user.reload.status_id
+      assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, Client.find(telephone.user_id).status_id
       assert_equal active_count + expected_count, ClientSecretCapacityQuery.call(
         client: actor, at: Client.database_now,
       ).active_count

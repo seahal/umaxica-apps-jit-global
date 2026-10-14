@@ -9,6 +9,12 @@ class AdministrativeAccessLockTest < ActiveSupport::TestCase
     client = clients(:one)
     operator = operators(:one)
     token = client_tokens(:one)
+    rp_session = ClientRpSession.create!(
+      client_token: token,
+      oidc_client_id: "core-app",
+      oidc_scope: "openid profile",
+      refresh_token_expires_at: 1.hour.from_now,
+    )
 
     AdministrativeAccessLock.lock!(
       account: client,
@@ -28,6 +34,7 @@ class AdministrativeAccessLockTest < ActiveSupport::TestCase
     assert_equal "security_incident", client.admin_locked_reason_code
     assert_predicate client.token_valid_after_at, :present?
     assert_predicate token, :revoked?
+    assert_predicate rp_session.reload, :revoked?
     assert_equal "Client", event.account_type
     assert_equal client.id, event.account_id
     assert_equal "admin_lock", event.event_type

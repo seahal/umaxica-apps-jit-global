@@ -50,6 +50,7 @@ Rails.application.config.filter_parameters += %i(
   sign_up_otp_counter
   contact_ceremony_transaction_ref
   contact_otp_counter
+  logout_intent_proof
   credential_id
   smtp_password
   aws_ses_smtp_password

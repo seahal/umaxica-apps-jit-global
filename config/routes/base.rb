@@ -109,11 +109,12 @@ scope(module: :base, as: :base) do
       get("service-worker", to: "/rails/pwa#service_worker", as: :pwa_service_worker)
       get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
 
-      # Base owns the post-authentication sign-out confirmation flow. Completion is a one-shot
-      # representation at GET /sign/out.
+      # Base owns the post-authentication sign-out confirmation and completion resources.
       scope path: :sign do
         resource :termination, path: "out", controller: :sign_outs, as: :sign_out,
                                only: %i(show new edit create)
+        resource :out_completion, only: %i(show create), path: "out/completion",
+                                  controller: :sign_outs, as: :sign_out_completion
       end
 
       # Base is both the authority and a first-party browser RP on this host.
@@ -150,8 +151,9 @@ scope(module: :base, as: :base) do
 
       # Edge compatibility API: token lifecycle management. These are Base authority and DBSC
       # protocol paths, so they require a client/authority review before any `/api/v0` migration.
-      # FIXME: Do not migrate this protocol surface by namespace renaming alone; decide the
-      # replacement contract and client compatibility first.
+      # FIXME: [routing] Keep this protocol namespace until its token-management contract and
+      # clients are reviewed; renaming it alone risks breaking existing clients. See
+      # `adr/rails-routing-resourceful-policy.md`, Exception ledger.
       namespace :edge do
         namespace :v0 do
           resource :cookie, only: %i(show update)
@@ -380,11 +382,12 @@ scope(module: :base, as: :base) do
       get("service-worker", to: "/rails/pwa#service_worker", as: :pwa_service_worker)
       get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
 
-      # Base owns the post-authentication sign-out confirmation flow. Completion is a one-shot
-      # representation at GET /sign/out.
+      # Base owns the post-authentication sign-out confirmation and completion resources.
       scope path: :sign do
         resource :termination, path: "out", controller: :sign_outs, as: :sign_out,
                                only: %i(show new edit create)
+        resource :out_completion, only: %i(show create), path: "out/completion",
+                                  controller: :sign_outs, as: :sign_out_completion
       end
 
       # Base is both the authority and a first-party browser RP on this host.
@@ -645,11 +648,12 @@ scope(module: :base, as: :base) do
       end
       resources :billing, only: :index
 
-      # Base owns the post-authentication sign-out confirmation flow. Completion is a one-shot
-      # representation at GET /sign/out.
+      # Base owns the post-authentication sign-out confirmation and completion resources.
       scope path: :sign do
         resource :termination, path: "out", controller: :sign_outs, as: :sign_out,
                                only: %i(show new edit create)
+        resource :out_completion, only: %i(show create), path: "out/completion",
+                                  controller: :sign_outs, as: :sign_out_completion
       end
 
       # Base is both the authority and a first-party browser RP on this host.

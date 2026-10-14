@@ -167,7 +167,7 @@ module PreferenceBase
     with_model_writing_connection(klass) do
       create_preference_association!(
         preference,
-        "#{prefix.underscore}_preference_cookie",
+        klass,
         targetable: false,
         performant: false,
         functional: false,
@@ -189,19 +189,17 @@ module PreferenceBase
       with_model_writing_connection(klass) do
         create_preference_association!(
           preference,
-          "#{prefix.underscore}_preference_#{type}",
+          klass,
           option_id: option_ids[type],
         )
       end
     end
   end
 
-  def create_preference_association!(preference, association_name, attributes)
-    creator = :"create_#{association_name}!"
-    return preference.public_send(creator, attributes) if preference.respond_to?(creator)
-
-    association = preference.association(association_name.to_sym)
-    association.klass.create!(attributes.merge(preference: preference))
+  def create_preference_association!(preference, record_class, attributes)
+    record_class.find_or_create_by!(preference_id: preference.id) do |record|
+      record.assign_attributes(attributes)
+    end
   end
 
   def preference_param_value(params_hash, type)
@@ -597,10 +595,9 @@ module PreferenceBase
   end
 
   def build_preferences_payload(preference)
-    association_prefix = preference.class.name.underscore
     option_prefix = preference.class.name.sub("Preference", "")
-    option_ids = preference_payload_option_ids(preference, association_prefix)
-    consent_state = preference_cookie_consent_state(preference, association_prefix)
+    option_ids = preference_payload_option_ids(preference)
+    consent_state = preference_cookie_consent_state(preference)
 
     {
       "ver" => Actor::Preference::SCHEMA_VERSION,
@@ -624,13 +621,13 @@ module PreferenceBase
     { "explicit" => preference.explicit_field_names }
   end
 
-  def preference_payload_option_ids(preference, association_prefix)
+  def preference_payload_option_ids(preference)
     %i(language region timezone theme currency date_format time_format motion density
        page_size).index_with do |type|
-      association_name = "#{association_prefix}_#{type}"
-      next unless preference.respond_to?(association_name)
-
-      preference.public_send(association_name)&.option_id
+      PreferenceClassRegistry.record_class(
+        preference_prefix(preference),
+        type,
+      ).where(preference_id: preference.id).pick(:option_id)
     end
   end
 
@@ -654,14 +651,10 @@ module PreferenceBase
     }
   end
 
-  def preference_cookie_consent_state(preference, association_prefix)
-    cookie_name = "#{association_prefix}_cookie"
-    return { consented: false,
-             functional: false,
-             performant: false,
-             targetable: false, } unless preference.respond_to?(cookie_name)
-
-    cookie = preference.public_send(cookie_name)
+  def preference_cookie_consent_state(preference)
+    cookie = PreferenceClassRegistry.cookie_class(
+      preference_prefix(preference),
+    ).find_by(preference_id: preference.id)
     return { consented: false, functional: false, performant: false, targetable: false } if cookie.blank?
 
     {
@@ -670,8 +663,6 @@ module PreferenceBase
       performant: !!cookie.performant,
       targetable: !!cookie.targetable,
     }
-  rescue NoMethodError
-    { consented: false, functional: false, performant: false, targetable: false }
   end
 
   def option_id_to_language(option_id, prefix)
@@ -1037,15 +1028,15 @@ module PreferenceBase
   # 7) Child-record lazy helpers
   # ==========================================================================
   def load_or_create_preference_child(child_type, default_attributes = {})
-    association_name = "#{preference_prefix_underscore}_#{child_type.to_s.underscore}"
-    child = @preferences.public_send(association_name)
+    record_class = preference_child_record_class(child_type)
+    relation = record_class.where(preference_id: @preferences.id)
+    child = relation.first
     return child if child.present?
 
     begin
-      @preferences.public_send("create_#{association_name}!", default_attributes)
+      relation.create!(default_attributes)
     rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
-      @preferences.reload
-      @preferences.public_send(association_name)
+      relation.first!
     end
   end
 
@@ -1056,19 +1047,21 @@ module PreferenceBase
   # row here means a pre-bootstrap-completeness legacy record; the row is
   # backfilled at the next legitimate write point (PATCH/update), not on GET.
   def load_or_build_preference_child(child_type, default_attributes = {})
-    association_name = "#{preference_prefix_underscore}_#{child_type.to_s.underscore}"
-    child = @preferences.public_send(association_name)
+    record_class = preference_child_record_class(child_type)
+    child = record_class.find_by(preference_id: @preferences.id)
     return child if child.present?
 
-    attributes = { preference: @preferences }.merge(default_attributes)
-    record_class =
-      if child_type.to_s == "Cookie"
-        PreferenceClassRegistry.cookie_class(preference_prefix)
-      else
-        attributes[:option_id] = PreferenceClassRegistry.default_option_id(preference_prefix, child_type)
-        PreferenceClassRegistry.record_class(preference_prefix, child_type)
-      end
+    attributes = { preference_id: @preferences.id }.merge(default_attributes)
+    unless child_type.to_s == "Cookie"
+      attributes[:option_id] = PreferenceClassRegistry.default_option_id(preference_prefix, child_type)
+    end
 
     record_class.new(attributes)
+  end
+
+  def preference_child_record_class(child_type)
+    return PreferenceClassRegistry.cookie_class(preference_prefix) if child_type.to_s == "Cookie"
+
+    PreferenceClassRegistry.record_class(preference_prefix, child_type)
   end
 end

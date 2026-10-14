@@ -25,7 +25,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           when :org then [Operator, OperatorToken, OperatorSignInFlow, OperatorAuthCeremonySession, OrgTicketRecord,
                           :staff_id,]
           end
-        actor = actors.create!
+        actor = (surface == :com) ? create_unique_visitor! : actors.create!
         token = tokens.create!(token_key => actor.id, :id => 9_920_000_000_010)
         flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
           surface: surface.to_s,
@@ -98,6 +98,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           end
         end
         flows.where(id: flow.id).delete_all if flow
+        delete_admission_bindings_for(token) if token
         tokens.where(id: token.id).delete_all if token
         case actor
         when Client
@@ -128,7 +129,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           case surface
           when :app then [Client.create!, ClientPasskey, :user_id, ClientToken, :user_id]
           when :totp then [Client.create!, ClientTotpCredential, :user_id, ClientToken, :user_id]
-          when :com then [Visitor.create!, VisitorPasskey, :visitor_id, VisitorToken, :visitor_id]
+          when :com then [create_unique_visitor!, VisitorPasskey, :visitor_id, VisitorToken, :visitor_id]
           when :org then [Operator.create!, OperatorPasskey, :staff_id, OperatorToken, :staff_id]
           end
         if surface == :com
@@ -246,7 +247,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         actor, model, owner_key, writer =
           case surface
           when :app then [Client.create!, ClientPasskey, :user_id, AppPrincipalRecord]
-          when :com then [Visitor.create!, VisitorPasskey, :visitor_id, ComPrincipalRecord]
+          when :com then [create_unique_visitor!, VisitorPasskey, :visitor_id, ComPrincipalRecord]
           when :org then [Operator.create!, OperatorPasskey, :staff_id, OrgPrincipalRecord]
           end
         if surface == :com
@@ -384,6 +385,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
     end
     ClientStepUpSession.where(id: record.id).delete_all if record
     ClientStepUpCeremonyTransaction.where(id: parent.id).delete_all if parent
+    delete_admission_bindings_for(token) if token
     ClientToken.where(id: token.id).delete_all if token
     ClientEmail.where(id: credential.id).delete_all if credential
     if actor
@@ -393,7 +395,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
   end
 
   test "COM competing Email OTP verification consumes one code and records one verification event" do
-    actor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    actor = create_unique_visitor!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
     credential = actor.visitor_emails.create!(
       address: "otp-race-#{SecureRandom.hex(8)}@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
@@ -464,6 +466,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
     end
     VisitorStepUpSession.where(id: record.id).delete_all if record
     VisitorStepUpCeremonyTransaction.where(id: parent.id).delete_all if parent
+    delete_admission_bindings_for(token) if token
     VisitorToken.where(id: token.id).delete_all if token
     VisitorEmail.where(id: credential.id).delete_all if credential
     if actor
@@ -488,7 +491,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         token = ClientToken.create!(id: 9_920_000_000_001, user: actor)
         credential_ref = credential.public_id
       when :com
-        actor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::BOTH)
+        actor = create_unique_visitor!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::BOTH)
         contact = actor.visitor_emails.create!(
           address: "logout-race-#{SecureRandom.hex(8)}@example.com",
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
@@ -601,6 +604,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         sessions.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
         transactions.where(id: parent.id).delete_all
       end
+      delete_admission_bindings_for(token) if token
       tokens.where(id: token.id).delete_all if token
       passkeys.where(id: credential.id).delete_all if credential
       VisitorEmail.where(id: contact.id).delete_all if contact
@@ -622,7 +626,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         token = ClientToken.create!(id: 9_920_000_000_002, user: actor)
         credential_ref = credential.public_id
       when :com
-        actor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::BOTH)
+        actor = create_unique_visitor!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::BOTH)
         contact = actor.visitor_emails.create!(
           address: "credential-revocation-race-#{SecureRandom.hex(8)}@example.com",
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
@@ -756,6 +760,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         sessions.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
         transactions.where(id: parent.id).delete_all
       end
+      delete_admission_bindings_for(token) if token
       tokens.where(id: token.id).delete_all if token
       passkeys.where(id: credential.id).delete_all if credential
       VisitorEmail.where(id: contact.id).delete_all if contact
@@ -777,7 +782,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         token = ClientToken.create!(id: 9_920_000_000_003, user: actor)
         credential_ref = credential.public_id
       when :com
-        actor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::BOTH)
+        actor = create_unique_visitor!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::BOTH)
         contact = actor.visitor_emails.create!(
           address: "cancellation-race-#{SecureRandom.hex(8)}@example.com",
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
@@ -906,6 +911,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         sessions.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
         transactions.where(id: parent.id).delete_all
       end
+      delete_admission_bindings_for(token) if token
       tokens.where(id: token.id).delete_all if token
       passkeys.where(id: credential.id).delete_all if credential
       VisitorEmail.where(id: contact.id).delete_all if contact
@@ -1056,5 +1062,24 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       ClientAuthCeremonySession.where(step_up_ceremony_transaction_ref: parent.transaction_id).delete_all
       ClientStepUpCeremonyTransaction.where(id: parent.id).delete_all
     end
+  end
+
+  def delete_admission_bindings_for(token)
+    binding_model =
+      case token
+      when ClientToken then ClientAuthAdmissionBinding
+      when VisitorToken then VisitorAuthAdmissionBinding
+      when OperatorToken then OperatorAuthAdmissionBinding
+      else raise ArgumentError, "unsupported test token class: #{token.class.name}"
+      end
+
+    binding_model.where(base_token_id: token.id).delete_all
+  end
+
+  def create_unique_visitor!(**attributes)
+    Visitor.create!(
+      id: 8_000_000_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+      **attributes,
+    )
   end
 end

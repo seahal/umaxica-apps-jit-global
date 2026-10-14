@@ -82,9 +82,9 @@ authorization, or general settings authority to Auth.
 
 ### Palm and Edit
 
-Palm keeps its native bearer resource-server boundary and gains no browser preference API. Its use of
-the `ri` request context is unrelated and unchanged. Edit offers no interactive controls and gains
-no preference API; preference editing stays on Base.
+Palm is a browser RP, but still has no browser preference controls or preference API. Its use of the
+`ri` request context is unrelated and unchanged. Edit offers no interactive controls and gains no
+preference API; preference editing stays on Base.
 
 ## Consequences
 

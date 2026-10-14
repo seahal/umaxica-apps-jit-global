@@ -61,8 +61,10 @@ class AuthAdmissionCsrfTransportTest < ActionDispatch::IntegrationTest
         assert_nil binding.admitted_auth_ceremony_session_id
         assert_predicate issuance.transaction.reload, :sign_in_primary_pending?
         if binding.attached?
-          assert_predicate binding.auth_ceremony_session, :active?
-          assert_not_predicate binding.auth_ceremony_session, :admitted?
+          auth_session = binding.class.auth_admission_session_class.find(binding.auth_ceremony_session_id)
+
+          assert_predicate auth_session, :active?
+          assert_not_predicate auth_session, :admitted?
         else
           assert_nil browser.response.location
           assert_nil browser.cookies["__Host-auth_sid"] || browser.cookies["auth_sid"]

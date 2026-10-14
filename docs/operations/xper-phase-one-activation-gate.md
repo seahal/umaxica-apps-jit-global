@@ -1,5 +1,10 @@
 # Xper Phase 1 Activation Gate
 
+> **Superseded on 2026-10-13.** The Phase 0 Xper Rails surface is retired by
+> [the Rails retirement decision](../../adr/xper-rails-surface-retirement.md). Do not use this gate
+> to activate Rails Xper routes or hosts. It records the earlier activation proposal; Edge,
+> Cloudflare, and public DNS ownership remain separate and were not changed by that decision.
+
 This gate follows the [Xper Phase 0 decision](../../adr/xper-phase-zero-bootstrap.md).
 Phase 0 route and request tests do not establish private DNS, Tunnel, Access, public DNS,
 or public apex reachability. The network alias change takes effect only after rebuild.

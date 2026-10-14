@@ -19,17 +19,18 @@ class EnforcementReconciliationJob < ApplicationJob
 
   def perform(batch_size: 200)
     CASE_CLASSES.each do |case_class|
-      case_class.pending_convergence.in_batches(of: batch_size) do |batch|
+      case_class.pending_convergence.includes(:principal_effect).in_batches(of: batch_size) do |batch|
         batch.find_each { |enforcement_case| reconcile!(enforcement_case) }
       end
 
-      case_class.pending_end_convergence.in_batches(of: batch_size) do |batch|
+      case_class.pending_end_convergence.includes(:principal_effect).in_batches(of: batch_size) do |batch|
         batch.find_each { |enforcement_case| reconcile_ended_case!(enforcement_case) }
       end
     end
 
     APPEAL_CLASSES.each do |appeal_class|
-      appeal_class.where(state: APPEAL_AUDITABLE_STATES).in_batches(of: batch_size) do |batch|
+      appeal_class.includes(enforcement_case: :principal_effect)
+        .where(state: APPEAL_AUDITABLE_STATES).in_batches(of: batch_size) do |batch|
         batch.find_each { |appeal| reconcile_appeal!(appeal) }
       end
     end

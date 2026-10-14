@@ -11,7 +11,6 @@ module OidcClientRegistry
   class ClientAuthenticationConfigurationError < StandardError; end
 
   DEFAULT_ALLOWED_SCOPES = %w(openid profile email).freeze
-  PALM_ALLOWED_SCOPES = (DEFAULT_ALLOWED_SCOPES + %w(palm.read)).freeze
 
   VisitorAccount =
     Data.define(
@@ -19,7 +18,7 @@ module OidcClientRegistry
       :aud, :resource_type,
       :name, :domains, :allowed_scopes, :registered_token_endpoint_auth_method,
       :metadata_token_endpoint_auth_method, :jwt_namespace, :backchannel_logout_uris,
-      :backchannel_logout_session_required,
+      :backchannel_logout_session_required, :required_operator_capability,
     ) do
       def public_client?
         registered_token_endpoint_auth_method == "none"
@@ -60,6 +59,7 @@ module OidcClientRegistry
       post_logout_redirect_uris: (config[:post_logout_redirect_uris] || []).uniq,
       backchannel_logout_uris: (config[:backchannel_logout_uris] || []).uniq,
       backchannel_logout_session_required: config.fetch(:backchannel_logout_session_required, false),
+      required_operator_capability: config[:required_operator_capability],
       aud: config[:aud],
       resource_type: config[:resource_type],
       name: config[:name],

@@ -19,7 +19,14 @@ module EmailValidation
     start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
     digest = IdentifierBlindIndex.bidx_for_email(email, realm: identity_email_model.identifier_hmac_realm)
-    result = digest ? identity_email_model.effective_binding.find_by(address_digest: digest) : nil
+    owner_association =
+      case identity_email_model.name
+      when ClientEmail.name then :user
+      when VisitorEmail.name then :visitor
+      else raise ArgumentError, "unsupported identity email model"
+      end
+    result =
+      digest ? identity_email_model.effective_binding.includes(owner_association).find_by(address_digest: digest) : nil
 
     elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
     remaining = target_seconds - elapsed

@@ -47,8 +47,9 @@ class PreferenceCorruptCookieTest < ActionDispatch::IntegrationTest
     get "/preference?ri=jp"
 
     assert_response :success
-    assert_equal AppPreferenceRegionOption::US,
-                 AppPreference.order(:created_at).last.app_preference_region.option_id
+    preference = AppPreference.includes(:app_preference_region).order(:created_at).last
+
+    assert_equal AppPreferenceRegionOption::US, preference.app_preference_region.option_id
   end
 
   test "garbage refresh cookie does not overwrite an existing preference's DB state" do
@@ -57,7 +58,7 @@ class PreferenceCorruptCookieTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
 
-    existing = AppPreference.order(:created_at).last
+    existing = AppPreference.includes(:app_preference_region).order(:created_at).last
     existing_region_option_id = existing.app_preference_region.option_id
 
     reset!

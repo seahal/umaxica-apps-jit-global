@@ -146,7 +146,13 @@ module EnforcementCaseApplicable
       next unless METHOD_REVOKING_EFFECTS.include?(effect.effect)
 
       AuthenticationSessionRevoker.tokens_for_method(principal, effect.authentication_method)
-        .not_revoked.find_each(&:revoke!)
+        .not_revoked.find_each do |token|
+          AuthenticationLogoutCurrentSession.call(
+            resource: principal,
+            token: token,
+            reason: "enforcement_#{effect.effect}",
+          )
+        end
     end
 
     update!(sessions_revoked_at: Time.current)
@@ -267,8 +273,9 @@ module EnforcementCaseApplicable
   end
 
   def close_superseded!(association, key_columns)
-    association.select(&:new_record?).each do |effect|
-      scope = association.klass.where(ended_at: nil)
+    association_object = association.proxy_association
+    association_object.target.select(&:new_record?).each do |effect|
+      scope = association_object.klass.where(ended_at: nil)
       key_columns.each { |column| scope = scope.where(column => effect.public_send(column)) }
       scope.update_all(ended_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
     end

@@ -102,7 +102,7 @@ module Security
                       !(fv5049.device_session_id && VisitorRpSession.exists?(
                         device_session_id: fv5049.device_session_id, oidc_client_id: fv5048.client_id, revoked_at: nil,
                       ))
-                    fv5049.rotate_refresh_token! unless fv5049.device_session.current_refresh_token_id
+                    fv5049.rotate_refresh_token! unless fv5049.device_session_record.current_refresh_token_id
                     fv5050 = Time.current
                     fv5047 = VisitorRpSession.create!(
                       visitor_token: fv5049, oidc_client_id: fv5048.client_id, oidc_scope: "openid profile",
@@ -110,16 +110,17 @@ module Security
                       refresh_token_expires_at: fv5050 + 10.minutes,
                     )
                     fv5045 = AuthenticationTokenService.encode(
-                      fv5049.visitor, host: fv5051, resource_type: "visitor",
-                                      session_public_id: fv5049.public_id, base_session_public_id: fv5049.public_id,
-                                      oidc_sid: fv5047.public_id, oidc_jti: fv5047.oidc_jti,
-                                      expires_at: fv5050 + 10.minutes, scopes: %w(openid profile),
-                                      issuer: OidcIssuer.for_client(fv5048), audiences: [fv5048.aud],
-                                      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5048),
-                                      subject: OidcSubject.for(
-                                        fv5049.visitor,
-                                        resource_type: "visitor",
-                                      ), client_id: fv5048.client_id,
+                      Visitor.find(fv5049.visitor_id), host: fv5051, resource_type: "visitor",
+                                                       session_public_id: fv5049.public_id,
+                                                       base_session_public_id: fv5049.public_id,
+                                                       oidc_sid: fv5047.public_id, oidc_jti: fv5047.oidc_jti,
+                                                       expires_at: fv5050 + 10.minutes, scopes: %w(openid profile),
+                                                       issuer: OidcIssuer.for_client(fv5048), audiences: [fv5048.aud],
+                                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5048),
+                                                       subject: OidcSubject.for(
+                                                         Visitor.find(fv5049.visitor_id),
+                                                         resource_type: "visitor",
+                                                       ), client_id: fv5048.client_id,
                     )
                     @base_browser_rp_credentials[fv5046] = [fv5045, fv5047.issue_refresh_token!]
                   end
@@ -188,7 +189,7 @@ module Security
                       !(fv5030.device_session_id && VisitorRpSession.exists?(
                         device_session_id: fv5030.device_session_id, oidc_client_id: fv5029.client_id, revoked_at: nil,
                       ))
-                    fv5030.rotate_refresh_token! unless fv5030.device_session.current_refresh_token_id
+                    fv5030.rotate_refresh_token! unless fv5030.device_session_record.current_refresh_token_id
                     fv5031 = Time.current
                     fv5028 = VisitorRpSession.create!(
                       visitor_token: fv5030, oidc_client_id: fv5029.client_id, oidc_scope: "openid profile",
@@ -196,16 +197,17 @@ module Security
                       refresh_token_expires_at: fv5031 + 10.minutes,
                     )
                     fv5026 = AuthenticationTokenService.encode(
-                      fv5030.visitor, host: fv5032, resource_type: "visitor",
-                                      session_public_id: fv5030.public_id, base_session_public_id: fv5030.public_id,
-                                      oidc_sid: fv5028.public_id, oidc_jti: fv5028.oidc_jti,
-                                      expires_at: fv5031 + 10.minutes, scopes: %w(openid profile),
-                                      issuer: OidcIssuer.for_client(fv5029), audiences: [fv5029.aud],
-                                      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5029),
-                                      subject: OidcSubject.for(
-                                        fv5030.visitor,
-                                        resource_type: "visitor",
-                                      ), client_id: fv5029.client_id,
+                      Visitor.find(fv5030.visitor_id), host: fv5032, resource_type: "visitor",
+                                                       session_public_id: fv5030.public_id,
+                                                       base_session_public_id: fv5030.public_id,
+                                                       oidc_sid: fv5028.public_id, oidc_jti: fv5028.oidc_jti,
+                                                       expires_at: fv5031 + 10.minutes, scopes: %w(openid profile),
+                                                       issuer: OidcIssuer.for_client(fv5029), audiences: [fv5029.aud],
+                                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5029),
+                                                       subject: OidcSubject.for(
+                                                         Visitor.find(fv5030.visitor_id),
+                                                         resource_type: "visitor",
+                                                       ), client_id: fv5029.client_id,
                     )
                     @base_browser_rp_credentials[fv5027] = [fv5026, fv5028.issue_refresh_token!]
                   end
@@ -272,7 +274,7 @@ module Security
                       !(fv5011.device_session_id && VisitorRpSession.exists?(
                         device_session_id: fv5011.device_session_id, oidc_client_id: fv5010.client_id, revoked_at: nil,
                       ))
-                    fv5011.rotate_refresh_token! unless fv5011.device_session.current_refresh_token_id
+                    fv5011.rotate_refresh_token! unless fv5011.device_session_record.current_refresh_token_id
                     fv5012 = Time.current
                     fv5009 = VisitorRpSession.create!(
                       visitor_token: fv5011, oidc_client_id: fv5010.client_id, oidc_scope: "openid profile",
@@ -280,16 +282,17 @@ module Security
                       refresh_token_expires_at: fv5012 + 10.minutes,
                     )
                     fv5007 = AuthenticationTokenService.encode(
-                      fv5011.visitor, host: fv5013, resource_type: "visitor",
-                                      session_public_id: fv5011.public_id, base_session_public_id: fv5011.public_id,
-                                      oidc_sid: fv5009.public_id, oidc_jti: fv5009.oidc_jti,
-                                      expires_at: fv5012 + 10.minutes, scopes: %w(openid profile),
-                                      issuer: OidcIssuer.for_client(fv5010), audiences: [fv5010.aud],
-                                      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5010),
-                                      subject: OidcSubject.for(
-                                        fv5011.visitor,
-                                        resource_type: "visitor",
-                                      ), client_id: fv5010.client_id,
+                      Visitor.find(fv5011.visitor_id), host: fv5013, resource_type: "visitor",
+                                                       session_public_id: fv5011.public_id,
+                                                       base_session_public_id: fv5011.public_id,
+                                                       oidc_sid: fv5009.public_id, oidc_jti: fv5009.oidc_jti,
+                                                       expires_at: fv5012 + 10.minutes, scopes: %w(openid profile),
+                                                       issuer: OidcIssuer.for_client(fv5010), audiences: [fv5010.aud],
+                                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5010),
+                                                       subject: OidcSubject.for(
+                                                         Visitor.find(fv5011.visitor_id),
+                                                         resource_type: "visitor",
+                                                       ), client_id: fv5010.client_id,
                     )
                     @base_browser_rp_credentials[fv5008] = [fv5007, fv5009.issue_refresh_token!]
                   end

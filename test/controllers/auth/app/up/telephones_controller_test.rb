@@ -656,7 +656,7 @@ module Auth::App::Up
 
       flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
       telephone = ClientTelephone.find(flow.pending_contact_id)
-      user = telephone.user
+      user = contact_owner_for_test(telephone)
 
       ClientPasskey.create!(
         user: user,
@@ -767,7 +767,7 @@ module Auth::App::Up
       assert_response :redirect
       assert_equal ClientSignUpFlowStatus::CHECKPOINT_PENDING, flow.reload.status_id
       original_facts = telephone.reload.attributes
-      original_owner_facts = telephone.user.reload.attributes
+      original_owner_facts = contact_owner_for_test(telephone).reload.attributes
       original_flow_facts = flow.reload.attributes
       browser = open_session
       browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
@@ -816,13 +816,15 @@ module Auth::App::Up
 
       assert_not_equal flow.id, new_flow.id
       assert_not_equal telephone.id, new_telephone.id
-      assert_not_equal telephone.user_id, new_telephone.user_id
+      assert_not_equal contact_owner_for_test(telephone).id, contact_owner_for_test(new_telephone).id
       assert_equal telephone.number_digest, new_telephone.number_digest
       assert_nil new_telephone.binding_finalized_at
       assert_withheld("original verified OTP evidence remains unchanged") {
         original_facts == telephone.reload.attributes
       }
-      assert_withheld("original owner remains unchanged") { original_owner_facts == telephone.user.reload.attributes }
+      assert_withheld("original owner remains unchanged") {
+        original_owner_facts == contact_owner_for_test(telephone).reload.attributes
+      }
       assert_withheld("original checkpoint proof remains unchanged") { original_flow_facts == flow.reload.attributes }
     end
 
@@ -867,7 +869,7 @@ module Auth::App::Up
 
       flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
       telephone = ClientTelephone.find(flow.pending_contact_id)
-      user = telephone.user
+      user = contact_owner_for_test(telephone)
       cycle = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
       completed_requirements = cycle.completed_requirements.deep_dup
 

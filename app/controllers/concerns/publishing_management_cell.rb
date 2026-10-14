@@ -221,6 +221,7 @@ module PublishingManagementCell
   # other place to see or cancel it.
   def scheduled_publications(entry)
     entry.publications
+      .includes(:entry_version)
       .where(cancelled_at: nil, terminated_at: nil)
       .where(effective_from: Time.current...)
       .order(:effective_from)

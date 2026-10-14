@@ -1208,7 +1208,7 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
                    headers: base_headers
               if elapsed.zero?
                 assert_response :see_other
-                first = flow.reload.token
+                first = ClientToken.find(flow.reload.token_id)
 
                 assert_equal anchor, first.root_login_established_at
                 AuthenticationLogoutCurrentSession.call(resource: @user, token: first, reason: "user_logout")
@@ -1226,7 +1226,8 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
               else
                 assert_response :see_other
                 assert_equal count_before + 1, ClientToken.where(user_id: @user.id).count
-                assert_equal (anchor + elapsed).iso8601(6), flow.reload.token.root_login_established_at.iso8601(6)
+                assert_equal (anchor + elapsed).iso8601(6),
+                             ClientToken.find(flow.reload.token_id).root_login_established_at.iso8601(6)
                 assert_predicate first.reload, :revoked?
               end
             end

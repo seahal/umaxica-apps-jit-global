@@ -39,7 +39,7 @@ class PreferenceSignedInDualWriteTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -47,16 +47,16 @@ class PreferenceSignedInDualWriteTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -80,7 +80,7 @@ class PreferenceSignedInDualWriteTest < ActionDispatch::IntegrationTest
           params: { preference_region: { option_id: "US" } }, headers: headers
 
     assert_response :redirect
-    account = ClientPreference.find_by!(user_id: client.id)
+    account = ClientPreference.includes(:user_preference_region, :user_preference_language).find_by!(user_id: client.id)
 
     assert_equal ClientPreferenceRegionOption::US, account.user_preference_region.option_id
     assert_equal ClientPreferenceLanguageOption::EN, account.user_preference_language.option_id
@@ -96,20 +96,21 @@ class PreferenceSignedInDualWriteTest < ActionDispatch::IntegrationTest
       patch base_app_preference_region_path(ri: "jp"), params: { preference_region: { option_id: "US" } }
     end
 
-    assert_equal AppPreferenceRegionOption::US,
-                 AppPreference.order(:created_at).last.app_preference_region.option_id
+    preference = AppPreference.includes(:app_preference_region).order(:created_at).last
+
+    assert_equal AppPreferenceRegionOption::US, preference.app_preference_region.option_id
   end
 
   test "a signed-in operator's and visitor's region changes are mirrored to their own account preferences" do
     [
       [ENV.fetch("PUBLIC_BASE_STAFF_URL"), operators(:one), :as_staff_headers, :base_org_preference_path,
-       :base_org_preference_region_path, OperatorPreference, :staff_id, :staff_preference_region,
+       :base_org_preference_region_path, OperatorPreference, :staff_id, OperatorPreferenceRegion,
        OperatorPreferenceRegionOption::US,],
       [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), visitors(:reserved_visitor), :as_visitor_headers,
        :base_com_preference_path, :base_com_preference_region_path, VisitorPreference, :visitor_id,
-       :visitor_preference_region,
+       VisitorPreferenceRegion,
        VisitorPreferenceRegionOption::US,],
-    ].each do |host, actor, headers_method, page, region_path, account_class, fk, region_assoc, us|
+    ].each do |host, actor, headers_method, page, region_path, account_class, fk, region_class, us|
       host! host
       headers = public_send(headers_method, actor, host: host)
       token_model, rp_model, root_association, resource_type, client_id =
@@ -119,7 +120,7 @@ class PreferenceSignedInDualWriteTest < ActionDispatch::IntegrationTest
           [VisitorToken, VisitorRpSession, :visitor_token, "visitor", "base-com-ww"]
         end
       token = token_model.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-      token.rotate_refresh_token! unless token.device_session.current_refresh_token_id
+      token.rotate_refresh_token! unless token.device_session_record.current_refresh_token_id
       rp_client = OidcClientRegistry.find!(client_id)
       now = rp_model.database_now
       rp_session = rp_model.create!(
@@ -152,7 +153,7 @@ class PreferenceSignedInDualWriteTest < ActionDispatch::IntegrationTest
       account_class.connection_class_for_self.connected_to(role: :writing) do
         account = account_class.find_by!(fk => actor.id)
 
-        assert_equal us, account.public_send(region_assoc).option_id, account_class.name
+        assert_equal us, region_class.find_by!(preference_id: account.id).option_id, account_class.name
       end
     end
   end

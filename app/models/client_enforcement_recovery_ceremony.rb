@@ -8,5 +8,5 @@ class ClientEnforcementRecoveryCeremony < AppPrincipalRecord
 
   def self.subject_association_name = :client
 
-  def subject = client
+  def subject = Client.find(client_id)
 end

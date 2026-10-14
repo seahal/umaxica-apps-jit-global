@@ -13,21 +13,18 @@ module PreferenceResourceSync
     case preference_class.name
     when "AppPreference"
       with_resource_preference_writing_connection(resource) do
-        resource.association(:user_preference).reset
-        resource.user_preference || create_resource_preference_for_write!(ClientPreference, :user_id, resource.id)
+        ClientPreference.find_by(user_id: resource.id) ||
+          create_resource_preference_for_write!(ClientPreference, :user_id, resource.id)
       end
     when "OrgPreference"
       with_resource_preference_writing_connection(resource) do
-        resource.association(:staff_preference).reset
-        resource.staff_preference || create_resource_preference_for_write!(OperatorPreference, :staff_id, resource.id)
+        OperatorPreference.find_by(staff_id: resource.id) ||
+          create_resource_preference_for_write!(OperatorPreference, :staff_id, resource.id)
       end
     when "ComPreference"
       with_resource_preference_writing_connection(resource) do
-        resource.association(:visitor_preference).reset
-        resource.visitor_preference || create_resource_preference_for_write!(
-          VisitorPreference, :visitor_id,
-          resource.id,
-        )
+        VisitorPreference.find_by(visitor_id: resource.id) ||
+          create_resource_preference_for_write!(VisitorPreference, :visitor_id, resource.id)
       end
     end
   end
@@ -104,19 +101,12 @@ module PreferenceResourceSync
   end
 
   def load_or_create_resource_preference_child!(resource_pref, resource_prefix, type)
-    association_prefix = resource_preference_association_prefix(resource_pref)
-    association_name = "#{association_prefix}_#{type}"
-    create_name = "create_#{association_name}!"
-    return unless resource_pref.respond_to?(association_name) || resource_pref.respond_to?(create_name)
-
-    child = resource_pref.public_send("#{association_prefix}_#{type}")
+    record_class = PreferenceClassRegistry.record_class(resource_prefix, type)
+    relation = record_class.where(preference_id: resource_pref.id)
+    child = relation.first
     return child if child.present?
-    return unless resource_pref.respond_to?(create_name)
 
-    resource_pref.public_send(
-      create_name,
-      option_id: PreferenceClassRegistry.default_option_id(resource_prefix, type),
-    )
+    relation.create!(option_id: PreferenceClassRegistry.default_option_id(resource_prefix, type))
   end
 
   def mapped_resource_option_id(resource_prefix, type, shared_option_id)
@@ -149,29 +139,6 @@ module PreferenceResourceSync
     when VisitorPreference then "Visitor"
     else
       resource_pref.class.name.delete_suffix("Preference")
-    end
-  end
-
-  # Must match the actual has_one association names declared on each mirror
-  # model (client_preference.rb: `user_preference_language` etc.;
-  # operator_preference.rb: `staff_preference_language` etc.;
-  # visitor_preference.rb: `visitor_preference_language` etc.) -- NOT the
-  # model's own class-name prefix. "client_preference"/"operator_preference"
-  # were wrong (found 2026-07-21 while measuring signed-in dual-write query
-  # counts: `load_or_create_resource_preference_child!` silently returned nil
-  # for App/Org because `respond_to?("client_preference_language")` /
-  # `respond_to?("operator_preference_language")` are both false, so the
-  # per-key mirror child option row was never created/updated -- only the
-  # flat string column was, via a separate code path that does not depend on
-  # this prefix). VisitorPreference's real prefix happens to equal its class
-  # name, which is why Com was unaffected.
-  def resource_preference_association_prefix(resource_pref)
-    case resource_pref
-    when ClientPreference then "user_preference"
-    when OperatorPreference then "staff_preference"
-    when VisitorPreference then "visitor_preference"
-    else
-      resource_pref.class.name.underscore
     end
   end
 
@@ -230,14 +197,11 @@ module PreferenceResourceSync
       end.compact
     end
 
-    association_prefix = preference.class.name.underscore
-
+    resource_prefix = resource_preference_registry_prefix(preference)
     PreferenceClassRegistry::CHILD_RECORD_TYPES.each_with_object({}) do |type, snapshot|
-      association_name = "#{association_prefix}_#{type}"
-      next unless preference.respond_to?(association_name)
-
-      child = preference.public_send(association_name)
-      value = child&.option&.name
+      child = PreferenceClassRegistry.record_class(resource_prefix, type).find_by(preference_id: preference.id)
+      option = PreferenceClassRegistry.option_class(resource_prefix, type).find_by(id: child&.option_id)
+      value = option&.name
       value = value&.downcase if %i(language region currency).include?(type)
       value = theme_short_code(value) if type == :theme
       snapshot[type] = value if value.present?
@@ -256,11 +220,8 @@ module PreferenceResourceSync
       }
     end
 
-    association_prefix = preference.class.name.underscore
-    cookie_name = "#{association_prefix}_cookie"
-    return default_preference_cookie_state unless preference.respond_to?(cookie_name)
-
-    cookie = preference.public_send(cookie_name)
+    resource_prefix = resource_preference_registry_prefix(preference)
+    cookie = PreferenceClassRegistry.cookie_class(resource_prefix).find_by(preference_id: preference.id)
     return default_preference_cookie_state if cookie.blank?
 
     {

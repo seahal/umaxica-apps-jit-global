@@ -54,7 +54,10 @@ class ProcessorErasureNotificationConcurrencyTest < ActiveSupport::TestCase
     assert_empty errors, errors.map { |error| "#{error.class}: #{error.message}" }.join("\n")
     assert_equal 1, outcomes.compact.size, outcomes.inspect
     assert_equal 1, @notification.reload.attempts.count
-    assert_equal "IN_FLIGHT", @notification.attempts.first.outcome
+    assert_equal "IN_FLIGHT",
+                 ClientProcessorErasureNotificationAttempt.find_by!(
+                   client_processor_erasure_notification_id: @notification.id,
+                 ).outcome
   end
 
   test "concurrent application of one verified receipt is idempotent" do

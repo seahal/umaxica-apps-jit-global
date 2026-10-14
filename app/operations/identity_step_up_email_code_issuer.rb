@@ -58,19 +58,19 @@ class IdentityStepUpEmailCodeIssuer
       when Client
         unless credential.is_a?(ClientEmail) && credential.user_id == actor.id &&
             transaction.is_a?(ClientStepUpCeremonyTransaction) && record.is_a?(ClientStepUpSession) &&
-            record.user_token.user_id == actor.id
+            ClientToken.find(record.user_token_id).user_id == actor.id
           raise Unavailable, "email ceremony binding mismatch"
         end
 
-        [record.user_token, Notify::App::StepUpOtpNotifier]
+        [ClientToken.find(record.user_token_id), Notify::App::StepUpOtpNotifier]
       when Visitor
         unless credential.is_a?(VisitorEmail) && credential.visitor_id == actor.id &&
             transaction.is_a?(VisitorStepUpCeremonyTransaction) && record.is_a?(VisitorStepUpSession) &&
-            record.visitor_token.visitor_id == actor.id
+            VisitorToken.find(record.visitor_token_id).visitor_id == actor.id
           raise Unavailable, "email ceremony binding mismatch"
         end
 
-        [record.visitor_token, Notify::Com::StepUpOtpNotifier]
+        [VisitorToken.find(record.visitor_token_id), Notify::Com::StepUpOtpNotifier]
       else
         raise Unavailable, "email step-up unsupported"
       end

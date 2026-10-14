@@ -8,6 +8,7 @@ class BranchCoverageBatch20PreciseServicesTest < ActiveSupport::TestCase
     avatar = Object.new
     state = Struct.new(:key).new("inactive")
     avatar.define_singleton_method(:lifecycle_state) { state }
+    avatar.define_singleton_method(:lifecycle_state_id) { 0 }
     avatar.define_singleton_method(:accessible?) { false }
     avatar.define_singleton_method(:id) { 1 }
     avatar.define_singleton_method(:==) { |other| equal?(other) }
@@ -18,6 +19,7 @@ class BranchCoverageBatch20PreciseServicesTest < ActiveSupport::TestCase
     avatar = Object.new
     state = Struct.new(:key).new("active")
     avatar.define_singleton_method(:lifecycle_state) { state }
+    avatar.define_singleton_method(:lifecycle_state_id) { AvatarLifecycleState.find_by!(key: "active").id }
     avatar.define_singleton_method(:accessible?) { true }
     avatar.define_singleton_method(:id) { id }
     avatar.define_singleton_method(:==) { |other| equal?(other) }

@@ -345,7 +345,7 @@ module Auth
           raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless cycle.entry_method == provider
 
           binding = auth_social_admission_binding!
-          ceremony = binding.admitted_auth_ceremony_session
+          ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
           unless ceremony.authentication_evidence_recorded?
             ceremony.record_authentication_evidence!(method: provider)
           end

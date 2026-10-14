@@ -15,12 +15,6 @@ module Security
       self.fixture_table_names = []
 
       POLICY_ROOTS = [
-        Xper::App::ApplicationController,
-        Xper::Com::ApplicationController,
-        Xper::Org::ApplicationController,
-        Xper::App::BareController,
-        Xper::Com::BareController,
-        Xper::Org::BareController,
         Auth::App::ApplicationController,
         Auth::Com::ApplicationController,
         Auth::Org::ApplicationController,
@@ -43,6 +37,8 @@ module Security
         Base::Net::BareController,
         Edit::Org::ApplicationController,
         Edit::Org::BareController,
+        Tech::Org::ApplicationController,
+        Tech::Org::BareController,
         Guid::Net::BareController,
         Info::App::BareController,
         Info::Com::BareController,
@@ -75,7 +71,6 @@ module Security
         Core::Org::Api::V0::BaseController,
         Palm::App::ApplicationController,
         Palm::App::BareController,
-        Palm::App::Api::V0::BaseController,
         Warp::App::ApplicationController,
         Warp::Com::ApplicationController,
         Warp::Org::ApplicationController,
@@ -86,7 +81,7 @@ module Security
 
       # Global and Publishing namespaces whose ApplicationController / BareController roots must all
       # carry the policy. A new root added under one of these fails the completeness test below.
-      IN_SCOPE_NAMESPACES = %w(Auth Base Docs Edit Guid Help Info News Xper).freeze
+      IN_SCOPE_NAMESPACES = %w(Auth Base Docs Edit Guid Help Info News Tech).freeze
 
       test "every policy root includes DefaultNoStore and runs it as its first before_action" do
         violations =

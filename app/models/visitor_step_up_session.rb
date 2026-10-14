@@ -57,9 +57,9 @@ class VisitorStepUpSession < ComTicketRecord
 
   def email_transaction_model = VisitorStepUpCeremonyTransaction
 
-  def email_session_token = visitor_token
+  def email_session_token = VisitorToken.find(visitor_token_id)
 
   def passkey_transaction_model = VisitorStepUpCeremonyTransaction
 
-  def passkey_session_token = visitor_token
+  def passkey_session_token = VisitorToken.find(visitor_token_id)
 end

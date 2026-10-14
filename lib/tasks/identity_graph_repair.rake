@@ -80,7 +80,8 @@ module IdentityGraphRepair
   end
 
   def selector_ready_graph?(config, principal)
-    identity = config.identity_class.find_by(source_record_id: principal.id)
+    account_association = config.account_class.name.underscore.to_sym
+    identity = config.identity_class.includes(account_association).find_by(source_record_id: principal.id)
     return false unless identity
 
     account = identity.public_send(config.account_class.name.underscore)

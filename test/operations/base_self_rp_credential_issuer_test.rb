@@ -16,6 +16,7 @@ class BaseSelfRpCredentialIssuerTest < ActiveSupport::TestCase
       oidc_auth_time: 5.minutes.ago,
       oidc_acr: "aal1",
       oidc_amr: JSON.generate(["pwd"]),
+      refresh_token_expires_at: 1.hour.from_now,
     )
     @refresh_token = @rp_session.issue_refresh_token!
   end

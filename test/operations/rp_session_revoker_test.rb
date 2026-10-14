@@ -39,6 +39,22 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
     assert_predicate @session_b.reload, :revoked?
   end
 
+  test "browser_session scope revokes an unrevoked child after its refresh window expires" do
+    expired_session = ClientRpSession.create!(
+      client_token: @root,
+      oidc_client_id: "edit-app",
+      oidc_scope: "openid profile",
+      refresh_token_expires_at: 1.minute.ago,
+    )
+
+    result = RpSessionRevoker.call(scope: :browser_session, record: @root)
+
+    assert_predicate result, :success?
+    assert_equal 3, result.revoked_count
+    assert_predicate expired_session.reload, :revoked?
+    assert_equal "failed", expired_session.reload.last_logout_status
+  end
+
   test "browser_session scope locks the parent before any RP Session" do
     lock_tables = []
     callback =

@@ -17,8 +17,8 @@ class OidcSevenFirstPartyRpClientsTest < ActiveSupport::TestCase
       assert_predicate client, :private_key_jwt_client?
       assert client.redirect_uris.any? { |uri| uri.end_with?("/oidc/callback") },
              "#{client_id} missing /oidc/callback"
-      assert client.post_logout_redirect_uris.any? { |uri| uri.end_with?("/sign/out") },
-             "#{client_id} missing /sign/out"
+      assert client.post_logout_redirect_uris.any? { |uri| URI.parse(uri).path == "/sign/out/completion" },
+             "#{client_id} missing /sign/out/completion"
       assert_predicate(
         JitSecurityJwtRegistry.private_key_for("oidc_client:#{client.jwt_namespace}"),
         :present?,
@@ -31,13 +31,13 @@ class OidcSevenFirstPartyRpClientsTest < ActiveSupport::TestCase
         OidcClientRegistry.find!(client_id).jwt_namespace
       end
 
-    assert_equal 10, namespaces.uniq.size
+    assert_equal 12, namespaces.uniq.size
     assert_equal(
       %w(CORE_APP CORE_COM CORE_ORG WARP_APP WARP_COM WARP_ORG EDIT_ORG BASE_RP_APP_WW BASE_RP_COM_WW
-         BASE_RP_ORG_WW),
+         BASE_RP_ORG_WW PALM_APP TECH_ORG),
       namespaces,
     )
-    assert_equal 10, AuthBoundaryAuthorityMap.first_party_rp_client_ids.size
+    assert_equal 12, AuthBoundaryAuthorityMap.first_party_rp_client_ids.size
     assert_predicate AuthBoundaryAuthorityMap, :unique_client_ids?
     assert_predicate AuthBoundaryAuthorityMap, :no_overlap_with_deprecated_ids?
   end

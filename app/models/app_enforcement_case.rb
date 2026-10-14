@@ -29,4 +29,9 @@ class AppEnforcementCase < AppPrincipalRecord
   def self.realm
     "app"
   end
+  public
+
+  def principal_effect_record
+    AppEnforcementPrincipalEffect.find_by(app_enforcement_case_id: id)
+  end
 end

@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 class CreateVisitorSignOutCycles < ActiveRecord::Migration[8.2]
   def change
     safety_assured do

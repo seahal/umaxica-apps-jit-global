@@ -30,6 +30,8 @@ module Authentication
               .include?(attribute.to_sym)
           end
 
+          def device_session_record = device_session
+
           # Records the throttled activity write so tests can assert when a
           # per-request last_used_at touch did (or did not) happen.
           def update_columns(attrs)
@@ -360,8 +362,10 @@ module Authentication
       payload = { "sub" => "123", "sid" => "sess_1", "scope" => "domain:client", "jti" => "current-jti" }
       FakeTokenScope.token_oidc_jti = "current-jti"
       FakeTokenScope.token_device_session_id = 42
-      FakeTokenScope.token_device_session = Struct.new(:user_id, :public_id, :dpop_jkt, :status_id, :revoked_at)
-        .new(123, "session_1", nil, DeviceSessionable::STATUS_ACTIVE, nil)
+      FakeTokenScope.token_device_session = ClientDeviceSession.new(
+        user_id: 123, public_id: "session_1", dpop_jkt: nil,
+        status_id: DeviceSessionable::STATUS_ACTIVE, revoked_at: nil,
+      )
 
       AuthenticationToken.stub(:decode, payload) do
         AuthenticationToken.stub(:resource_type_scope_matches?, true) do

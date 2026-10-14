@@ -131,7 +131,7 @@ class IdentityPasskeyRegistrationFinalCommitter
     def commit_ticket!(config, actor, token, transaction, payload, digest, ip_address, user_agent)
       config.fetch(:ticket_class).connected_to(role: :writing) do
         config.fetch(:ticket_class).transaction do
-          token.device_session.with_lock do
+          token.device_session_record!.with_lock do
             commit_under_device_lock!(config, actor, token, transaction, payload, digest, ip_address, user_agent)
           end
         end

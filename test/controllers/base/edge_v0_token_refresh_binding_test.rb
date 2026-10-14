@@ -147,6 +147,12 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     sibling = ClientToken.create!(user: clients(:one), device_session: token.device_session)
+    rp_session = ClientRpSession.create!(
+      client_token: token,
+      oidc_client_id: "core-app",
+      oidc_scope: "openid profile",
+      refresh_token_expires_at: 1.hour.from_now,
+    )
     token.device_session.bind_dbsc!(session_id: "dbsc-session-id", public_key_thumbprint: "thumbprint")
 
     post "/edge/v0/token/refresh",
@@ -161,6 +167,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
     assert_predicate token.device_session.reload, :revoked?
     assert_predicate token.reload, :revoked?
     assert_predicate sibling.reload, :revoked?
+    assert_predicate rp_session.reload, :revoked?
     occurrence = ClientOccurrence.where(event_type: "refresh_binding_denied").order(:created_at).last
 
     assert_equal "missing_proof", occurrence.context.fetch("reason")

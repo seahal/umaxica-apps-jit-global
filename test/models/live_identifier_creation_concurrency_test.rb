@@ -15,7 +15,7 @@ class LiveIdentifierCreationConcurrencyTest < ActiveSupport::TestCase
     [Operator, OperatorTelephone, :staff_id, OperatorStatus::ACTIVE, "org", "telephone", OperatorTelephoneHistory],
   ].each do |owner_model, model, owner_key, owner_status, realm, channel, history_model|
     test "#{realm} #{channel} equivalent concurrent live creation has one winner and usable conflict rollback" do
-      owners = 2.times.map { owner_model.create!(status_id: owner_status) }
+      owners = 2.times.map { create_test_owner(owner_model, status_id: owner_status) }
       identifier =
         (channel == "email") ? "create-race-#{SecureRandom.hex(8)}@example.test" :
           "+8190#{SecureRandom.random_number(100_000_000).to_s.rjust(8, "0")}"
@@ -75,8 +75,15 @@ class LiveIdentifierCreationConcurrencyTest < ActiveSupport::TestCase
         model.where(owner_key => owner.id).find_each(&:destroy_without_dead_history!)
         history_model.where(owner_key => owner.id).find_each(&:destroy!)
         owner.reload.update!(discard_at: owner.created_at, purge_eligible_at: owner.created_at)
-        owner.destroy!
+        StrictLoadingAssociationPreloader.for_destruction(owner.reload).destroy!
       end
     end
+  end
+
+  private
+
+  def create_test_owner(owner_model, **attributes)
+    # Avoid cross-database children left by committed test/dev runs with fixture-range IDs.
+    owner_model.create!(**attributes, id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
   end
 end

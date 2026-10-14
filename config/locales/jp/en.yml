@@ -2872,13 +2872,42 @@ en:
       too_soon: Please wait before requesting another code.
   palm:
     app:
+      dashboard:
+        description: This is a protected Palm browser page.
+        sign_out: Sign out
+        status: Your browser session is active.
+        status_heading: Session
+        title: Palm App
       roots:
         message:
-          Palm API is available for native and handheld clients. Browser access is not a product UI.
+          Sign in to your Palm account to open the protected app.
+        sign_in: Sign in
       sign_out:
         completed: Your Palm session was revoked and the browser logout flow completed.
         heading: Signed out
         missing: There is no active Palm logout transaction to display.
+  tech:
+    org:
+      access_denial:
+        description: You do not have permission to use the Tech workspace.
+        heading: No access
+        return_to_sign_in: Return to sign in
+        sign_out: Sign out
+        title: No access to Tech
+      dashboard:
+        description: This is the protected Tech operator workspace.
+        empty_state: No tools are available yet.
+        heading: Tech
+        sign_out: Sign out
+        title: Tech Org
+        tools_heading: Tools
+      navigation:
+        label: Tech navigation
+      roots:
+        description: Sign in with an authorized operator account to open the Tech workspace.
+        heading: Tech
+        sign_in: Sign in
+        title: Tech Org
   preference:
     cookie:
       banner:
@@ -4631,6 +4660,7 @@ en:
         completed_title: You are signed out
         confirm_description: Once you log out, you will need to log in again.
         home_link: Go to home
+        idp_session_error: We could not confirm the identity-provider session. No session was signed out.
         success: Sign-out has been scheduled. Access will be unavailable after %{expires_at}.
         title: Do you want to sign out?
       verification:

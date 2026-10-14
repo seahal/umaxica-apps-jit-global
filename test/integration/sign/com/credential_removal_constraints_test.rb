@@ -66,7 +66,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f0_key]
-                  f0_token.rotate_refresh_token! unless f0_token.device_session.current_refresh_token_id
+                  f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                   f0_now = Time.current
                   f0_session = VisitorRpSession.create!(
                     visitor_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
@@ -107,7 +107,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
           cookies.merge(f0_cookie_pairs, URI.parse("https://#{f0_host}/"))
         end
         begin
-          f0_headers = as_visitor_headers(fx0_visitor, host: fx0_host)
+          f0_headers = as_visitor_headers(fx0_visitor, host: fx0_host, session_public_id: fx0_token.public_id)
           f0_host = f0_headers["Host"]
           f0_route =
             begin
@@ -133,7 +133,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f0_client.client_id,
                   revoked_at: nil,
                 ))
-              f0_token.rotate_refresh_token! unless f0_token.device_session.current_refresh_token_id
+              f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
               f0_now = Time.current
               f0_session = VisitorRpSession.create!(
                 visitor_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
@@ -141,7 +141,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f0_now + 10.minutes,
               )
               f0_access = AuthenticationTokenService.encode(
-                f0_token.visitor,
+                f0_token.actor_record,
                 host: f0_host,
                 resource_type: "visitor",
                 session_public_id: f0_token.public_id,
@@ -154,7 +154,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 audiences: [f0_client.aud],
                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
                 subject: OidcSubject.for(
-                  f0_token.visitor,
+                  f0_token.actor_record,
                   resource_type: "visitor",
                 ),
                 client_id: f0_client.client_id,
@@ -220,7 +220,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f1_key]
-                  f1_token.rotate_refresh_token! unless f1_token.device_session.current_refresh_token_id
+                  f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                   f1_now = Time.current
                   f1_session = VisitorRpSession.create!(
                     visitor_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
@@ -261,7 +261,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
           cookies.merge(f1_cookie_pairs, URI.parse("https://#{f1_host}/"))
         end
         begin
-          f1_headers = as_visitor_headers(fx1_visitor, host: fx1_host)
+          f1_headers = as_visitor_headers(fx1_visitor, host: fx1_host, session_public_id: fx1_token.public_id)
           f1_host = f1_headers["Host"]
           f1_route =
             begin
@@ -287,7 +287,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f1_client.client_id,
                   revoked_at: nil,
                 ))
-              f1_token.rotate_refresh_token! unless f1_token.device_session.current_refresh_token_id
+              f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
               f1_now = Time.current
               f1_session = VisitorRpSession.create!(
                 visitor_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
@@ -295,7 +295,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f1_now + 10.minutes,
               )
               f1_access = AuthenticationTokenService.encode(
-                f1_token.visitor,
+                f1_token.actor_record,
                 host: f1_host,
                 resource_type: "visitor",
                 session_public_id: f1_token.public_id,
@@ -308,7 +308,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 audiences: [f1_client.aud],
                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
                 subject: OidcSubject.for(
-                  f1_token.visitor,
+                  f1_token.actor_record,
                   resource_type: "visitor",
                 ),
                 client_id: f1_client.client_id,
@@ -375,7 +375,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f2_key]
-                  f2_token.rotate_refresh_token! unless f2_token.device_session.current_refresh_token_id
+                  f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                   f2_now = Time.current
                   f2_session = VisitorRpSession.create!(
                     visitor_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
@@ -416,7 +416,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
           cookies.merge(f2_cookie_pairs, URI.parse("https://#{f2_host}/"))
         end
         begin
-          f2_headers = as_visitor_headers(fx2_visitor, host: fx2_host)
+          f2_headers = as_visitor_headers(fx2_visitor, host: fx2_host, session_public_id: fx2_token.public_id)
           f2_host = f2_headers["Host"]
           f2_route =
             begin
@@ -442,7 +442,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f2_client.client_id,
                   revoked_at: nil,
                 ))
-              f2_token.rotate_refresh_token! unless f2_token.device_session.current_refresh_token_id
+              f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
               f2_now = Time.current
               f2_session = VisitorRpSession.create!(
                 visitor_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
@@ -450,7 +450,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f2_now + 10.minutes,
               )
               f2_access = AuthenticationTokenService.encode(
-                f2_token.visitor,
+                f2_token.actor_record,
                 host: f2_host,
                 resource_type: "visitor",
                 session_public_id: f2_token.public_id,
@@ -463,7 +463,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 audiences: [f2_client.aud],
                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
                 subject: OidcSubject.for(
-                  f2_token.visitor,
+                  f2_token.actor_record,
                   resource_type: "visitor",
                 ),
                 client_id: f2_client.client_id,
@@ -528,7 +528,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f3_key]
-                  f3_token.rotate_refresh_token! unless f3_token.device_session.current_refresh_token_id
+                  f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                   f3_now = Time.current
                   f3_session = VisitorRpSession.create!(
                     visitor_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
@@ -569,7 +569,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
           cookies.merge(f3_cookie_pairs, URI.parse("https://#{f3_host}/"))
         end
         begin
-          f3_headers = as_visitor_headers(fx3_visitor, host: fx3_host)
+          f3_headers = as_visitor_headers(fx3_visitor, host: fx3_host, session_public_id: fx3_token.public_id)
           f3_host = f3_headers["Host"]
           f3_route =
             begin
@@ -595,7 +595,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f3_client.client_id,
                   revoked_at: nil,
                 ))
-              f3_token.rotate_refresh_token! unless f3_token.device_session.current_refresh_token_id
+              f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
               f3_now = Time.current
               f3_session = VisitorRpSession.create!(
                 visitor_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
@@ -603,7 +603,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f3_now + 10.minutes,
               )
               f3_access = AuthenticationTokenService.encode(
-                f3_token.visitor,
+                f3_token.actor_record,
                 host: f3_host,
                 resource_type: "visitor",
                 session_public_id: f3_token.public_id,
@@ -616,7 +616,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 audiences: [f3_client.aud],
                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f3_client),
                 subject: OidcSubject.for(
-                  f3_token.visitor,
+                  f3_token.actor_record,
                   resource_type: "visitor",
                 ),
                 client_id: f3_client.client_id,
@@ -640,12 +640,21 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
           f3_headers
         end.except("Cookie", "HTTP_COOKIE")
       end
-    delete base_com_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
-           headers: http_headers_2
+    with_forgery_protection do
+      get base_com_identity_secrets_url(ri: "jp", host: @base_host), headers: http_headers_2
 
-    assert_response :redirect
-    assert_includes response.location, "/verification/setup"
-    assert_equal VisitorSecretCredentialStatus::ACTIVE, secret_credential.reload.visitor_secret_credential_status_id
+      assert_response :success
+      csrf_token = response.parsed_body.at_css('meta[name="csrf-token"]')&.[]("content")
+
+      assert_predicate csrf_token, :present?
+
+      delete base_com_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
+             headers: http_headers_2.merge("X-CSRF-Token" => csrf_token)
+
+      assert_response :redirect
+      assert_includes response.location, "/verification/setup"
+      assert_equal VisitorSecretCredentialStatus::ACTIVE, secret_credential.reload.visitor_secret_credential_status_id
+    end
   end
 
   test "email and passkey removals are allowed when capabilities remain" do
@@ -684,7 +693,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f4_key]
-                  f4_token.rotate_refresh_token! unless f4_token.device_session.current_refresh_token_id
+                  f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                   f4_now = Time.current
                   f4_session = VisitorRpSession.create!(
                     visitor_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
@@ -725,7 +734,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
           cookies.merge(f4_cookie_pairs, URI.parse("https://#{f4_host}/"))
         end
         begin
-          f4_headers = as_visitor_headers(fx4_visitor, host: fx4_host)
+          f4_headers = as_visitor_headers(fx4_visitor, host: fx4_host, session_public_id: fx4_token.public_id)
           f4_host = f4_headers["Host"]
           f4_route =
             begin
@@ -751,7 +760,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f4_client.client_id,
                   revoked_at: nil,
                 ))
-              f4_token.rotate_refresh_token! unless f4_token.device_session.current_refresh_token_id
+              f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
               f4_now = Time.current
               f4_session = VisitorRpSession.create!(
                 visitor_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
@@ -759,7 +768,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f4_now + 10.minutes,
               )
               f4_access = AuthenticationTokenService.encode(
-                f4_token.visitor,
+                f4_token.actor_record,
                 host: f4_host,
                 resource_type: "visitor",
                 session_public_id: f4_token.public_id,
@@ -772,7 +781,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 audiences: [f4_client.aud],
                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f4_client),
                 subject: OidcSubject.for(
-                  f4_token.visitor,
+                  f4_token.actor_record,
                   resource_type: "visitor",
                 ),
                 client_id: f4_client.client_id,
@@ -831,7 +840,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f5_key]
-                  f5_token.rotate_refresh_token! unless f5_token.device_session.current_refresh_token_id
+                  f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
                   f5_now = Time.current
                   f5_session = VisitorRpSession.create!(
                     visitor_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
@@ -872,7 +881,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
           cookies.merge(f5_cookie_pairs, URI.parse("https://#{f5_host}/"))
         end
         begin
-          f5_headers = as_visitor_headers(fx5_visitor, host: fx5_host)
+          f5_headers = as_visitor_headers(fx5_visitor, host: fx5_host, session_public_id: fx5_token.public_id)
           f5_host = f5_headers["Host"]
           f5_route =
             begin
@@ -898,7 +907,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f5_client.client_id,
                   revoked_at: nil,
                 ))
-              f5_token.rotate_refresh_token! unless f5_token.device_session.current_refresh_token_id
+              f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
               f5_now = Time.current
               f5_session = VisitorRpSession.create!(
                 visitor_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
@@ -906,7 +915,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f5_now + 10.minutes,
               )
               f5_access = AuthenticationTokenService.encode(
-                f5_token.visitor,
+                f5_token.actor_record,
                 host: f5_host,
                 resource_type: "visitor",
                 session_public_id: f5_token.public_id,
@@ -919,7 +928,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 audiences: [f5_client.aud],
                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f5_client),
                 subject: OidcSubject.for(
-                  f5_token.visitor,
+                  f5_token.actor_record,
                   resource_type: "visitor",
                 ),
                 client_id: f5_client.client_id,
@@ -983,7 +992,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f6_key]
-                  f6_token.rotate_refresh_token! unless f6_token.device_session.current_refresh_token_id
+                  f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
                   f6_now = Time.current
                   f6_session = VisitorRpSession.create!(
                     visitor_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
@@ -1024,7 +1033,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
           cookies.merge(f6_cookie_pairs, URI.parse("https://#{f6_host}/"))
         end
         begin
-          f6_headers = as_visitor_headers(fx6_visitor, host: fx6_host)
+          f6_headers = as_visitor_headers(fx6_visitor, host: fx6_host, session_public_id: fx6_token.public_id)
           f6_host = f6_headers["Host"]
           f6_route =
             begin
@@ -1050,7 +1059,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f6_client.client_id,
                   revoked_at: nil,
                 ))
-              f6_token.rotate_refresh_token! unless f6_token.device_session.current_refresh_token_id
+              f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
               f6_now = Time.current
               f6_session = VisitorRpSession.create!(
                 visitor_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
@@ -1058,16 +1067,20 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f6_now + 10.minutes,
               )
               f6_access = AuthenticationTokenService.encode(
-                f6_token.visitor, host: f6_host, resource_type: "visitor",
-                                  session_public_id: f6_token.public_id, base_session_public_id: f6_token.public_id,
-                                  oidc_sid: f6_session.public_id, oidc_jti: f6_session.oidc_jti,
-                                  expires_at: f6_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f6_client), audiences: [f6_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f6_client),
-                                  subject: OidcSubject.for(
-                                    f6_token.visitor,
-                                    resource_type: "visitor",
-                                  ), client_id: f6_client.client_id,
+                f6_token.actor_record,
+                host: f6_host,
+                resource_type: "visitor",
+                session_public_id: f6_token.public_id,
+                base_session_public_id: f6_token.public_id,
+                oidc_sid: f6_session.public_id,
+                oidc_jti: f6_session.oidc_jti,
+                expires_at: f6_now + 10.minutes,
+                scopes: %w(openid profile),
+                issuer: OidcIssuer.for_client(f6_client),
+                audiences: [f6_client.aud],
+                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f6_client),
+                subject: OidcSubject.for(f6_token.actor_record, resource_type: "visitor"),
+                client_id: f6_client.client_id,
               )
               @base_browser_rp_credentials[f6_key] =
                 [f6_access, f6_session.issue_refresh_token!]

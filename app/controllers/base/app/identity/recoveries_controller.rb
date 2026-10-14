@@ -15,7 +15,7 @@ module Base
 
         def show
           render_identity_recovery(
-            enforcement_cases: AppEnforcementCase.in_force.where(
+            enforcement_cases: AppEnforcementCase.in_force.includes(:appeal).where(
               principal_public_id: current_recovery_ceremony.subject.public_id, kind: "security_lock",
               visibility: "visible", release_mode: "verification_required",
             ),

@@ -178,7 +178,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -186,7 +186,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -199,7 +199,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -244,7 +244,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr0_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr0_token.rotate_refresh_token! unless rr0_token.device_session.current_refresh_token_id
+                    rr0_token.rotate_refresh_token! unless rr0_token.device_session_record.current_refresh_token_id
                     rr0_now = Time.current
                     rr0_session = ClientRpSession.create!(
                       client_token: rr0_token,
@@ -256,7 +256,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr0_now + 10.minutes,
                     )
                     rr0_access = AuthenticationTokenService.encode(
-                      rr0_token.user,
+                      rr0_token.actor_record,
                       host: rr0_host,
                       resource_type: "client",
                       session_public_id: rr0_token.public_id,
@@ -269,7 +269,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr0_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr0_client),
                       subject: OidcSubject.for(
-                        rr0_token.user,
+                        rr0_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr0_client.client_id,
@@ -622,7 +622,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -630,7 +630,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -643,7 +643,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -688,7 +688,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr2_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr2_token.rotate_refresh_token! unless rr2_token.device_session.current_refresh_token_id
+                    rr2_token.rotate_refresh_token! unless rr2_token.device_session_record.current_refresh_token_id
                     rr2_now = Time.current
                     rr2_session = ClientRpSession.create!(
                       client_token: rr2_token,
@@ -700,7 +700,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr2_now + 10.minutes,
                     )
                     rr2_access = AuthenticationTokenService.encode(
-                      rr2_token.user,
+                      rr2_token.actor_record,
                       host: rr2_host,
                       resource_type: "client",
                       session_public_id: rr2_token.public_id,
@@ -713,7 +713,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr2_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr2_client),
                       subject: OidcSubject.for(
-                        rr2_token.user,
+                        rr2_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr2_client.client_id,
@@ -1031,7 +1031,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -1039,7 +1039,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -1052,7 +1052,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -1097,7 +1097,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr3_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr3_token.rotate_refresh_token! unless rr3_token.device_session.current_refresh_token_id
+                    rr3_token.rotate_refresh_token! unless rr3_token.device_session_record.current_refresh_token_id
                     rr3_now = Time.current
                     rr3_session = ClientRpSession.create!(
                       client_token: rr3_token,
@@ -1109,7 +1109,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr3_now + 10.minutes,
                     )
                     rr3_access = AuthenticationTokenService.encode(
-                      rr3_token.user,
+                      rr3_token.actor_record,
                       host: rr3_host,
                       resource_type: "client",
                       session_public_id: rr3_token.public_id,
@@ -1122,7 +1122,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr3_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr3_client),
                       subject: OidcSubject.for(
-                        rr3_token.user,
+                        rr3_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr3_client.client_id,
@@ -1500,7 +1500,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -1508,7 +1508,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -1521,7 +1521,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -1566,7 +1566,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr4_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr4_token.rotate_refresh_token! unless rr4_token.device_session.current_refresh_token_id
+                    rr4_token.rotate_refresh_token! unless rr4_token.device_session_record.current_refresh_token_id
                     rr4_now = Time.current
                     rr4_session = ClientRpSession.create!(
                       client_token: rr4_token,
@@ -1578,7 +1578,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr4_now + 10.minutes,
                     )
                     rr4_access = AuthenticationTokenService.encode(
-                      rr4_token.user,
+                      rr4_token.actor_record,
                       host: rr4_host,
                       resource_type: "client",
                       session_public_id: rr4_token.public_id,
@@ -1591,7 +1591,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr4_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr4_client),
                       subject: OidcSubject.for(
-                        rr4_token.user,
+                        rr4_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr4_client.client_id,
@@ -1752,7 +1752,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -1760,7 +1760,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -1773,7 +1773,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -1818,7 +1818,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr5_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr5_token.rotate_refresh_token! unless rr5_token.device_session.current_refresh_token_id
+                    rr5_token.rotate_refresh_token! unless rr5_token.device_session_record.current_refresh_token_id
                     rr5_now = Time.current
                     rr5_session = ClientRpSession.create!(
                       client_token: rr5_token,
@@ -1830,7 +1830,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr5_now + 10.minutes,
                     )
                     rr5_access = AuthenticationTokenService.encode(
-                      rr5_token.user,
+                      rr5_token.actor_record,
                       host: rr5_host,
                       resource_type: "client",
                       session_public_id: rr5_token.public_id,
@@ -1843,7 +1843,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr5_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr5_client),
                       subject: OidcSubject.for(
-                        rr5_token.user,
+                        rr5_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr5_client.client_id,
@@ -2166,7 +2166,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -2174,7 +2174,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -2187,7 +2187,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -2232,7 +2232,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr6_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr6_token.rotate_refresh_token! unless rr6_token.device_session.current_refresh_token_id
+                    rr6_token.rotate_refresh_token! unless rr6_token.device_session_record.current_refresh_token_id
                     rr6_now = Time.current
                     rr6_session = ClientRpSession.create!(
                       client_token: rr6_token,
@@ -2244,7 +2244,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr6_now + 10.minutes,
                     )
                     rr6_access = AuthenticationTokenService.encode(
-                      rr6_token.user,
+                      rr6_token.actor_record,
                       host: rr6_host,
                       resource_type: "client",
                       session_public_id: rr6_token.public_id,
@@ -2257,7 +2257,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr6_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr6_client),
                       subject: OidcSubject.for(
-                        rr6_token.user,
+                        rr6_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr6_client.client_id,
@@ -2827,7 +2827,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -2835,7 +2835,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -2848,7 +2848,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -2893,7 +2893,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr7_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr7_token.rotate_refresh_token! unless rr7_token.device_session.current_refresh_token_id
+                    rr7_token.rotate_refresh_token! unless rr7_token.device_session_record.current_refresh_token_id
                     rr7_now = Time.current
                     rr7_session = ClientRpSession.create!(
                       client_token: rr7_token,
@@ -2905,7 +2905,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr7_now + 10.minutes,
                     )
                     rr7_access = AuthenticationTokenService.encode(
-                      rr7_token.user,
+                      rr7_token.actor_record,
                       host: rr7_host,
                       resource_type: "client",
                       session_public_id: rr7_token.public_id,
@@ -2918,7 +2918,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr7_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr7_client),
                       subject: OidcSubject.for(
-                        rr7_token.user,
+                        rr7_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr7_client.client_id,
@@ -3293,7 +3293,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -3301,7 +3301,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -3314,7 +3314,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -3359,7 +3359,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr8_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr8_token.rotate_refresh_token! unless rr8_token.device_session.current_refresh_token_id
+                    rr8_token.rotate_refresh_token! unless rr8_token.device_session_record.current_refresh_token_id
                     rr8_now = Time.current
                     rr8_session = ClientRpSession.create!(
                       client_token: rr8_token,
@@ -3371,7 +3371,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr8_now + 10.minutes,
                     )
                     rr8_access = AuthenticationTokenService.encode(
-                      rr8_token.user,
+                      rr8_token.actor_record,
                       host: rr8_host,
                       resource_type: "client",
                       session_public_id: rr8_token.public_id,
@@ -3384,7 +3384,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr8_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr8_client),
                       subject: OidcSubject.for(
-                        rr8_token.user,
+                        rr8_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr8_client.client_id,
@@ -3767,7 +3767,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -3775,7 +3775,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -3788,7 +3788,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -3833,7 +3833,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr9_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr9_token.rotate_refresh_token! unless rr9_token.device_session.current_refresh_token_id
+                    rr9_token.rotate_refresh_token! unless rr9_token.device_session_record.current_refresh_token_id
                     rr9_now = Time.current
                     rr9_session = ClientRpSession.create!(
                       client_token: rr9_token,
@@ -3845,7 +3845,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr9_now + 10.minutes,
                     )
                     rr9_access = AuthenticationTokenService.encode(
-                      rr9_token.user,
+                      rr9_token.actor_record,
                       host: rr9_host,
                       resource_type: "client",
                       session_public_id: rr9_token.public_id,
@@ -3858,7 +3858,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr9_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr9_client),
                       subject: OidcSubject.for(
-                        rr9_token.user,
+                        rr9_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr9_client.client_id,
@@ -4244,7 +4244,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -4252,7 +4252,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -4265,7 +4265,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -4310,7 +4310,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr10_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr10_token.rotate_refresh_token! unless rr10_token.device_session.current_refresh_token_id
+                    rr10_token.rotate_refresh_token! unless rr10_token.device_session_record.current_refresh_token_id
                     rr10_now = Time.current
                     rr10_session = ClientRpSession.create!(
                       client_token: rr10_token,
@@ -4322,7 +4322,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr10_now + 10.minutes,
                     )
                     rr10_access = AuthenticationTokenService.encode(
-                      rr10_token.user,
+                      rr10_token.actor_record,
                       host: rr10_host,
                       resource_type: "client",
                       session_public_id: rr10_token.public_id,
@@ -4335,7 +4335,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr10_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr10_client),
                       subject: OidcSubject.for(
-                        rr10_token.user,
+                        rr10_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr10_client.client_id,
@@ -4684,7 +4684,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -4692,7 +4692,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -4705,7 +4705,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -4750,7 +4750,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr11_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr11_token.rotate_refresh_token! unless rr11_token.device_session.current_refresh_token_id
+                    rr11_token.rotate_refresh_token! unless rr11_token.device_session_record.current_refresh_token_id
                     rr11_now = Time.current
                     rr11_session = ClientRpSession.create!(
                       client_token: rr11_token,
@@ -4762,7 +4762,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr11_now + 10.minutes,
                     )
                     rr11_access = AuthenticationTokenService.encode(
-                      rr11_token.user,
+                      rr11_token.actor_record,
                       host: rr11_host,
                       resource_type: "client",
                       session_public_id: rr11_token.public_id,
@@ -4775,7 +4775,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr11_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr11_client),
                       subject: OidcSubject.for(
-                        rr11_token.user,
+                        rr11_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr11_client.client_id,
@@ -5129,7 +5129,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -5137,7 +5137,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -5150,7 +5150,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -5195,7 +5195,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr12_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr12_token.rotate_refresh_token! unless rr12_token.device_session.current_refresh_token_id
+                    rr12_token.rotate_refresh_token! unless rr12_token.device_session_record.current_refresh_token_id
                     rr12_now = Time.current
                     rr12_session = ClientRpSession.create!(
                       client_token: rr12_token,
@@ -5207,7 +5207,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr12_now + 10.minutes,
                     )
                     rr12_access = AuthenticationTokenService.encode(
-                      rr12_token.user,
+                      rr12_token.actor_record,
                       host: rr12_host,
                       resource_type: "client",
                       session_public_id: rr12_token.public_id,
@@ -5220,7 +5220,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr12_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr12_client),
                       subject: OidcSubject.for(
-                        rr12_token.user,
+                        rr12_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr12_client.client_id,
@@ -5592,7 +5592,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -5600,7 +5600,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -5613,7 +5613,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -5658,7 +5658,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr13_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr13_token.rotate_refresh_token! unless rr13_token.device_session.current_refresh_token_id
+                    rr13_token.rotate_refresh_token! unless rr13_token.device_session_record.current_refresh_token_id
                     rr13_now = Time.current
                     rr13_session = ClientRpSession.create!(
                       client_token: rr13_token,
@@ -5670,7 +5670,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr13_now + 10.minutes,
                     )
                     rr13_access = AuthenticationTokenService.encode(
-                      rr13_token.user,
+                      rr13_token.actor_record,
                       host: rr13_host,
                       resource_type: "client",
                       session_public_id: rr13_token.public_id,
@@ -5683,7 +5683,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr13_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr13_client),
                       subject: OidcSubject.for(
-                        rr13_token.user,
+                        rr13_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr13_client.client_id,
@@ -5977,7 +5977,9 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     assert_predicate inertia_props.fetch("confirm_label"), :present?
     assert_select "script:not([nonce])", false
 
-    cycle = ClientSignUpFlow.order(:id).last
+    cycle = SignUpCycleLocator.new(session, surface: :app, cycle_class: ClientSignUpFlow).current
+
+    assert_predicate cycle, :present?
 
     assert_no_difference("Client.count") do
       assert_no_difference("ClientGoogleIdentity.count") do
@@ -5985,7 +5987,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           assert_no_difference("OperatorOrganization.count") do
             assert_no_difference("Avatar.count") do
               assert_no_difference("ClientToken.count") do
-                patch sign_app_sign_up_check_google_birthdate_url(
+                patch auth_app_sign_up_check_google_birthdate_path(
                   ri: "jp", fb: SignFlowBindingCodec.encode(
                     flow: SignUpCycleLocator.new(
                       session,
@@ -6090,7 +6092,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -6098,7 +6100,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -6111,7 +6113,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -6156,7 +6158,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr14_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr14_token.rotate_refresh_token! unless rr14_token.device_session.current_refresh_token_id
+                    rr14_token.rotate_refresh_token! unless rr14_token.device_session_record.current_refresh_token_id
                     rr14_now = Time.current
                     rr14_session = ClientRpSession.create!(
                       client_token: rr14_token,
@@ -6168,7 +6170,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr14_now + 10.minutes,
                     )
                     rr14_access = AuthenticationTokenService.encode(
-                      rr14_token.user,
+                      rr14_token.actor_record,
                       host: rr14_host,
                       resource_type: "client",
                       session_public_id: rr14_token.public_id,
@@ -6181,7 +6183,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr14_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr14_client),
                       subject: OidcSubject.for(
-                        rr14_token.user,
+                        rr14_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr14_client.client_id,
@@ -6515,7 +6517,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           oidc_client_id: rp_client.client_id,
                           revoked_at: nil,
                         ))
-                      rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                      rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                       rp_now = Time.current
                       rp_session = ClientRpSession.create!(
                         client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -6523,7 +6525,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         refresh_token_expires_at: rp_now + 10.minutes,
                       )
                       rp_access = AuthenticationTokenService.encode(
-                        rp_token.user,
+                        rp_token.actor_record,
                         host: rp_host,
                         resource_type: "client",
                         session_public_id: rp_token.public_id,
@@ -6536,7 +6538,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         audiences: [rp_client.aud],
                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                         subject: OidcSubject.for(
-                          rp_token.user,
+                          rp_token.actor_record,
                           resource_type: "client",
                         ),
                         client_id: rp_client.client_id,
@@ -6580,7 +6582,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       oidc_client_id: rr15_client.client_id,
                       revoked_at: nil,
                     ))
-                  rr15_token.rotate_refresh_token! unless rr15_token.device_session.current_refresh_token_id
+                  rr15_token.rotate_refresh_token! unless rr15_token.device_session_record.current_refresh_token_id
                   rr15_now = Time.current
                   rr15_session = ClientRpSession.create!(
                     client_token: rr15_token,
@@ -6592,7 +6594,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     refresh_token_expires_at: rr15_now + 10.minutes,
                   )
                   rr15_access = AuthenticationTokenService.encode(
-                    rr15_token.user,
+                    rr15_token.actor_record,
                     host: rr15_host,
                     resource_type: "client",
                     session_public_id: rr15_token.public_id,
@@ -6605,7 +6607,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     audiences: [rr15_client.aud],
                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr15_client),
                     subject: OidcSubject.for(
-                      rr15_token.user,
+                      rr15_token.actor_record,
                       resource_type: "client",
                     ),
                     client_id: rr15_client.client_id,
@@ -6714,7 +6716,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           oidc_client_id: rp_client.client_id,
                           revoked_at: nil,
                         ))
-                      rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                      rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                       rp_now = Time.current
                       rp_session = ClientRpSession.create!(
                         client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -6722,7 +6724,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         refresh_token_expires_at: rp_now + 10.minutes,
                       )
                       rp_access = AuthenticationTokenService.encode(
-                        rp_token.user,
+                        rp_token.actor_record,
                         host: rp_host,
                         resource_type: "client",
                         session_public_id: rp_token.public_id,
@@ -6735,7 +6737,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         audiences: [rp_client.aud],
                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                         subject: OidcSubject.for(
-                          rp_token.user,
+                          rp_token.actor_record,
                           resource_type: "client",
                         ),
                         client_id: rp_client.client_id,
@@ -6779,7 +6781,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       oidc_client_id: rr16_client.client_id,
                       revoked_at: nil,
                     ))
-                  rr16_token.rotate_refresh_token! unless rr16_token.device_session.current_refresh_token_id
+                  rr16_token.rotate_refresh_token! unless rr16_token.device_session_record.current_refresh_token_id
                   rr16_now = Time.current
                   rr16_session = ClientRpSession.create!(
                     client_token: rr16_token,
@@ -6791,7 +6793,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     refresh_token_expires_at: rr16_now + 10.minutes,
                   )
                   rr16_access = AuthenticationTokenService.encode(
-                    rr16_token.user,
+                    rr16_token.actor_record,
                     host: rr16_host,
                     resource_type: "client",
                     session_public_id: rr16_token.public_id,
@@ -6804,7 +6806,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     audiences: [rr16_client.aud],
                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr16_client),
                     subject: OidcSubject.for(
-                      rr16_token.user,
+                      rr16_token.actor_record,
                       resource_type: "client",
                     ),
                     client_id: rr16_client.client_id,
@@ -6938,7 +6940,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -6946,7 +6948,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -6959,7 +6961,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -7004,7 +7006,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr18_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr18_token.rotate_refresh_token! unless rr18_token.device_session.current_refresh_token_id
+                    rr18_token.rotate_refresh_token! unless rr18_token.device_session_record.current_refresh_token_id
                     rr18_now = Time.current
                     rr18_session = ClientRpSession.create!(
                       client_token: rr18_token,
@@ -7016,7 +7018,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr18_now + 10.minutes,
                     )
                     rr18_access = AuthenticationTokenService.encode(
-                      rr18_token.user,
+                      rr18_token.actor_record,
                       host: rr18_host,
                       resource_type: "client",
                       session_public_id: rr18_token.public_id,
@@ -7029,7 +7031,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr18_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr18_client),
                       subject: OidcSubject.for(
-                        rr18_token.user,
+                        rr18_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr18_client.client_id,
@@ -7392,7 +7394,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
-                        rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                        rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = ClientRpSession.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -7400,7 +7402,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           refresh_token_expires_at: rp_now + 10.minutes,
                         )
                         rp_access = AuthenticationTokenService.encode(
-                          rp_token.user,
+                          rp_token.actor_record,
                           host: rp_host,
                           resource_type: "client",
                           session_public_id: rp_token.public_id,
@@ -7413,7 +7415,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                           audiences: [rp_client.aud],
                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                           subject: OidcSubject.for(
-                            rp_token.user,
+                            rp_token.actor_record,
                             resource_type: "client",
                           ),
                           client_id: rp_client.client_id,
@@ -7458,7 +7460,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rr19_client.client_id,
                         revoked_at: nil,
                       ))
-                    rr19_token.rotate_refresh_token! unless rr19_token.device_session.current_refresh_token_id
+                    rr19_token.rotate_refresh_token! unless rr19_token.device_session_record.current_refresh_token_id
                     rr19_now = Time.current
                     rr19_session = ClientRpSession.create!(
                       client_token: rr19_token,
@@ -7470,7 +7472,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rr19_now + 10.minutes,
                     )
                     rr19_access = AuthenticationTokenService.encode(
-                      rr19_token.user,
+                      rr19_token.actor_record,
                       host: rr19_host,
                       resource_type: "client",
                       session_public_id: rr19_token.public_id,
@@ -7483,7 +7485,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       audiences: [rr19_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr19_client),
                       subject: OidcSubject.for(
-                        rr19_token.user,
+                        rr19_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: rr19_client.client_id,

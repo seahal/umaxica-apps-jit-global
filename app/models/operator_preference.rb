@@ -41,6 +41,13 @@ class OperatorPreference < OrgPrincipalRecord
   include ::PublicId
   include ::PreferenceExplicitFields
 
+  DESTROY_DEPENDENT_ASSOCIATIONS = %i(
+    staff_preference_language staff_preference_timezone staff_preference_region staff_preference_theme
+    operator_preference_currency operator_preference_date_format operator_preference_time_format
+    operator_preference_motion operator_preference_density operator_preference_page_size
+    operator_preference_adult_content_gate
+  ).freeze
+
   belongs_to :staff, inverse_of: :staff_preference, class_name: "Operator"
 
   has_one :staff_preference_language, class_name: "OperatorPreferenceLanguage", foreign_key: :preference_id,
@@ -90,12 +97,19 @@ class OperatorPreference < OrgPrincipalRecord
   validates :performant, inclusion: { in: [true, false] }
   validates :targetable, inclusion: { in: [true, false] }
   after_initialize :set_defaults
+  before_destroy :preload_dependent_associations, prepend: true
 
   def adult_content_gate
     operator_preference_adult_content_gate&.option&.name || "nothing"
   end
 
   private
+
+  def preload_dependent_associations
+    ActiveRecord::Associations::Preloader.new(
+      records: [self], associations: DESTROY_DEPENDENT_ASSOCIATIONS,
+    ).call
+  end
 
   # New records get explicit non-consent defaults so a nil never reaches a
   # boolean consent column.

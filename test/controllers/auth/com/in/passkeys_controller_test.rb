@@ -248,7 +248,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
     @visitor.visitor_telephones.update_all(visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED)
 
     post auth_com_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
-         params: { identifier: @visitor.visitor_emails.first.address },
+         params: { identifier: VisitorEmail.find_by!(visitor_id: @visitor.id).address },
          headers: @origin_headers
     challenge_id = response.parsed_body["challenge_id"]
 

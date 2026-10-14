@@ -8,9 +8,6 @@ Rails.application.routes.draw do
   # Auth owns the credential gateway for sign-in/sign-up ceremonies.
   draw :auth
 
-  # Xper bootstraps the independent Experience surface.
-  draw :xper
-
   # Info owns public informational content.
   draw :info
 
@@ -23,8 +20,11 @@ Rails.application.routes.draw do
   # Warp owns the Rails foundation/control-plane surface.
   draw :warp
 
-  # Palm owns the native RP and bearer-token API surface.
+  # Palm owns the app-surface browser RP.
   draw :palm
+
+  # Tech owns the global operator tools Browser RP.
+  draw :tech
 
   # Help owns the public help content surface.
   draw :help

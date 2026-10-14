@@ -63,7 +63,7 @@ class ComVisitorPreferenceControllerAdoptionTest < ActionDispatch::IntegrationTe
               !(rp_token.device_session_id && VisitorRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = VisitorRpSession.create!(
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -71,16 +71,16 @@ class ComVisitorPreferenceControllerAdoptionTest < ActionDispatch::IntegrationTe
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.visitor, host: rp_host, resource_type: "visitor",
-                                session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                subject: OidcSubject.for(
-                                  rp_token.visitor,
-                                  resource_type: "visitor",
-                                ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "visitor",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "visitor",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -101,14 +101,14 @@ class ComVisitorPreferenceControllerAdoptionTest < ActionDispatch::IntegrationTe
     # Home 404s for an authenticated session (adr/home-dashboard-authentication-boundary.md).
     assert_response :not_found
 
-    assert_nil visitor.reload.visitor_preference
+    assert_not VisitorPreference.exists?(visitor_id: visitor.id)
 
     patch base_com_preference_region_path(ri: "jp"), headers: headers,
                                                      params: { preference_region: { option_id: ComPreferenceRegionOption::US } }
 
     assert_response :redirect
     assert_predicate ComPreference, :exists?
-    assert_not_nil visitor.reload.visitor_preference,
-                   "an explicit preference write must synchronize the VisitorPreference mirror"
+    assert VisitorPreference.exists?(visitor_id: visitor.id),
+           "an explicit preference write must synchronize the VisitorPreference mirror"
   end
 end

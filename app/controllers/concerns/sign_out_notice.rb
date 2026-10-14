@@ -79,6 +79,13 @@ module SignOutNotice
   end
 
   def sign_out_post_path(**options)
+    if params[:logout_challenge].present?
+      route_params = sign_out_route_params.merge(options.compact)
+      return request.path if route_params.empty?
+
+      return "#{request.path}?#{route_params.to_query}"
+    end
+
     public_send("#{sign_out_route_helper_prefix}_sign_out_path", **sign_out_route_params, **options.compact)
   end
 
@@ -95,6 +102,19 @@ module SignOutNotice
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     response.headers["Referrer-Policy"] = SIGN_OUT_REFERRER_POLICY
+  end
+
+  # A lost commit response is neither a successful nor a failed sign-out. Keep the response
+  # uncached and use the existing retry-safe unavailable presentation while the caller reports the
+  # indeterminate state in the structured sign-out event.
+  def render_sign_out_indeterminate!
+    response.headers["Cache-Control"] = SIGN_OUT_NOTICE_CACHE_CONTROL
+    response.headers["Referrer-Policy"] = SIGN_OUT_REFERRER_POLICY
+    if respond_to?(:render_oidc_rp_logout_indeterminate, true)
+      render_oidc_rp_logout_indeterminate
+    else
+      render "auth/shared/sign_outs/unavailable", status: :service_unavailable, layout: false
+    end
   end
 
   def sign_out_handoff_cache_headers!

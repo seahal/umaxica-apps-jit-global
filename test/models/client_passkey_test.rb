@@ -47,7 +47,7 @@ require "test_helper"
 
 class ClientPasskeyTest < ActiveSupport::TestCase
   test "retained terminal history does not consume the four Passkey slots" do
-    actor = Client.create!
+    actor = Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
     [ClientPasskeyStatus::REVOKED, ClientPasskeyStatus::DELETED].each do |terminal_status|
       historical = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "history-public-key")
       historical.update!(status_id: terminal_status)
@@ -69,9 +69,8 @@ class ClientPasskeyTest < ActiveSupport::TestCase
   end
 
   test "a stale loaded owner association cannot admit a fifth Passkey" do
-    actor = Client.create!
-    stale_actor = Client.find(actor.id)
-    stale_actor.client_passkeys.load
+    actor = Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
+    stale_actor = Client.includes(:client_passkeys).find(actor.id)
     4.times { actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
     candidate = ClientPasskey.new(
       user: stale_actor, webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key",

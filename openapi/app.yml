@@ -11,7 +11,6 @@ info:
     The `app`, `com`, and `org` surfaces are independent trust boundaries served on separate
     hosts, so each has its own description. This one covers the end-user application surface. An
     endpoint described here exists on this surface's own hosts; it is never shared across surfaces.
-    `/api/v0/profile` is the Palm native-client resource endpoint and exists on this surface only.
 
     ## What is absent, and why
 
@@ -63,8 +62,6 @@ tags:
     description: Core browser BFF session and token lifecycle, authenticated by first-party cookie.
   - name: Preferences
     description: Cookie-consent and color-theme JSON endpoints under `/api/v0/preferences`.
-  - name: Profile
-    description: Native bearer-token resource endpoints.
   - name: Content
     description: Read-only published documentation, help, news, and info entries.
 
@@ -86,9 +83,6 @@ paths:
 
   /api/v0/preferences/theme:
     $ref: "app/paths/preferences-theme.yml"
-
-  /api/v0/profile:
-    $ref: "shared/paths/profile.yml"
 
   /api/v0/entries:
     $ref: "shared/paths/entries.yml"

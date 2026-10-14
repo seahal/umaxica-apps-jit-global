@@ -360,7 +360,10 @@ module AuthenticationSequenceGate
     return auth_ceremony_local_sign_in_flow if local_authentication_ceremony?
 
     resolution = session_limit_resolution
-    return resolution.sign_in_flow if resolution
+    if resolution
+      flow_class = resolution.class.resolution_sign_in_flow_class
+      return flow_class.find_by(id: resolution.sign_in_flow_id)
+    end
 
     @current_db_sign_in_flow_for_sequence ||=
       begin
@@ -446,7 +449,7 @@ module AuthenticationSequenceGate
     resource.with_lock do
       AppTicketRecord.connected_to(role: :writing) do
         transaction.with_lock do
-          flow = transaction.secret_sign_in_flow
+          flow = ClientSignInFlow.find_by(id: transaction.secret_sign_in_flow_id)
           raise AuthCeremonySession::InvalidTransition, "Secret OIDC flow missing" unless flow
 
           flow.lock!
@@ -587,7 +590,7 @@ module AuthenticationSequenceGate
   # already signed in) is refused by the final boundary rather than receiving
   # a second root session.
   def issue_active_session_for_selector!(cycle)
-    actor = cycle.principal
+    actor = sign_in_flow_principal(cycle)
     return { status: :invalid_request } unless actor
     return { status: :invalid_request } if logged_in?
 
@@ -606,7 +609,16 @@ module AuthenticationSequenceGate
     return current_resource if current_resource
     return unless cycle.respond_to?(:principal)
 
-    cycle.principal
+    sign_in_flow_principal(cycle)
+  end
+
+  def sign_in_flow_principal(cycle)
+    case cycle
+    when ClientSignInFlow then Client.find_by(id: cycle.principal_id)
+    when VisitorSignInFlow then Visitor.find_by(id: cycle.principal_id)
+    when OperatorSignInFlow then Operator.find_by(id: cycle.principal_id)
+    else raise ArgumentError, "unsupported sign-in flow: #{cycle.class.name}"
+    end
   end
 
   def oidc_authorization_login_challenge_present?

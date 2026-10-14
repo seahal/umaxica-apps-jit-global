@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -38,7 +39,6 @@
 #  fk_rails_...  (level_id => org_preference_chronicle_levels.id)
 #
 
-# frozen_string_literal: true
 
 class OrgPreferenceChronicle < ChronicleRecord
   self.belongs_to_required_by_default = false

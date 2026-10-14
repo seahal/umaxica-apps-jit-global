@@ -14,7 +14,7 @@ module ExternalAuthentication
     def find_by_subject(subject, lock:)
       scope = ClientExternalIdentity.effective_binding.where(
         provider: provider, issuer: issuer, subject: subject.to_s, state: "active",
-      )
+      ).includes(:client)
       scope = scope.lock if lock
       scope.first
     end

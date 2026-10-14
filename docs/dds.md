@@ -4,7 +4,7 @@
 > application. The `Sign` and `Top` namespaces,
 > `app/controllers/sign/app/registration/emails_controller.rb`, `UserIdentityEmail`,
 > `ServiceSiteContact`, and `src/pages/app/inquiry/before_submit.js` are not in the current code.
-> Current controllers live under `Auth`, `Base`, `Core`, `Warp`, `Palm`, `Edit`, `Xper`, `Guid`, and
+> Current controllers live under `Auth`, `Base`, `Core`, `Warp`, `Palm`, `Edit`, `Guid`, and
 > the content surfaces `Docs`, `Help`, `Info`, and `News`, one route file each in `config/routes/`.
 > Use `README.md` ("Routing") and `docs/architecture/` for the current topology.
 

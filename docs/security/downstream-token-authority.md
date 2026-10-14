@@ -11,6 +11,11 @@
 > Auth is ceremony-only. The Acme vocabulary below is historical and must not be used to introduce
 > an additional issuer, shared browser session, or retired RP registration.
 
+> **Participation update (2026-10-13):** Palm is now a first-party browser RP using the `palm-app`
+> audience; its former native bearer API is retired. Tech is an operator browser RP using
+> `tech-org`. The accepted contract and local implementation status are recorded in
+> `adr/tech-and-palm-browser-rp-participation.md`.
+
 ## Authority
 
 `acme/www` is the downstream-token Authority.
@@ -45,3 +50,10 @@ audience, subject and RP-session binding are checked before a token is accepted;
 results are not downstream access tokens. A parent security context can authorize an explicitly
 bound RP operation but never authenticates a missing RP credential. Legacy Sign/Acme wording above
 is migration history and is superseded by the Base/Warp registry.
+
+## Browser RP participation update (2026-10-13)
+
+Core, Warp, Edit, Palm and Tech use Base-issued browser RP credentials bound to their own client,
+issuer, audience and host-local cookie. Tech also checks the current `tech.access` capability.
+Palm's former `palm-api` bearer resource-server path is retired; this update does not create a
+general-purpose downstream API token contract.

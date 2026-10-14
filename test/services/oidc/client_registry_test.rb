@@ -145,12 +145,12 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     assert_equal original_client.redirect_uris, restored_client.redirect_uris
   end
 
-  test "shared browser clients post logout at canonical /sign/out" do
+  test "shared browser clients post logout at canonical /sign/out/completion" do
     AuthBoundaryAuthorityMap.first_party_rp_client_ids.each do |client_id|
       client = OidcClientRegistry.find!(client_id)
 
-      assert client.post_logout_redirect_uris.all? { |uri| URI.parse(uri).path == "/sign/out" },
-             "#{client_id} should complete at /sign/out"
+      assert client.post_logout_redirect_uris.all? { |uri| URI.parse(uri).path == "/sign/out/completion" },
+             "#{client_id} should complete at /sign/out/completion"
     end
   end
 
@@ -183,12 +183,28 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     end
   end
 
-  test "native clients do not expose logout receiver uris" do
-    %w(app-ios-rp app-android-rp).each do |client_id|
-      client = OidcClientRegistry.find!(client_id)
+  test "Palm browser client has no back-channel logout receiver" do
+    client = OidcClientRegistry.find!("palm-app")
 
-      assert_empty client.backchannel_logout_uris, "#{client_id} should not have back-channel logout URIs"
-    end
+    assert_empty client.backchannel_logout_uris
+    assert_not client.backchannel_logout_session_required
+  end
+
+  test "Tech operator client has its own host, key namespace, and required capability" do
+    client = OidcClientRegistry.find!("tech-org")
+
+    assert_equal "operator", client.resource_type
+    assert_equal "tech-org", client.aud
+    assert_equal "TECH_ORG", client.jwt_namespace
+    assert_equal OperatorCapabilityGrant::TECH_ACCESS, client.required_operator_capability
+    expected_hosts =
+      [ENV.fetch("PUBLIC_TECH_STAFF_URL"), ENV["PRIVATE_TECH_STAFF_URL"]].compact.map do |origin|
+        URI.parse(origin).host || URI.parse("//#{origin}").host
+      end
+
+    assert_equal expected_hosts.uniq.sort, client.redirect_uris.map { |uri| URI.parse(uri).host }.uniq.sort
+    assert_empty client.backchannel_logout_uris
+    assert_not client.backchannel_logout_session_required
   end
 
   test "sign and core clients require back-channel session logout" do
@@ -197,8 +213,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
 
   test "all expected clients are registered" do
     expected = %w(
-      app-ios-rp app-android-rp
-      core-app core-com core-org warp-app warp-com warp-org edit-org
+      core-app core-com core-org warp-app warp-com warp-org edit-org palm-app tech-org
     )
 
     expected.each do |client_id|
@@ -212,8 +227,6 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
 
   test "clients expose explicit allowed scopes" do
     expectations = {
-      "app-ios-rp" => OidcClientRegistry::PALM_ALLOWED_SCOPES,
-      "app-android-rp" => OidcClientRegistry::PALM_ALLOWED_SCOPES,
       "core-app" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
       "core-com" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
       "core-org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
@@ -221,6 +234,8 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
       "warp-com" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
       "warp-org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
       "edit-org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "palm-app" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "tech-org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
     }
 
     expectations.each do |client_id, allowed_scopes|
@@ -231,7 +246,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "org clients have operator resource_type" do
-    %w(core-org warp-org edit-org).each do |client_id|
+    %w(core-org warp-org edit-org tech-org).each do |client_id|
       client = OidcClientRegistry.find(client_id)
 
       assert_equal "operator", client.resource_type, "#{client_id} should be operator type"
@@ -239,7 +254,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "app clients have client resource_type" do
-    %w(app-ios-rp app-android-rp core-app warp-app).each do |client_id|
+    %w(core-app warp-app palm-app).each do |client_id|
       client = OidcClientRegistry.find(client_id)
 
       assert_equal "client", client.resource_type, "#{client_id} should be client type"
@@ -284,8 +299,9 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     assert_includes ids, "warp-app"
     assert_not_includes ids, "sign-rp"
     assert_not_includes ids, "base-rails-rp"
-    assert_includes ids, "app-ios-rp"
-    assert_includes ids, "app-android-rp"
+    assert_includes ids, "palm-app"
+    assert_not_includes ids, "app-ios-rp"
+    assert_not_includes ids, "app-android-rp"
     AuthBoundaryAuthorityMap.first_party_rp_client_ids.each { |client_id| assert_includes ids, client_id }
     assert_equal OidcClientStoresStaticClientStore.clients.keys.sort, ids.sort
   end
@@ -322,6 +338,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
 
       assert_includes error.message, "core-app(CORE_APP)"
       assert_includes error.message, "warp-app(WARP_APP)"
+      assert_includes error.message, "palm-app(PALM_APP)"
     end
   end
 
@@ -338,14 +355,16 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     assert_not_predicate client, :confidential_client?
   end
 
-  test "native app clients are public palm-api clients" do
+  test "retired native clients are not registered and Palm is confidential" do
     %w(app-ios-rp app-android-rp).each do |client_id|
-      client = OidcClientRegistry.find!(client_id)
-
-      assert_equal "none", client.registered_token_endpoint_auth_method
-      assert_equal "palm-api", client.aud
-      assert_predicate client, :public_client?
+      assert_nil OidcClientRegistry.find(client_id)
     end
+
+    client = OidcClientRegistry.find!("palm-app")
+
+    assert_equal "private_key_jwt", client.registered_token_endpoint_auth_method
+    assert_predicate client, :confidential_client?
+    assert_not_predicate client, :public_client?
   end
 
   test "missing registered auth method with blank secret remains confidential" do
@@ -407,6 +426,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
       registered_token_endpoint_auth_method: "client_secret_post",
       metadata_token_endpoint_auth_method: "client_secret_post",
       jwt_namespace: nil,
+      required_operator_capability: nil,
       **overrides,
     )
   end

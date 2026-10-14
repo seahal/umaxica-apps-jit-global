@@ -70,7 +70,7 @@ module Base
 
           def withdrawal_email_ceremony_model = ClientEmailCeremonyTransaction
 
-          def withdrawal_subject_from_email(email) = email&.user
+          def withdrawal_subject_from_email(email) = Client.find_by(id: email&.user_id)
 
           def withdrawal_reentry_surface = :app
 

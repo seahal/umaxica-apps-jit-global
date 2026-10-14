@@ -152,8 +152,9 @@ module Base
           ) unless finalization[:status] == :success
 
           if transaction.secret_sign_in_flow_id
+            secret_flow = ClientSignInFlow.find(transaction.secret_sign_in_flow_id)
             credential = ClientSecretCredential.find_by!(
-              client_id: resource.id, claim_sign_in_flow_ref: transaction.secret_sign_in_flow.public_id,
+              client_id: resource.id, claim_sign_in_flow_ref: secret_flow.public_id,
             )
             ClientSecretClaimFinalizer.call!(
               credential: credential, purge_after: ClientSecretLifetimesValue.purge_delay,
@@ -210,7 +211,7 @@ module Base
                 raise AuthenticationBase::SignInFlowIssuanceRejected, "Secret OIDC authentication method mismatch"
               end
 
-              flow = transaction.secret_sign_in_flow
+              flow = ClientSignInFlow.find(transaction.secret_sign_in_flow_id)
               flow.with_lock do
                 return { status: :login_failed } if flow.sign_in_failed? ||
                   flow.expired?(ClientSignInFlow.database_now)

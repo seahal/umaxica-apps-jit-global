@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -22,7 +23,6 @@
 #  fk_rails_...  (muter_avatar_id => avatars.id) ON DELETE => cascade
 #
 
-# frozen_string_literal: true
 
 require "test_helper"
 require_relative "../support/avatar_test_factory"
@@ -86,8 +86,10 @@ class AvatarMuteTest < ActiveSupport::TestCase
 
     muter.outgoing_mutes.create!(muted_avatar: muted)
 
-    assert_includes muted.incoming_mutes.map(&:muter_avatar), muter
-    assert_includes muted.muting_avatars, muter
+    incoming_muters = AvatarMute.includes(:muter_avatar).where(muted_avatar_id: muted.id).map(&:muter_avatar)
+
+    assert_includes incoming_muters, muter
+    assert_equal [muter.id], AvatarMute.where(muted_avatar_id: muted.id).pluck(:muter_avatar_id)
   end
 
   test "mute creation does not destroy follow state" do

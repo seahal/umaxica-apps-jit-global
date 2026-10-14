@@ -133,7 +133,7 @@ class IdentityStepUpCeremonyFreshnessCommitter
                                                credential:)
       session_model, ceremony_model, credentials = binding
       transaction.class.connection_owner.connected_to(role: :writing) do
-        device_session = token.device_session
+        device_session = find_device_session(token)
         raise IdentityStepUpCeremonyContract::Error.new(
           "Browser Session is missing", code: "session_expired",
         ) unless device_session
@@ -279,7 +279,7 @@ class IdentityStepUpCeremonyFreshnessCommitter
     end
 
     def validate_finalization!(actor, token, transaction, requirement, now)
-      device = token.device_session
+      device = find_device_session(token)
       unless token.currently_usable?(now) && device.usable? && device.current_refresh_token_id == token.id &&
           transaction.actor_ref == actor.public_id &&
           transaction.session_ref == token.public_id && %w(step_up reauthentication).include?(transaction.purpose) &&
@@ -292,7 +292,11 @@ class IdentityStepUpCeremonyFreshnessCommitter
     end
 
     def with_device_and_token_locks!(token, &)
-      token.device_session.with_lock { token.with_lock(&) }
+      find_device_session(token).with_lock { token.with_lock(&) }
+    end
+
+    def find_device_session(token)
+      token.device_session_record!
     end
 
     # A full reauthentication replaces the root token as part of the first commit. A lost
@@ -316,7 +320,7 @@ class IdentityStepUpCeremonyFreshnessCommitter
     end
 
     def validate_reauthentication_replay_root!(actor, current_token, previous_token, now)
-      device = current_token.device_session
+      device = find_device_session(current_token)
       unless current_token.currently_usable?(now) && device.usable? &&
           device.current_refresh_token_id == current_token.id && previous_token&.rotated_at.present? &&
           previous_token.device_session_id == current_token.device_session_id &&

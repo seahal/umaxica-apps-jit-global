@@ -32,11 +32,26 @@ class RefreshTokenReuseActivityRecorder
   def audit_target
     case @token
     when ClientToken
-      [ClientChronicle, ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED, @token.user, "app"]
+      [
+        ClientChronicle,
+        ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
+        Client.find(@token.user_id),
+        "app",
+      ]
     when VisitorToken
-      [ClientChronicle, ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED, @token.visitor, "com"]
+      [
+        ClientChronicle,
+        ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
+        Visitor.find(@token.visitor_id),
+        "com",
+      ]
     when OperatorToken
-      [OperatorChronicle, OperatorChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED, @token.staff, "org"]
+      [
+        OperatorChronicle,
+        OperatorChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
+        Operator.find(@token.staff_id),
+        "org",
+      ]
     else
       raise ArgumentError, "unsupported refresh token class: #{@token.class.name}"
     end

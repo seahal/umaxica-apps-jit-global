@@ -44,6 +44,41 @@ class AvatarProvisioningCreateTest < ActiveSupport::TestCase
     end
   end
 
+  test "post-cutover provisioning writes only the concrete ownership source" do
+    user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
+    bootstrap.avatar.current_avatar_persona_binding.revoke!(force: true)
+
+    AvatarRecord.transaction(joinable: false) do
+      AvatarOwnershipCutover.create!(
+        id: AvatarOwnershipCutover::CUTOVER_ID,
+        cutover_at: Time.utc(2030, 1, 1),
+      )
+
+      result = AvatarProvisioning::Create.call(
+        actor: user,
+        subject_type: :persona,
+        subject: bootstrap.account,
+        avatar_params: { moniker: "Cutover Avatar" },
+        handle_params: { handle: "post-cutover-#{SecureRandom.hex(6)}" },
+        owner_surface: "app",
+        owner_collective_public_id: bootstrap.collective.public_id,
+      )
+
+      assert_predicate result, :success?, result.errors.inspect
+      avatar = result.avatar
+      period = avatar.enterprise_ownership_periods.current.sole
+
+      assert_equal 0, avatar.avatar_ownership_periods.count
+      assert_equal bootstrap.collective.public_id, period.enterprise_public_id
+      assert_equal avatar.created_at, period.valid_from
+      assert_equal period, avatar.current_ownership_period
+
+      # Roll back the marker and synthetic graph through the ordinary test transaction.
+      raise ActiveRecord::Rollback
+    end
+  end
+
   test "handle conflict rolls back the avatar graph" do
     user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)

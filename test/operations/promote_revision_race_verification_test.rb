@@ -55,24 +55,30 @@ class PromoteRevisionRaceVerificationTest < ActiveSupport::TestCase
 
       # A collision on the revision idempotency index means another promotion won
       # the race: the loser re-reads and hands back the winner's version.
-      owner.stub(:versions, losing_versions.call(revision_index)) do
-        assert_equal winner, Publishing::PromoteRevisionOperation.call(revision: revision)
+      entry_class.stub(:find_by, ->(*, **) { owner }) do
+        owner.stub(:versions, losing_versions.call(revision_index)) do
+          assert_equal winner, Publishing::PromoteRevisionOperation.call(revision: revision)
+        end
       end
 
       # A duplicate sequence, public id, or any other unique violation is a
       # genuine failure and must propagate unswallowed.
       other_indexes.each do |index_name|
-        owner.stub(:versions, losing_versions.call(index_name)) do
-          error =
-            assert_raises(ActiveRecord::RecordNotUnique) do
-              Publishing::PromoteRevisionOperation.call(revision: revision)
-            end
+        entry_class.stub(:find_by, ->(*, **) { owner }) do
+          owner.stub(:versions, losing_versions.call(index_name)) do
+            error =
+              assert_raises(ActiveRecord::RecordNotUnique) do
+                Publishing::PromoteRevisionOperation.call(revision: revision)
+              end
 
-          assert_match index_name, error.message
+            assert_match index_name, error.message
+          end
         end
       end
 
-      assert_equal [winner.id], entry.versions.reload.pluck(:id)
+      version_class = Publishing::ContentFamilies.cell_for_entry(entry).fetch(:version)
+
+      assert_equal [winner.id], version_class.where(entry_id: entry.id).pluck(:id)
     end
   end
 end

@@ -57,7 +57,7 @@ class Auth::App::Sign::In::ChecksAuthorizationTest < ActionDispatch::Integration
     @binding = admission_binding.reload
     @primary_sign_in_binding = SignInFlowBindingCodec.encode(
       flow: ClientSignInFlow.find_by!(
-        public_id: @binding.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+        public_id: admitted_auth_ceremony_session_for_test(@binding).local_sign_in_flow_ref,
       ),
       surface: "app", phase: "PRIMARY_PENDING",
     )
@@ -91,7 +91,7 @@ class Auth::App::Sign::In::ChecksAuthorizationTest < ActionDispatch::Integration
     assert_response :see_other
     assert_equal auth_app_sign_handoff_path(ri: "jp"), URI.parse(response.location).request_uri
     assert_equal before, ClientToken.where(user_id: @user.id).count
-    assert_predicate @binding.admitted_auth_ceremony_session.reload, :authentication_evidence_recorded?
-    assert_nil @binding.sign_in_flow.reload.token_id
+    assert_predicate admitted_auth_ceremony_session_for_test(@binding).reload, :authentication_evidence_recorded?
+    assert_nil sign_in_flow_for_test(@binding).reload.token_id
   end
 end

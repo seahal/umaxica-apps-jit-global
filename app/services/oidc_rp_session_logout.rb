@@ -81,9 +81,10 @@ class OidcRpSessionLogout < ApplicationService
 
   def token_resource(token)
     case token
-    when OperatorToken then token.staff
-    when VisitorToken then token.visitor
-    else token.user
+    when OperatorToken then Operator.find(token.staff_id)
+    when VisitorToken then Visitor.find(token.visitor_id)
+    when ClientToken then Client.find(token.user_id)
+    else raise ArgumentError, "unsupported Browser Session token class"
     end
   end
 end

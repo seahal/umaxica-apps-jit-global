@@ -3,6 +3,16 @@
 > **Supersession (2026-09-13):** Browser completion is one-shot `GET /sign/out` (no
 > `/sign/out/complete`). See `adr/base-auth-ceremony-and-seven-rp-boundary.md`.
 
+> **Browser RP amendment (2026-10-14):** Every participating first-party RP, including Base Self-RP,
+> Core, Warp, Edit, Palm and Tech, uses the noun continuation resource
+> `GET/POST /sign/out/completion`; exact registered post-logout URIs carry the supported `ri` value,
+> and direct `/sign/out` is not a registered return URI. GET is read-only and the protected POST
+> requires a Rails authenticity token. The older route descriptions below are historical for
+> authority-driven Browser RP completion. See
+> `adr/first-party-sign-out-shared-database-without-backchannel-logout.md` for the current contract
+> and remaining BCL, full-authority and browser-acceptance gates. The shared parent-and-RP
+> transaction is locally implemented and focused-tested; final acceptance remains open.
+
 ## Status
 
 Accepted; partially superseded (2026-09-13) (2026-06-21). Amended for Base completion destination by
@@ -48,9 +58,9 @@ and does not use `sot`.
 
 `DELETE /sign/out` is not part of the public contract.
 
-Palm is an approved native RP. Its implemented browser authorization and Jump logout handoff
-contract is recorded in `adr/jump-directed-rails-handoff-contract.md`; native custom-scheme
-completion delivery remains outside the Jump graph.
+The former Palm native-RP and custom-scheme completion description is superseded by
+`adr/tech-and-palm-browser-rp-participation.md`. Palm is a first-party Browser RP and uses the
+dedicated completion resource recorded above.
 
 ## Consequences
 

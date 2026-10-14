@@ -8,7 +8,8 @@ require "uri"
 # This value does not register clients or generate credentials. It only derives exact URI
 # bindings from an existing canonical source and refuses to invent a host when that source is
 # absent. The active seven-client registry remains the compatibility registry until every target
-# caller, audience, key namespace, and RP-session binding has migrated.
+# caller, audience, key namespace, and RP-session binding has migrated. Global approved RPs remain
+# in AuthBoundaryAuthorityMap and are not regional cells.
 module RegionalRpClientMatrix
   class MissingCanonicalHost < KeyError; end
 
@@ -17,10 +18,10 @@ module RegionalRpClientMatrix
   class InvalidCanonicalRegistration < KeyError; end
 
   CALLBACK_PATH = "/oidc/callback"
-  POST_LOGOUT_PATH = "/sign/out"
+  POST_LOGOUT_PATH = "/sign/out/completion"
   BACKCHANNEL_LOGOUT_PATH = "/oidc/backchannel/logout"
 
-  CLIENT_IDS = AuthBoundaryAuthorityMap.approved_rp_client_ids.freeze
+  CLIENT_IDS = (AuthBoundaryAuthorityMap::REGIONAL_RP_CLIENT_IDS + ["edit-org"]).freeze
 
   module_function
 
@@ -71,6 +72,10 @@ module RegionalRpClientMatrix
   # A caller that needs a complete OIDC registration must use `binding_for`, which fails closed
   # until the repository has one canonical regional audience source.
   def uri_binding_for(client_id)
+    unless CLIENT_IDS.include?(client_id.to_s)
+      raise ArgumentError, "unapproved RP client: #{client_id}"
+    end
+
     metadata =
       AuthBoundaryAuthorityMap.approved_rp_faces.fetch(client_id.to_s) do
         raise ArgumentError, "unapproved RP client: #{client_id}"
@@ -87,7 +92,10 @@ module RegionalRpClientMatrix
       rp_session_client_id: client_id.to_s,
       host: URI.parse(base_uri).host,
       redirect_uri: join_uri(base_uri, CALLBACK_PATH),
-      post_logout_redirect_uri: join_uri(base_uri, POST_LOGOUT_PATH),
+      post_logout_redirect_uri: join_uri(
+        base_uri,
+        "#{POST_LOGOUT_PATH}?ri=#{metadata.fetch(:region).presence || RequestContextContract.default_region}",
+      ),
       backchannel_logout_uri: join_uri(base_uri, BACKCHANNEL_LOGOUT_PATH),
     }.freeze
   end
@@ -150,6 +158,10 @@ module RegionalRpClientMatrix
   private_class_method :validate_registered_client!
 
   def jwt_namespace_for(client_id)
+    unless CLIENT_IDS.include?(client_id.to_s)
+      raise ArgumentError, "unapproved RP client: #{client_id}"
+    end
+
     metadata =
       AuthBoundaryAuthorityMap.approved_rp_faces.fetch(client_id.to_s) do
         raise ArgumentError, "unapproved RP client: #{client_id}"

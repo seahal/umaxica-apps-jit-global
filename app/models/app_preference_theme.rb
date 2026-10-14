@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -21,7 +22,6 @@
 #  fk_rails_...                           (preference_id => app_preferences.id)
 #
 
-# frozen_string_literal: true
 
 class AppPreferenceTheme < AppSettingRecord
   belongs_to :preference, class_name: "AppPreference", inverse_of: :app_preference_theme

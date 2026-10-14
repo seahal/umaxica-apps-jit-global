@@ -16,15 +16,15 @@ class ClientSecretClaimCommitter
       return unless credential
 
       AppZenithRecord.connected_to(role: :writing) do
-        credential.client.with_lock do
+        client.with_lock do
           AppTicketRecord.connected_to(role: :writing) do
             transaction.with_lock do
-              flow = transaction.secret_sign_in_flow
+              flow = ClientSignInFlow.find_by(id: transaction.secret_sign_in_flow_id)
               flow&.lock!
               ceremony.lock!
               credential.lock!
               now = ClientSignInFlow.database_now
-              return nil unless oidc_binding_admitted?(credential, transaction, ceremony, now)
+              return nil unless oidc_binding_admitted?(client, credential, transaction, ceremony, now)
 
               if flow
                 return flow if flow.principal_id == credential.client_id && flow.sign_in_primary_pending? &&
@@ -77,7 +77,7 @@ class ClientSecretClaimCommitter
               unless actor.login_allowed? && flow.sign_in_primary_pending? && !flow.expired?(ticket_now) &&
                   (flow.principal_id.nil? || flow.principal_id == actor.id) && ceremony.active?(now: ticket_now) &&
                   ceremony.admitted? && claim_admission_matches?(
-                    credential, flow, ceremony, authorization_transaction, ticket_now,
+                    actor, credential, flow, ceremony, authorization_transaction, ticket_now,
                   ) && !ceremony.authentication_evidence_recorded? &&
                   credential.client_id == actor.id && credential.available_at?(at: source_now) &&
                   credential.matches_secret?(secret)
@@ -110,16 +110,17 @@ class ClientSecretClaimCommitter
       raise ArgumentError, "Secret authorization transaction must be durable app OIDC"
     end
 
-    def claim_admission_matches?(credential, flow, ceremony, transaction, now)
+    def claim_admission_matches?(actor, credential, flow, ceremony, transaction, now)
       if transaction
-        transaction.secret_sign_in_flow_id == flow.id && oidc_binding_admitted?(credential, transaction, ceremony, now)
+        transaction.secret_sign_in_flow_id == flow.id &&
+          oidc_binding_admitted?(actor, credential, transaction, ceremony, now)
       else
         ceremony.admission_purpose == "local_sign_in" && ceremony.local_sign_in_flow_ref == flow.public_id
       end
     end
 
-    def oidc_binding_admitted?(credential, transaction, ceremony, now)
-      credential.available_at?(at: Client.database_now) && credential.client.login_allowed? &&
+    def oidc_binding_admitted?(actor, credential, transaction, ceremony, now)
+      credential.available_at?(at: Client.database_now) && actor.login_allowed? &&
         transaction.status == "pending" && !transaction.expired?(now: now) &&
         !transaction.login_challenge_expired?(now: now) && ceremony.admitted? && ceremony.active?(now: now) &&
         ceremony.admission_purpose == "authentication_handoff" && !ceremony.authentication_evidence_recorded? &&

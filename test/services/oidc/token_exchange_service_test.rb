@@ -1138,22 +1138,24 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
-  test "app-ios-rp cannot exchange an authorization code issued to app-android-rp" do
-    code_record = issue_code!(client_id: "app-android-rp", redirect_uri: "https://palm-jp.umaxica.app/oidc/callback")
+  test "retired native Palm clients cannot exchange their old authorization codes" do
+    %w(app-ios-rp app-android-rp).each do |client_id|
+      redirect_uri = "https://palm-jp.umaxica.app/oidc/callback"
+      code_record = issue_code!(client_id: client_id, redirect_uri: redirect_uri)
 
-    result = OidcTokenExchangeCoordinator.call(
-      grant_type: "authorization_code",
-      code: code_record.code,
-      redirect_uri: "https://palm-jp.umaxica.app/oidc/callback",
-      client_id: "app-ios-rp",
-      code_verifier: @code_verifier,
-      expected_resource_type: "client",
-    )
+      result = OidcTokenExchangeCoordinator.call(
+        grant_type: "authorization_code",
+        code: code_record.code,
+        redirect_uri: redirect_uri,
+        client_id: client_id,
+        code_verifier: @code_verifier,
+        expected_resource_type: "client",
+      )
 
-    assert_not result.success?
-    assert_equal "invalid_request", result.error
-    assert_equal "client_id mismatch", result.error_description
-    assert_code_unconsumed(code_record)
+      assert_not result.success?, client_id
+      assert_equal "invalid_client", result.error, client_id
+      assert_code_unconsumed(code_record)
+    end
   end
 
   test "token exchange rejects codes with disallowed scopes" do
@@ -2871,47 +2873,6 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_code_unconsumed(code_record)
   end
 
-  test "public palm audience exchange issues access token accepted by palm resource server" do
-    public_client = public_visitor_account(
-      client_id: "app-ios-rp",
-      aud: PalmAccessTokenAuthenticator::AUDIENCE,
-      redirect_uris: ["https://palm-jp.umaxica.app/auth/callback"],
-      redirect_uris_by_realm: { "client" => ["https://palm-jp.umaxica.app/auth/callback"] },
-      domains: ["palm-jp.umaxica.app"],
-      allowed_scopes: OidcClientRegistry::PALM_ALLOWED_SCOPES,
-    )
-    code_record = issue_code!(
-      client_id: public_client.client_id,
-      redirect_uri: public_client.redirect_uris.first,
-      scope: "openid palm.read",
-    )
-
-    with_public_client(public_client) do
-      result = OidcTokenExchangeCoordinator.call(
-        grant_type: "authorization_code",
-        code: code_record.code,
-        redirect_uri: public_client.redirect_uris.first,
-        client_id: public_client.client_id,
-        code_verifier: @code_verifier,
-        expected_resource_type: "client",
-      )
-
-      assert_predicate result, :success?
-
-      palm_result = PalmAccessTokenAuthenticator.call(
-        access_token: result.token_response.fetch(:access_token),
-        host: "palm-jp.umaxica.app",
-        authorization_scheme: "Bearer",
-      )
-
-      assert_predicate palm_result, :success?
-      assert_equal @user, palm_result.resource
-      assert_equal "app-ios-rp", AuthorizationTokenClaims.client_id(palm_result.payload)
-      assert_equal [PalmAccessTokenAuthenticator::AUDIENCE], Array(palm_result.payload.fetch("aud"))
-      assert_equal %w(openid palm.read), Array(AuthorizationTokenClaims.scopes(palm_result.payload))
-    end
-  end
-
   private
 
   def generate_dpop_jwk
@@ -3129,6 +3090,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       registered_token_endpoint_auth_method: "client_secret_post",
       metadata_token_endpoint_auth_method: "client_secret_post",
       jwt_namespace: nil,
+      required_operator_capability: nil,
       **overrides,
     )
   end

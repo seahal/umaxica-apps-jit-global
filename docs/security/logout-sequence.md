@@ -1,5 +1,37 @@
 # Logout Sequence
 
+> **Current implementation status (2026-10-14):** The accepted first-party Browser RP target and
+> its remaining gates are recorded in
+> `adr/first-party-sign-out-shared-database-without-backchannel-logout.md`. The historical Acme
+> ownership, `/sign/out/complete`, and future-native Palm sections below do not describe the current
+> Browser RP flow. All 12 registered first-party Browser RPs register exact
+> `GET/POST /sign/out/completion?ri=jp` and `?ri=us` URIs on their own host. GET is read-only; a
+> protected POST with a Rails authenticity token advances the captured logout challenge. Direct
+> `/sign/out` is rejected as a registered post-logout return URI. The
+> integration matrix covers the challenge continuation for all 12 client IDs after parent/RP
+> revocation, including HTML and Inertia at `ri=jp`. The shared parent-and-RP transaction is
+> locally implemented and focused-tested; first-party BCL removal, full IdP authority flow,
+> independent-connection race evidence and real browser acceptance remain incomplete. See
+> `docs/security/logout-session-management.md` and
+> `evidence/2026-10-13-first-party-rp-completion-uri-matrix-P7V4.md` for current route and
+> registration evidence.
+
+## Current Browser RP Flow
+
+The accepted authority-driven flow starts at the RP's protected `POST /sign/out` and returns to its
+exact registered `GET/POST /sign/out/completion?ri=jp|us` URI. The local continuation matrix starts
+after parent and RP-session revocation; it verifies the durable challenge, read-only GET and
+CSRF-protected POST that clears captured origin credentials, records origin cleanup and finalizes
+the challenge. It does not verify the full IdP authority round trip. No DELETE cancellation route is
+available during this continuation. The path, host and helper remain surface-local for Core, Warp,
+Edit, Base, Palm and Tech.
+
+Before a logout intent is staged, Base requires a live IdP session with a captured `sid` that matches
+the verified `id_token_hint` when one is supplied. An absent session, missing captured `sid`, or
+subject/session mismatch returns a plain localized error with no-store headers and no `Location`;
+it creates no intent, revokes no session or token, and does not redirect to the RP. A valid hint and
+registered return URI do not bypass this authority check.
+
 > **Lifecycle vocabulary:** Status, event, and result names in this document are current runtime
 > vocabulary. Future canonical lifecycle terminology (`ACTIVE`, `COMPLETED`, `CANCELLED`, `EXPIRED`,
 > `HALTED`, and the canonical events) is defined in `docs/security/idp-flow-lifecycle.md` and
@@ -117,11 +149,12 @@ never be redirected to.
 
 ## Palm Contract
 
-Palm remains a future native/app-link client. The future completion target is:
+The former native/app-link contract below is retired. Palm is now a first-party Browser RP; its
+current sign-out continuation is `GET/POST /sign/out/completion`. The previous completion target was:
 
 `https://<palm-host>/sign/out/complete`
 
-This is documented only; runtime Palm logout is not implemented here.
+That URI is historical and must not be restored.
 
 ## Related
 

@@ -7,9 +7,13 @@ description: The app/org/com surfaces are independent boundaries that must never
 
 This is a multi-surface Ruby on Rails application with three user-facing surfaces:
 
-- `app` — end-user application
-- `org` — staff / organization surface
+- `app` — end-user application; Palm is its browser relying party
+- `org` — staff / organization surface; Tech is its global operator relying party
 - `com` — public / corporate surface
+
+Tech and Palm remain independent relying-party boundaries within their respective surfaces. Tech
+uses operator identity and requires its own `tech.access` capability. Palm uses client identity.
+Neither surface inherits another surface's credentials, permissions, or sessions.
 
 Each surface is an independent boundary.
 

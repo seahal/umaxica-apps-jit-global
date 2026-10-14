@@ -16,7 +16,7 @@ class Base::Org::Identity::BirthdatesControllerTest < ActionDispatch::Integratio
     headers = as_staff_headers(@operator, host: @host)
     token = OperatorToken.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
     actor = @operator
-    token.rotate_refresh_token! unless token.device_session.current_refresh_token_id
+    token.rotate_refresh_token! unless token.device_session_record.current_refresh_token_id
     registration = WebAuthn::Credential.from_create(
       WebAuthn::FakeClient.new("https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}").create(user_verified: true),
     )
@@ -89,7 +89,7 @@ class Base::Org::Identity::BirthdatesControllerTest < ActionDispatch::Integratio
     headers = as_staff_headers(@operator, host: @host)
     token = OperatorToken.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
     actor = @operator
-    token.rotate_refresh_token! unless token.device_session.current_refresh_token_id
+    token.rotate_refresh_token! unless token.device_session_record.current_refresh_token_id
     registration = WebAuthn::Credential.from_create(
       WebAuthn::FakeClient.new("https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}").create(user_verified: true),
     )

@@ -33,8 +33,6 @@ module Base
         def base_admission_surface_name = "com"
       end
 
-      prepend_before_action :apply_default_no_store
-
       layout "base/com/application"
 
       authorize :user, through: :current_policy_user
@@ -79,6 +77,8 @@ module Base
       # Rails validates Origin and Fetch Metadata first; require its session-bound token before surface callbacks.
       prepend_before_action :require_authenticity_token_for_unsafe_request!
       protect_from_forgery using: :header_or_legacy_token, with: :exception, prepend: true
+      ensure_fqdn_gate_first!
+      prepend_before_action :apply_default_no_store
 
       private
 

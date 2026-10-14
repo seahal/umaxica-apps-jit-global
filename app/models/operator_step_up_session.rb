@@ -56,5 +56,5 @@ class OperatorStepUpSession < OrgTicketRecord
 
   def passkey_transaction_model = OperatorStepUpCeremonyTransaction
 
-  def passkey_session_token = staff_token
+  def passkey_session_token = OperatorToken.find(staff_token_id)
 end

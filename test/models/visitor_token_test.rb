@@ -81,7 +81,7 @@ class VisitorTokenTest < ActiveSupport::TestCase
   def setup
     ensure_visitor_reference_records!
     ensure_visitor_token_reference_records!
-    @visitor = Visitor.create!
+    @visitor = Visitor.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
     @token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
   end
 
@@ -226,6 +226,7 @@ class VisitorTokenTest < ActiveSupport::TestCase
 
     # An Identity is physically erased only once it has lapsed and is purgeable.
     @visitor.reload.update!(discard_at: @visitor.created_at, purge_eligible_at: @visitor.created_at)
+    @visitor = StrictLoadingAssociationPreloader.for_destruction(@visitor.reload)
     @visitor.destroy!
 
     assert_not VisitorToken.exists?(@token.id)

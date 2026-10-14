@@ -101,4 +101,15 @@ class JumpRtReceiverContractTest < ActiveSupport::TestCase
       assert_equal expected_sha256, Digest::SHA256.file(path).hexdigest, filename
     end
   end
+
+  test "Tech is outside the Jump issuer and navigation graph" do
+    graph = JSON.parse(Rails.root.join("test/fixtures/files/jump_production_graph_0_4_0.json").read)
+
+    assert_raises(JumpRtConfigurationError) do
+      JumpRtSurface.namespace_for_controller("Tech::Org::Sign::EntriesController")
+    end
+    assert_raises(JumpRtConfigurationError) { JumpRtSurface.normalize_namespace("TECH_ORG") }
+    assert_empty graph.fetch("nodes").keys.grep(/tech/i)
+    assert_empty graph.fetch("edges").flatten.grep(/tech/i)
+  end
 end

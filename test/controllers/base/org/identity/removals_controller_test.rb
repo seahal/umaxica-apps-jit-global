@@ -41,7 +41,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
               !(rp_token.device_session_id && OperatorRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OperatorRpSession.create!(
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -49,16 +49,16 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.staff, host: rp_host, resource_type: "operator",
-                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                              subject: OidcSubject.for(
-                                rp_token.staff,
-                                resource_type: "operator",
-                              ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "operator",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -92,7 +92,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OperatorRpSession.create!(
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -173,7 +173,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                     oidc_client_id: f0_client.client_id,
                     revoked_at: nil,
                   ))
-                f0_token.rotate_refresh_token! unless f0_token.device_session.current_refresh_token_id
+                f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                 f0_now = Time.current
                 f0_session = OperatorRpSession.create!(
                   operator_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
@@ -181,16 +181,17 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                   refresh_token_expires_at: f0_now + 10.minutes,
                 )
                 f0_access = AuthenticationTokenService.encode(
-                  f0_token.staff, host: f0_host, resource_type: "operator",
-                                  session_public_id: f0_token.public_id, base_session_public_id: f0_token.public_id,
-                                  oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
-                                  expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
-                                  subject: OidcSubject.for(
-                                    f0_token.staff,
-                                    resource_type: "operator",
-                                  ), client_id: f0_client.client_id,
+                  f0_token.actor_record, host: f0_host, resource_type: "operator",
+                                         session_public_id: f0_token.public_id,
+                                         base_session_public_id: f0_token.public_id,
+                                         oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
+                                         expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
+                                         subject: OidcSubject.for(
+                                           f0_token.actor_record,
+                                           resource_type: "operator",
+                                         ), client_id: f0_client.client_id,
                 )
                 @base_browser_rp_credentials[f0_key] =
                   [f0_access, f0_session.issue_refresh_token!]
@@ -265,7 +266,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                      oidc_client_id: rp_client.client_id,
                      revoked_at: nil,
                    ))
-                 rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                 rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                  rp_now = Time.current
                  rp_session = OperatorRpSession.create!(
                    operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -273,16 +274,17 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                    refresh_token_expires_at: rp_now + 10.minutes,
                  )
                  rp_access = AuthenticationTokenService.encode(
-                   rp_token.staff, host: rp_host, resource_type: "operator",
-                                   session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                   oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                   expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                   issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                   subject: OidcSubject.for(
-                                     rp_token.staff,
-                                     resource_type: "operator",
-                                   ), client_id: rp_client.client_id,
+                   rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                          session_public_id: rp_token.public_id,
+                                          base_session_public_id: rp_token.public_id,
+                                          oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                          expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                          subject: OidcSubject.for(
+                                            rp_token.actor_record,
+                                            resource_type: "operator",
+                                          ), client_id: rp_client.client_id,
                  )
                  @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
                end
@@ -338,7 +340,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                     oidc_client_id: f1_client.client_id,
                     revoked_at: nil,
                   ))
-                f1_token.rotate_refresh_token! unless f1_token.device_session.current_refresh_token_id
+                f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                 f1_now = Time.current
                 f1_session = OperatorRpSession.create!(
                   operator_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
@@ -346,16 +348,17 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                   refresh_token_expires_at: f1_now + 10.minutes,
                 )
                 f1_access = AuthenticationTokenService.encode(
-                  f1_token.staff, host: f1_host, resource_type: "operator",
-                                  session_public_id: f1_token.public_id, base_session_public_id: f1_token.public_id,
-                                  oidc_sid: f1_session.public_id, oidc_jti: f1_session.oidc_jti,
-                                  expires_at: f1_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f1_client), audiences: [f1_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
-                                  subject: OidcSubject.for(
-                                    f1_token.staff,
-                                    resource_type: "operator",
-                                  ), client_id: f1_client.client_id,
+                  f1_token.actor_record, host: f1_host, resource_type: "operator",
+                                         session_public_id: f1_token.public_id,
+                                         base_session_public_id: f1_token.public_id,
+                                         oidc_sid: f1_session.public_id, oidc_jti: f1_session.oidc_jti,
+                                         expires_at: f1_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f1_client), audiences: [f1_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
+                                         subject: OidcSubject.for(
+                                           f1_token.actor_record,
+                                           resource_type: "operator",
+                                         ), client_id: f1_client.client_id,
                 )
                 @base_browser_rp_credentials[f1_key] =
                   [f1_access, f1_session.issue_refresh_token!]
@@ -435,7 +438,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                     oidc_client_id: f2_client.client_id,
                     revoked_at: nil,
                   ))
-                f2_token.rotate_refresh_token! unless f2_token.device_session.current_refresh_token_id
+                f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                 f2_now = Time.current
                 f2_session = OperatorRpSession.create!(
                   operator_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
@@ -443,16 +446,17 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                   refresh_token_expires_at: f2_now + 10.minutes,
                 )
                 f2_access = AuthenticationTokenService.encode(
-                  f2_token.staff, host: f2_host, resource_type: "operator",
-                                  session_public_id: f2_token.public_id, base_session_public_id: f2_token.public_id,
-                                  oidc_sid: f2_session.public_id, oidc_jti: f2_session.oidc_jti,
-                                  expires_at: f2_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f2_client), audiences: [f2_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
-                                  subject: OidcSubject.for(
-                                    f2_token.staff,
-                                    resource_type: "operator",
-                                  ), client_id: f2_client.client_id,
+                  f2_token.actor_record, host: f2_host, resource_type: "operator",
+                                         session_public_id: f2_token.public_id,
+                                         base_session_public_id: f2_token.public_id,
+                                         oidc_sid: f2_session.public_id, oidc_jti: f2_session.oidc_jti,
+                                         expires_at: f2_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f2_client), audiences: [f2_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
+                                         subject: OidcSubject.for(
+                                           f2_token.actor_record,
+                                           resource_type: "operator",
+                                         ), client_id: f2_client.client_id,
                 )
                 @base_browser_rp_credentials[f2_key] =
                   [f2_access, f2_session.issue_refresh_token!]
@@ -524,7 +528,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                  !(rp_token.device_session_id && OperatorRpSession.exists?(
                    device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                  ))
-               rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                rp_now = Time.current
                rp_session = OperatorRpSession.create!(
                  operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -532,16 +536,17 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                  refresh_token_expires_at: rp_now + 10.minutes,
                )
                rp_access = AuthenticationTokenService.encode(
-                 rp_token.staff, host: rp_host, resource_type: "operator",
-                                 session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                 oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                 expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                 subject: OidcSubject.for(
-                                   rp_token.staff,
-                                   resource_type: "operator",
-                                 ), client_id: rp_client.client_id,
+                 rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                        session_public_id: rp_token.public_id,
+                                        base_session_public_id: rp_token.public_id,
+                                        oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                        expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                        issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                        subject: OidcSubject.for(
+                                          rp_token.actor_record,
+                                          resource_type: "operator",
+                                        ), client_id: rp_client.client_id,
                )
                @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
              end
@@ -598,7 +603,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
               !(rp_token.device_session_id && OperatorRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OperatorRpSession.create!(
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -606,16 +611,16 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.staff, host: rp_host, resource_type: "operator",
-                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                              subject: OidcSubject.for(
-                                rp_token.staff,
-                                resource_type: "operator",
-                              ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "operator",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end

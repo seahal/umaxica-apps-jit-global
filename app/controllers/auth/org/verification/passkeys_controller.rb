@@ -22,7 +22,7 @@ class Auth::Org::Verification::PasskeysController < ::Auth::Org::ApplicationCont
 
   def ceremony_step_up_session_model = OperatorStepUpSession
 
-  def ceremony_session_token(record) = record.staff_token
+  def ceremony_session_token(record) = OperatorToken.find(record.staff_token_id)
 
   def ceremony_token_owned_by?(token, actor) = token.staff_id == actor.id && !token.emergency_authentication_context?
 

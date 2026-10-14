@@ -33,7 +33,7 @@ class EnforcementCaseApplyFailureTest < ActiveSupport::TestCase
 
     def approved_by_operator_public_id = nil
 
-    def principal_effect = nil
+    def principal_effect_record = nil
 
     def public_id = "case-public-id"
 

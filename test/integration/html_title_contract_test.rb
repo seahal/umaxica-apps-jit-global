@@ -99,9 +99,9 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
       },
       {
         host: ENV.fetch("PUBLIC_PALM_SERVICE_URL"),
-        path: -> { palm_app_sign_out_path(ri: "jp") },
+        path: -> { palm_app_sign_show_path(ri: "jp") },
         tld: "APP",
-        page_title: -> { "Signed out" },
+        page_title: -> { I18n.t("actions.continue") },
       },
     ]
 

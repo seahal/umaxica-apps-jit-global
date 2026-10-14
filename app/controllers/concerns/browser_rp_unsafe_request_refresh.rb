@@ -12,9 +12,14 @@ module BrowserRpUnsafeRequestRefresh
   def authenticate_browser_rp_unsafe_request!
     return if request.get? || request.head? || request.options?
     return unless browser_rp_request_safe_for_unsafe_method?
+    return unless browser_rp_unsafe_request_refresh_enabled?
     return if browser_rp_authenticated? || browser_rp_dependency_failed?
 
     refresh_browser_rp_credentials!
+  end
+
+  def browser_rp_unsafe_request_refresh_enabled?
+    true
   end
 
   private

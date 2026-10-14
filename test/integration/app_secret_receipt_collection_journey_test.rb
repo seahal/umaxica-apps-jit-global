@@ -330,7 +330,8 @@ class AppSecretReceiptCollectionJourneyTest < ActionDispatch::IntegrationTest
     assert credentials.none? { |credential| ClientSecretCredential.exists?(credential.id) }
     ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 3600)
     deadline = transactions.flat_map do |transaction|
-      [transaction.expires_at, transaction.login_challenge_expires_at, transaction.secret_sign_in_flow.expires_at]
+      [transaction.expires_at, transaction.login_challenge_expires_at,
+       ClientSignInFlow.find(transaction.secret_sign_in_flow_id).expires_at,]
     end.max + 1.second
     Timeout.timeout(15) { sleep 0.01 while ClientSignInFlow.database_now < deadline }
     hold = ClientRetentionHold.create!(client: clients(:one), hold_kind: "legal_hold", reason_code: "legal_hold")

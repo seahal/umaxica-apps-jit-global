@@ -48,7 +48,7 @@ class ClientSecretCredential < AppZenithRecord
     self.claim_sign_in_flow_ref = flow.public_id
     self.claim_ceremony_session_id = ceremony.id
     ClientSecretAuditOutbox.record!(
-      actor_context: actor_context, client_ref: client.public_id, credential_ref: public_id,
+      actor_context: actor_context, client_ref: actor_context.subject.public_id, credential_ref: public_id,
       operation_ref: claim_operation_id, occurred_at: at, event_name: "secret.claimed",
     )
     save!
@@ -64,7 +64,8 @@ class ClientSecretCredential < AppZenithRecord
 
     flow = ClientSignInFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
     unless self.class.lease_connection.transaction_open? && claimed_at && discard_at == Float::INFINITY &&
-        at >= claimed_at && purge_at > at && actor_context.subject.id == client_id &&
+        at >= claimed_at && purge_at > at && actor_context.subject.is_a?(Client) &&
+        actor_context.subject.id == client_id &&
         flow.public_id == claim_sign_in_flow_ref &&
         flow.principal_id == client_id
       raise InvalidTransition, "Secret retirement requires its terminal claim decision"
@@ -79,7 +80,7 @@ class ClientSecretCredential < AppZenithRecord
     events = successful ? %w(secret.consumed secret.discarded) : %w(secret.discarded)
     events.each do |event|
       ClientSecretAuditOutbox.record!(
-        actor_context: actor_context, client_ref: client.public_id, credential_ref: public_id,
+        actor_context: actor_context, client_ref: actor_context.subject.public_id, credential_ref: public_id,
         operation_ref: claim_operation_id, occurred_at: at, event_name: event, reason: reason,
       )
     end
@@ -101,6 +102,7 @@ class ClientSecretCredential < AppZenithRecord
   end
 
   def commit_storage_confirmation!(actor_context:, at:)
+    owned_issuance = ClientSecretIssuance.find_by(id: issuance_id, client_id: client_id)
     unless (at.is_a?(Time) || at.is_a?(ActiveSupport::TimeWithZone)) &&
         self.class.lease_connection.transaction_open?
       raise InvalidTransition, "Secret confirmation requires its source transaction and timestamp"
@@ -108,12 +110,9 @@ class ClientSecretCredential < AppZenithRecord
 
     unless storage_confirmation_context_matches?(actor_context) && confirmed_at.nil? &&
         claimed_at.nil? && claim_operation_id.nil? && revoked_at.nil? &&
-        created_at <= at && accessible?(at) && issuance.reload.confirmed_at == at
+        created_at <= at && accessible?(at) && owned_issuance&.confirmed_at == at &&
+        storage_confirmation_source_recorded?(at, issuance: owned_issuance)
       raise InvalidTransition, "Secret confirmation requires its owning storage declaration"
-    end
-
-    unless storage_confirmation_source_recorded?(at)
-      raise InvalidTransition, "Secret confirmation requires its matching source audit"
     end
 
     @storage_confirmation_write = true
@@ -144,10 +143,10 @@ class ClientSecretCredential < AppZenithRecord
     end
 
     AppZenithRecord.connected_to(role: :writing) do
-      client.with_lock(requires_new: true) do
+      actor_context.subject.with_lock(requires_new: true) do
         with_lock do
           unless available_at?(at: at) && created_at <= at &&
-              AuthMethodGuard.can_remove_secret_credential?(client, self)
+              AuthMethodGuard.can_remove_secret_credential?(actor_context.subject, self)
             raise InvalidTransition, "Secret is unavailable for management revocation"
           end
 
@@ -158,7 +157,7 @@ class ClientSecretCredential < AppZenithRecord
           operation_ref = SecureRandom.uuid
           %w(secret.revoked secret.discarded).each do |event_name|
             ClientSecretAuditOutbox.record!(
-              actor_context: actor_context.with(subject: client), client_ref: client.public_id,
+              actor_context: actor_context, client_ref: actor_context.subject.public_id,
               credential_ref: public_id, operation_ref: operation_ref, occurred_at: at,
               event_name: event_name, reason: "user_revocation",
             )
@@ -181,8 +180,9 @@ class ClientSecretCredential < AppZenithRecord
     end
 
     AppZenithRecord.connected_to(role: :writing) do
-      client.with_lock do
-        raise InvalidTransition, "Secret withdrawal requires a terminated Client" unless client.terminated?
+      actor = Client.find(client_id)
+      actor.with_lock do
+        raise InvalidTransition, "Secret withdrawal requires a terminated Client" unless actor.terminated?
 
         with_lock do
           return self if revoked_at || discard_at != Float::INFINITY
@@ -195,11 +195,11 @@ class ClientSecretCredential < AppZenithRecord
             self.purge_eligible_at = purge_at
             events << "secret.discarded"
           end
-          context = ActorValuesContext.empty.with(subject: client, actor_type: :client, tld: :app, surface: :base)
+          context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
           operation_ref = SecureRandom.uuid
           events.each do |event_name|
             ClientSecretAuditOutbox.record!(
-              actor_context: context, client_ref: client.public_id, credential_ref: public_id,
+              actor_context: context, client_ref: actor.public_id, credential_ref: public_id,
               operation_ref: operation_ref, occurred_at: at, event_name: event_name, reason: "withdrawal",
             )
           end
@@ -253,8 +253,9 @@ class ClientSecretCredential < AppZenithRecord
   def verify_retirement_outcome!(flow, successful, reason)
     receipt = ClientSecretSignInReceipt.find_by(operation_id: claim_operation_id)
     if successful
+      flow_token_ref = ClientToken.where(id: flow.token_id, user_id: client_id).pick(:public_id)
       unless receipt && receipt.credential_ref == public_id && receipt.sign_in_flow_id == flow.id &&
-          flow.sign_in_completed? && receipt.root_token_ref == flow.token&.public_id &&
+          flow.sign_in_completed? && receipt.root_token_ref == flow_token_ref &&
           receipt.committed_at == flow.session_issued_at
         raise InvalidTransition, "Secret consumption requires its durable successful receipt"
       end
@@ -293,9 +294,10 @@ class ClientSecretCredential < AppZenithRecord
   end
 
   def storage_confirmation_context_matches?(context)
+    owned_issuance = ClientSecretIssuance.find_by(id: issuance_id, client_id: client_id)
     persisted? && context.is_a?(ActorValuesContext) && context.client? &&
       context.tld == :app &&
-      (context.surface == :base || (context.surface == :sign && issuance.sign_up_flow_ref.present?)) &&
+      (context.surface == :base || (context.surface == :sign && owned_issuance&.sign_up_flow_ref.present?)) &&
       context.subject.is_a?(Client) &&
       context.subject.id == client_id
   end
@@ -344,26 +346,36 @@ class ClientSecretCredential < AppZenithRecord
 
   def confirmation_has_source_audit
     return unless confirmed_at && confirmed_at_in_database.nil? && will_save_change_to_confirmed_at?
-    return if issuance.reload.confirmed_at == confirmed_at && storage_confirmation_source_recorded?(confirmed_at)
+
+    owned_issuance = ClientSecretIssuance.find_by(id: issuance_id, client_id: client_id)
+    return if owned_issuance&.confirmed_at == confirmed_at &&
+      storage_confirmation_source_recorded?(confirmed_at, issuance: owned_issuance)
 
     errors.add(:confirmed_at, "requires its matching source audit and storage declaration")
   end
 
-  def storage_confirmation_source_recorded?(at)
+  def storage_confirmation_source_recorded?(at, issuance: nil)
+    issuance ||= ClientSecretIssuance.find_by(id: issuance_id, client_id: client_id)
+    client_ref = Client.where(id: client_id).pick(:public_id)
+    return false unless issuance && client_ref
+
     created = ClientSecretAuditOutbox.exists?(
-      client_ref: client.public_id, credential_ref: public_id, operation_ref: issuance.origin_operation_id,
+      client_ref: client_ref, credential_ref: public_id, operation_ref: issuance.origin_operation_id,
       event_name: "secret.created", occurred_at: at,
-      actor_type: "Client", actor_id: client_id, actor_public_ref: client.public_id,
+      actor_type: "Client", actor_id: client_id, actor_public_ref: client_ref,
     )
     created && ClientSecretAuditOutbox.exists?(
-      client_ref: client.public_id, credential_ref: nil, operation_ref: issuance.origin_operation_id,
+      client_ref: client_ref, credential_ref: nil, operation_ref: issuance.origin_operation_id,
       event_name: "secret.storage_declared", occurred_at: at, item_count: issuance.planned_count,
-      actor_type: "Client", actor_id: client_id, actor_public_ref: client.public_id,
+      actor_type: "Client", actor_id: client_id, actor_public_ref: client_ref,
     )
   end
 
   def terminal_issuance_cannot_confirm_candidate
-    return unless confirmed_at && issuance && (issuance.canceled_at || issuance.planned_count.zero?)
+    return unless confirmed_at
+
+    owned_issuance = ClientSecretIssuance.find_by(id: issuance_id, client_id: client_id)
+    return unless owned_issuance && (owned_issuance.canceled_at || owned_issuance.planned_count.zero?)
 
     errors.add(:issuance, "canceled or omitted issuance cannot confirm a candidate")
   end
@@ -378,6 +390,9 @@ class ClientSecretCredential < AppZenithRecord
   # Only the management operation verifies the current browser and Step-Up.
   def revocation_has_source_audit
     return unless revoked_at && revoked_at_in_database.nil? && will_save_change_to_revoked_at?
+
+    client = Client.find_by(id: client_id)
+    return errors.add(:revoked_at, "requires its matching source audit transaction") unless client
 
     events = ClientSecretAuditOutbox.where(
       credential_ref: public_id, client_ref: client.public_id, actor_type: "Client", actor_id: client_id,

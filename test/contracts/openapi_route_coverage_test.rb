@@ -33,7 +33,7 @@ class OpenapiRouteCoverageTest < ActiveSupport::TestCase
 
   # Surfaces with their own description. `net` and `dev` are internal-only and have none.
   SURFACES = OpenapiContract::SURFACES
-  APPLICATION_SERVICE_NAMES = %w(auth base core docs edit help info news palm warp xper).freeze
+  APPLICATION_SERVICE_NAMES = %w(auth base core docs edit help info news palm warp).freeze
 
   test "every described surface has a bundled description that parses" do
     SURFACES.each do |surface|
@@ -71,11 +71,9 @@ class OpenapiRouteCoverageTest < ActiveSupport::TestCase
   end
 
   test "the surfaces differ only where the routes differ" do
-    # Palm serves the app surface only, so `/api/v0/profile` must be app-only in the descriptions
-    # too. This is the concrete case that a single shared description could not express.
-    assert_includes described_operations("app"), "GET /api/v0/profile"
-    assert_not_includes described_operations("com"), "GET /api/v0/profile"
-    assert_not_includes described_operations("org"), "GET /api/v0/profile"
+    %w(app com org).each do |surface|
+      assert_not_includes described_operations(surface), "GET /api/v0/profile"
+    end
   end
 
   test "edit org operational API routes are covered by the org description" do

@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -22,7 +23,6 @@
 #  fk_rails_...  (muter_avatar_id => avatars.id) ON DELETE => cascade
 #
 
-# frozen_string_literal: true
 
 class AvatarMute < AvatarRecord
   belongs_to :muter_avatar,

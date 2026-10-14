@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -29,7 +30,6 @@
 #  fk_rails_...  (user_id => clients.id) ON DELETE => nullify
 #
 
-# frozen_string_literal: true
 
 require "test_helper"
 

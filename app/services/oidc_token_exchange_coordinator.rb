@@ -139,6 +139,9 @@ class OidcTokenExchangeCoordinator < ApplicationService
     bound_session_failure = prevalidate_bound_session(peeked)
     return bound_session_failure if bound_session_failure
 
+    capability_failure = required_operator_capability_failure_for_payload(peeked)
+    return capability_failure if capability_failure
+
     dpop_jkt = validate_dpop_proof(resource_type: peeked["resource_type"])
     return dpop_jkt if dpop_jkt.is_a?(Result)
 
@@ -201,6 +204,9 @@ class OidcTokenExchangeCoordinator < ApplicationService
     resource = resource_for_root_token(root_token, resource_type)
     return failure("invalid_grant", "refresh token session is not active") unless
       root_token&.currently_usable? && resource&.active?
+
+    capability_failure = required_operator_capability_failure(client, resource)
+    return capability_failure if capability_failure
 
     auth_time = parse_time(usage.oidc_auth_time)
     return failure("invalid_grant", "refresh token authentication time missing") unless auth_time
@@ -293,10 +299,32 @@ class OidcTokenExchangeCoordinator < ApplicationService
     return unless root_token
 
     case resource_type
-    when "operator" then root_token.staff
-    when "visitor" then root_token.visitor
-    when "client" then root_token.user
+    when "operator"
+      Operator.find_by(id: root_token.staff_id) if root_token.is_a?(OperatorToken)
+    when "visitor"
+      Visitor.find_by(id: root_token.visitor_id) if root_token.is_a?(VisitorToken)
+    when "client"
+      Client.find_by(id: root_token.user_id) if root_token.is_a?(ClientToken)
     end
+  end
+
+  def required_operator_capability_failure(client, resource)
+    capability = client.required_operator_capability
+    return unless capability
+    return failure("access_denied", "operator capability is not in force") unless resource.is_a?(Operator)
+
+    allowed =
+      OrgZenithRecord.connected_to(role: :writing) do
+        Operator.find_by(id: resource.id)&.capability?(capability) || false
+      end
+    return if allowed
+
+    failure("access_denied", "operator capability is not in force")
+  end
+
+  def required_operator_capability_failure_for_payload(payload)
+    client = OidcClientRegistry.find!(client_id)
+    required_operator_capability_failure(client, resolve_resource(wrap_payload(payload)))
   end
 
   def valid_refresh_scopes?(client, scopes)
@@ -1076,14 +1104,23 @@ class OidcTokenExchangeCoordinator < ApplicationService
   end
 
   def current_root_token_for(device_session)
-    device_session.current_refresh_token
+    case device_session
+    when ClientDeviceSession
+      ClientToken.find_by(id: device_session.current_refresh_token_id, device_session_id: device_session.id)
+    when VisitorDeviceSession
+      VisitorToken.find_by(id: device_session.current_refresh_token_id, device_session_id: device_session.id)
+    when OperatorDeviceSession
+      OperatorToken.find_by(id: device_session.current_refresh_token_id, device_session_id: device_session.id)
+    else
+      raise ArgumentError, "unsupported Browser Session class: #{device_session.class.name}"
+    end
   end
 
   def root_token_actor_matches?(root_token, resource)
     case root_token
-    when ClientToken then root_token.user == resource
-    when OperatorToken then root_token.staff == resource
-    when VisitorToken then root_token.visitor == resource
+    when ClientToken then resource.is_a?(Client) && root_token.user_id == resource.id
+    when OperatorToken then resource.is_a?(Operator) && root_token.staff_id == resource.id
+    when VisitorToken then resource.is_a?(Visitor) && root_token.visitor_id == resource.id
     else false
     end
   end
@@ -1150,6 +1187,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
       registered_token_endpoint_auth_method: client.registered_token_endpoint_auth_method,
       metadata_token_endpoint_auth_method: client.metadata_token_endpoint_auth_method,
       jwt_namespace: client.jwt_namespace,
+      required_operator_capability: client.required_operator_capability,
     )
   end
 

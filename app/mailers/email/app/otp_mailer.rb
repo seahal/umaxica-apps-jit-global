@@ -53,7 +53,7 @@ module Email::App
       return false unless transaction && transaction.operation == params[:purpose].to_s &&
         transaction.purpose == params[:purpose].to_s
 
-      email = ClientEmail.find_by(public_id: params[:public_id])
+      email = ClientEmail.includes(:user).find_by(public_id: params[:public_id])
       return false unless email
 
       email.with_lock do
@@ -109,7 +109,7 @@ module Email::App
 
     def deliver_current_registration_email_otp(binding)
       transaction = ClientEmailCeremonyTransaction.find_by(transaction_id: binding.contact_ceremony_transaction_ref)
-      email = ClientEmail.find_by(public_id: params[:public_id])
+      email = ClientEmail.includes(:user).find_by(public_id: params[:public_id])
       return unless transaction && email
 
       EmailCredentialRegistrationOtpDeliveryGuard.call(
@@ -120,7 +120,7 @@ module Email::App
 
     def deliver_current_signup_email_otp(binding)
       flow = ClientSignUpFlow.find_by(public_id: binding.sign_up_flow_ref)
-      email = ClientEmail.find_by(public_id: params[:public_id])
+      email = ClientEmail.includes(:user).find_by(public_id: params[:public_id])
       transaction = ClientEmailCeremonyTransaction.find_by(transaction_id: binding.sign_up_email_transaction_ref)
       delivered =
         if flow && email && transaction

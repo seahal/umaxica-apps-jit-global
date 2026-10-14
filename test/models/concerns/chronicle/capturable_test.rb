@@ -9,12 +9,12 @@ class ChronicleCapturableTest < ActiveSupport::TestCase
   class BusinessFailure < StandardError; end
 
   setup do
-    @policy = ChronicleRetentionPolicy.create!(
-      code: "security",
-      name: "Security",
-      duration_days: 365,
-      permanent: false,
-    )
+    @policy =
+      ChronicleRetentionPolicy.find_or_create_by!(code: "security") do |policy|
+        policy.name = "Security"
+        policy.duration_days = 365
+        policy.permanent = false
+      end
   end
 
   test "capture records succeeded when block succeeds" do
@@ -26,7 +26,7 @@ class ChronicleCapturableTest < ActiveSupport::TestCase
         "business-result"
       end
 
-    chronicle = Chronicle.find_by!(request_id: "request-success")
+    chronicle = Chronicle.includes(:chronicle_retention_policy).find_by!(request_id: "request-success")
 
     assert_equal "business-result", result
     assert_equal "succeeded", chronicle.result

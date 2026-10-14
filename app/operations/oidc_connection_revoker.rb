@@ -22,7 +22,12 @@ class OidcConnectionRevoker < ApplicationService
   attr_reader :connection, :revoked_at
 
   def revoke_tokens!
-    token_scope.find_each(&:revoke!)
+    token_scope.find_each do |token|
+      AuthenticationLogoutCurrentSession.call(
+        token: token,
+        reason: "oidc_connection_revoked",
+      )
+    end
   end
 
   def token_scope

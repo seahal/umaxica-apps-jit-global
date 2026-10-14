@@ -104,7 +104,7 @@ class JwtAnomalySubscriberTest < ActiveSupport::TestCase
   test "emit creates anomaly event linked to occurrence" do
     event, _occurred_at = setup_anomaly_event_test
 
-    assert_equal jwt_occurrences(:auth_user_malformed_token), event.jwt_occurrence
+    assert_equal jwt_occurrences(:auth_user_malformed_token).id, event.jwt_occurrence_id
     assert_equal "AUTH_USER_MALFORMED_TOKEN", event.code
   end
 
@@ -127,7 +127,7 @@ class JwtAnomalySubscriberTest < ActiveSupport::TestCase
       event = JwtAnomalyEvent.order(:id).last
 
       assert_equal code, event.code
-      assert_equal code, event.jwt_occurrence.body
+      assert_equal code, JwtOccurrence.find(event.jwt_occurrence_id).body
     end
   end
 

@@ -28,7 +28,7 @@ class TelephoneCredentialRegistrationOtpFormQuery
 
   def call
     now = transaction.class.database_now
-    source_current? && root_current?(now) && ticket_current?(now) && available_evidence?(now)
+    token_device_session && source_current? && root_current?(now) && ticket_current?(now) && available_evidence?(now)
   end
 
   private
@@ -42,11 +42,11 @@ class TelephoneCredentialRegistrationOtpFormQuery
   def source_owned?
     case actor
     when Client
-      token.user_id == actor.id && telephone.user_id == actor.id && token.device_session.user_id == actor.id
+      token.user_id == actor.id && telephone.user_id == actor.id && token_device_session.user_id == actor.id
     when Visitor
-      token.visitor_id == actor.id && telephone.visitor_id == actor.id && token.device_session.visitor_id == actor.id
+      token.visitor_id == actor.id && telephone.visitor_id == actor.id && token_device_session.visitor_id == actor.id
     when Operator
-      token.staff_id == actor.id && telephone.staff_id == actor.id && token.device_session.staff_id == actor.id
+      token.staff_id == actor.id && telephone.staff_id == actor.id && token_device_session.staff_id == actor.id
     end
   end
 
@@ -66,8 +66,12 @@ class TelephoneCredentialRegistrationOtpFormQuery
   end
 
   def root_current?(now)
-    token.currently_usable?(now) && token.device_session.usable? &&
-      token.device_session.current_refresh_token_id == token.id
+    token.currently_usable?(now) && token_device_session.usable? &&
+      token_device_session.current_refresh_token_id == token.id
+  end
+
+  def token_device_session
+    @token_device_session ||= token.device_session_record
   end
 
   def ticket_current?(now)

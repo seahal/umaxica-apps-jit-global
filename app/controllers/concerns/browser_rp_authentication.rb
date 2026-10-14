@@ -421,7 +421,7 @@ module BrowserRpAuthentication
     return unless request.format.html?
 
     case controller_path.split("/").first
-    when "base", "core", "edit", "warp"
+    when "base", "core", "edit", "palm", "tech", "warp"
       sign_in_url_with_pt(encoded_pt(request.fullpath))
     end
   end
@@ -508,44 +508,46 @@ module BrowserRpAuthentication
     return AccessState.new(status: :missing, resource: nil, rp_session: nil, payload: nil, security_context: nil) if
       access_token.blank?
 
-    payload = OidcRpBrowserCredentialContract.decode_access_token(
-      token: access_token,
-      host: request.host,
-      resource_type: browser_rp_resource_type,
-      client_id: browser_rp_client_id,
-    )
-    unless payload
-      return AccessState.new(status: :invalid, resource: nil, rp_session: nil, payload: nil, security_context: nil)
+    browser_rp_connection_owner.connected_to(role: :writing) do
+      payload = OidcRpBrowserCredentialContract.decode_access_token(
+        token: access_token,
+        host: request.host,
+        resource_type: browser_rp_resource_type,
+        client_id: browser_rp_client_id,
+      )
+      unless payload
+        return AccessState.new(status: :invalid, resource: nil, rp_session: nil, payload: nil, security_context: nil)
+      end
+
+      session_public_id = AuthorizationTokenClaims.session_id(payload).to_s
+      rp_session = find_browser_rp_session(session_public_id)
+      resource = browser_rp_resource_for(rp_session)
+      root_token = rp_session&.parent_token
+      browser_session = rp_session&.parent_device_session
+      return invalid_browser_rp_access unless valid_browser_rp_chain?(
+        payload, rp_session, resource, browser_session, root_token,
+      )
+
+      security_context = BrowserSessionSecurityContext.new(
+        resource: resource,
+        browser_session: browser_session,
+        root_token: root_token,
+        rp_session: rp_session,
+        access_payload: payload,
+      )
+      # A deactivated actor holds a sound credential but is not an authenticated member: protected
+      # pages answer `withdrawal_required` and the credential is kept, so recovery stays reachable.
+      return withdrawal_required_browser_rp_access if resource.deactivated?
+
+      @current_access_token_payload = payload
+      AccessState.new(
+        status: :valid,
+        resource: resource,
+        rp_session: rp_session,
+        payload: payload,
+        security_context: security_context,
+      )
     end
-
-    session_public_id = AuthorizationTokenClaims.session_id(payload).to_s
-    rp_session = find_browser_rp_session(session_public_id)
-    resource = browser_rp_resource_for(rp_session)
-    root_token = rp_session&.parent_token
-    browser_session = rp_session&.parent_device_session
-    return invalid_browser_rp_access unless valid_browser_rp_chain?(
-      payload, rp_session, resource, browser_session, root_token,
-    )
-
-    security_context = BrowserSessionSecurityContext.new(
-      resource: resource,
-      browser_session: browser_session,
-      root_token: root_token,
-      rp_session: rp_session,
-      access_payload: payload,
-    )
-    # A deactivated actor holds a sound credential but is not an authenticated member: protected
-    # pages answer `withdrawal_required` and the credential is kept, so recovery stays reachable.
-    return withdrawal_required_browser_rp_access if resource.deactivated?
-
-    @current_access_token_payload = payload
-    AccessState.new(
-      status: :valid,
-      resource: resource,
-      rp_session: rp_session,
-      payload: payload,
-      security_context: security_context,
-    )
   rescue ActiveRecord::RecordNotFound
     invalid_browser_rp_access
   end
@@ -555,7 +557,18 @@ module BrowserRpAuthentication
 
     browser_rp_connection_owner.connected_to(role: :writing) do
       browser_rp_session_class.uncached do
-        browser_rp_session_class.find_by(public_id: public_id, oidc_client_id: browser_rp_client_id)
+        relation =
+          case browser_rp_resource_type.to_s
+          when "operator"
+            OperatorRpSession.includes(:operator_device_session)
+          when "visitor"
+            VisitorRpSession.includes(:visitor_device_session)
+          when "client"
+            ClientRpSession.includes(:client_device_session)
+          else
+            raise ArgumentError, "unsupported Browser RP resource type"
+          end
+        relation.find_by(public_id: public_id, oidc_client_id: browser_rp_client_id)
       end
     end
   end
@@ -563,11 +576,19 @@ module BrowserRpAuthentication
   def browser_rp_resource_for(rp_session)
     return unless rp_session
 
-    case rp_session
-    when OperatorRpSession then rp_session.staff
-    when VisitorRpSession then rp_session.visitor
-    when ClientRpSession then rp_session.user
-    else raise ArgumentError, "unsupported Browser RP Session class"
+    resource_class = browser_rp_resource_class
+    actor_key =
+      case rp_session
+      when OperatorRpSession then :staff_id
+      when VisitorRpSession then :visitor_id
+      when ClientRpSession then :user_id
+      else raise ArgumentError, "unsupported Browser RP Session class"
+      end
+    actor_id = rp_session.parent_device_session&.public_send(actor_key)
+    return if actor_id.blank?
+
+    resource_class.connection_class_for_self.connected_to(role: :writing) do
+      resource_class.find_by(id: actor_id)
     end
   end
 

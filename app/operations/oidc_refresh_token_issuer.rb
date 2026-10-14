@@ -371,7 +371,18 @@ class OidcRefreshTokenIssuer
     return unless context && usage_class
 
     context.connected_to(role: :writing) do
-      usage_class.uncached { usage_class.find_by(public_id: public_id) }
+      usage_class.uncached do
+        usage_class.includes(parent_device_session_association).find_by(public_id: public_id)
+      end
+    end
+  end
+
+  def parent_device_session_association
+    case resource_type
+    when "client" then :client_device_session
+    when "visitor" then :visitor_device_session
+    when "operator" then :operator_device_session
+    else raise ArgumentError, "unsupported OIDC refresh resource type"
     end
   end
 

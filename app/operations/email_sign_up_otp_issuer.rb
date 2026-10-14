@@ -48,11 +48,11 @@ class EmailSignUpOtpIssuer
       when ClientSignUpFlow
         raise ArgumentError, "APP signup requires its own Email" unless email.is_a?(ClientEmail)
 
-        [email.user, ClientEmailCeremonyTransaction, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
+        [Client.find(email.user_id), ClientEmailCeremonyTransaction, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
       when VisitorSignUpFlow
         raise ArgumentError, "COM signup requires its own Email" unless email.is_a?(VisitorEmail)
 
-        [email.visitor, VisitorEmailCeremonyTransaction, VisitorStatus::ACTIVE]
+        [Visitor.find(email.visitor_id), VisitorEmailCeremonyTransaction, VisitorStatus::ACTIVE]
       else raise ArgumentError, "unsupported Email signup realm"
       end
     end

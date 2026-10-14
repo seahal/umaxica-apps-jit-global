@@ -158,18 +158,22 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     completion_destination = base.response.location
 
     original_completion_status = base.response.status
+    base.get(base_app_root_url(ri: "jp", host: base_host))
+    csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
     assert_no_difference(["Client.count", "ClientExternalIdentity.count", "ClientToken.count"]) do
-      base.post(form["action"], params: fields, headers: base_headers)
+      base.post(
+        form["action"], params: fields.merge("authenticity_token" => csrf), headers: base_headers,
+      )
     end
     assert_equal [303, 303, completion_destination],
                  [original_completion_status, base.response.status, base.response.location]
     identity = ClientExternalIdentity.find_by!(provider: "google", subject:)
-    actor = identity.user
+    actor = Client.find(identity.client_id)
 
     assert_equal [actor.id, true, true, nil],
                  [signup.reload.principal_id, signup.completed?, ClientIdentity.exists?(source_record_id: actor.id),
                   base.cookies[AuthenticationBase::ACCESS_COOKIE_KEY],]
-    ceremony = binding.reload.admitted_auth_ceremony_session
+    ceremony = ClientAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
     evidence_time = ceremony.authentication_event_at
 
     assert_equal [true, "google"], [binding.redeemed?, ceremony.authentication_method]
@@ -187,8 +191,10 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     assert_equal [evidence_time, "google", true, token.public_id, true],
                  [token.authentication_event_at, token.established_authentication_method,
                   token.root_login_established_at.present?,
-                  binding.authorization_transaction.reload.browser_session_ref,
-                  binding.authorization_transaction.consumed?,]
+                  ClientOidcAuthorizationTransaction.find(
+                    binding.authorization_transaction_id,
+                  ).reload.browser_session_ref,
+                  ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id).consumed?,]
   end
   test "a local signup receipt resumes the exact completed Source and Root without another issuance" do
     subject = "new-social-#{SecureRandom.hex(8)}"
@@ -314,7 +320,9 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
         )
       end
     end
-    assert_equal [true, nil], [signup.reload.completed?, binding.sign_in_flow.reload.principal_id]
+    flow = ClientSignInFlow.find(binding.sign_in_flow_id)
+
+    assert_equal [true, nil], [signup.reload.completed?, flow.reload.principal_id]
     assert_difference("ClientToken.count", 1) do
       assert_no_difference(["Client.count", "ClientExternalIdentity.count"]) do
         base.post(form["action"], params: fields, headers: base_headers)
@@ -323,26 +331,34 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     completion_destination = base.response.location
 
     original_completion_status = base.response.status
+    base.get(base_app_root_url(ri: "jp", host: base_host))
+    csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
     assert_no_difference(["Client.count", "ClientExternalIdentity.count", "ClientToken.count"]) do
-      base.post(form["action"], params: fields, headers: base_headers)
+      base.post(
+        form["action"], params: fields.merge("authenticity_token" => csrf), headers: base_headers,
+      )
     end
     assert_equal [303, 303, completion_destination],
                  [original_completion_status, base.response.status, base.response.location]
     identity = ClientExternalIdentity.find_by!(provider: "google", subject:)
-    actor = identity.user
+    actor = Client.find(identity.client_id)
 
     token = ClientToken.find_by!(user_id: actor.id)
-    ceremony = binding.reload.admitted_auth_ceremony_session
+    ceremony = ClientAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
 
     assert_equal [actor.id, true, true, true, true],
                  [signup.reload.principal_id, signup.completed?, ClientIdentity.exists?(source_record_id: actor.id),
                   token.currently_usable?, ceremony.completed?,]
     assert_equal [ceremony.authentication_event_at, "google", token.id],
                  [token.authentication_event_at, token.established_authentication_method,
-                  binding.sign_in_flow.reload.token_id,]
+                  ClientSignInFlow.find(binding.sign_in_flow_id).reload.token_id,]
     token.revoke!
+    base.get(base_app_root_url(ri: "jp", host: base_host))
+    csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
     assert_no_difference(["Client.count", "ClientExternalIdentity.count", "ClientToken.count"]) do
-      base.post(form["action"], params: fields, headers: base_headers)
+      base.post(
+        form["action"], params: fields.merge("authenticity_token" => csrf), headers: base_headers,
+      )
     end
     assert_equal [422, true, true], [base.response.status, token.reload.revoked?, signup.reload.completed?]
   end
@@ -443,13 +459,13 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
       auth.get(auth_app_social_google_callback_path, params: { state:, ri: "jp" }, headers: auth_headers)
     end
     assert_equal 303, auth.response.status
-    ceremony = binding.reload.admitted_auth_ceremony_session
+    ceremony = ClientAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
 
     assert_predicate ceremony, :authentication_evidence_recorded?
     assert_equal "google", ceremony.authentication_method
     assert_equal [true, true], [auth.cookies[AuthenticationBase::ACCESS_COOKIE_KEY].nil?,
                                 auth.cookies[AuthenticationBase::REFRESH_COOKIE_KEY].nil?,]
-    assert_equal "pending", binding.authorization_transaction.reload.status
+    assert_equal "pending", ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id).reload.status
 
     auth.get(auth_app_sign_oidc_handoff_path, params: { ri: "jp" })
 
@@ -476,8 +492,10 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     assert_equal [ceremony.authentication_event_at, "google"],
                  [token.authentication_event_at, token.established_authentication_method]
     assert_not_nil token.root_login_established_at
-    assert_equal token.public_id, binding.authorization_transaction.reload.browser_session_ref
-    assert_predicate binding.authorization_transaction, :consumed?
+    transaction = ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id)
+
+    assert_equal token.public_id, transaction.reload.browser_session_ref
+    assert_predicate transaction, :consumed?
     assert_equal 0, ClientRpSession.where(client_token_id: token.id).count
   end
   test "a result-delivery outage resumes the exact committed signup without another Source or Root" do
@@ -948,12 +966,12 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     assert_equal [303, 303, completion_destination, true],
                  [original_completion_status, base.response.status, base.response.location, base.flash.empty?]
     identity = ClientExternalIdentity.find_by!(provider: "google", subject:)
-    actor = identity.user
+    actor = Client.find(identity.client_id)
 
     assert_equal [actor.id, true, true, nil],
                  [signup.reload.principal_id, signup.completed?, ClientIdentity.exists?(source_record_id: actor.id),
                   base.cookies[AuthenticationBase::ACCESS_COOKIE_KEY],]
-    ceremony = binding.reload.admitted_auth_ceremony_session
+    ceremony = ClientAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
     evidence_time = ceremony.authentication_event_at
 
     assert_equal [true, "google"], [binding.redeemed?, ceremony.authentication_method]
@@ -971,8 +989,10 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
     assert_equal [evidence_time, "google", true, token.public_id, true],
                  [token.authentication_event_at, token.established_authentication_method,
                   token.root_login_established_at.present?,
-                  binding.authorization_transaction.reload.browser_session_ref,
-                  binding.authorization_transaction.consumed?,]
+                  ClientOidcAuthorizationTransaction.find(
+                    binding.authorization_transaction_id,
+                  ).reload.browser_session_ref,
+                  ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id).consumed?,]
   end
   test "a cancelled provider candidate yields a terminal refusal without Source or Root writes" do
     subject = "new-social-#{SecureRandom.hex(8)}"
@@ -1155,10 +1175,10 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
           base.post(form["action"], params: fields, headers: base_headers)
         else
           reference = Rack::Utils.parse_query(target.query).fetch("entry_ref")
-          original_parent = BaseAuthAdmissionCoordinator.find_admission_binding!(
-            surface: "app",
-            reference:,
-          ).authorization_transaction if index.zero?
+          binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference:)
+          if index.zero?
+            original_parent = ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id)
+          end
           auth.get(target.request_uri)
         end
       end

@@ -132,6 +132,7 @@ module AvatarOwnershipTransfers
 
     def assert_replay_identity!(reservation)
       detail = reservation_detail(reservation)
+      avatar = Avatar.find_by(id: reservation.avatar_id)
       destination_attribute =
         if operation_kind.end_with?("enterprise")
           :destination_enterprise_public_id
@@ -140,7 +141,7 @@ module AvatarOwnershipTransfers
         end
       same_request = reservation.request_fingerprint == request_fingerprint &&
         reservation.operation_kind == operation_kind &&
-        reservation.avatar.public_id == avatar_public_id &&
+        avatar.public_id == avatar_public_id &&
         detail.request_actor_public_id == authorized_initiator_public_id &&
         detail.public_send(destination_attribute) == target_collective_public_id
       return if same_request
@@ -149,13 +150,11 @@ module AvatarOwnershipTransfers
     end
 
     def reservation_detail(reservation)
-      case reservation.operation_kind
-      when "enterprise_to_enterprise" then reservation.enterprise_to_enterprise_detail
-      when "enterprise_to_bureau" then reservation.enterprise_to_bureau_detail
-      when "bureau_to_enterprise" then reservation.bureau_to_enterprise_detail
-      when "bureau_to_bureau" then reservation.bureau_to_bureau_detail
-      else raise InvalidTransfer, "unsupported transfer operation kind"
-      end
+      detail_class =
+        ReservationCreator::DETAIL_CLASSES.fetch(reservation.operation_kind) do
+          raise InvalidTransfer, "unsupported transfer operation kind"
+        end
+      detail_class.find_by!(transfer_reservation_id: reservation.id)
     end
 
     def assert_owner_unchanged!(current, observed)

@@ -165,14 +165,14 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "verified_email? uses loaded visitor_emails" do
-    visitor = Visitor.create!
+    created_visitor = Visitor.create!
     VisitorEmail.create!(
-      visitor: visitor,
+      visitor: created_visitor,
       address: "loaded@example.com",
       confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     ).tap(&:finalize_binding!)
-    visitor.visitor_emails.load
+    visitor = Visitor.includes(:visitor_emails).find(created_visitor.id)
 
     assert_predicate visitor, :verified_email?
   end
@@ -213,13 +213,13 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "verified_telephone? uses loaded visitor_telephones" do
-    visitor = Visitor.create!
+    created_visitor = Visitor.create!
     VisitorTelephone.create!(
-      visitor: visitor,
+      visitor: created_visitor,
       number: "+15557654321",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
     ).tap(&:finalize_binding!)
-    visitor.visitor_telephones.load
+    visitor = Visitor.includes(:visitor_telephones).find(created_visitor.id)
 
     assert_predicate visitor, :verified_telephone?
   end
@@ -289,6 +289,7 @@ class VisitorTest < ActiveSupport::TestCase
       public_key: "test-public-key",
       description: "My Passkey",
     )
+    visitor = Visitor.includes(:visitor_telephones, :visitor_passkeys).find(visitor.id)
 
     assert_predicate visitor, :passkey_login_available?
   end
@@ -306,7 +307,7 @@ class VisitorTest < ActiveSupport::TestCase
       public_key: "loaded-public-key",
       description: "Loaded Passkey",
     )
-    visitor.visitor_passkeys.load
+    visitor = Visitor.includes(:visitor_telephones, :visitor_passkeys).find(visitor.id)
 
     assert_predicate visitor, :passkey_login_available?
   end

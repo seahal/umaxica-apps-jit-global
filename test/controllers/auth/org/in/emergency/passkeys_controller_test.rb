@@ -67,7 +67,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     post form["action"], params: fields, headers: {
       "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}", "Sec-Fetch-Site" => "same-origin",
     }
-    @flow = binding.sign_in_flow
+    @flow = sign_in_flow_for_test(binding)
 
     assert_response :see_other
   end
@@ -180,7 +180,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     }
 
     assert_response :see_other
-    token = @flow.reload.token
+    token = OperatorToken.find(@flow.reload.token_id)
 
     assert_equal "emergency", token.authentication_context
     assert_predicate token, :emergency_authentication_context?

@@ -5,7 +5,7 @@ require "test_helper"
 
 class MfaStatusTrackableTest < ActiveSupport::TestCase
   test "credential callback refreshes persisted MFA without saving or discarding unrelated cached owner edits" do
-    owner = Client.create!
+    owner = create_client!
     persisted_status = owner.status_id
     owner.status_id = ClientStatus::ACTIVE
     ClientEmail.create!(
@@ -28,14 +28,15 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
   end
 
   test "user refreshes to unconfigured without app step up methods" do
-    user = Client.create!
+    # Keep this owner outside committed test/dev credential rows keyed by fixture-range IDs.
+    user = create_client!
 
     assert_equal ClientMfaStatus::UNCONFIGURED, user.reload.mfa_status_id
     assert_predicate user, :mfa_status_unconfigured?
   end
 
   test "raises when placeholder status is used for runtime checks" do
-    user = Client.create!
+    user = create_client!
     user.update_column(:mfa_status_id, ClientMfaStatus::NOTHING)
 
     assert_raises(MfaStatusTrackable::InvalidMfaStatus) do
@@ -44,7 +45,7 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
   end
 
   test "assigns unconfigured before validation when placeholder is present" do
-    user = Client.create!
+    user = create_client!
     user.update_column(:mfa_status_id, ClientMfaStatus::NOTHING)
 
     user = Client.find(user.id)
@@ -55,7 +56,7 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
   end
 
   test "user refreshes to active with verified email" do
-    user = Client.create!
+    user = create_client!
 
     ClientEmail.create!(
       user: user,
@@ -69,7 +70,7 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
   end
 
   test "user refreshes from unconfigured to active after verified email registration" do
-    user = Client.create!
+    user = create_client!
 
     assert_equal ClientMfaStatus::UNCONFIGURED, user.reload.mfa_status_id
 
@@ -84,8 +85,8 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
   end
 
   test "user refresh ignores stale loaded email association" do
-    user = Client.create!
-    user.client_emails.load
+    user = create_client!
+    user = Client.includes(:client_emails).find(user.id)
 
     ClientEmail.create!(
       user: user,
@@ -98,7 +99,7 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
   end
 
   test "user refreshes back to unconfigured when last method is no longer verified" do
-    user = Client.create!
+    user = create_client!
     email = ClientEmail.create!(
       user: user,
       address: "mfs-demote-user-#{SecureRandom.hex(4)}@example.com",
@@ -136,5 +137,12 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
     )
 
     assert_equal VisitorMfaStatus::ACTIVE, visitor.reload.mfa_status_id
+  end
+
+  private
+
+  def create_client!
+    # Keep this owner outside committed test/dev credential rows keyed by fixture-range IDs.
+    Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
   end
 end

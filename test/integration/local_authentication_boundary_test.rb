@@ -935,9 +935,11 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     end
     assert_response :see_other
     assert_not_nil flow.reload.base_finalized_at
-    assert_equal "email", flow.token.established_authentication_method
-    assert_equal flow.authentication_event_at, flow.token.authentication_event_at
-    assert_not_nil flow.token.root_login_established_at
+    token = ClientToken.find(flow.token_id)
+
+    assert_equal "email", token.established_authentication_method
+    assert_equal flow.authentication_event_at, token.authentication_event_at
+    assert_not_nil token.root_login_established_at
     assert_not_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil browser.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
@@ -1065,7 +1067,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     )
     credential = WebAuthn::Credential.from_create(registration, relying_party: relying_party)
     actor.client_passkeys.create!(webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0)
-    token = flow.token.reload
+    token = ClientToken.find(flow.token_id)
     path = base_app_identity_birthdate_path(ri: "jp")
     verifier = ActiveSupport::MessageVerifier.new(
       Rails.application.key_generator.generate_key("path_target_token", 32),
@@ -1078,8 +1080,12 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
         "pt" => path, },
       purpose: :path_target, expires_in: 15.minutes,
     )
-    get "/sign", params: { ri: "jp" }
-    base_csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    get base_app_verification_path(ri: "jp", scope: "settings_birthdate", pt: pt)
+
+    assert_response :success
+    base_csrf = response.body[/<meta name="csrf-token" content="([^"]+)"/, 1]
+
+    assert_predicate base_csrf, :present?
     post base_app_verification_path(ri: "jp"), params: { scope: "settings_birthdate", pt: pt },
                                                headers: base_headers.merge("X-CSRF-Token" => base_csrf)
 
@@ -1342,9 +1348,11 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     end
     assert_response :see_other
     assert_not_nil flow.reload.base_finalized_at
-    assert_equal "email", flow.token.established_authentication_method
-    assert_equal flow.authentication_event_at, flow.token.authentication_event_at
-    assert_not_nil flow.token.root_login_established_at
+    token = VisitorToken.find(flow.token_id)
+
+    assert_equal "email", token.established_authentication_method
+    assert_equal flow.authentication_event_at, token.authentication_event_at
+    assert_not_nil token.root_login_established_at
     assert_not_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil browser.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
@@ -1472,7 +1480,7 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
     actor.visitor_passkeys.create!(
       webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0, status_id: VisitorPasskeyStatus::ACTIVE,
     )
-    token = flow.token.reload
+    token = VisitorToken.find(flow.token_id)
     path = base_com_identity_birthdate_path(ri: "jp")
     verifier = ActiveSupport::MessageVerifier.new(
       Rails.application.key_generator.generate_key("path_target_token", 32),
@@ -1485,8 +1493,12 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
         "pt" => path, },
       purpose: :path_target, expires_in: 15.minutes,
     )
-    get "/sign", params: { ri: "jp" }
-    base_csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    get base_com_verification_path(ri: "jp", scope: "settings_birthdate", pt: pt)
+
+    assert_response :success
+    base_csrf = response.body[/<meta name="csrf-token" content="([^"]+)"/, 1]
+
+    assert_predicate base_csrf, :present?
     post base_com_verification_path(ri: "jp"), params: { scope: "settings_birthdate", pt: pt },
                                                headers: base_headers.merge("X-CSRF-Token" => base_csrf)
 

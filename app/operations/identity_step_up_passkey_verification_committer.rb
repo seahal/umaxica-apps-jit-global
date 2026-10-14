@@ -48,19 +48,19 @@ class IdentityStepUpPasskeyVerificationCommitter
             raise IdentityStepUpCeremonyContract::Error, "step-up surface mismatch"
           end
 
-          session_record.user_token
+          ClientToken.find(session_record.user_token_id)
         when Visitor
           unless transaction.is_a?(VisitorStepUpCeremonyTransaction) && session_record.is_a?(VisitorStepUpSession)
             raise IdentityStepUpCeremonyContract::Error, "step-up surface mismatch"
           end
 
-          session_record.visitor_token
+          VisitorToken.find(session_record.visitor_token_id)
         when Operator
           unless transaction.is_a?(OperatorStepUpCeremonyTransaction) && session_record.is_a?(OperatorStepUpSession)
             raise IdentityStepUpCeremonyContract::Error, "step-up surface mismatch"
           end
 
-          session_record.staff_token
+          OperatorToken.find(session_record.staff_token_id)
         else
           raise IdentityStepUpCeremonyContract::Error, "step-up actor type mismatch"
         end

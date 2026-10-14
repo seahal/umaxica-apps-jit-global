@@ -169,46 +169,16 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
-  test "palm iOS client can request palm.read" do
-    client = OidcClientRegistry.find!("app-ios-rp")
-    result = authorize_service_call(
-      params: valid_params(
-        client_id: client.client_id,
-        redirect_uri: client.redirect_uris.first,
-        scope: "openid palm.read",
-      ),
-      resource: @user,
-    )
+  test "retired Palm native clients are refused at the authorization boundary" do
+    %w(app-ios-rp app-android-rp).each do |client_id|
+      result = authorize_service_call(
+        params: valid_params.merge(client_id: client_id),
+        resource: @user,
+      )
 
-    assert_predicate result, :success?
-
-    store = Valkey::AuthState::AuthorizationCodeStore.new
-    raw = URI.decode_www_form(URI.parse(result.redirect_url).query).to_h.fetch("code")
-    payload = store.read(raw)
-
-    assert_equal "openid palm.read", payload.fetch("scope")
-    assert_equal client.client_id, payload.fetch("client_id")
-  end
-
-  test "palm Android client can request palm.read" do
-    client = OidcClientRegistry.find!("app-android-rp")
-    result = authorize_service_call(
-      params: valid_params(
-        client_id: client.client_id,
-        redirect_uri: client.redirect_uris.first,
-        scope: "openid palm.read",
-      ),
-      resource: @user,
-    )
-
-    assert_predicate result, :success?
-
-    store = Valkey::AuthState::AuthorizationCodeStore.new
-    raw = URI.decode_www_form(URI.parse(result.redirect_url).query).to_h.fetch("code")
-    payload = store.read(raw)
-
-    assert_equal "openid palm.read", payload.fetch("scope")
-    assert_equal client.client_id, payload.fetch("client_id")
+      assert_not result.success?, client_id
+      assert_equal "unauthorized_client", result.error, client_id
+    end
   end
 
   test "state is included in redirect URL when provided" do

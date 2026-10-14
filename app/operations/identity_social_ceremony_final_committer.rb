@@ -71,7 +71,7 @@ class IdentitySocialCeremonyFinalCommitter
       client_id: flow.principal_id,
       provider:,
     ).sole
-    user = identity.user
+    user = Client.find(identity.client_id)
     unless flow.completed? && flow.pending_contact_type == "social_identity" && identity.released_at.nil? &&
         identity.state == "active" && identity.subject == provider_subject && user.login_allowed?
       raise IdentitySocialCeremonyContract::Error, "social completion source is unavailable"

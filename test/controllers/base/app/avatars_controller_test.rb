@@ -45,7 +45,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -53,16 +53,16 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -113,7 +113,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -121,16 +121,16 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -186,7 +186,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -194,16 +194,16 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -248,66 +248,66 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
         moniker_queries << sql if sql.match?(/\bFROM\s+"?avatar_monikers"?\b/i) && !payload[:cached]
       end
 
-    ActiveSupport::Notifications.subscribed(query_subscription, "sql.active_record") do
-      http_headers_11 =
-        begin
-          rp_headers = as_user_headers(@user, host: @host)
-          rp_host = rp_headers["Host"]
-          rp_route =
-            begin
-              Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
-            rescue ActionController::RoutingError
-              nil
-            end
-          rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
-          if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
-            rp_client_id =
-              case rp_family
-              when "base" then "base-#{rp_surface}-ww"
-              when "edit" then "edit-org"
-              else "#{rp_family}-#{rp_surface}"
-              end
-            rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-            rp_client = OidcClientRegistry.find!(rp_client_id)
-            rp_key = [rp_client.client_id, rp_token.public_id]
-            @base_browser_rp_credentials ||= {}
-            if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                !(rp_token.device_session_id && ClientRpSession.exists?(
-                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
-                ))
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
-              rp_now = Time.current
-              rp_session = ClientRpSession.create!(
-                client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
-                refresh_token_expires_at: rp_now + 10.minutes,
-              )
-              rp_access = AuthenticationTokenService.encode(
-                rp_token.user, host: rp_host, resource_type: "client",
-                               session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                               oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                               expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                               subject: OidcSubject.for(
-                                 rp_token.user,
-                                 resource_type: "client",
-                               ), client_id: rp_client.client_id,
-              )
-              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
-            end
-            if @base_browser_rp_credentials[rp_key]
-              rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
-              rp_cookie = [
-                rp_headers.fetch("Cookie"),
-                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
-                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
-              ].join("; ")
-              rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
-            end
+    http_headers_11 =
+      begin
+        rp_headers = as_user_headers(@user, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
           end
-          rp_headers
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org"
+            else "#{rp_family}-#{rp_surface}"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && ClientRpSession.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = ClientRpSession.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
         end
+        rp_headers
+      end
+    ActiveSupport::Notifications.subscribed(query_subscription, "sql.active_record") do
       get base_app_avatars_url(ri: "jp", host: @host), headers: http_headers_11
     end
 
@@ -347,7 +347,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -355,16 +355,16 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -414,7 +414,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -422,16 +422,16 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -481,7 +481,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -489,16 +489,16 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -524,7 +524,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
 
   test "invalid moniker update preserves the current row and value" do
     result = bootstrap_and_select!(@user, @token)
-    current_moniker = result.avatar.current_avatar_moniker
+    current_moniker = AvatarMoniker.current.find_by!(avatar_id: result.avatar.id)
 
     http_headers_7 =
       begin
@@ -552,7 +552,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -560,16 +560,16 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -591,8 +591,8 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :unprocessable_content
     assert_equal "base/app/avatars/edit", inertia_component
-    assert_equal current_moniker.id, result.avatar.reload.current_avatar_moniker.id
-    assert_equal current_moniker.id, result.avatar.current_avatar_moniker.id
+    assert_equal current_moniker.id, AvatarMoniker.current.find_by!(avatar_id: result.avatar.reload.id).id
+    assert_equal current_moniker.id, AvatarMoniker.current.find_by!(avatar_id: result.avatar.id).id
     assert_equal "Default Avatar", result.avatar.moniker
     assert_not_empty inertia_props.dig("errors", "avatar.moniker")
   end
@@ -626,7 +626,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -634,16 +634,16 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -709,7 +709,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
                   oidc_client_id: rp_client.client_id,
                   revoked_at: nil,
                 ))
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = ClientRpSession.create!(
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -717,16 +717,17 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: rp_now + 10.minutes,
               )
               rp_access = AuthenticationTokenService.encode(
-                rp_token.user, host: rp_host, resource_type: "client",
-                               session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                               oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                               expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                               subject: OidcSubject.for(
-                                 rp_token.user,
-                                 resource_type: "client",
-                               ), client_id: rp_client.client_id,
+                rp_token.actor_record, host: rp_host, resource_type: "client",
+                                       session_public_id: rp_token.public_id,
+                                       base_session_public_id: rp_token.public_id,
+                                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                       subject: OidcSubject.for(
+                                         rp_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: rp_client.client_id,
               )
               @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
             end
@@ -755,7 +756,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     assert_equal result.collective.public_id, avatar.current_ownership_period.owner_collective_public_id
     assert_nil avatar.owner_organization_id
     assert_equal result.account, avatar.current_persona
-    assert_equal "active", avatar.lifecycle_state.key
+    assert_equal "active", AvatarLifecycleState.find(avatar.lifecycle_state_id).key
     assert_redirected_to base_app_avatar_url(avatar.public_id, ri: "jp", host: @host)
   end
 
@@ -811,7 +812,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: rp_client.client_id,
                     revoked_at: nil,
                   ))
-                rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
                 rp_session = ClientRpSession.create!(
                   client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -819,16 +820,17 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: rp_now + 10.minutes,
                 )
                 rp_access = AuthenticationTokenService.encode(
-                  rp_token.user, host: rp_host, resource_type: "client",
-                                 session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                 oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                 expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                 subject: OidcSubject.for(
-                                   rp_token.user,
-                                   resource_type: "client",
-                                 ), client_id: rp_client.client_id,
+                  rp_token.actor_record, host: rp_host, resource_type: "client",
+                                         session_public_id: rp_token.public_id,
+                                         base_session_public_id: rp_token.public_id,
+                                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                         subject: OidcSubject.for(
+                                           rp_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: rp_client.client_id,
                 )
                 @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
               end
@@ -889,7 +891,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
                   oidc_client_id: rp_client.client_id,
                   revoked_at: nil,
                 ))
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = ClientRpSession.create!(
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -897,16 +899,17 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: rp_now + 10.minutes,
               )
               rp_access = AuthenticationTokenService.encode(
-                rp_token.user, host: rp_host, resource_type: "client",
-                               session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                               oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                               expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                               subject: OidcSubject.for(
-                                 rp_token.user,
-                                 resource_type: "client",
-                               ), client_id: rp_client.client_id,
+                rp_token.actor_record, host: rp_host, resource_type: "client",
+                                       session_public_id: rp_token.public_id,
+                                       base_session_public_id: rp_token.public_id,
+                                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                       subject: OidcSubject.for(
+                                         rp_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: rp_client.client_id,
               )
               @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
             end
@@ -965,7 +968,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
                   oidc_client_id: rp_client.client_id,
                   revoked_at: nil,
                 ))
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = ClientRpSession.create!(
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -973,16 +976,17 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: rp_now + 10.minutes,
               )
               rp_access = AuthenticationTokenService.encode(
-                rp_token.user, host: rp_host, resource_type: "client",
-                               session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                               oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                               expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                               subject: OidcSubject.for(
-                                 rp_token.user,
-                                 resource_type: "client",
-                               ), client_id: rp_client.client_id,
+                rp_token.actor_record, host: rp_host, resource_type: "client",
+                                       session_public_id: rp_token.public_id,
+                                       base_session_public_id: rp_token.public_id,
+                                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                       subject: OidcSubject.for(
+                                         rp_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: rp_client.client_id,
               )
               @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
             end
@@ -1039,7 +1043,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -1047,16 +1051,16 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -1108,7 +1112,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -1116,16 +1120,16 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -1149,6 +1153,83 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     assert_not_equal "Stolen", other_avatar.reload.moniker
   end
 
+  test "post-cutover moniker update uses concrete Avatar ownership" do
+    bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
+    BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
+    avatar = bootstrap.avatar
+    legacy_period_count = AvatarOwnershipPeriod.where(avatar_id: avatar.id).count
+
+    AvatarRecord.transaction(joinable: false) do
+      AvatarOwnershipCutover.create!(
+        id: AvatarOwnershipCutover::CUTOVER_ID,
+        cutover_at: Time.utc(2030, 1, 1),
+      )
+
+      rp_token = @token
+      rp_client = OidcClientRegistry.find!("base-app-ww")
+      rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+      rp_now = Time.current
+      rp_session = ClientRpSession.create!(
+        client_token: rp_token,
+        oidc_client_id: rp_client.client_id,
+        oidc_scope: "openid profile",
+        oidc_jti: SecureRandom.uuid,
+        oidc_nonce: SecureRandom.hex(16),
+        oidc_auth_time: rp_now,
+        refresh_token_expires_at: rp_now + 10.minutes,
+      )
+      root_access = AuthenticationToken.encode(
+        @user,
+        host: @host,
+        resource_type: "client",
+        session_public_id: rp_token.public_id,
+        jwt_issuer_id: "surface:BASE_APP",
+        authentication_context: rp_token.authentication_context_value.to_s,
+      )
+      rp_access = AuthenticationTokenService.encode(
+        rp_token.actor_record,
+        host: @host,
+        resource_type: "client",
+        session_public_id: rp_token.public_id,
+        base_session_public_id: rp_token.public_id,
+        oidc_sid: rp_session.public_id,
+        oidc_jti: rp_session.oidc_jti,
+        expires_at: rp_now + 10.minutes,
+        scopes: %w(openid profile),
+        issuer: OidcIssuer.for_client(rp_client),
+        audiences: [rp_client.aud],
+        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+        subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"),
+        client_id: rp_client.client_id,
+      )
+      rp_refresh = rp_session.issue_refresh_token!
+      cookie = [
+        "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(root_access)}",
+        "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+        "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+      ].join("; ")
+      headers = {
+        "Host" => @host,
+        "Client-Agent" => AuthenticationHarness::TEST_BROWSER_USER_AGENT,
+        "Authorization" => "Bearer #{root_access}",
+        "Cookie" => cookie,
+        "HTTP_COOKIE" => cookie,
+      }
+
+      patch base_app_avatar_url(avatar.public_id, ri: "jp", host: @host),
+            params: { avatar: { moniker: "Post-cutover APP" } },
+            headers: headers
+
+      assert_response :see_other
+      assert_equal "Post-cutover APP", avatar.reload.moniker
+      assert_instance_of AvatarEnterpriseOwnershipPeriod, avatar.current_ownership_period
+      assert_equal legacy_period_count, AvatarOwnershipPeriod.where(avatar_id: avatar.id).count
+
+      # Roll back the marker and moniker write through the ordinary test transaction.
+      raise ActiveRecord::Rollback
+    end
+  end
+
   private
 
   def bootstrap_and_select!(user, token)
@@ -1161,6 +1242,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     other = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: other)
   end
+
   private
 
   def bearer_headers(token, host: nil, headers: {})

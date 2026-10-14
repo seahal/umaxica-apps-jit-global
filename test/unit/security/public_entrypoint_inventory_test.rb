@@ -8,11 +8,11 @@ module Security
     self.fixture_table_names = []
 
     APP_CONTROLLER_PREFIXES = %w(
-      auth base core warp docs guid help info news palm
+      auth base core warp docs guid help info news palm tech
     ).freeze
 
     APPLICATION_CLASS_PREFIXES = %w(
-      Auth:: Base:: Core:: Warp:: Docs:: Guid:: Help:: Info:: News:: Palm::
+      Auth:: Base:: Core:: Warp:: Docs:: Guid:: Help:: Info:: News:: Palm:: Tech::
     ).freeze
 
     PUBLIC_MODES = %i(bare open guest).freeze
@@ -43,7 +43,6 @@ module Security
       PUBLIC_AUTH_APP_REDIRECTS
       PUBLIC_AUTH_APP_SETTINGS_COMPAT
       PUBLIC_CORE_API
-      PUBLIC_PALM_API
       PUBLIC_AUTH_ORG_REDIRECTS
       PUBLIC_WARP_SETTINGS
       PUBLIC_APPLE_NOTIFICATIONS
@@ -202,7 +201,6 @@ module Security
 
     def documented_public_api?(entry)
       public_core_api?(entry) ||
-        public_palm_api?(entry) ||
         public_auth_org_redirect?(entry) ||
         public_warp_settings?(entry) ||
         public_apple_notification?(entry) ||
@@ -356,10 +354,6 @@ module Security
       entry.controller_path.start_with?("core/") &&
         ((get?(entry) && entry.path == "/api/v0/session") ||
           (post?(entry) && entry.path == "/api/v0/token/refresh"))
-    end
-
-    def public_palm_api?(entry)
-      get?(entry) && entry.controller_path.start_with?("palm/") && entry.path == "/api/v0/profile"
     end
 
     def public_auth_org_redirect?(entry)

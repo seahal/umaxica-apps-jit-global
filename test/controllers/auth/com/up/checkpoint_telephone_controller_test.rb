@@ -177,7 +177,7 @@ class AuthComUpCheckpointTelephoneControllerTest < ActionDispatch::IntegrationTe
     register_signup_passkey!(cycle, "com_signup_direct_birthdate")
 
     assert cycle.reload.requirement_cleared?(:passkey)
-    assert_empty telephone.visitor.visitor_secret_credentials.where(
+    assert_empty VisitorSecretCredential.where(visitor_id: telephone.visitor_id).where(
       visitor_secret_credential_kind_id: VisitorSecretCredentialKind::LOGIN,
     )
 

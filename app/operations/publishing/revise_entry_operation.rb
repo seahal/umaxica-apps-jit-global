@@ -21,7 +21,9 @@ module Publishing
       entry.with_lock do
         return PublishingReviseEntryResult.failure(lock_version: "is stale") if stale_lock?
 
-        current = entry.current_revision
+        cell = ContentFamilies.cell_for_entry(entry)
+        revision_class = cell.fetch(:revision)
+        current = revision_class.find_by(id: entry.current_revision_id)
         if current.blank?
           return PublishingReviseEntryResult.failure(base: "entry has no current revision")
         end
@@ -67,8 +69,10 @@ module Publishing
     end
 
     def copy_taxonomy_assignments(source, revision)
-      source.single_taxonomy_assignments.each do |assignment|
-        revision.single_taxonomy_assignments.create!(
+      cell = ContentFamilies.cell_for_revision(source)
+      cell.fetch(:revision_single).where(entry_revision_id: source.id).find_each do |assignment|
+        cell.fetch(:revision_single).create!(
+          entry_revision_id: revision.id,
           vocabulary_id: assignment.vocabulary_id,
           vocabulary_kind: assignment.vocabulary_kind,
           taxonomy_term_id: assignment.taxonomy_term_id,
@@ -76,8 +80,9 @@ module Publishing
         )
       end
 
-      source.multiple_taxonomy_assignments.ordered.each do |assignment|
-        revision.multiple_taxonomy_assignments.create!(
+      cell.fetch(:revision_multiple).where(entry_revision_id: source.id).order(:position).find_each do |assignment|
+        cell.fetch(:revision_multiple).create!(
+          entry_revision_id: revision.id,
           vocabulary_id: assignment.vocabulary_id,
           vocabulary_kind: assignment.vocabulary_kind,
           taxonomy_term_id: assignment.taxonomy_term_id,
@@ -88,8 +93,10 @@ module Publishing
     end
 
     def copy_media_usages(source, revision)
-      source.media_usages.find_each do |usage|
-        revision.media_usages.create!(
+      cell = ContentFamilies.cell_for_revision(source)
+      cell.fetch(:revision_media).where(entry_revision_id: source.id).find_each do |usage|
+        cell.fetch(:revision_media).create!(
+          entry_revision_id: revision.id,
           media_file_id: usage.media_file_id,
           role: usage.role,
           field_path: usage.field_path,

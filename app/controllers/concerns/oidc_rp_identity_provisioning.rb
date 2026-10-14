@@ -79,16 +79,22 @@ module OidcRpIdentityProvisioning
   end
 
   def actor_from_binding(binding)
-    identity =
-      case binding
-      when ClientOidcIdentityBinding then binding.client_identity
-      when VisitorOidcIdentityBinding then binding.visitor_identity
-      when OperatorOidcIdentityBinding then binding.operator_identity
-      else
-        raise ActiveRecord::RecordNotFound, "OIDC identity binding class is not registered"
-      end
+    identity = identity_for_binding(binding)
 
     find_rp_actor(identity.source_record_id)
+  end
+
+  def identity_for_binding(binding)
+    case binding
+    when ClientOidcIdentityBinding
+      ClientIdentity.find(binding.client_identity_id)
+    when VisitorOidcIdentityBinding
+      VisitorIdentity.find(binding.visitor_identity_id)
+    when OperatorOidcIdentityBinding
+      OperatorIdentity.find(binding.operator_identity_id)
+    else
+      raise ActiveRecord::RecordNotFound, "OIDC identity binding class is not registered"
+    end
   end
 
   def actor_from_authoritative_resource!(resource, claims)

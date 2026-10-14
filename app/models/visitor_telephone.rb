@@ -112,7 +112,7 @@ class VisitorTelephone < ComPrincipalRecord
   def sign_up_consumed_ceremony_matches?(flow, transaction)
     expected_session = Digest::SHA256.hexdigest(JSON.generate(["telephone_sign_up", flow.public_id, flow.nonce_digest]))
     transaction.surface == "com" && transaction.operation == "sign_up" && transaction.purpose == "sign_up" &&
-      transaction.actor_ref == visitor.public_id && transaction.session_ref == expected_session &&
+      transaction.actor_ref == Visitor.find(visitor_id).public_id && transaction.session_ref == expected_session &&
       transaction.telephone_candidate_ref == public_id && transaction.normalized_number_digest == number_digest &&
       transaction.expires_at == flow.expires_at && transaction.status == "pending" && !transaction.consumed_at &&
       !transaction.otp_cancelled_at && transaction.otp_verifier.nil? &&

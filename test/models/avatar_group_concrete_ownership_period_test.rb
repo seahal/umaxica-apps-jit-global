@@ -3,7 +3,6 @@
 require "test_helper"
 
 class AvatarGroupConcreteOwnershipPeriodTest < ActiveSupport::TestCase
-  self.use_transactional_tests = false
   self.fixture_table_names = []
 
   test "direct SQL cannot change or delete concrete Group ownership history" do

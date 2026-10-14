@@ -63,7 +63,7 @@ class AuthenticationSecurityEventEmitterTest < ActiveSupport::TestCase
 
     assert_equal "authentication.security_event.rate_limit.exceeded", chronicle.action
     assert_equal "succeeded", chronicle.result
-    assert_equal "security", chronicle.chronicle_retention_policy.code
+    assert_equal "security", ChronicleRetentionPolicy.find(chronicle.chronicle_retention_policy_id).code
     assert_equal "warning", chronicle.metadata["severity"]
     assert_equal "telephone_verification_rate_limit", chronicle.metadata["reason_code"]
     assert_not chronicle.metadata.key?("token")

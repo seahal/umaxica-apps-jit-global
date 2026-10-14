@@ -27,7 +27,7 @@ GIT
 
 GIT
   remote: https://github.com/rails/rails.git
-  revision: 6ed67f823c72f59948ca47c8ccbed53085a49f27
+  revision: 44d7eb5e42ad2ce7214977e02f9bbe0fbf102da5
   branch: main
   specs:
     actioncable (8.2.0.alpha)
@@ -942,14 +942,14 @@ GEM
     rswag-ui (2.17.0)
       actionpack (>= 5.2, < 8.2)
       railties (>= 5.2, < 8.2)
-    rubocop (1.91.0)
+    rubocop (1.92.0)
       json (>= 2.3)
       language_server-protocol (~> 3.17.0.2)
       lint_roller (~> 1.1.0)
       parallel (>= 1.10)
       parser (>= 3.3.0.2)
       rainbow (>= 2.2.2, < 4.0)
-      regexp_parser (>= 2.9.3, < 3.0)
+      regexp_parser (>= 2.11.3, < 3.0)
       rubocop-ast (>= 1.49.0, < 2.0)
       ruby-progressbar (~> 1.7)
       unicode-display_width (>= 2.4.0, < 4.0)
@@ -1020,7 +1020,7 @@ GEM
       logger
     sexp_processor (4.17.6)
     sha3 (2.2.4)
-    shrine (3.10.0)
+    shrine (3.10.1)
       content_disposition (~> 1.0)
       down (~> 5.1)
     signet (0.22.0)
@@ -1605,7 +1605,7 @@ CHECKSUMS
   rqrcode_core (2.1.0) sha256=f303b85df89c1b8fc5ee8dc19808c9dc4330e6329b660d99d4a8cbb36ca13051
   rswag-api (2.17.0) sha256=728b336b65168ab8ab6024b0e5d267b485c22ccdeb9dfbfb6ec3bac423545a13
   rswag-ui (2.17.0) sha256=5f707b9b5e8171ddf9f519f6e401e79e419bd1d07387508603e76124f2443212
-  rubocop (1.91.0) sha256=9c82b7bf391c5d7e3798c5b9996e22a1fe3bd7468e351dfdeb96140c058296d0
+  rubocop (1.92.0) sha256=2af68041fb2e70bd9321d0479b49fad07f8008a3d0758c83347b4917128c56e0
   rubocop-ast (1.50.0) sha256=b9ca88300da0803ee222ad20cdb30494c0a784eed06fdc35d254b06d662788db
   rubocop-i18n (3.3.0) sha256=6cd5977aeac9eb9e34962c0d2bd8e0225a4b43117d21b7e315dc56500c38a96b
   rubocop-minitest (0.41.0) sha256=c15bfe00134a30c8a00ce670b07ecc80440455ba277b8682cf0d515c98ee7426
@@ -1634,7 +1634,7 @@ CHECKSUMS
   sentry-ruby (7.1.0) sha256=bd6d2d022d879268526f62f0dccfb76aac99542bfce355e2b6a49cd1a81c0102
   sexp_processor (4.17.6) sha256=3c5d0e9db06377abde06db51dbacb14ce239ed0bd038ae515bc42c81602c6c1f
   sha3 (2.2.4) sha256=2a3c7b8c8fd5ba2571f8f21b51935c8c513c1036f1e472181e8275c469b16bc7
-  shrine (3.10.0) sha256=42f470b1a2a0424fa60d1b5b4dd0b2047bb952a60c8a7fc8c2d745e88fa60f12
+  shrine (3.10.1) sha256=c9a08d60495e955d9e5d3ceec5d3d9cd18fb3b8b3a14544ab473490b5dc7874a
   signet (0.22.0) sha256=b76d495ccb07ad35dbc89f3e920665a9d8ed717141955034005d7843dcfe4780
   simple_form (5.4.1) sha256=58c3d229034c7e5545035c3271b6f030ef730c340b9d7d8eb730e0a385b20808
   simplecov (1.3.2) sha256=2a22ec1759f1b8db60881a2e038758956fc69ef93ed669be0bde0678de6d0e85

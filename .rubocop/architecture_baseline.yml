@@ -656,18 +656,15 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/news/org/revisions_controller.rb: 1
   app/controllers/news/org/roots_controller.rb: 1
   app/controllers/palm/app/api/v0/healths_controller.rb: 1
-  app/controllers/palm/app/api/v0/profiles_controller.rb: 1
   app/controllers/palm/app/api/v0/revisions_controller.rb: 1
   app/controllers/palm/app/csp_violation_reports_controller.rb: 1
   app/controllers/palm/app/health/livenesses_controller.rb: 1
   app/controllers/palm/app/health/readinesses_controller.rb: 1
   app/controllers/palm/app/health/startups_controller.rb: 1
   app/controllers/palm/app/healths_controller.rb: 1
-  app/controllers/palm/app/oidc/callbacks_controller.rb: 1
   app/controllers/palm/app/revisions_controller.rb: 1
   app/controllers/palm/app/robots_controller.rb: 1
   app/controllers/palm/app/roots_controller.rb: 1
-  app/controllers/palm/app/sign/outs_controller.rb: 2
   app/controllers/palm/app/sitemaps_controller.rb: 1
   app/controllers/unknown_hosts_controller.rb: 1
   app/controllers/warp/app/api/v0/healths_controller.rb: 1
@@ -886,7 +883,6 @@ Umaxica/ExplicitMethodVisibility:
   app/models/concerns/publishing_taxonomy_term_record.rb: 7
   app/models/concerns/publishing_vocabulary_record.rb: 3
   app/models/concerns/refresh_token_shared.rb: 1
-  app/models/concerns/refresh_tokenable.rb: 6
   app/models/concerns/retainable.rb: 6
   app/models/concerns/retention_hold_state.rb: 1
   app/models/concerns/secret_credential.rb: 7
@@ -962,7 +958,6 @@ Umaxica/ExplicitMethodVisibility:
   app/models/org_preference_time_format_option.rb: 2
   app/models/org_preference_timezone_option.rb: 2
   app/models/organization_invitation.rb: 6
-  app/models/publishing/content_families.rb: 1
   app/models/publishing/docs/app/revision_multiple_taxonomy_assignment.rb: 1
   app/models/publishing/docs/app/revision_single_taxonomy_assignment.rb: 1
   app/models/publishing/docs/app/version_multiple_taxonomy_assignment.rb: 2
@@ -1177,7 +1172,7 @@ Umaxica/ExplicitMethodVisibility:
   app/serializers/health_status_serializer.rb: 2
   app/serializers/publishing_entry_serializer.rb: 2
   app/services/account_session_revocation.rb: 3
-  app/services/acme_logout_transaction_coordinator.rb: 8
+  app/services/acme_logout_transaction_coordinator.rb: 9
   app/services/acme_selectable_context.rb: 4
   app/services/acme_selector.rb: 1
   app/services/administrative_access_lock.rb: 4
@@ -1262,8 +1257,6 @@ Umaxica/ExplicitMethodVisibility:
   app/services/outbound_sms.rb: 6
   app/services/outbound_sms_providers_aws_sns.rb: 1
   app/services/outbound_sms_providers_test.rb: 1
-  app/services/palm_access_token_authenticator.rb: 1
-  app/services/palm_logout_coordinator.rb: 2
   app/services/recovery_passcode_top_up.rb: 2
   app/services/redirects_jump_gateway_url.rb: 2
   app/services/retention_cross_database_child_purge.rb: 2
@@ -1351,7 +1344,6 @@ Umaxica/ExplicitMethodVisibility:
   app/values/publishing_publication_result.rb: 3
   app/values/publishing_revise_entry_result.rb: 3
   app/values/security_jwt_auth_access_token_codec.rb: 12
-  app/values/security_jwt_jump_rt_token_codec.rb: 5
   app/values/security_jwt_oidc_id_token_codec.rb: 7
   app/values/security_jwt_preference_token_codec.rb: 6
   app/values/sign_in_participant_item.rb: 2

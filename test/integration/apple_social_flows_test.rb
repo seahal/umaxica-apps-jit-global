@@ -596,7 +596,7 @@ class AppleSocialFlowsTest < ActionDispatch::IntegrationTest
 
   test "sign in uses existing identity" do
     user = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
-    user.create_rp_account!
+    ClientAccount.create!(user_id: user.id)
     ClientAppleIdentity.create!(
       user: user,
       uid: "apple_flow_existing",

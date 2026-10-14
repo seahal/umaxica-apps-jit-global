@@ -139,7 +139,13 @@ class OrgOperatorLifecycleExecute
   end
 
   def revoke_target_sessions!(target)
-    target.staff_tokens.not_revoked.find_each(&:revoke!)
+    target.staff_tokens.not_revoked.find_each do |token|
+      AuthenticationLogoutCurrentSession.call(
+        resource: target,
+        token: token,
+        reason: "operator_lifecycle_#{request.action}",
+      )
+    end
   end
 
   # Logical delete: the row keeps (tid, oid), the protocol evidence, and

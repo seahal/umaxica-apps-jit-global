@@ -18,7 +18,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
       destination = "concurrent-#{surface}-#{SecureRandom.hex(12)}@example.test"
       attempts =
         2.times.map do
-          actor = actor_class.create!
+          actor = create_test_actor(actor_class)
           actors << actor
           contact = contact_class.create!(owner_key => actor.id, :address => destination, :confirm_policy => "1")
           contacts << contact
@@ -108,7 +108,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
       destination = "+8190#{SecureRandom.random_number(100_000_000).to_s.rjust(8, "0")}"
       attempts =
         2.times.map do
-          actor = actor_class.create!
+          actor = create_test_actor(actor_class)
           actors << actor
           contact = contact_class.create!(owner_key => actor.id, :number => destination, :confirm_policy => "1")
           contacts << contact
@@ -196,7 +196,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
       [Visitor, VisitorTelephone, VisitorTelephoneCeremonyTransaction, VisitorContactAuditOutbox, :visitor_id, "com",
        :telephone,],
     ].each do |actor_class, contact_class, transaction_class, outbox_class, owner_key, surface, kind|
-      actor = actor_class.create!
+      actor = create_test_actor(actor_class)
       contacts = []
       transactions = []
       attempts =
@@ -308,7 +308,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
       [Client, ClientEmail, :user_id, ClientEmailCeremonyTransaction, ClientContactAuditOutbox, "app"],
       [Visitor, VisitorEmail, :visitor_id, VisitorEmailCeremonyTransaction, VisitorContactAuditOutbox, "com"],
     ].each do |owner_class, contact_class, owner_key, transaction_class, outbox_class, surface|
-      owner = owner_class.create!
+      owner = create_test_actor(owner_class)
       original = contact_class.create!(
         owner_key => owner.id, :address => "original@example.test",
         :confirm_policy => "1",
@@ -360,7 +360,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
       [Client, ClientTelephone, :user_id, ClientTelephoneCeremonyTransaction, ClientContactAuditOutbox, "app"],
       [Visitor, VisitorTelephone, :visitor_id, VisitorTelephoneCeremonyTransaction, VisitorContactAuditOutbox, "com"],
     ].each do |owner_class, contact_class, owner_key, transaction_class, outbox_class, surface|
-      owner = owner_class.create!
+      owner = create_test_actor(owner_class)
       original = contact_class.create!(owner_key => owner.id, :number => "+819012345684", :confirm_policy => "1")
       substitute = contact_class.create!(owner_key => owner.id, :number => "+819012345685", :confirm_policy => "1")
       context = ActorValuesContext.empty.with(
@@ -402,7 +402,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
   end
 
   test "a consumed email Ticket without a Source commit stays terminal and creates no binding on retry" do
-    owner = Client.create!
+    owner = create_test_actor(Client)
     contact = ClientEmail.create!(user_id: owner.id, address: "rolled-back-audit@example.test", confirm_policy: "1")
     context = ActorValuesContext.empty.with(subject: owner, actor_type: :client, tld: :app, surface: :base)
     now = ClientEmailCeremonyTransaction.database_now
@@ -454,7 +454,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
       [Client, ClientTelephone, :user_id, ClientTelephoneCeremonyTransaction, ClientContactAuditOutbox, "app"],
       [Visitor, VisitorTelephone, :visitor_id, VisitorTelephoneCeremonyTransaction, VisitorContactAuditOutbox, "com"],
     ].each do |owner_class, contact_class, owner_key, transaction_class, outbox_class, surface|
-      actor = owner_class.create!
+      actor = create_test_actor(owner_class)
       contact = contact_class.create!(owner_key => actor.id, :number => "+819012345683", :confirm_policy => "1")
       context = ActorValuesContext.empty.with(
         subject: actor, actor_type: (surface == "app") ? :client : :visitor, tld: surface.to_sym, surface: :base,
@@ -507,7 +507,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
   end
 
   test "audit refuses a wrong actor role and an event without the corresponding Source binding fact" do
-    owner = Client.create!
+    owner = create_test_actor(Client)
     contact = ClientEmail.create!(user_id: owner.id, address: "audit-facts@example.test", confirm_policy: "1")
     [
       [ActorValuesContext.empty.with(subject: owner, actor_type: :visitor, tld: :app, surface: :base),
@@ -530,7 +530,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
   end
 
   test "unauthenticated signup audit retains its owner without inventing an authenticated actor" do
-    owner = Visitor.create!
+    owner = create_test_actor(Visitor)
     contact = VisitorEmail.create!(visitor_id: owner.id, address: "anonymous-audit@example.test", confirm_policy: "1")
     context = ActorValuesContext.empty.with(tld: :com, surface: :sign)
     event =
@@ -548,8 +548,8 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
   end
 
   test "audit attribution refuses an actor from a different explicit context before Contact mutation" do
-    owner = Client.create!
-    foreign = Client.create!
+    owner = create_test_actor(Client)
+    foreign = create_test_actor(Client)
     contact = ClientEmail.create!(user_id: owner.id, address: "wrong-context@example.test", confirm_policy: "1")
     context = ActorValuesContext.empty.with(subject: foreign, actor_type: :client, tld: :app, surface: :base)
     error =
@@ -571,7 +571,7 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
       [Client, ClientEmail, :user_id, ClientEmailCeremonyTransaction, ClientContactAuditOutbox, "app"],
       [Visitor, VisitorEmail, :visitor_id, VisitorEmailCeremonyTransaction, VisitorContactAuditOutbox, "com"],
     ].each do |owner_class, contact_class, owner_key, transaction_class, outbox_class, surface|
-      actor = owner_class.create!
+      actor = create_test_actor(owner_class)
       contact = contact_class.create!(
         owner_key => actor.id, :address => "#{surface}-audit@example.test",
         :confirm_policy => "1",
@@ -664,5 +664,12 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
       assert_equal released_at, contact.reload.binding_released_at
       assert_equal 1, outbox_class.where(operation_ref: parent.transaction_id).count
     end
+  end
+
+  private
+
+  def create_test_actor(actor_class)
+    # Distinct high IDs keep cross-database foreign keys away from committed test/dev credentials.
+    actor_class.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
   end
 end

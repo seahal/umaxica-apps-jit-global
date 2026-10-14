@@ -8,7 +8,7 @@ class OidcSevenFirstPartyRpIsolationTest < ActiveSupport::TestCase
     ids = AuthBoundaryAuthorityMap.first_party_rp_client_ids
     clients = ids.map { |client_id| OidcClientRegistry.find!(client_id) }
 
-    assert_equal 10, clients.size
+    assert_equal 12, clients.size
     assert_equal ids, clients.map(&:client_id)
     assert_equal ids.size, clients.map(&:aud).uniq.size
     assert_equal ids.size, clients.map(&:jwt_namespace).uniq.size
@@ -27,6 +27,25 @@ class OidcSevenFirstPartyRpIsolationTest < ActiveSupport::TestCase
     assert_not_equal core_org.redirect_uris, edit.redirect_uris
     assert_not_equal warp_org.redirect_uris, edit.redirect_uris
     assert_not_equal core_org.jwt_namespace, edit.jwt_namespace
+
+    palm = OidcClientRegistry.find!("palm-app")
+
+    assert_equal "client", palm.resource_type
+    assert_equal "palm-app", palm.aud
+    assert_empty palm.backchannel_logout_uris
+    assert_not palm.backchannel_logout_session_required
+    assert_not_equal core_org.redirect_uris, palm.redirect_uris
+    assert_not_equal core_org.jwt_namespace, palm.jwt_namespace
+
+    tech = OidcClientRegistry.find!("tech-org")
+
+    assert_equal "operator", tech.resource_type
+    assert_equal "tech-org", tech.aud
+    assert_equal OperatorCapabilityGrant::TECH_ACCESS, tech.required_operator_capability
+    assert_empty tech.backchannel_logout_uris
+    assert_not tech.backchannel_logout_session_required
+    assert_not_equal edit.redirect_uris, tech.redirect_uris
+    assert_not_equal edit.jwt_namespace, tech.jwt_namespace
   end
 
   test "a first-party RP redirect is rejected for a different registered client" do

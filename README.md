@@ -5,8 +5,8 @@
 
 ## Routing
 
-- `app`: end-user application
-- `org`: staff and organization surface
+- `app`: end-user application; Palm is its browser relying party
+- `org`: staff and organization surface; Tech is its global operator relying party
 - `com`: public and corporate surface
 - `net`: network-facing surface supporting other TLDs (`app`/`com`/`org`), including
   cookie-authentication-less access
@@ -176,7 +176,7 @@ can use them; containers continue to use Compose DNS names. See
 | Base (developer / network) | `http://base.{dev,net}.localhost:3000`                                        |
 | Auth                       | `http://auth.{app,com,org}.localhost:3000`                                    |
 | Core                       | `http://core.{app,com,org,net,dev}.localhost:3000`                            |
-| Warp / Palm                | `http://warp.{app,com,org}.localhost:3000` / `http://palm.app.localhost:3000` |
+| Warp / Palm / Tech         | `http://warp.{app,com,org}.localhost:3000` / `http://palm.app.localhost:3000` / `http://tech.org.localhost:3000` |
 | Info / Help / Docs / News  | `http://{info,help,docs,news}.{app,com,org}.localhost:3000`                   |
 
 The application contract supplies PUBLIC and PRIVATE URL values in both supported modes; Compose

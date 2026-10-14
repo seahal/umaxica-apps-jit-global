@@ -262,7 +262,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       actor, token, credential, terminal_status =
         case surface
         when :app, :totp
-          actor = Client.create!
+          actor = Client.create!(id: 9_108_000_000_000 + SecureRandom.random_number(1_000_000_000))
 
           assert_equal 0, actor.client_passkeys.count
           actor.client_passkeys.create!(

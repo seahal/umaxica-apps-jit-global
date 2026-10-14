@@ -13,7 +13,8 @@ class EmailCredentialRegistrationOtpIssuer
       actor.class.connection_class_for_self.connected_to(role: :writing) do
         actor.with_lock do
           transaction_model.connection_owner.connected_to(role: :writing) do
-            token.device_session.with_lock do
+            device_session = token.device_session_record!
+            device_session.with_lock do
               token.with_lock do
                 email.with_lock do
                   if bootstrap_transaction
@@ -23,11 +24,13 @@ class EmailCredentialRegistrationOtpIssuer
                     ) do
                       issue_locked(
                         actor, token, email, transaction_model, pending_status, browser_nonce, bootstrap_transaction,
+                        device_session:,
                       )
                     end || result(:unavailable)
                   else
                     issue_locked(
                       actor, token, email, transaction_model, pending_status, browser_nonce,
+                      device_session:,
                     )
                   end
                 end
@@ -52,10 +55,13 @@ class EmailCredentialRegistrationOtpIssuer
       end
     end
 
-    def issue_locked(actor, token, email, transaction_model, pending_status, browser_nonce, bootstrap_transaction = nil)
+    def issue_locked(actor, token, email, transaction_model, pending_status, browser_nonce,
+                     bootstrap_transaction = nil, device_session:)
       ticket_now = transaction_model.database_now
       source_now = email.class.database_now
-      return result(:unavailable) unless current_binding?(actor, token, email, pending_status, ticket_now, source_now)
+      unless current_binding?(actor, token, email, pending_status, ticket_now, source_now, device_session)
+        return result(:unavailable)
+      end
       return result(:locked) if email.locked?(now: source_now)
       return result(:rate_limited) if email.otp_cooldown_active?(now: source_now)
 
@@ -134,26 +140,26 @@ class EmailCredentialRegistrationOtpIssuer
       end
     end
 
-    def current_binding?(actor, token, email, pending_status, ticket_now, source_now)
+    def current_binding?(actor, token, email, pending_status, ticket_now, source_now, device_session)
       source_owned_pending?(
-        actor, token, email,
+        actor, token, email, device_session,
         pending_status,
       ) && actor.login_allowed? && actor.accessible?(source_now) &&
         uncommitted_candidate?(email, source_now) &&
-        token.currently_usable?(ticket_now) && token.device_session.usable? &&
-        token.device_session.current_refresh_token_id == token.id
+        token.currently_usable?(ticket_now) && device_session.usable? &&
+        device_session.current_refresh_token_id == token.id
     end
 
-    def source_owned_pending?(actor, token, email, pending_status)
+    def source_owned_pending?(actor, token, email, device_session, pending_status)
       case actor
       when Client
-        token.user_id == actor.id && token.device_session.user_id == actor.id && email.user_id == actor.id &&
+        token.user_id == actor.id && device_session.user_id == actor.id && email.user_id == actor.id &&
           email.user_email_status_id == pending_status
       when Visitor
-        token.visitor_id == actor.id && token.device_session.visitor_id == actor.id && email.visitor_id == actor.id &&
+        token.visitor_id == actor.id && device_session.visitor_id == actor.id && email.visitor_id == actor.id &&
           email.visitor_email_status_id == pending_status
       when Operator
-        token.staff_id == actor.id && token.device_session.staff_id == actor.id && email.staff_id == actor.id &&
+        token.staff_id == actor.id && device_session.staff_id == actor.id && email.staff_id == actor.id &&
           email.staff_email_status_id == pending_status
       end
     end

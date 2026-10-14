@@ -40,7 +40,7 @@ class StaffSecretCredentialsDestroyTest < ActiveSupport::TestCase
     activity = OperatorChronicle.last
 
     assert_equal OperatorChronicleEvent::STAFF_SECRET_REMOVED, activity.event_id
-    assert_equal @staff, activity.actor
+    assert_equal @staff.id, activity.actor_id
     assert_equal @secret_credential.id, activity.subject_id
   end
 end

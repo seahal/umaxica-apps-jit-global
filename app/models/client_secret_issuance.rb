@@ -51,15 +51,16 @@ class ClientSecretIssuance < AppZenithRecord
       raise ArgumentError, "Secret withdrawal cancellation requires ordered timestamps"
     end
 
-    client.with_lock do
-      raise ArgumentError, "Secret withdrawal cancellation requires a terminated Client" unless client.terminated?
+    actor = Client.find(client_id)
+    actor.with_lock do
+      raise ArgumentError, "Secret withdrawal cancellation requires a terminated Client" unless actor.terminated?
 
       with_lock do
         return self if confirmed_at || canceled_at || planned_count.zero?
 
-        context = ActorValuesContext.empty.with(subject: client, actor_type: :client, tld: :app, surface: :base)
+        context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
         ClientSecretAuditOutbox.record!(
-          actor_context: context, client_ref: client.public_id, operation_ref: origin_operation_id,
+          actor_context: context, client_ref: actor.public_id, operation_ref: origin_operation_id,
           occurred_at: at, event_name: "secret.issuance_canceled", reason: "withdrawal", item_count: planned_count,
         )
         update!(canceled_at: at, encrypted_payload: nil, discard_at: at, purge_eligible_at: purge_at)
@@ -101,8 +102,9 @@ class ClientSecretIssuance < AppZenithRecord
       errors.add(:signup_completed_at, "requires an immutable signup completion fact")
       return
     end
-    recorded = ClientSecretAuditOutbox.exists?(
-      client_ref: client.public_id, operation_ref: origin_operation_id,
+    client_ref = Client.where(id: client_id).pick(:public_id)
+    recorded = client_ref && ClientSecretAuditOutbox.exists?(
+      client_ref: client_ref, operation_ref: origin_operation_id,
       event_name: "secret.signup_completed", occurred_at: signup_completed_at, item_count: planned_count,
     )
     errors.add(:signup_completed_at, "requires its matching source audit transaction") unless recorded
@@ -129,11 +131,12 @@ class ClientSecretIssuance < AppZenithRecord
   def cancellation_has_source_audit
     return unless canceled_at && canceled_at_in_database.nil? && will_save_change_to_canceled_at?
 
-    recorded = ClientSecretAuditOutbox.exists?(
-      client_ref: client.public_id, credential_ref: nil, operation_ref: origin_operation_id,
+    client_ref = Client.where(id: client_id).pick(:public_id)
+    recorded = client_ref && ClientSecretAuditOutbox.exists?(
+      client_ref: client_ref, credential_ref: nil, operation_ref: origin_operation_id,
       event_name: "secret.issuance_canceled", reason: %w(flow_canceled withdrawal payload_unavailable),
       occurred_at: canceled_at,
-      actor_type: "Client", actor_id: client_id, actor_public_ref: client.public_id, item_count: planned_count,
+      actor_type: "Client", actor_id: client_id, actor_public_ref: client_ref, item_count: planned_count,
     )
     return if recorded
 

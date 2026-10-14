@@ -73,7 +73,7 @@ class EnforcementCaseApplyOperation
   end
 
   def perform_principal_access_effect!
-    effect = enforcement_case.principal_effect
+    effect = enforcement_case.principal_effect_record
     return unless effect&.access_blocking?
 
     principal = enforcement_case.class.principal_class.find_by!(public_id: enforcement_case.principal_public_id)

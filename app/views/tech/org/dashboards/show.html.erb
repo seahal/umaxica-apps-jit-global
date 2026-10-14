@@ -1,0 +1,16 @@
+<% page_title(t("tech.org.dashboard.title")) %>
+<div class="ui-page">
+  <div>
+    <h1><%= t("tech.org.dashboard.heading") %></h1>
+    <p><%= t("tech.org.dashboard.description") %></p>
+  </div>
+  <section aria-labelledby="tech-tools-heading">
+    <h2 id="tech-tools-heading"><%= t("tech.org.dashboard.tools_heading") %></h2>
+    <p><%= t("tech.org.dashboard.empty_state") %></p>
+  </section>
+  <nav aria-label="<%= t("tech.org.navigation.label") %>">
+    <%= form_with url: tech_org_sign_out_path, method: :post, local: true do |form| %>
+      <%= form.submit t("tech.org.dashboard.sign_out"), class: "ui-button ui-button--secondary" %>
+    <% end %>
+  </nav>
+</div>

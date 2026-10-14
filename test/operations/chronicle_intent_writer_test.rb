@@ -8,12 +8,12 @@ class ChronicleIntentWriterTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   setup do
-    @policy = ChronicleRetentionPolicy.create!(
-      code: "security",
-      name: "Security",
-      duration_days: 365,
-      permanent: false,
-    )
+    @policy =
+      ChronicleRetentionPolicy.find_or_create_by!(code: "security") do |policy|
+        policy.name = "Security"
+        policy.duration_days = 365
+        policy.permanent = false
+      end
   end
 
   test "skips visibility contexts that resolve to blank" do
@@ -39,6 +39,7 @@ class ChronicleIntentWriterTest < ActiveSupport::TestCase
       visibility_contexts: ["audit"],
     )
 
-    assert_equal [context], chronicle.chronicle_visibility_contexts
+    assert_equal [context.id], ChronicleVisibility.where(chronicle_id: chronicle.id)
+      .pluck(:chronicle_visibility_context_id)
   end
 end

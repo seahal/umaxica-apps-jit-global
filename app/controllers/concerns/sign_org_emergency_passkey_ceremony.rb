@@ -102,7 +102,7 @@ module SignOrgEmergencyPasskeyCeremony
   # Re-checked at verification because eligibility can be withdrawn between the
   # two requests of the ceremony, and because the credential is only now known.
   def allow_passkey_sign_in?(passkey)
-    return true if OrgEmergencyAccessPolicy.eligible?(passkey.staff)
+    return true if OrgEmergencyAccessPolicy.eligible?(Operator.find(passkey.staff_id))
 
     emit_passkey_auth_failed(reason: "emergency_access_ineligible")
     render_error("errors.webauthn.verification_failed", :unauthorized)
@@ -111,7 +111,7 @@ module SignOrgEmergencyPasskeyCeremony
 
   def perform_passkey_sign_in(passkey)
     establish_signed_in_session!(
-      passkey.staff,
+      Operator.find(passkey.staff_id),
       pt: retrieve_pt_for_checkpoint,
       ri: current_region_identifier,
       auth_method: "passkey",

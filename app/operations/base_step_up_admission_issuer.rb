@@ -10,13 +10,13 @@ class BaseStepUpAdmissionIssuer
 
     def conflict_binding_for_form!(actor:, token:, transaction:, base_browser_nonce:, base_token:)
       binding = binding_for(actor, token)
-      device = token.device_session.reload
+      device_session = token.device_session_record!
       unless base_token.equal?(token) && transaction.is_a?(binding.transaction_model) &&
           transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
           %w(pending verified).include?(transaction.status) &&
           !transaction.expired?(now: transaction.class.database_now) && actor.login_allowed? &&
-          token.currently_usable?(token.class.database_now) && device.usable? &&
-          device.current_refresh_token_id == token.id
+          token.currently_usable?(token.class.database_now) && device_session.usable? &&
+          device_session.current_refresh_token_id == token.id
         deny!("step-up conflict parent is unavailable", "invalid_admission")
       end
 
@@ -38,16 +38,16 @@ class BaseStepUpAdmissionIssuer
       binding = binding_for(actor, token)
       validate_requirement!(requirement, actor:, token:, return_to:, binding:)
       admission = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: binding.surface, reference: restart_of)
-      transaction = admission.step_up_ceremony_transaction
+      transaction = binding.transaction_model.find_by(id: admission.step_up_ceremony_transaction_id)
       unless transaction && %w(pending verified).include?(transaction.status) &&
           !transaction.expired?(now: transaction.class.database_now) &&
           matching_pending_intent?(transaction, binding:, requirement:, token:, actor:, return_to:)
         deny!("step-up restart parent is unavailable", "invalid_admission")
       end
 
-      device = token.device_session
-      unless actor.login_allowed? && token.currently_usable?(token.class.database_now) && device.usable? &&
-          device.current_refresh_token_id == token.id
+      device_session = token.device_session_record!
+      unless actor.login_allowed? && token.currently_usable?(token.class.database_now) && device_session.usable? &&
+          device_session.current_refresh_token_id == token.id
         deny!("Base session is unavailable", "session_expired")
       end
 
@@ -70,10 +70,12 @@ class BaseStepUpAdmissionIssuer
           ensure_bootstrap_eligible!(actor) if requirement.purpose == "bootstrap"
 
           binding.transaction_model.connection_owner.connected_to(role: :writing) do
-            token.device_session.with_lock do
+            device_session = token.device_session_record!
+            device_session.with_lock do
               token.with_lock do
                 issue_under_root_locks!(
                   actor:, token:, binding:, requirement:, return_to:, base_browser_nonce:, base_token:, restart_of:,
+                  device_session:,
                 )
               end
             end
@@ -85,10 +87,10 @@ class BaseStepUpAdmissionIssuer
     private
 
     def issue_under_root_locks!(actor:, token:, binding:, requirement:, return_to:, base_browser_nonce:, base_token:,
-                                restart_of:)
+                                restart_of:, device_session:)
       now = binding.transaction_model.database_now
-      device = token.device_session
-      unless token.currently_usable?(now) && device.usable? && device.current_refresh_token_id == token.id
+      unless token.currently_usable?(now) && device_session.usable? &&
+          device_session.current_refresh_token_id == token.id
         deny!("Base session is unavailable", "session_expired")
       end
       ensure_bootstrap_session!(token, now) if requirement.purpose == "bootstrap"

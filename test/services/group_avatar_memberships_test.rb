@@ -15,6 +15,42 @@ class GroupAvatarMembershipsTest < ActiveSupport::TestCase
     assert_equal context.fetch(:avatar).id, membership.avatar_id
   end
 
+  test "post-cutover membership attach reorder and detach use current concrete owners" do
+    context = app_context
+
+    AvatarRecord.transaction(joinable: false) do
+      legacy_owner = context.fetch(:group).ownership_periods.first
+      AvatarGroupConcreteOwnershipPeriod.create!(
+        avatar_group: context.fetch(:group),
+        owner_surface: legacy_owner.owner_surface,
+        owner_collective_public_id: legacy_owner.owner_collective_public_id,
+        valid_from: legacy_owner.valid_from,
+      )
+      AvatarOwnershipCutover.create!(
+        id: AvatarOwnershipCutover::CUTOVER_ID,
+        cutover_at: Time.utc(2030, 1, 1),
+      )
+
+      membership = GroupAvatarMemberships::Attach.call(**attach_arguments(context))
+      GroupAvatarMemberships::Reorder.call(
+        **authorization_arguments(context).merge(membership: membership),
+        position: 2,
+      )
+      GroupAvatarMemberships::Detach.call(
+        **authorization_arguments(context).merge(membership: membership),
+      )
+
+      assert_equal "removed", membership.reload.state
+      assert_equal 2, membership.position
+      assert_equal context.fetch(:bootstrap).account.public_id, context.fetch(:group).reload.account_public_id
+      assert_instance_of AvatarGroupConcreteOwnershipPeriod, context.fetch(:group).current_ownership_period
+      assert_instance_of AvatarEnterpriseOwnershipPeriod, context.fetch(:avatar).current_ownership_period
+
+      # Roll back the marker and synthetic graph through the ordinary test transaction.
+      raise ActiveRecord::Rollback
+    end
+  end
+
   test "attach rejects an Avatar whose current owner differs from the Group owner" do
     context = app_context
     other_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)

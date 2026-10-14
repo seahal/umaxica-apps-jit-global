@@ -10,7 +10,9 @@ class CoverageThresholdOidcEdgesTest < ActiveSupport::TestCase
   end
 
   test "public token exchange maps missing and atomic consume outcomes" do
-    client = Struct.new(:registered_token_endpoint_auth_method, :allowed_scopes).new("none", %w(openid profile))
+    client = Struct.new(
+      :registered_token_endpoint_auth_method, :allowed_scopes, :required_operator_capability,
+    ).new("none", %w(openid profile), nil)
     payload = {
       "state" => "issued",
       "redirect_uri" => "https://client/cb",

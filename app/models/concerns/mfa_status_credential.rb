@@ -21,7 +21,24 @@ module MfaStatusCredential
   private
 
   def refresh_owner_mfa_status
-    owner = public_send(self.class.mfa_status_owner_association)
+    association_name = self.class.mfa_status_owner_association
+    owner =
+      case self
+      when ClientEmail, ClientTotpCredential, ClientPasskey
+        raise FlowConfigurationError, "Client MFA credential owner must be user" unless association_name == :user
+
+        Client.find_by(id: user_id)
+      when VisitorEmail, VisitorPasskey
+        raise FlowConfigurationError, "Visitor MFA credential owner must be visitor" unless association_name == :visitor
+
+        Visitor.find_by(id: visitor_id)
+      when OperatorPasskey
+        raise FlowConfigurationError, "Operator MFA credential owner must be staff" unless association_name == :staff
+
+        Operator.find_by(id: staff_id)
+      else
+        raise FlowConfigurationError, "unsupported MFA credential class"
+      end
     return unless owner&.respond_to?(:refresh_mfa_status!)
     return if owner.destroyed?
 

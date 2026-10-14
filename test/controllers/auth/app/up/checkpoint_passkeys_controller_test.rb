@@ -102,7 +102,8 @@ module Auth::App::Up
 
     test "POST begin excludes existing passkey credentials" do
       telephone = verify_telephone_via_otp!
-      telephone.user.client_passkeys.create!(
+      ClientPasskey.create!(
+        user_id: contact_owner_for_test(telephone).id,
         webauthn_id: "existing_webauthn_id",
         public_key: "existing_public_key",
         sign_count: 0,
@@ -187,7 +188,7 @@ module Auth::App::Up
       assert_equal auth_app_sign_up_check_telephone_secret_path(ri: "jp", fb: @signup_flow_binding),
                    response.parsed_body["redirect_url"]
       assert_predicate session[:user_telephone_registration], :present?
-      assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, telephone.user.reload.status_id
+      assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, contact_owner_for_test(telephone).status_id
       assert_not cycle.reload.requirement_cleared?(:passkey)
       assert_not cycle.requirement_cleared?(:birthdate)
       assert_not_includes cycle.completed_requirements.keys, "passcode"
@@ -252,7 +253,7 @@ module Auth::App::Up
         /#{Regexp.escape(::AuthenticationClient::ACCESS_COOKIE_KEY.to_s)}=/,
         response.headers["Set-Cookie"].to_s,
       )
-      assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, telephone.user.reload.status_id
+      assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, contact_owner_for_test(telephone).status_id
     end
 
     test "POST create respects pt parameter for redirect" do
@@ -459,7 +460,7 @@ module Auth::App::Up
         assert_not_includes response.body, "13歳の誕生日"
         assert_equal ClientSignUpFlowStatus::HALTED, cycle.reload.status_id
         assert_not cycle.requirement_cleared?(:birthdate)
-        assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, telephone.user.reload.status_id
+        assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, contact_owner_for_test(telephone).status_id
       end
     end
 
@@ -561,7 +562,7 @@ module Auth::App::Up
 
         assert_response :redirect
         assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
-        assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, telephone.user.reload.status_id
+        assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, contact_owner_for_test(telephone).status_id
       end
     end
 
@@ -635,7 +636,7 @@ module Auth::App::Up
         assert fv5000.reload.requirement_cleared?(:passkey)
       end
 
-      user = telephone.user
+      user = contact_owner_for_test(telephone)
 
       get auth_app_sign_up_check_telephone_birthdate_url(ri: "jp", fb: @signup_flow_binding)
 

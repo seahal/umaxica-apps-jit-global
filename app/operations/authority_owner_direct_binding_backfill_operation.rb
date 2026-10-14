@@ -129,8 +129,13 @@ class AuthorityOwnerDirectBindingBackfillOperation
   end
 
   def resource_identity(resource)
-    association = configuration.fetch(:identity_association)
-    resource.public_send(association) if resource.respond_to?(association)
+    case resource
+    when ClientPersona then ClientIdentity.find_by(id: resource.client_identity_id)
+    when Individual then VisitorIdentity.find_by(id: resource.visitor_identity_id)
+    when Agent then OperatorIdentity.find_by(id: resource.operator_identity_id)
+    when Enterprise, Company, Bureau then nil
+    else raise ArgumentError, "unsupported authority resource class"
+    end
   end
 
   def owner_mismatch?(identity, principal)

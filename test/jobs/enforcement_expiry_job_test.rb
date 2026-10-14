@@ -5,7 +5,7 @@ require "test_helper"
 
 class EnforcementExpiryJobTest < ActiveJob::TestCase
   test "ends an active cooldown case whose expires_at has passed and unlocks nothing since it never blocked access" do
-    client = clients(:one)
+    client = create_test_client!
     operator = operators(:one)
 
     the_case = AppEnforcementCase.new(
@@ -33,7 +33,7 @@ class EnforcementExpiryJobTest < ActiveJob::TestCase
   end
 
   test "expiring a temporary_freeze releases admin_locked when no other blocking case remains" do
-    client = clients(:one)
+    client = create_test_client!
     operator = operators(:one)
 
     the_case = AppEnforcementCase.new(
@@ -64,7 +64,7 @@ class EnforcementExpiryJobTest < ActiveJob::TestCase
   end
 
   test "does not touch a case whose expires_at has not yet passed" do
-    client = clients(:one)
+    client = create_test_client!
     operator = operators(:one)
 
     the_case = AppEnforcementCase.new(
@@ -86,5 +86,15 @@ class EnforcementExpiryJobTest < ActiveJob::TestCase
     EnforcementExpiryJob.perform_now
 
     assert_not_predicate the_case.reload.ended_at, :present?
+  end
+
+  private
+
+  def create_test_client!
+    Client.create!(
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+      status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::BOTH,
+    )
   end
 end

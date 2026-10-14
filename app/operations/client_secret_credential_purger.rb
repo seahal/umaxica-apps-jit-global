@@ -8,20 +8,22 @@ class ClientSecretCredentialPurger
 
     def call!(credential:, executor_job_id:)
       AppZenithRecord.connected_to(role: :writing) do
-        credential.client.with_lock do
+        client = Client.find(credential.client_id)
+        issuance = ClientSecretIssuance.find(credential.issuance_id)
+        client.with_lock do
           credential.lock!
           now = Client.database_now
           return :pending unless credential.lapsed?(now) && credential.purgeable?(now)
-          return :held if credential.client.client_retention_holds.active_at(now).exists? ||
-            AppEnforcementCase.principal_effect_blocking?(credential.client.public_id, :withdrawal_purge_blocked) ||
-            AppEnforcementCase.principal_effect_blocking?(credential.client.public_id, :principal_hard_delete_blocked)
+          return :held if client.client_retention_holds.active_at(now).exists? ||
+            AppEnforcementCase.principal_effect_blocking?(client.public_id, :withdrawal_purge_blocked) ||
+            AppEnforcementCase.principal_effect_blocking?(client.public_id, :principal_hard_delete_blocked)
 
-          events = terminal_events(credential).lock.to_a
+          events = terminal_events(credential, issuance).lock.to_a
           return :undelivered unless terminal_audits_complete?(credential, events)
 
           reference = credential.public_id
-          client_ref = credential.client.public_id
-          operation = credential.claim_operation_id || credential.issuance.origin_operation_id
+          client_ref = client.public_id
+          operation = credential.claim_operation_id || issuance.origin_operation_id
           credential.delete
           ClientSecretAuditOutbox.record!(
             actor_context: ActorValuesContext.empty, client_ref: client_ref, credential_ref: reference,
@@ -67,14 +69,14 @@ class ClientSecretCredentialPurger
       end
     end
 
-    def terminal_events(credential)
+    def terminal_events(credential, issuance)
       if credential.confirmed_at || ClientSecretAuditOutbox.exists?(
         credential_ref: credential.public_id, event_name: "secret.discarded", reason: "withdrawal",
       )
         ClientSecretAuditOutbox.where(credential_ref: credential.public_id, event_name: "secret.discarded")
       else
         ClientSecretAuditOutbox.where(
-          operation_ref: credential.issuance.origin_operation_id,
+          operation_ref: issuance.origin_operation_id,
           credential_ref: [nil, credential.public_id], event_name: %w(secret.issuance_canceled secret.discarded),
         )
       end

@@ -11,7 +11,6 @@ info:
     The `app`, `com`, and `org` surfaces are independent trust boundaries served on separate
     hosts, so each has its own description. This one covers the end-user application surface. An
     endpoint described here exists on this surface's own hosts; it is never shared across surfaces.
-    `/api/v0/profile` is the Palm native-client resource endpoint and exists on this surface only.
 
     ## What is absent, and why
 
@@ -61,8 +60,6 @@ tags:
     description: Core browser BFF session and token lifecycle, authenticated by first-party cookie.
   - name: Preferences
     description: Cookie-consent and color-theme JSON endpoints under `/api/v0/preferences`.
-  - name: Profile
-    description: Native bearer-token resource endpoints.
   - name: Content
     description: Read-only published documentation, help, news, and info entries.
 paths:
@@ -369,59 +366,6 @@ paths:
           $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-  /api/v0/profile:
-    get:
-      summary: Current native client profile
-      description: 'Bearer-token resource endpoint for native clients on the app surface. Rejects any request that also carries cookies: an endpoint accepts exactly one credential transport. The host is deployment configuration; see PALM_SERVICE_URL.'
-      operationId: getProfile
-      tags:
-        - Profile
-      security:
-        - bearerToken: []
-      responses:
-        '200':
-          description: The authenticated actor.
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                  - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - actor
-                properties:
-                  actor:
-                    $ref: '#/components/schemas/Actor'
-        '401':
-          description: No usable bearer token. `WWW-Authenticate` names the bearer error per RFC 6750 3.1.
-          headers:
-            WWW-Authenticate:
-              schema:
-                type: string
-                example: Bearer error="invalid_token"
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-        '403':
-          description: The token lacks the required scope.
-          headers:
-            WWW-Authenticate:
-              schema:
-                type: string
-                example: Bearer error="insufficient_scope"
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-        '406':
-          $ref: '#/components/responses/NotAcceptable'
         '429':
           $ref: '#/components/responses/RateLimited'
   /api/v0/entries:
@@ -731,18 +675,6 @@ components:
         theme:
           type: string
           description: Stored color-theme code (`li`/`dr`/`sy`) or the canonical option (`light`/`dark`/`system`).
-    Actor:
-      type: object
-      required:
-        - type
-        - id
-      properties:
-        type:
-          type: string
-          example: client
-        id:
-          type: string
-          description: Public identifier. Never a database primary key.
     Entry:
       type: object
       description: One published entry, rendered from its frozen published version.

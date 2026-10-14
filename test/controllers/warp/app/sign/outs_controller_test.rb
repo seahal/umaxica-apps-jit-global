@@ -21,6 +21,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "warp/app/sign/outs/edit", inertia_component
     assert_equal warp_app_sign_out_path, URI.parse(inertia_props.dig("form", "action")).path
+    assert_nil inertia_props["cancel"]
     assert_predicate token.reload, :currently_usable?
   end
 
@@ -35,6 +36,21 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_nil response.headers["Clear-Site-Data"]
     assert_predicate token.reload, :currently_usable?
     assert_predicate @rp_session.reload, :active?
+  end
+
+  test "a write that creates the browser preference synchronizes the client preference mirror" do
+    user = clients(:sample_user)
+    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    authenticate_rp!(user, token)
+    mirror = -> { AppZenithRecord.connected_to(role: :writing) { ClientPreference.find_by(user_id: user.id) } }
+
+    assert_nil mirror.call
+
+    post warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
+
+    assert_response :see_other
+    assert_predicate cookies[PreferenceCookieName.refresh(surface: :app)], :present?
+    assert_not_nil mirror.call
   end
 
   test "post sign out redirects to the registered base authority" do

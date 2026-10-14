@@ -7,9 +7,9 @@ class TelephoneIdentifierPurger
     def call(record:)
       owner, database =
         case record
-        when ClientTelephone then [record.user, AppZenithRecord]
-        when VisitorTelephone then [record.visitor, ComZenithRecord]
-        when OperatorTelephone then [record.staff, OrgZenithRecord]
+        when ClientTelephone then [Client.find(record.user_id), AppZenithRecord]
+        when VisitorTelephone then [Visitor.find(record.visitor_id), ComZenithRecord]
+        when OperatorTelephone then [Operator.find(record.staff_id), OrgZenithRecord]
         else raise ArgumentError, "unsupported telephone identifier"
         end
       unless owner && (record.persisted? || record.destroyed?)

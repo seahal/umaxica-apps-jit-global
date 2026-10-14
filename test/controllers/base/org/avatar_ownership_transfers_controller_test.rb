@@ -110,7 +110,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               !(rp_token.device_session_id && OperatorRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OperatorRpSession.create!(
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -118,16 +118,16 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.staff, host: rp_host, resource_type: "operator",
-                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                              subject: OidcSubject.for(
-                                rp_token.staff,
-                                resource_type: "operator",
-                              ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "operator",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -185,7 +185,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               !(rp_token.device_session_id && OperatorRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OperatorRpSession.create!(
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -193,16 +193,16 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.staff, host: rp_host, resource_type: "operator",
-                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                              subject: OidcSubject.for(
-                                rp_token.staff,
-                                resource_type: "operator",
-                              ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "operator",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -224,6 +224,63 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_response :success
     assert_equal "cancelled", response.parsed_body.fetch("status")
     assert_equal "org", @avatar_result.avatar.reload.current_ownership_period.owner_surface
+  end
+
+  test "another authorized source agent can cancel a transfer over HTTP" do
+    transfer = AvatarOwnershipTransfers::RequestOperation.call(
+      actor: @operator,
+      surface: "org",
+      subject_public_id: @source.account.public_id,
+      avatar_public_id: @avatar_result.avatar.public_id,
+      target_surface: "app",
+      target_collective_public_id: @target.collective.public_id,
+    )
+    other_operator = Operator.create!(
+      status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
+    other = BaseSelectorBootstrapAuthority.call(surface: :org, principal: other_operator)
+    AgentMembership.create!(
+      agent: other.account,
+      bureau: @source.collective,
+      bureau_unit: @source.unit,
+      membership_kind_id: AgentMembershipKind::OWNER,
+      membership_state_id: AgentMembershipState::ACTIVE,
+      primary: false,
+      metadata: {},
+    )
+    other_avatar_result = AvatarProvisioning::Create.call(
+      actor: other_operator,
+      subject_type: :agent,
+      subject: other.account,
+      avatar_params: { moniker: "Second agent" },
+      handle_params: { handle: "avatar-transfer-agent-#{SecureRandom.hex(5)}" },
+      owner_surface: "org",
+      owner_collective_public_id: other.collective.public_id,
+    )
+
+    assert_predicate other_avatar_result, :success?, other_avatar_result.errors.inspect
+    other_token = OperatorToken.create!(staff: other_operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    BaseSwitcherAuthority.switch(
+      surface: :org,
+      principal: other_operator,
+      session: other_token,
+      params: {
+        account_public_id: other.account.public_id,
+        organization_public_id: other.collective.public_id,
+        organization_unit_public_id: other.unit.public_id,
+        avatar_public_id: other_avatar_result.avatar.public_id,
+      },
+    )
+    grant_step_up!("avatar_transfer_cancel", token: other_token)
+
+    post base_org_cancel_avatar_ownership_transfer_url(transfer.public_id, host: @host),
+         headers: base_browser_headers(operator: other_operator, token: other_token),
+         as: :json
+
+    assert_response :success
+    assert_equal "cancelled", response.parsed_body.fetch("status")
+    assert_equal other.account.public_id, transfer.reload.cancel_actor_public_id
   end
 
   test "URL-provided Avatar cannot replace a nil selected Avatar" do
@@ -260,7 +317,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
                   oidc_client_id: rp_client.client_id,
                   revoked_at: nil,
                 ))
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OperatorRpSession.create!(
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -268,16 +325,17 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
                 refresh_token_expires_at: rp_now + 10.minutes,
               )
               rp_access = AuthenticationTokenService.encode(
-                rp_token.staff, host: rp_host, resource_type: "operator",
-                                session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                subject: OidcSubject.for(
-                                  rp_token.staff,
-                                  resource_type: "operator",
-                                ), client_id: rp_client.client_id,
+                rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                       session_public_id: rp_token.public_id,
+                                       base_session_public_id: rp_token.public_id,
+                                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                       subject: OidcSubject.for(
+                                         rp_token.actor_record,
+                                         resource_type: "operator",
+                                       ), client_id: rp_client.client_id,
               )
               @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
             end
@@ -295,7 +353,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
         end
       post base_org_avatar_ownership_transfers_url(host: @host),
            params: {
-             avatar_public_id: @avatar_result.avatar.public_id,
+             avatar_public_id: @target.avatar.public_id,
              target_surface: "app",
              target_collective_public_id: @target.collective.public_id,
            },
@@ -303,6 +361,104 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
       assert_response :forbidden
     end
+  end
+
+  test "request is denied when the selected agent is no longer an owner member" do
+    grant_step_up!("avatar_transfer_request")
+    membership = @source.account.agent_memberships.find_by!(bureau: @source.collective)
+    membership.update!(membership_kind_id: AgentMembershipKind::MEMBER)
+
+    assert_no_difference -> { AvatarOwnershipTransfer.count } do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: {
+             target_surface: "app",
+             target_collective_public_id: @target.collective.public_id,
+           },
+           headers: base_browser_headers,
+           as: :json
+
+      assert_response :forbidden
+    end
+  end
+
+  test "request is refused after the operator principal enters a login-blocked status" do
+    grant_step_up!("avatar_transfer_request")
+    headers = base_browser_headers
+    @operator.update!(status_id: OperatorStatus::RESERVED)
+
+    assert_no_difference -> { AvatarOwnershipTransfer.count } do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: {
+             target_surface: "app",
+             target_collective_public_id: @target.collective.public_id,
+           },
+           headers: headers,
+           as: :json
+
+      assert_response :forbidden
+    end
+  end
+
+  test "an app principal cannot use the org transfer endpoint" do
+    token = ClientToken.create!(user: @target_client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    headers = as_user_headers(@target_client, host: @host, session_public_id: token.public_id)
+
+    assert_no_difference -> { AvatarOwnershipTransfer.count } do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: {
+             target_surface: "app",
+             target_collective_public_id: @target.collective.public_id,
+           },
+           headers: headers,
+           as: :json
+
+      assert_response :unauthorized
+    end
+  end
+
+  test "an operator cannot accept a transfer addressed to another bureau" do
+    destination_operator = Operator.create!(
+      status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
+    destination = BaseSelectorBootstrapAuthority.call(surface: :org, principal: destination_operator)
+    transfer = AvatarOwnershipTransfers::RequestOperation.call(
+      actor: @operator,
+      surface: "org",
+      subject_public_id: @source.account.public_id,
+      avatar_public_id: @avatar_result.avatar.public_id,
+      target_surface: "org",
+      target_collective_public_id: destination.collective.public_id,
+    )
+    grant_step_up!("avatar_transfer_accept")
+
+    post base_org_accept_avatar_ownership_transfer_url(transfer.public_id, host: @host),
+         headers: base_browser_headers,
+         as: :json
+
+    assert_response :forbidden
+    assert_equal "pending", transfer.reload.state
+    assert_equal "org", @avatar_result.avatar.reload.current_ownership_period.owner_surface
+  end
+
+  test "destination-side org authority cannot cancel an app-originated transfer" do
+    transfer = AvatarOwnershipTransfers::RequestOperation.call(
+      actor: @target_client,
+      surface: "app",
+      subject_public_id: @target.account.public_id,
+      avatar_public_id: @target.avatar.public_id,
+      target_surface: "org",
+      target_collective_public_id: @source.collective.public_id,
+    )
+    grant_step_up!("avatar_transfer_cancel")
+
+    post base_org_cancel_avatar_ownership_transfer_url(transfer.public_id, host: @host),
+         headers: base_browser_headers,
+         as: :json
+
+    assert_response :forbidden
+    assert_equal "pending", transfer.reload.state
+    assert_equal "app", @target.avatar.reload.current_ownership_period.owner_surface
   end
 
   test "registry accept transport completes an explicit registry reservation" do
@@ -375,22 +531,22 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     )
   end
 
-  def grant_step_up!(scope)
-    @token.update!(
+  def grant_step_up!(scope, token: @token)
+    token.update!(
       last_step_up_at: Time.current,
       last_step_up_scope: scope,
       last_step_up_aal: nil,
       last_step_up_method: "passkey",
       last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
       last_step_up_credential_ref: "test-step-up-credential", last_step_up_full_reauthentication: false,
-      last_step_up_session_public_id: @token.public_id,
+      last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:org",
     )
   end
 
-  def base_browser_headers
-    rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @token.public_id)
+  def base_browser_headers(operator: @operator, token: @token)
+    rp_headers = as_staff_headers(operator, host: @host, session_public_id: token.public_id)
     rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
     rp_client = OidcClientRegistry.find!("base-org-ww")
     rp_key = [rp_client.client_id, rp_token.public_id]
@@ -413,7 +569,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       revoked_at: nil,
     )
 
-    rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+    rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
     rp_now = Time.current
     rp_session = OperatorRpSession.create!(
       operator_token: rp_token,
@@ -425,7 +581,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       refresh_token_expires_at: rp_now + 10.minutes,
     )
     rp_access = AuthenticationTokenService.encode(
-      rp_token.staff,
+      rp_token.actor_record,
       host: rp_headers.fetch("Host"),
       resource_type: "operator",
       session_public_id: rp_token.public_id,
@@ -437,7 +593,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       issuer: OidcIssuer.for_client(rp_client),
       audiences: [rp_client.aud],
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-      subject: OidcSubject.for(rp_token.staff, resource_type: "operator"),
+      subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
       client_id: rp_client.client_id,
     )
     @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]

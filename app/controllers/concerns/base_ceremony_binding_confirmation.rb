@@ -92,7 +92,7 @@ module BaseCeremonyBindingConfirmation
   def validate_binding_parent_actor!(binding, token)
     case binding.parent_kind
     when :step_up_ceremony_transaction
-      transaction = binding.step_up_ceremony_transaction
+      transaction = auth_binding_parent_record(binding)
       actor = Actor.subject
       unless actor.is_a?(ApplicationRecord) && transaction.actor_ref == actor.public_id &&
           transaction.session_ref == token.public_id &&
@@ -104,12 +104,12 @@ module BaseCeremonyBindingConfirmation
         )
       end
     when :authorization_transaction
-      transaction = binding.authorization_transaction
+      transaction = auth_binding_parent_record(binding)
       now = transaction.class.database_now
       raise BaseAuthAdmissionCoordinator::Denied.new("authorization is unavailable", code: "invalid_admission") if
         transaction.expired?(now: now) || transaction.login_challenge_expired?(now: now) || transaction.consumed?
     when :sign_in_flow
-      flow = binding.sign_in_flow
+      flow = auth_binding_parent_record(binding)
       raise BaseAuthAdmissionCoordinator::Denied.new("local entry is unavailable", code: "invalid_admission") unless
         flow.sign_in_primary_pending? && !flow.expired?(flow.class.database_now) && flow.principal_id.nil?
     else
@@ -118,8 +118,71 @@ module BaseCeremonyBindingConfirmation
   end
 
   def auth_binding_session_active?(binding)
-    session = binding.auth_ceremony_session
+    session_class =
+      case binding
+      when ClientAuthAdmissionBinding then ClientAuthCeremonySession
+      when VisitorAuthAdmissionBinding then VisitorAuthCeremonySession
+      when OperatorAuthAdmissionBinding then OperatorAuthCeremonySession
+      else raise BaseAuthAdmissionCoordinator::Denied.new("binding is invalid", code: "invalid_admission")
+      end
+    session = session_class.find_by(id: binding.auth_ceremony_session_id)
     session.present? && session.active?(now: binding.class.database_now)
+  end
+
+  def auth_binding_parent_record(binding)
+    case binding
+    when ClientAuthAdmissionBinding
+      auth_binding_parent_record_for_surface(
+        binding.parent_kind,
+        sign_in_flow_id: binding.sign_in_flow_id,
+        authorization_transaction_id: binding.authorization_transaction_id,
+        step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
+        sign_in_flow_class: ClientSignInFlow,
+        authorization_transaction_class: ClientOidcAuthorizationTransaction,
+        step_up_ceremony_transaction_class: ClientStepUpCeremonyTransaction,
+      )
+    when VisitorAuthAdmissionBinding
+      auth_binding_parent_record_for_surface(
+        binding.parent_kind,
+        sign_in_flow_id: binding.sign_in_flow_id,
+        authorization_transaction_id: binding.authorization_transaction_id,
+        step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
+        sign_in_flow_class: VisitorSignInFlow,
+        authorization_transaction_class: VisitorOidcAuthorizationTransaction,
+        step_up_ceremony_transaction_class: VisitorStepUpCeremonyTransaction,
+      )
+    when OperatorAuthAdmissionBinding
+      auth_binding_parent_record_for_surface(
+        binding.parent_kind,
+        sign_in_flow_id: binding.sign_in_flow_id,
+        authorization_transaction_id: binding.authorization_transaction_id,
+        step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
+        sign_in_flow_class: OperatorSignInFlow,
+        authorization_transaction_class: OperatorOidcAuthorizationTransaction,
+        step_up_ceremony_transaction_class: OperatorStepUpCeremonyTransaction,
+      )
+    else
+      raise BaseAuthAdmissionCoordinator::Denied.new("binding is invalid", code: "invalid_admission")
+    end
+  end
+
+  def auth_binding_parent_record_for_surface(
+    parent_kind,
+    sign_in_flow_id:,
+    authorization_transaction_id:,
+    step_up_ceremony_transaction_id:,
+    sign_in_flow_class:,
+    authorization_transaction_class:,
+    step_up_ceremony_transaction_class:
+  )
+    case parent_kind
+    when :sign_in_flow then sign_in_flow_class.find_by(id: sign_in_flow_id)
+    when :authorization_transaction then authorization_transaction_class.find_by(id: authorization_transaction_id)
+    when :step_up_ceremony_transaction
+      step_up_ceremony_transaction_class.find_by(id: step_up_ceremony_transaction_id)
+    else
+      raise BaseAuthAdmissionCoordinator::Denied.new("binding parent is invalid", code: "invalid_admission")
+    end
   end
 
   def auth_binding_entry_url(binding)
@@ -143,7 +206,7 @@ module BaseCeremonyBindingConfirmation
     when "bootstrap_handoff"
       new_auth_app_verification_setup_url(**query)
     when "credential_registration_handoff"
-      if binding.step_up_ceremony_transaction&.allowed_methods_array == ["totp"]
+      if auth_binding_parent_record(binding)&.allowed_methods_array == ["totp"]
         return new_auth_app_settings_totp_url(**query)
       end
 
@@ -191,11 +254,20 @@ module BaseCeremonyBindingConfirmation
   end
 
   def signup_binding?(binding)
-    binding.purpose == "local_sign_up" || binding.authorization_transaction&.intent == "sign_up"
+    return true if binding.purpose == "local_sign_up"
+    return false unless binding.parent_kind == :authorization_transaction
+
+    parent = auth_binding_parent_record(binding)
+    case parent
+    when ClientOidcAuthorizationTransaction, VisitorOidcAuthorizationTransaction, OperatorOidcAuthorizationTransaction
+      parent.intent == "sign_up"
+    else
+      false
+    end
   end
 
   def require_passkey_registration_binding!(binding)
-    return if binding.step_up_ceremony_transaction&.allowed_methods_array == ["passkey"]
+    return if auth_binding_parent_record(binding)&.allowed_methods_array == ["passkey"]
 
     raise ArgumentError, "unsupported credential registration method"
   end

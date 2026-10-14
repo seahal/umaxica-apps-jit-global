@@ -159,9 +159,6 @@ services:
       frontend:
         aliases:
           - core-workers-vpc.internal
-          - xper.app.localhost
-          - xper.com.localhost
-          - xper.org.localhost
           - base.app.localhost
           - base.com.localhost
           - base.org.localhost

@@ -63,7 +63,7 @@ lists use a 32px horizontal gutter in their two-column arrangement, with natural
 React uses `src/styles/theme.css`, imported within its own surface stack. Propshaft uses
 `app/assets/stylesheets/application.css`, independently encoding the same installed palette
 values and roles. Existing per-edition tints remain red-500, indigo-500 and green-500; text names
-identify editions too. Xper retains its established placeholder stylesheet.
+identify editions too.
 
 | Role | React utility / ERB variable | Use |
 | --- | --- | --- |

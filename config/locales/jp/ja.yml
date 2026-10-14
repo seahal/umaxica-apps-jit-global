@@ -2993,13 +2993,42 @@ ja:
       too_soon: しばらく待ってから再送してください。
   palm:
     app:
+      dashboard:
+        description: Palm の保護されたブラウザページです。
+        sign_out: サインアウト
+        status: ブラウザセッションは有効です。
+        status_heading: セッション
+        title: Palm App
       roots:
         message:
-          Palm API is available for native and handheld clients. Browser access is not a product UI.
+          Palm アカウントにサインインして保護されたアプリを開いてください。
+        sign_in: サインイン
       sign_out:
         completed: Your Palm session was revoked and the browser logout flow completed.
         heading: Signed out
         missing: There is no active Palm logout transaction to display.
+  tech:
+    org:
+      access_denial:
+        description: Tech ワークスペースを利用する権限がありません。
+        heading: アクセスできません
+        return_to_sign_in: サインインに戻る
+        sign_out: サインアウト
+        title: Tech にアクセスできません
+      dashboard:
+        description: Tech の保護されたオペレーターワークスペースです。
+        empty_state: 利用できるツールはまだありません。
+        heading: Tech
+        sign_out: サインアウト
+        title: Tech Org
+        tools_heading: ツール
+      navigation:
+        label: Tech のナビゲーション
+      roots:
+        description: Tech ワークスペースを開くには、許可されたオペレーターアカウントでサインインしてください。
+        heading: Tech
+        sign_in: サインイン
+        title: Tech Org
   preference:
     cookie:
       banner:
@@ -4801,6 +4830,7 @@ ja:
         completed_title: サインアウトしました
         confirm_description: 一度ログアウトすると、再度ログインが必要になります。
         home_link: ホームへ戻る
+        idp_session_error: IdP セッションを確認できませんでした。セッションはサインアウトされていません。
         success: ログアウトの予約を行いました。%{expires_at}以降には確実にアクセスが不可能となります。
         title: ログアウトしますか？
       verification:

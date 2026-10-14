@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 class RenameAppSignSequenceTicketsToCycles < ActiveRecord::Migration[8.2]
   def up
     safety_assured do

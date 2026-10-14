@@ -56,11 +56,12 @@ class TelephoneSignUpOtpVerificationCommitter
       when ClientSignUpFlow
         raise ArgumentError, "APP signup requires its own Telephone" unless telephone.is_a?(ClientTelephone)
 
-        [telephone.user, ClientTelephoneCeremonyTransaction, ClientStatus::UNVERIFIED_WITH_SIGN_UP, :app]
+        [Client.find(telephone.user_id), ClientTelephoneCeremonyTransaction,
+         ClientStatus::UNVERIFIED_WITH_SIGN_UP, :app,]
       when VisitorSignUpFlow
         raise ArgumentError, "COM signup requires its own Telephone" unless telephone.is_a?(VisitorTelephone)
 
-        [telephone.visitor, VisitorTelephoneCeremonyTransaction, VisitorStatus::ACTIVE, :com]
+        [Visitor.find(telephone.visitor_id), VisitorTelephoneCeremonyTransaction, VisitorStatus::ACTIVE, :com]
       else raise ArgumentError, "unsupported Telephone signup realm"
       end
     end

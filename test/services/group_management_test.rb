@@ -26,6 +26,58 @@ class GroupManagementTest < ActiveSupport::TestCase
     assert_equal bootstrap.collective.public_id, group.current_ownership_period.owner_collective_public_id
   end
 
+  test "post-cutover group creation and management keep account context separate from concrete ownership" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
+
+    AvatarRecord.transaction(joinable: false) do
+      AvatarOwnershipCutover.create!(
+        id: AvatarOwnershipCutover::CUTOVER_ID,
+        cutover_at: Time.utc(2030, 1, 1),
+      )
+
+      group = GroupManagement::Create.call(
+        account_surface: "app",
+        account_public_id: bootstrap.account.public_id,
+        owner_surface: "app",
+        owner_collective_public_id: bootstrap.collective.public_id,
+        actor: actor,
+        subject_public_id: bootstrap.account.public_id,
+        name: "Post-cutover group",
+      )
+      owner = group.current_ownership_period
+
+      assert_instance_of AvatarGroupConcreteOwnershipPeriod, owner
+      assert_equal 0, AvatarGroupOwnershipPeriod.where(avatar_group_id: group.id).count
+      assert_equal bootstrap.account.public_id, group.account_public_id
+      assert_equal bootstrap.collective.public_id, owner.owner_collective_public_id
+
+      GroupManagement::Update.call(
+        group: group,
+        attributes: { name: "Managed after cutover" },
+        actor: actor,
+        surface: "app",
+        subject_public_id: bootstrap.account.public_id,
+        account_public_id: bootstrap.account.public_id,
+      )
+      GroupManagement::Archive.call(
+        group: group,
+        actor: actor,
+        surface: "app",
+        subject_public_id: bootstrap.account.public_id,
+        account_public_id: bootstrap.account.public_id,
+      )
+
+      assert_equal "Managed after cutover", group.reload.name
+      assert_equal "archived", group.state
+      assert_equal bootstrap.account.public_id, group.account_public_id
+      assert_equal owner.id, group.current_ownership_period.id
+
+      # Roll back the marker and synthetic graph through the ordinary test transaction.
+      raise ActiveRecord::Rollback
+    end
+  end
+
   test "requires an explicit app or org owner for a new group" do
     error =
       assert_raises(ArgumentError) do

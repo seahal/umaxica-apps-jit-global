@@ -101,7 +101,9 @@ module Auth
                       assert_equal 303, entry0_browser.response.status
                       entry0_phase_binding = SignInFlowBindingCodec.encode(
                         flow: ClientSignInFlow.find_by!(
-                          public_id: entry0_binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+                          public_id: ClientAuthCeremonySession.find(
+                            entry0_binding.reload.admitted_auth_ceremony_session_id,
+                          ).local_sign_in_flow_ref,
                         ),
                         surface: "app", phase: "PRIMARY_PENDING",
                       )
@@ -182,7 +184,9 @@ module Auth
                       assert_equal 303, entry1_browser.response.status
                       entry1_phase_binding = SignInFlowBindingCodec.encode(
                         flow: ClientSignInFlow.find_by!(
-                          public_id: entry1_binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+                          public_id: ClientAuthCeremonySession.find(
+                            entry1_binding.reload.admitted_auth_ceremony_session_id,
+                          ).local_sign_in_flow_ref,
                         ),
                         surface: "app", phase: "PRIMARY_PENDING",
                       )
@@ -269,7 +273,9 @@ module Auth
               assert_equal 303, admission_browser.response.status
               phase_binding = SignInFlowBindingCodec.encode(
                 flow: ClientSignInFlow.find_by!(
-                  public_id: admission_binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+                  public_id: ClientAuthCeremonySession.find(
+                    admission_binding.reload.admitted_auth_ceremony_session_id,
+                  ).local_sign_in_flow_ref,
                 ),
                 surface: "app", phase: "PRIMARY_PENDING",
               )
@@ -339,7 +345,9 @@ module Auth
               assert_equal 303, admission_browser.response.status
               phase_binding = SignInFlowBindingCodec.encode(
                 flow: ClientSignInFlow.find_by!(
-                  public_id: admission_binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+                  public_id: ClientAuthCeremonySession.find(
+                    admission_binding.reload.admitted_auth_ceremony_session_id,
+                  ).local_sign_in_flow_ref,
                 ),
                 surface: "app", phase: "PRIMARY_PENDING",
               )

@@ -126,7 +126,7 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
         assert_withheld { delivery.fetch(:sign_up_flow_ref) == flow.public_id }
         assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
         assert_withheld { transaction.email_candidate_ref == contact.public_id }
-        owner = (surface == :app) ? contact.user : contact.visitor
+        owner = contact_owner_for_test(contact)
 
         assert_withheld { transaction.actor_ref == owner.public_id }
         assert_not delivery_job.fetch(:args).to_s.include?(code), "Delivery must not queue the plaintext code"

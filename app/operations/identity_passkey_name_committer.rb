@@ -12,7 +12,8 @@ class IdentityPasskeyNameCommitter
         token.class.transaction do
           actor.class.connection_class_for_self.connected_to(role: :writing) do
             actor.with_lock do
-              token.device_session.with_lock do
+              device_session = token.device_session_record!
+              device_session.with_lock do
                 token.with_lock do
                   evidence = policy.management_credential(token: token)
                   raise Denied, "Passkey rename evidence is unavailable" unless evidence

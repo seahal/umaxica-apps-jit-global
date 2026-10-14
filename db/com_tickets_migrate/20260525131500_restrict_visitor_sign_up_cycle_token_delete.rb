@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 class RestrictVisitorSignUpCycleTokenDelete < ActiveRecord::Migration[8.2]
   def up
     remove_foreign_key :visitor_sign_up_cycles, column: :token_id, if_exists: true

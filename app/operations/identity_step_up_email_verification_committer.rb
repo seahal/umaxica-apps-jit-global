@@ -55,17 +55,19 @@ class IdentityStepUpEmailVerificationCommitter
     def bound_token(actor, credential, transaction, record)
       case actor
       when Client
+        token = ClientToken.find(record.user_token_id) if record.is_a?(ClientStepUpSession)
         return unless credential.is_a?(ClientEmail) && credential.user_id == actor.id &&
           transaction.is_a?(ClientStepUpCeremonyTransaction) && record.is_a?(ClientStepUpSession) &&
-          record.user_token.user_id == actor.id
+          token.user_id == actor.id
 
-        record.user_token
+        token
       when Visitor
+        token = VisitorToken.find(record.visitor_token_id) if record.is_a?(VisitorStepUpSession)
         return unless credential.is_a?(VisitorEmail) && credential.visitor_id == actor.id &&
           transaction.is_a?(VisitorStepUpCeremonyTransaction) && record.is_a?(VisitorStepUpSession) &&
-          record.visitor_token.visitor_id == actor.id
+          token.visitor_id == actor.id
 
-        record.visitor_token
+        token
       end
     end
 

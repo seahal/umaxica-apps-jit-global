@@ -55,9 +55,10 @@ Preference credential cookies are no longer apex-scoped. New writes use only the
 `__Secure-preference_*` names may be read for a short compatibility window and must be deleted after
 successful reissue or refresh.
 
-Palm remains cookie-less. Palm API requests use `Authorization: Bearer ...` with the `palm-api`
-audience. Acme/Sign do not issue or consume Core/Base regional browser cookies. Sign is a special
-RP, not a token or refresh authority; refresh rotation authority is `AcmeRefreshTokenService`.
+Palm is a browser RP and uses host-only browser credential cookies with the `palm-app` audience.
+The retired native API and `palm-api` bearer audience do not participate in the current contract.
+Acme/Sign do not issue or consume Core/Base regional browser cookies. Sign is a special RP, not a
+token or refresh authority; refresh rotation authority is `AcmeRefreshTokenService`.
 
 ## Evidence
 

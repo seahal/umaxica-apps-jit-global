@@ -69,12 +69,12 @@ class ChronicleTest < ActiveSupport::TestCase
   end
 
   test "non-permanent policy requires erasable_at" do
-    policy = ChronicleRetentionPolicy.create!(
-      code: "security",
-      name: "Security",
-      duration_days: 365,
-      permanent: false,
-    )
+    policy =
+      ChronicleRetentionPolicy.find_or_create_by!(code: "security") do |record|
+        record.name = "Security"
+        record.duration_days = 365
+        record.permanent = false
+      end
 
     chronicle = Chronicle.new(
       event_uuid: SecureRandom.uuid,
@@ -111,12 +111,12 @@ class ChronicleTest < ActiveSupport::TestCase
   end
 
   test "sanitizes forbidden metadata and changeset keys recursively" do
-    policy = ChronicleRetentionPolicy.create!(
-      code: "security",
-      name: "Security",
-      duration_days: 365,
-      permanent: false,
-    )
+    policy =
+      ChronicleRetentionPolicy.find_or_create_by!(code: "security") do |record|
+        record.name = "Security"
+        record.duration_days = 365
+        record.permanent = false
+      end
 
     chronicle = Chronicle.create!(
       event_uuid: SecureRandom.uuid,

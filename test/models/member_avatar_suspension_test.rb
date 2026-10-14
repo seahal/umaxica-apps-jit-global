@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -20,7 +21,6 @@
 #  fk_rails_...  (avatar_id => avatars.id)
 #
 
-# frozen_string_literal: true
 
 require "test_helper"
 

@@ -45,7 +45,8 @@ scope module: :edit, as: :edit do
       end
 
       namespace :sign do
-        resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
+        resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
+        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
       end
 
       # Staff Publishing CMS. Twelve explicit surface/audience cells (no route loops).

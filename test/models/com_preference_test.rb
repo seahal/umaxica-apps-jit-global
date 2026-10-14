@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -44,11 +45,16 @@
 #  fk_rails_...                             (replaced_by_id => com_preferences.id) ON DELETE => nullify
 #
 
-# frozen_string_literal: true
 
 require "test_helper"
 
 class ComPreferenceTest < ActiveSupport::TestCase
+  PREFERENCE_CHILD_ASSOCIATIONS = %i(com_preference_cookie com_preference_region com_preference_timezone
+                                     com_preference_language com_preference_theme com_preference_currency
+                                     com_preference_date_format com_preference_time_format com_preference_motion
+                                     com_preference_density com_preference_page_size com_preference_adult_content_gate
+                                     com_preference_chronicles replacements).freeze
+
   setup do
     ComPreferenceStatus.find_or_create_by!(id: ComPreferenceStatus::NOTHING)
   end
@@ -76,15 +82,20 @@ class ComPreferenceTest < ActiveSupport::TestCase
 
   test "has one com_preference_cookie" do
     preference = ComPreference.create!
+    preference = ComPreference.includes(:com_preference_cookie).find(preference.id)
     cookie = preference.create_com_preference_cookie!
 
-    assert_equal cookie, preference.com_preference_cookie
+    loaded_preference = ComPreference.includes(:com_preference_cookie).find(preference.id)
+
+    assert_equal cookie, loaded_preference.com_preference_cookie
   end
 
   test "destroys com_preference_cookie when destroyed" do
     preference = ComPreference.create!
+    preference = ComPreference.includes(:com_preference_cookie).find(preference.id)
     cookie = preference.create_com_preference_cookie!
     cookie_id = cookie.id
+    preference = ComPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil ComPreferenceCookie.find_by(id: cookie_id)
@@ -93,16 +104,21 @@ class ComPreferenceTest < ActiveSupport::TestCase
   test "has one com_preference_region" do
     preference = ComPreference.create!
     option = com_preference_region_options(:jp)
+    preference = ComPreference.includes(:com_preference_region).find(preference.id)
     region = preference.create_com_preference_region!(option: option)
 
-    assert_equal region, preference.com_preference_region
+    loaded_preference = ComPreference.includes(:com_preference_region).find(preference.id)
+
+    assert_equal region, loaded_preference.com_preference_region
   end
 
   test "destroys com_preference_region when destroyed" do
     preference = ComPreference.create!
     option = com_preference_region_options(:jp)
+    preference = ComPreference.includes(:com_preference_region).find(preference.id)
     region = preference.create_com_preference_region!(option: option)
     region_id = region.id
+    preference = ComPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil ComPreferenceRegion.find_by(id: region_id)
@@ -111,16 +127,21 @@ class ComPreferenceTest < ActiveSupport::TestCase
   test "has one com_preference_timezone" do
     preference = ComPreference.create!
     option = com_preference_timezone_options(:asia_tokyo)
+    preference = ComPreference.includes(:com_preference_timezone).find(preference.id)
     timezone = preference.create_com_preference_timezone!(option: option)
 
-    assert_equal timezone, preference.com_preference_timezone
+    loaded_preference = ComPreference.includes(:com_preference_timezone).find(preference.id)
+
+    assert_equal timezone, loaded_preference.com_preference_timezone
   end
 
   test "destroys com_preference_timezone when destroyed" do
     preference = ComPreference.create!
     option = com_preference_timezone_options(:asia_tokyo)
+    preference = ComPreference.includes(:com_preference_timezone).find(preference.id)
     timezone = preference.create_com_preference_timezone!(option: option)
     timezone_id = timezone.id
+    preference = ComPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil ComPreferenceTimezone.find_by(id: timezone_id)
@@ -129,16 +150,21 @@ class ComPreferenceTest < ActiveSupport::TestCase
   test "has one com_preference_language" do
     preference = ComPreference.create!
     option = com_preference_language_options(:ja)
+    preference = ComPreference.includes(:com_preference_language).find(preference.id)
     language = preference.create_com_preference_language!(option: option)
 
-    assert_equal language, preference.com_preference_language
+    loaded_preference = ComPreference.includes(:com_preference_language).find(preference.id)
+
+    assert_equal language, loaded_preference.com_preference_language
   end
 
   test "destroys com_preference_language when destroyed" do
     preference = ComPreference.create!
     option = com_preference_language_options(:ja)
+    preference = ComPreference.includes(:com_preference_language).find(preference.id)
     language = preference.create_com_preference_language!(option: option)
     language_id = language.id
+    preference = ComPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil ComPreferenceLanguage.find_by(id: language_id)
@@ -147,16 +173,21 @@ class ComPreferenceTest < ActiveSupport::TestCase
   test "has one com_preference_theme" do
     preference = ComPreference.create!
     option = com_preference_theme_options(:light)
+    preference = ComPreference.includes(:com_preference_theme).find(preference.id)
     theme = preference.create_com_preference_theme!(option: option)
 
-    assert_equal theme, preference.com_preference_theme
+    loaded_preference = ComPreference.includes(:com_preference_theme).find(preference.id)
+
+    assert_equal theme, loaded_preference.com_preference_theme
   end
 
   test "destroys com_preference_theme when destroyed" do
     preference = ComPreference.create!
     option = com_preference_theme_options(:light)
+    preference = ComPreference.includes(:com_preference_theme).find(preference.id)
     theme = preference.create_com_preference_theme!(option: option)
     theme_id = theme.id
+    preference = ComPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil ComPreferenceTheme.find_by(id: theme_id)

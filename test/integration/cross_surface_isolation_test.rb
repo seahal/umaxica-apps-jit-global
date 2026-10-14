@@ -59,23 +59,12 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
             else "#{rp_family}-#{rp_surface}"
             end
           rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_actor = Client.find(rp_token.user_id)
           BaseSelectorBootstrapAuthority.call(
-            surface: rp_surface.to_sym, principal: rp_token.public_send(
-              {
-                "app" => :user,
-                "com" => :visitor,
-                "org" => :staff,
-              }.fetch(rp_surface),
-            ),
+            surface: rp_surface.to_sym, principal: rp_actor,
           )
           BaseSelectorAuthority.prepare(
-            surface: rp_surface.to_sym, principal: rp_token.public_send(
-              {
-                "app" => :user,
-                "com" => :visitor,
-                "org" => :staff,
-              }.fetch(rp_surface),
-            ), session: rp_token,
+            surface: rp_surface.to_sym, principal: rp_actor, session: rp_token,
           )
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
@@ -84,7 +73,7 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -92,16 +81,16 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -142,23 +131,12 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
             else "#{rp_family}-#{rp_surface}"
             end
           rp_token = VisitorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_actor = Visitor.find(rp_token.visitor_id)
           BaseSelectorBootstrapAuthority.call(
-            surface: rp_surface.to_sym, principal: rp_token.public_send(
-              {
-                "app" => :user,
-                "com" => :visitor,
-                "org" => :staff,
-              }.fetch(rp_surface),
-            ),
+            surface: rp_surface.to_sym, principal: rp_actor,
           )
           BaseSelectorAuthority.prepare(
-            surface: rp_surface.to_sym, principal: rp_token.public_send(
-              {
-                "app" => :user,
-                "com" => :visitor,
-                "org" => :staff,
-              }.fetch(rp_surface),
-            ), session: rp_token,
+            surface: rp_surface.to_sym, principal: rp_actor, session: rp_token,
           )
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
@@ -167,7 +145,7 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && VisitorRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = VisitorRpSession.create!(
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -175,16 +153,16 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.visitor, host: rp_host, resource_type: "visitor",
-                                session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                subject: OidcSubject.for(
-                                  rp_token.visitor,
-                                  resource_type: "visitor",
-                                ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "visitor",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "visitor",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -225,23 +203,12 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
             else "#{rp_family}-#{rp_surface}"
             end
           rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_actor = Operator.find(rp_token.staff_id)
           BaseSelectorBootstrapAuthority.call(
-            surface: rp_surface.to_sym, principal: rp_token.public_send(
-              {
-                "app" => :user,
-                "com" => :visitor,
-                "org" => :staff,
-              }.fetch(rp_surface),
-            ),
+            surface: rp_surface.to_sym, principal: rp_actor,
           )
           BaseSelectorAuthority.prepare(
-            surface: rp_surface.to_sym, principal: rp_token.public_send(
-              {
-                "app" => :user,
-                "com" => :visitor,
-                "org" => :staff,
-              }.fetch(rp_surface),
-            ), session: rp_token,
+            surface: rp_surface.to_sym, principal: rp_actor, session: rp_token,
           )
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
@@ -250,7 +217,7 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && OperatorRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OperatorRpSession.create!(
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -258,16 +225,16 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.staff, host: rp_host, resource_type: "operator",
-                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                              subject: OidcSubject.for(
-                                rp_token.staff,
-                                resource_type: "operator",
-                              ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "operator",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -335,7 +302,7 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && OperatorRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OperatorRpSession.create!(
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -343,16 +310,16 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.staff, host: rp_host, resource_type: "operator",
-                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                              subject: OidcSubject.for(
-                                rp_token.staff,
-                                resource_type: "operator",
-                              ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "operator",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -418,7 +385,7 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && VisitorRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = VisitorRpSession.create!(
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -426,16 +393,16 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.visitor, host: rp_host, resource_type: "visitor",
-                                session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                subject: OidcSubject.for(
-                                  rp_token.visitor,
-                                  resource_type: "visitor",
-                                ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "visitor",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "visitor",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -501,7 +468,7 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -509,16 +476,16 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -584,7 +551,7 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && OperatorRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OperatorRpSession.create!(
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -592,16 +559,16 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.staff, host: rp_host, resource_type: "operator",
-                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                              subject: OidcSubject.for(
-                                rp_token.staff,
-                                resource_type: "operator",
-                              ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "operator",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -667,7 +634,7 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -675,16 +642,16 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -750,7 +717,7 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && VisitorRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = VisitorRpSession.create!(
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -758,16 +725,16 @@ class CrossSurfaceIsolationTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.visitor, host: rp_host, resource_type: "visitor",
-                                session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                subject: OidcSubject.for(
-                                  rp_token.visitor,
-                                  resource_type: "visitor",
-                                ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "visitor",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "visitor",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end

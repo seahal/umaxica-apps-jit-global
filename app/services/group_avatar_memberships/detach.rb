@@ -29,7 +29,7 @@ module GroupAvatarMemberships
         subject_public_id: subject_public_id,
         owner_collective_public_id: observed_group_owner.owner_collective_public_id,
         permission: "avatar.group.detach",
-        avatar: observed_membership.avatar,
+        avatar: Avatar.find(observed_membership.avatar_id),
       ) do
         Avatar.transaction do
           current_membership = GroupAvatarMembership.find(membership.id)

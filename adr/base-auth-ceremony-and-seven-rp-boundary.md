@@ -15,6 +15,13 @@ Back-channel note (2026-10-13): the backchannel logout URI named below as a per-
 withdrawn for first-party clients by
 `adr/first-party-sign-out-shared-database-without-backchannel-logout.md`.
 
+Sign-out completion note (2026-10-14): the original one-shot `/sign/out` and seven-client route
+description below is historical for authority-driven first-party Browser RP logout. All 12 current
+first-party clients use exact `/sign/out/completion?ri=jp|us` registrations; direct `/sign/out` is
+not a registered return URI. Base local sign-out still ends at `/lobby`. The current Browser RP
+completion contract and its implementation limits are recorded in
+`adr/first-party-sign-out-shared-database-without-backchannel-logout.md`.
+
 Supersedes conflicting authority claims in:
 
 - `adr/acme-sign-core-base-port-boundary.md` where it calls Base an RP or Auth/Sign a special RP

@@ -115,7 +115,7 @@ module PasskeySignInFlow
           return reject_passkey_sign_in unless passkey_belongs_to_challenge_actor?(passkey, actor_id)
 
           @_risk_actor_id = actor.id
-          return unless passkey_eligible_for_sign_in?(passkey)
+          return unless passkey_eligible_for_sign_in?(passkey, actor)
 
           context = Webauthn::AssertionVerifier.verify!(
             credential_params: credential_params.to_h,
@@ -139,9 +139,9 @@ module PasskeySignInFlow
 
   def passkey_sign_in_actor(passkey)
     case passkey
-    when ClientPasskey then passkey.user
-    when VisitorPasskey then passkey.visitor
-    when OperatorPasskey then passkey.staff
+    when ClientPasskey then Client.find(passkey.user_id)
+    when VisitorPasskey then Visitor.find(passkey.visitor_id)
+    when OperatorPasskey then Operator.find(passkey.staff_id)
     else raise ArgumentError, "unsupported Passkey credential"
     end
   end
@@ -276,8 +276,7 @@ module PasskeySignInFlow
     %i(app com).include?(webauthn_surface.key)
   end
 
-  def passkey_eligible_for_sign_in?(passkey)
-    actor = passkey.public_send(webauthn_surface.actor_association_name)
+  def passkey_eligible_for_sign_in?(passkey, actor)
     status_class = webauthn_surface.passkey_status_class
 
     return reject_passkey_sign_in unless passkey.status_id == status_class::ACTIVE

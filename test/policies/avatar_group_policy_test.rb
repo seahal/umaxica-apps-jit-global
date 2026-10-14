@@ -68,6 +68,38 @@ class AvatarGroupPolicyTest < ActiveSupport::TestCase
     assert_equal [own.id], scoped.pluck(:id)
   end
 
+  test "post-cutover group policy scopes by concrete ownership and preserves account context" do
+    group = create_group(name: "Cutover scoped")
+
+    AvatarRecord.transaction(joinable: false) do
+      legacy_owner = AvatarGroupOwnershipPeriod.find_by!(avatar_group_id: group.id)
+      AvatarGroupConcreteOwnershipPeriod.create!(
+        avatar_group: group,
+        owner_surface: legacy_owner.owner_surface,
+        owner_collective_public_id: legacy_owner.owner_collective_public_id,
+        valid_from: legacy_owner.valid_from,
+      )
+      AvatarOwnershipCutover.create!(
+        id: AvatarOwnershipCutover::CUTOVER_ID,
+        cutover_at: Time.utc(2030, 1, 1),
+      )
+
+      scoped = AvatarGroupPolicy.new(AvatarGroup, user: @user).apply_scope(
+        AvatarGroup.where(id: group.id),
+        type: :active_record_relation,
+      )
+
+      assert_equal [group.id], scoped.pluck(:id)
+      assert_predicate AvatarGroupPolicy.new(group, user: @user), :show?
+      assert_instance_of AvatarGroupConcreteOwnershipPeriod, group.current_ownership_period
+      assert_equal @bootstrap.account.public_id, group.account_public_id
+      assert_equal @bootstrap.collective.public_id, group.current_ownership_period.owner_collective_public_id
+
+      # Roll back the marker and synthetic graph through the ordinary test transaction.
+      raise ActiveRecord::Rollback
+    end
+  end
+
   test "relation scope is empty for non-owner actor or missing selected context" do
     group = create_group
 

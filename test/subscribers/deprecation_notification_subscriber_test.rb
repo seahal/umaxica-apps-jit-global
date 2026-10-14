@@ -3,6 +3,44 @@
 require "test_helper"
 
 class DeprecationNotificationSubscriberTest < ActiveSupport::TestCase
+  test "all values in an unquoted Cookie header are removed before logging" do
+    logged_messages = []
+
+    Rails.logger.stub(:warn, ->(entry) { logged_messages << entry }) do
+      ActiveSupport::Notifications.instrument(
+        "deprecation.library",
+        message: "Deprecated Cookie: first=private-first; second=private-second\nUse the new API",
+        callstack: ["vendor/library.rb:8"],
+        gem_name: "Library",
+        deprecation_horizon: "3.0",
+      )
+    end
+
+    assert_equal 1, logged_messages.length
+    assert_not_includes logged_messages.first, "private-first"
+    assert_not_includes logged_messages.first, "private-second"
+    assert_includes JSON.parse(logged_messages.first).fetch("data").fetch("message"), "Use the new API"
+  end
+
+  test "a Basic authorization credential in deprecation text is removed before logging" do
+    logged_messages = []
+    credential = Base64.strict_encode64("example-user:example-password")
+
+    Rails.logger.stub(:warn, ->(entry) { logged_messages << entry }) do
+      ActiveSupport::Notifications.instrument(
+        "deprecation.library",
+        message: "Deprecated header Authorization: Basic #{credential}",
+        callstack: ["vendor/library.rb:8"],
+        gem_name: "Library",
+        deprecation_horizon: "3.0",
+      )
+    end
+
+    assert_equal 1, logged_messages.length
+    assert_not_includes logged_messages.first, credential
+    assert_includes JSON.parse(logged_messages.first).fetch("data").fetch("message"), "[FILTERED]"
+  end
+
   test "a notification emits one bounded warning without raw payload secrets or a full backtrace" do
     raw_token = "token=do-not-log-this"
     raw_url = "https://user:password@example.invalid/private/path?access_token=also-secret"

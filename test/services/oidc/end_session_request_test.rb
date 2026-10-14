@@ -109,6 +109,17 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
     assert_predicate result, :requires_confirmation?
   end
 
+  test "requires confirmation when the current actor has no captured IdP session" do
+    install_actor_context!(sid: nil)
+
+    result = call(id_token_hint: id_token)
+
+    assert_predicate result, :success?
+    assert_predicate result, :requires_confirmation?
+    assert_nil result.subject
+    assert_nil result.sid
+  end
+
   test "accepts exact registered post logout redirect uri and state" do
     install_actor_context!
     uri = @client.post_logout_redirect_uris.first

@@ -34,11 +34,11 @@ class AccountPolicy < ApplicationPolicy
   def legacy_account_owned_by_current_principal?
     case record
     when ClientPersona
-      user.is_a?(Client) && record.client_identity&.source_record_id == user.id
+      user.is_a?(Client) && ClientIdentity.exists?(id: record.client_identity_id, source_record_id: user.id)
     when Individual
-      user.is_a?(Visitor) && record.visitor_identity&.source_record_id == user.id
+      user.is_a?(Visitor) && VisitorIdentity.exists?(id: record.visitor_identity_id, source_record_id: user.id)
     when Agent
-      user.is_a?(Operator) && record.operator_identity&.source_record_id == user.id
+      user.is_a?(Operator) && OperatorIdentity.exists?(id: record.operator_identity_id, source_record_id: user.id)
     else
       false
     end

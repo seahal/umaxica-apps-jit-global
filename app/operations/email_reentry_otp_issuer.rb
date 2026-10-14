@@ -62,9 +62,9 @@ class EmailReentryOtpIssuer
 
     def owner_reference(email)
       case email
-      when ClientEmail then email.user.public_id
-      when VisitorEmail then email.visitor.public_id
-      when OperatorEmail then email.staff.public_id
+      when ClientEmail then Client.find(email.user_id).public_id
+      when VisitorEmail then Visitor.find(email.visitor_id).public_id
+      when OperatorEmail then Operator.find(email.staff_id).public_id
       else raise ArgumentError, "unsupported reentry email identifier"
       end
     end

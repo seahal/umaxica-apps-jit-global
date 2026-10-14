@@ -200,7 +200,9 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
           )
         end
       end
-      owner.post("/oauth/authorize", params: submission, headers:)
+      owner.get("/")
+      csrf = owner.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
+      owner.post("/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers:)
 
       assert_equal 303, owner.response.status
       assert_equal finalized_root, parent.reload.browser_session_ref

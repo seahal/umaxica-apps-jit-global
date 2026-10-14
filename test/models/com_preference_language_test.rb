@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -21,7 +22,6 @@
 #  fk_rails_...                              (preference_id => com_preferences.id)
 #
 
-# frozen_string_literal: true
 
 require "test_helper"
 

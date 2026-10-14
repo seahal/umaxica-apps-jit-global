@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -21,7 +22,6 @@
 #  fk_rails_...  (follower_avatar_id => avatars.id)
 #
 
-# frozen_string_literal: true
 
 class AvatarFollow < AvatarRecord
   belongs_to :follower_avatar,

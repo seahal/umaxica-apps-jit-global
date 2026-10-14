@@ -543,7 +543,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       "visitor_id", "address_digest",
       "binding_finalized_at", "binding_released_at",
     )
-    original_owner = first_candidate.visitor.reload
+    original_owner = contact_owner_for_test(first_candidate)
     # A new entry starts its own flow; the previous screen must never act on that replacement.
     post auth_com_sign_up_email_url(ri: "jp"),
          params: { visitor_email: { raw_address: email_address, confirm_policy: "1" },
@@ -596,7 +596,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       "visitor_id", "address_digest", "binding_finalized_at",
       "binding_released_at",
     )
-    first_owner = first_candidate.visitor.reload
+    first_owner = contact_owner_for_test(first_candidate)
 
     travel EmailOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
       assert_difference("VisitorEmail.count", 1) do

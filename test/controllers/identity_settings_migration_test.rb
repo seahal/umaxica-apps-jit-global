@@ -63,7 +63,7 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f0_key]
-                  f0_token.rotate_refresh_token! unless f0_token.device_session.current_refresh_token_id
+                  f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                   f0_now = Time.current
                   f0_session = ClientRpSession.create!(
                     client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
@@ -121,7 +121,7 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f1_key]
-                  f1_token.rotate_refresh_token! unless f1_token.device_session.current_refresh_token_id
+                  f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                   f1_now = Time.current
                   f1_session = ClientRpSession.create!(
                     client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
@@ -179,7 +179,7 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f2_key]
-                  f2_token.rotate_refresh_token! unless f2_token.device_session.current_refresh_token_id
+                  f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                   f2_now = Time.current
                   f2_session = ClientRpSession.create!(
                     client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
@@ -239,7 +239,7 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f3_key]
-                  f3_token.rotate_refresh_token! unless f3_token.device_session.current_refresh_token_id
+                  f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                   f3_now = Time.current
                   f3_session = ClientRpSession.create!(
                     client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",

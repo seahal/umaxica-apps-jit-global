@@ -163,7 +163,6 @@ Rails.application.configure do
     boot_hosts.core_origins,
     boot_hosts.tech_staff,
     boot_hosts.base_origins,
-    boot_hosts.xper_origins,
     boot_hosts.palm_service,
     boot_hosts.docs_origins,
     boot_hosts.news_origins,
@@ -210,12 +209,6 @@ Rails.application.configure do
     news.com.localhost:3000
     news.org.localhost:3000
     news.app.localhost:3000
-    xper.app.localhost
-    xper.com.localhost
-    xper.org.localhost
-    xper.app.localhost:3000
-    xper.com.localhost:3000
-    xper.org.localhost:3000
     warp.com.localhost:3000
     warp.com.localhost:3001
     warp.org.localhost:3000
@@ -262,12 +255,6 @@ Rails.application.configure do
     PRIVATE_CORE_STAFF_URL
     PRIVATE_CORE_CORPORATE_URL
     PRIVATE_CORE_DEVELOPER_URL
-    PRIVATE_XPER_SERVICE_URL
-    PRIVATE_XPER_CORPORATE_URL
-    PRIVATE_XPER_STAFF_URL
-    PUBLIC_XPER_SERVICE_URL
-    PUBLIC_XPER_CORPORATE_URL
-    PUBLIC_XPER_STAFF_URL
     PRIVATE_PALM_SERVICE_URL
     PRIVATE_INFO_SERVICE_URL
     PRIVATE_INFO_STAFF_URL

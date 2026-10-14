@@ -128,7 +128,7 @@ class OidcEndSessionRequest < ApplicationService
   end
 
   def current_session_missing?
-    current_actor.blank? || current_actor.is_a?(Unauthenticated)
+    current_actor.blank? || current_actor.is_a?(Unauthenticated) || current_sid.blank?
   end
 
   def current_subject
@@ -150,7 +150,7 @@ class OidcEndSessionRequest < ApplicationService
   end
 
   def current_sid
-    Actor.authn.access_claims&.dig("sid").presence
+    Actor.authn&.access_claims&.dig("sid").presence
   end
 
   def resource_type_for_request

@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -23,7 +24,6 @@
 #  fk_rails_...  (avatar_id => avatars.id) ON DELETE => cascade
 #
 
-# frozen_string_literal: true
 
 require "test_helper"
 require_relative "../support/avatar_test_factory"

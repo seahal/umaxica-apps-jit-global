@@ -59,7 +59,8 @@ class OperatorPasskeyPolicy < ApplicationPolicy
 
   def management_authorized?(token:, now:)
     requirement = management_requirement(token: token)
-    device = token.device_session.reload
+    device = token.device_session_record!
+    device.reload
     user.login_allowed? && !token.restricted? && token.currently_usable?(now) && device.usable? &&
       device.current_refresh_token_id == token.id &&
       StepUpResolver.call(token: token, requirement: requirement, now: now).satisfied? &&
@@ -69,7 +70,7 @@ class OperatorPasskeyPolicy < ApplicationPolicy
   def management_credential(token:)
     return unless token.last_step_up_method == "passkey"
 
-    user.staff_passkeys.active.find_by(external_id: token.last_step_up_credential_ref)
+    OperatorPasskey.active.find_by(staff_id: user.id, external_id: token.last_step_up_credential_ref)
   end
 
   private

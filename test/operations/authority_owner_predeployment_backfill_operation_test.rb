@@ -29,8 +29,8 @@ class AuthorityOwnerPredeploymentBackfillOperationTest < ActiveSupport::TestCase
     assert_equal :already_applied, second.status
     assert_equal client.public_id, first.owner_public_id
     assert_equal "active", first.lifecycle_state
-    assert_equal client.id, persona.reload.ownership.client_id
-    assert_equal "active", persona.lifecycle.state
+    assert_equal client.id, ClientPersonaOwnership.find_by!(client_persona_id: persona.id).client_id
+    assert_equal "active", ClientPersonaLifecycle.find_by!(client_persona_id: persona.id).state
   end
 
   test "does not create a lifecycle row when the explicit owner is rejected" do

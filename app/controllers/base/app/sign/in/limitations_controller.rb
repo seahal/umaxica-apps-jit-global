@@ -91,7 +91,7 @@ module Base
               challenge: @resolution_challenge,
               browser_binding_digest: @resolution.class.digest_challenge(@resolution_binding),
             )
-            flow = @resolution.sign_in_flow
+            flow = ClientSignInFlow.find(@resolution.sign_in_flow_id)
             flow.cancel_sign_in! unless flow.sign_in_completed? || flow.sign_in_expired? ||
               flow.sign_in_cancelled? || flow.sign_in_halted?
             if @oidc_transaction&.secret_sign_in_flow_id
@@ -183,9 +183,9 @@ module Base
             @actor = Client.find_by(public_id: @resolution.actor_ref)
             @oidc_transaction =
               AppTicketRecord.connected_to(role: :writing) do
-                @resolution.oidc_authorization_transaction
+                ClientOidcAuthorizationTransaction.find_by(id: @resolution.oidc_authorization_transaction_id)
               end
-            flow = @resolution.sign_in_flow
+            flow = ClientSignInFlow.find_by(id: @resolution.sign_in_flow_id)
             now = ClientSignInFlow.database_now
             valid_binding = ActiveSupport::SecurityUtils.secure_compare(
               @resolution.browser_binding_digest,
@@ -198,7 +198,7 @@ module Base
           end
 
           def valid_resolution_parent?(flow, now)
-            flow.principal_id == @actor&.id && !flow.expired?(now) &&
+            flow && @actor && flow.principal_id == @actor.id && !flow.expired?(now) &&
               !flow.sign_in_completed? && !flow.sign_in_cancelled? && !flow.sign_in_halted?
           end
 
@@ -319,7 +319,7 @@ module Base
             login_result = log_in(
               @actor,
               establishment: :root_login,
-              sign_in_flow: @resolution.sign_in_flow,
+              sign_in_flow: ClientSignInFlow.find(@resolution.sign_in_flow_id),
               record_login_audit: true,
               token_kind_id: "BROWSER_WEB",
               require_totp_check: false,
@@ -345,7 +345,7 @@ module Base
               raise AuthenticationBase::SignInFlowIssuanceRejected, "Secret OIDC authentication method mismatch"
             end
 
-            flow = @oidc_transaction.secret_sign_in_flow
+            flow = ClientSignInFlow.find(@oidc_transaction.secret_sign_in_flow_id)
             flow.with_lock do
               return nil if flow.sign_in_failed? || flow.expired?(ClientSignInFlow.database_now)
 
@@ -357,8 +357,9 @@ module Base
           end
 
           def finalize_oidc_secret_claim!
+            flow = ClientSignInFlow.find(@oidc_transaction.secret_sign_in_flow_id)
             credential = ClientSecretCredential.find_by!(
-              client_id: @actor.id, claim_sign_in_flow_ref: @oidc_transaction.secret_sign_in_flow.public_id,
+              client_id: @actor.id, claim_sign_in_flow_ref: flow.public_id,
             )
             ClientSecretClaimFinalizer.call!(
               credential: credential, purge_after: ClientSecretLifetimesValue.purge_delay,

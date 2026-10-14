@@ -16,7 +16,7 @@ class Auth::App::VerificationsController < ::Auth::App::ApplicationController
 
   def ceremony_step_up_session_model = ClientStepUpSession
 
-  def ceremony_session_token(session_record) = session_record.user_token
+  def ceremony_session_token(session_record) = ClientToken.find(session_record.user_token_id)
 
   def ceremony_token_owned_by?(token, actor) = token.user_id == actor.id
 

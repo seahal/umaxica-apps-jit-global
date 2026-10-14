@@ -265,12 +265,23 @@ class AuthenticationCurrentResourceResolver
   end
 
   def token_actor_matches?(token_record, resource)
-    actor_column = { "client" => :user_id,
-                     "visitor" => :visitor_id,
-                     "operator" => :staff_id, }.fetch(@resource_type.to_s)
-    token_record_attribute(token_record, actor_column) == resource.id &&
-      (token_record_attribute(token_record, :device_session_id).blank? ||
-        token_record.device_session.public_send(actor_column) == resource.id)
+    token_actor_id =
+      case @resource_type.to_s
+      when "client" then token_record_attribute(token_record, :user_id)
+      when "visitor" then token_record_attribute(token_record, :visitor_id)
+      when "operator" then token_record_attribute(token_record, :staff_id)
+      else raise FlowConfigurationError, "unsupported authentication resource type"
+      end
+    return false unless token_actor_id == resource.id
+    return true if token_record_attribute(token_record, :device_session_id).blank?
+
+    device_session = token_record.device_session_record
+    case [@resource_type.to_s, device_session]
+    in ["client", ClientDeviceSession] then device_session.user_id == resource.id
+    in ["visitor", VisitorDeviceSession] then device_session.visitor_id == resource.id
+    in ["operator", OperatorDeviceSession] then device_session.staff_id == resource.id
+    else false
+    end
   end
 
   def resource_failure(reason, payload, token_record, sid, include_token: true)

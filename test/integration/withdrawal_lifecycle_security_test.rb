@@ -70,7 +70,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
                         oidc_client_id: f0_client.client_id,
                         revoked_at: nil,
                       ))
-                    f0_token.rotate_refresh_token! unless f0_token.device_session.current_refresh_token_id
+                    f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                     f0_now = Time.current
                     f0_session = ClientRpSession.create!(
                       client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
@@ -78,7 +78,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: f0_now + 10.minutes,
                     )
                     f0_access = AuthenticationTokenService.encode(
-                      f0_token.user,
+                      f0_token.actor_record,
                       host: f0_host,
                       resource_type: "client",
                       session_public_id: f0_token.public_id,
@@ -91,7 +91,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
                       audiences: [f0_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
                       subject: OidcSubject.for(
-                        f0_token.user,
+                        f0_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: f0_client.client_id,
@@ -168,7 +168,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
                         oidc_client_id: f1_client.client_id,
                         revoked_at: nil,
                       ))
-                    f1_token.rotate_refresh_token! unless f1_token.device_session.current_refresh_token_id
+                    f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                     f1_now = Time.current
                     f1_session = ClientRpSession.create!(
                       client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
@@ -176,7 +176,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: f1_now + 10.minutes,
                     )
                     f1_access = AuthenticationTokenService.encode(
-                      f1_token.user,
+                      f1_token.actor_record,
                       host: f1_host,
                       resource_type: "client",
                       session_public_id: f1_token.public_id,
@@ -189,7 +189,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
                       audiences: [f1_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
                       subject: OidcSubject.for(
-                        f1_token.user,
+                        f1_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: f1_client.client_id,
@@ -278,7 +278,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
                         oidc_client_id: f2_client.client_id,
                         revoked_at: nil,
                       ))
-                    f2_token.rotate_refresh_token! unless f2_token.device_session.current_refresh_token_id
+                    f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                     f2_now = Time.current
                     f2_session = ClientRpSession.create!(
                       client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
@@ -286,7 +286,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: f2_now + 10.minutes,
                     )
                     f2_access = AuthenticationTokenService.encode(
-                      f2_token.user,
+                      f2_token.actor_record,
                       host: f2_host,
                       resource_type: "client",
                       session_public_id: f2_token.public_id,
@@ -299,7 +299,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
                       audiences: [f2_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
                       subject: OidcSubject.for(
-                        f2_token.user,
+                        f2_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: f2_client.client_id,
@@ -376,7 +376,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
                         oidc_client_id: f3_client.client_id,
                         revoked_at: nil,
                       ))
-                    f3_token.rotate_refresh_token! unless f3_token.device_session.current_refresh_token_id
+                    f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                     f3_now = Time.current
                     f3_session = ClientRpSession.create!(
                       client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
@@ -384,7 +384,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: f3_now + 10.minutes,
                     )
                     f3_access = AuthenticationTokenService.encode(
-                      f3_token.user,
+                      f3_token.actor_record,
                       host: f3_host,
                       resource_type: "client",
                       session_public_id: f3_token.public_id,
@@ -397,7 +397,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
                       audiences: [f3_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f3_client),
                       subject: OidcSubject.for(
-                        f3_token.user,
+                        f3_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: f3_client.client_id,

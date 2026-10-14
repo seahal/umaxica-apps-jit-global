@@ -15,7 +15,11 @@ class OidcRpSessionLogoutTest < ActiveSupport::TestCase
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
-    rp_session = OperatorRpSession.create!(operator_token: browser_session, oidc_client_id: "org-console-rp")
+    rp_session = OperatorRpSession.create!(
+      operator_token: browser_session,
+      oidc_client_id: "org-console-rp",
+      refresh_token_expires_at: 1.hour.from_now,
+    )
     rp_session.issue_refresh_token!
 
     assert OidcRpSessionLogout.call(
@@ -39,7 +43,11 @@ class OidcRpSessionLogoutTest < ActiveSupport::TestCase
       discard_at: 1.day.from_now,
       oidc_client_id: "org-console-rp",
     )
-    rp_session = OperatorRpSession.create!(operator_token: browser_session, oidc_client_id: "org-console-rp")
+    rp_session = OperatorRpSession.create!(
+      operator_token: browser_session,
+      oidc_client_id: "org-console-rp",
+      refresh_token_expires_at: 1.hour.from_now,
+    )
     rp_session.issue_refresh_token!
 
     assert_not OidcRpSessionLogout.call(

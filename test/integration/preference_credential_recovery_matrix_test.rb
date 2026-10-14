@@ -213,7 +213,9 @@ class PreferenceCredentialRecoveryMatrixTest < ActionDispatch::IntegrationTest
     patch base_app_preference_region_path(ri: "us"),
           params: { preference_region: { option_id: AppPreferenceRegionOption::US } }
     patch base_app_preference_theme_path(ri: "us"), params: { preference_theme: { option_id: DARK } }
-    old = AppPreference.find_by!(public_id: cookies[REFRESH].to_s.split(".").first)
+    old = AppPreference.includes(:app_preference_region, :app_preference_theme).find_by!(
+      public_id: cookies[REFRESH].to_s.split(".").first,
+    )
 
     assert_equal [AppPreferenceRegionOption::US, DARK],
                  [old.app_preference_region.option_id, old.app_preference_theme.option_id]
@@ -233,14 +235,16 @@ class PreferenceCredentialRecoveryMatrixTest < ActionDispatch::IntegrationTest
     assert_difference -> { AppPreference.count }, 1 do
       patch base_app_preference_theme_path(ri: "jp"), params: { preference_theme: { option_id: LIGHT } }
     end
-    fresh = AppPreference.order(:created_at).last
+    fresh = AppPreference.includes(:app_preference_region, :app_preference_theme).order(:created_at).last
 
     assert_not_equal old.id, fresh.id
     assert_not_equal old.public_id, fresh.public_id
     assert_equal LIGHT, fresh.app_preference_theme.option_id
     assert_not_equal AppPreferenceRegionOption::US, fresh.app_preference_region&.option_id
+    old = AppPreference.includes(:app_preference_region, :app_preference_theme).find(old.id)
+
     assert_equal [AppPreferenceRegionOption::US, DARK],
-                 [old.reload.app_preference_region.option_id, old.app_preference_theme.option_id]
+                 [old.app_preference_region.option_id, old.app_preference_theme.option_id]
   end
 
   # --- Concurrency: same generation, response inversion, rotation boundary --------------------------

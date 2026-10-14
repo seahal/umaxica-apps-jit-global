@@ -126,7 +126,7 @@ class IdentitySocialCeremonyAcmeTransactionTest < ActiveSupport::TestCase
         assert_equal signup_auth_hash["uid"], commit.identity.uid
         assert_not_equal existing_user.id, commit.user.id
         assert_equal 1, existing_user.client_emails.count
-        assert_equal "shared-email@example.com", existing_user.client_emails.first.address
+        assert_equal "shared-email@example.com", ClientEmail.find_by!(user_id: existing_user.id).address
       end
     end
   end

@@ -190,7 +190,7 @@ class ClientSecretPasskeyReservationIssuer
       now = Client.database_now
       return owned if owned.discard_at != Float::INFINITY && owned.discard_at <= now
 
-      actor = owned.client
+      actor = Client.find(owned.client_id)
       context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :sign)
       candidates = ClientSecretCredential.where(issuance_id: owned.id, client_id: actor.id).order(:id).lock.to_a
       if candidates.any? { |candidate| candidate.claimed_at || candidate.revoked_at }
@@ -265,7 +265,7 @@ class ClientSecretPasskeyReservationIssuer
       latest_attempt = ClientSecretIssuance.where(
         client_id: actor.id, sign_up_flow_ref: flow.public_id, origin_operation_id: operation,
       ).maximum(:attempt_number)
-      unless latest_attempt == owned.attempt_number && payload_failed?(owned)
+      unless latest_attempt == owned.attempt_number && payload_failed?(owned, actor)
         raise Denied, "Secret signup reattempt requires the exact retired latest allocation"
       end
 
@@ -296,9 +296,9 @@ class ClientSecretPasskeyReservationIssuer
       successor
     end
 
-    def payload_failed?(issuance)
+    def payload_failed?(issuance, actor)
       issuance.canceled_at.present? && ClientSecretAuditOutbox.exists?(
-        client_ref: issuance.client.public_id, operation_ref: issuance.origin_operation_id,
+        client_ref: actor.public_id, operation_ref: issuance.origin_operation_id,
         event_name: "secret.issuance_canceled", reason: "payload_unavailable",
         occurred_at: issuance.canceled_at, item_count: issuance.planned_count,
       )

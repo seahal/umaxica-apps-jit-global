@@ -28,7 +28,10 @@ class OperatorRpSession < OrgTicketRecord
   private
 
   def bind_device_session_from_parent_token
-    self.operator_device_session ||= operator_token&.device_session
+    return if device_session_id.present?
+
+    token = OperatorToken.find_by(id: operator_token_id)
+    self.device_session_id = token&.device_session_id
   end
 
   def parent_association_name

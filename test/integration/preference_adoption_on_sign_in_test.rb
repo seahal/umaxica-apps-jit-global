@@ -61,15 +61,15 @@ class PreferenceAdoptionOnSignInTest < ActionDispatch::IntegrationTest
   end
 
   test "a signed-in theme write reaches the principal's own preference record" do
-    patch base_app_preference_theme_url(ri: "jp"), headers: @headers, as: :json,
+    patch base_app_preference_theme_url(ri: "jp"), headers: csrf_headers_for_rp_browser, as: :json,
                                                    params: { preference_theme: { option_id: "dr" } }
 
-    assert_response :ok
+    assert_response :success
     assert_equal "dr", @user.reload.user_preference.theme
   end
 
   test "a signed-in language write reaches the principal's own preference record" do
-    patch base_app_preference_language_url(ri: "jp"), headers: @headers, as: :json,
+    patch base_app_preference_language_url(ri: "jp"), headers: csrf_headers_for_rp_browser, as: :json,
                                                       params: { preference_language: { option_id: "en" } }
 
     assert_response :redirect
@@ -117,7 +117,7 @@ class PreferenceAdoptionOnSignInTest < ActionDispatch::IntegrationTest
   end
 
   test "a signed-in cookie consent write reaches the principal's own preference record" do
-    patch base_app_preference_cookie_url(ri: "jp"), headers: @headers, as: :json,
+    patch base_app_preference_cookie_url(ri: "jp"), headers: csrf_headers_for_rp_browser, as: :json,
                                                     params: {
                                                       preference_cookie: {
                                                         consented: "1",
@@ -127,7 +127,7 @@ class PreferenceAdoptionOnSignInTest < ActionDispatch::IntegrationTest
                                                       },
                                                     }
 
-    assert_response :ok
+    assert_response :success
     preference = @user.reload.user_preference
 
     assert preference.consented
@@ -135,9 +135,12 @@ class PreferenceAdoptionOnSignInTest < ActionDispatch::IntegrationTest
     assert_not preference.targetable
   end
   test "a fresh browser session takes over the principal's explicit language and recorded consent" do
-    patch base_app_preference_language_url(ri: "jp"), headers: @headers, as: :json,
+    request_headers = csrf_headers_for_rp_browser
+    patch base_app_preference_language_url(ri: "jp"), headers: request_headers, as: :json,
                                                       params: { preference_language: { option_id: "en" } }
-    patch base_app_preference_cookie_url(ri: "jp"), headers: @headers, as: :json,
+
+    assert_response :redirect
+    patch base_app_preference_cookie_url(ri: "jp"), headers: request_headers, as: :json,
                                                     params: {
                                                       preference_cookie: {
                                                         consented: "1",
@@ -146,6 +149,8 @@ class PreferenceAdoptionOnSignInTest < ActionDispatch::IntegrationTest
                                                         targetable: "0",
                                                       },
                                                     }
+
+    assert_response :success
 
     assert_predicate @user.reload.user_preference, :present?
 
@@ -156,14 +161,47 @@ class PreferenceAdoptionOnSignInTest < ActionDispatch::IntegrationTest
     get base_app_api_v0_preferences_theme_url(ri: "jp"), headers: @headers
 
     assert_response :success
-    browser = AppPreference.order(:created_at).last
+    browser = AppPreference.order(:created_at, :id).last
 
-    assert_equal AppPreferenceLanguageOption::EN, browser.app_preference_language.option_id
-    cookie = browser.app_preference_cookie
+    language = AppPreferenceLanguage.find_by!(preference_id: browser.id)
+
+    assert_equal AppPreferenceLanguageOption::EN, language.option_id
+    cookie = AppPreferenceCookie.find_by!(preference_id: browser.id)
 
     assert_predicate cookie, :consented?
     assert_predicate cookie, :functional?
     assert_predicate cookie, :performant?
     assert_not_predicate cookie, :targetable?
+  end
+
+  private
+
+  def csrf_headers_for_rp_browser
+    original_forgery_protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    cookie_header = @headers.fetch("Cookie")
+    cookie_header.split("; ").each do |pair|
+      name, value = pair.split("=", 2)
+      cookies[name] = Rack::Utils.unescape(value)
+    end
+    get(
+      edit_base_app_preference_theme_url(ri: "jp"),
+      headers: @headers.merge("Accept" => "text/html", "HTTP_COOKIE" => cookie_header),
+    )
+
+    assert_response :success
+    token = response.body[/<meta name="csrf-token" content="([^"]+)"/, 1] ||
+      response.body[/name="authenticity_token" value="([^"]+)"/, 1]
+
+    assert_predicate token, :present?
+    cookies["csrf_token"] = token
+
+    {
+      "Origin" => "https://#{@host}",
+      "Sec-Fetch-Site" => "same-origin",
+      "X-CSRF-Token" => token,
+    }
+  ensure
+    ActionController::Base.allow_forgery_protection = original_forgery_protection
   end
 end

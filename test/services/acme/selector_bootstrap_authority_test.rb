@@ -52,6 +52,29 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
     assert_equal result.avatar, result.account.current_avatar
   end
 
+  test "post-cutover app bootstrap creates its default Avatar with concrete ownership only" do
+    user = create_client!
+
+    AvatarRecord.transaction(joinable: false) do
+      AvatarOwnershipCutover.create!(
+        id: AvatarOwnershipCutover::CUTOVER_ID,
+        cutover_at: Time.utc(2030, 1, 1),
+      )
+
+      result = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
+      avatar = result.avatar
+      period = avatar.enterprise_ownership_periods.current.sole
+
+      assert_predicate avatar, :persisted?
+      assert_equal 0, AvatarOwnershipPeriod.where(avatar_id: avatar.id).count
+      assert_equal result.collective.public_id, period.enterprise_public_id
+      assert_equal avatar.created_at, period.valid_from
+
+      # Roll back the marker and synthetic graph through the ordinary test transaction.
+      raise ActiveRecord::Rollback
+    end
+  end
+
   test "app bootstrap delegates avatar creation to AvatarProvisioning Create" do
     user = create_client!
     original_call = AvatarProvisioning::Create.method(:call)

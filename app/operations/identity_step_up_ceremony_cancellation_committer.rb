@@ -11,7 +11,7 @@ class IdentityStepUpCeremonyCancellationCommitter
       actor.class.connection_class_for_self.connected_to(role: :writing) do
         actor.with_lock do
           transaction.class.connection_owner.connected_to(role: :writing) do
-            with_device_and_token_locks!(token) do
+            with_device_and_token_locks!(token) do |device|
               unless transaction.actor_ref == actor.public_id &&
                   transaction.session_ref == token.public_id
                 raise IdentityStepUpCeremonyContract::Error.new(
@@ -28,7 +28,6 @@ class IdentityStepUpCeremonyCancellationCommitter
                   )
                 end
                 now = transaction.class.database_now
-                device = token.device_session
                 unless actor.login_allowed? && token.currently_usable?(now) && device.usable? &&
                     device.current_refresh_token_id == token.id
                   raise IdentityStepUpCeremonyContract::Error.new(
@@ -61,7 +60,8 @@ class IdentityStepUpCeremonyCancellationCommitter
     private
 
     def with_device_and_token_locks!(token, &)
-      token.device_session.with_lock { token.with_lock(&) }
+      device = token.device_session_record!
+      device.with_lock { token.with_lock { yield device } }
     end
 
     def binding_for(actor, token, transaction)

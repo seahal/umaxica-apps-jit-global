@@ -41,7 +41,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                           revoked_at: nil,
                         )))
                     unless @base_browser_rp_credentials[f0_key]
-                      f0_token.rotate_refresh_token! unless f0_token.device_session.current_refresh_token_id
+                      f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                       f0_now = Time.current
                       f0_session = ClientRpSession.create!(
                         client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
@@ -114,7 +114,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                           revoked_at: nil,
                         )))
                     unless @base_browser_rp_credentials[f1_key]
-                      f1_token.rotate_refresh_token! unless f1_token.device_session.current_refresh_token_id
+                      f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                       f1_now = Time.current
                       f1_session = VisitorRpSession.create!(
                         visitor_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
@@ -187,7 +187,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                           revoked_at: nil,
                         )))
                     unless @base_browser_rp_credentials[f2_key]
-                      f2_token.rotate_refresh_token! unless f2_token.device_session.current_refresh_token_id
+                      f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                       f2_now = Time.current
                       f2_session = OperatorRpSession.create!(
                         operator_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
@@ -318,7 +318,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                         revoked_at: nil,
                       )))
                   unless @base_browser_rp_credentials[f3_key]
-                    f3_token.rotate_refresh_token! unless f3_token.device_session.current_refresh_token_id
+                    f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                     f3_now = Time.current
                     f3_session = ClientRpSession.create!(
                       client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
@@ -381,7 +381,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                         revoked_at: nil,
                       )))
                   unless @base_browser_rp_credentials[f4_key]
-                    f4_token.rotate_refresh_token! unless f4_token.device_session.current_refresh_token_id
+                    f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                     f4_now = Time.current
                     f4_session = VisitorRpSession.create!(
                       visitor_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
@@ -451,7 +451,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                         revoked_at: nil,
                       )))
                   unless @base_browser_rp_credentials[f5_key]
-                    f5_token.rotate_refresh_token! unless f5_token.device_session.current_refresh_token_id
+                    f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
                     f5_now = Time.current
                     f5_session = OperatorRpSession.create!(
                       operator_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
@@ -583,7 +583,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f6_key]
-                  f6_token.rotate_refresh_token! unless f6_token.device_session.current_refresh_token_id
+                  f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
                   f6_now = Time.current
                   f6_session = ClientRpSession.create!(
                     client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
@@ -691,7 +691,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f7_key]
-                  f7_token.rotate_refresh_token! unless f7_token.device_session.current_refresh_token_id
+                  f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
                   f7_now = Time.current
                   f7_session = ClientRpSession.create!(
                     client_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
@@ -797,7 +797,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f8_key]
-                  f8_token.rotate_refresh_token! unless f8_token.device_session.current_refresh_token_id
+                  f8_token.rotate_refresh_token! unless f8_token.device_session_record.current_refresh_token_id
                   f8_now = Time.current
                   f8_session = ClientRpSession.create!(
                     client_token: f8_token, oidc_client_id: f8_client.client_id, oidc_scope: "openid profile",
@@ -923,7 +923,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                         revoked_at: nil,
                       )))
                   unless @base_browser_rp_credentials[f9_key]
-                    f9_token.rotate_refresh_token! unless f9_token.device_session.current_refresh_token_id
+                    f9_token.rotate_refresh_token! unless f9_token.device_session_record.current_refresh_token_id
                     f9_now = Time.current
                     f9_session = ClientRpSession.create!(
                       client_token: f9_token, oidc_client_id: f9_client.client_id, oidc_scope: "openid profile",
@@ -1006,7 +1006,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                         revoked_at: nil,
                       )))
                   unless @base_browser_rp_credentials[f10_key]
-                    f10_token.rotate_refresh_token! unless f10_token.device_session.current_refresh_token_id
+                    f10_token.rotate_refresh_token! unless f10_token.device_session_record.current_refresh_token_id
                     f10_now = Time.current
                     f10_session = ClientRpSession.create!(
                       client_token: f10_token, oidc_client_id: f10_client.client_id, oidc_scope: "openid profile",
@@ -1089,7 +1089,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f11_key]
-                  f11_token.rotate_refresh_token! unless f11_token.device_session.current_refresh_token_id
+                  f11_token.rotate_refresh_token! unless f11_token.device_session_record.current_refresh_token_id
                   f11_now = Time.current
                   f11_session = ClientRpSession.create!(
                     client_token: f11_token, oidc_client_id: f11_client.client_id, oidc_scope: "openid profile",
@@ -1229,7 +1229,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f12_key]
-                  f12_token.rotate_refresh_token! unless f12_token.device_session.current_refresh_token_id
+                  f12_token.rotate_refresh_token! unless f12_token.device_session_record.current_refresh_token_id
                   f12_now = Time.current
                   f12_session = ClientRpSession.create!(
                     client_token: f12_token, oidc_client_id: f12_client.client_id, oidc_scope: "openid profile",
@@ -1356,7 +1356,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f13_key]
-                  f13_token.rotate_refresh_token! unless f13_token.device_session.current_refresh_token_id
+                  f13_token.rotate_refresh_token! unless f13_token.device_session_record.current_refresh_token_id
                   f13_now = Time.current
                   f13_session = ClientRpSession.create!(
                     client_token: f13_token, oidc_client_id: f13_client.client_id, oidc_scope: "openid profile",
@@ -1434,7 +1434,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f14_key]
-                  f14_token.rotate_refresh_token! unless f14_token.device_session.current_refresh_token_id
+                  f14_token.rotate_refresh_token! unless f14_token.device_session_record.current_refresh_token_id
                   f14_now = Time.current
                   f14_session = ClientRpSession.create!(
                     client_token: f14_token, oidc_client_id: f14_client.client_id, oidc_scope: "openid profile",
@@ -1541,7 +1541,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f15_key]
-                  f15_token.rotate_refresh_token! unless f15_token.device_session.current_refresh_token_id
+                  f15_token.rotate_refresh_token! unless f15_token.device_session_record.current_refresh_token_id
                   f15_now = Time.current
                   f15_session = ClientRpSession.create!(
                     client_token: f15_token,
@@ -1647,7 +1647,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                            revoked_at: nil,
                          )))
                      unless @base_browser_rp_credentials[f16_key]
-                       f16_token.rotate_refresh_token! unless f16_token.device_session.current_refresh_token_id
+                       f16_token.rotate_refresh_token! unless f16_token.device_session_record.current_refresh_token_id
                        f16_now = Time.current
                        f16_session = ClientRpSession.create!(
                          client_token: f16_token, oidc_client_id: f16_client.client_id, oidc_scope: "openid profile",
@@ -1735,7 +1735,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f17_key]
-                  f17_token.rotate_refresh_token! unless f17_token.device_session.current_refresh_token_id
+                  f17_token.rotate_refresh_token! unless f17_token.device_session_record.current_refresh_token_id
                   f17_now = Time.current
                   f17_session = ClientRpSession.create!(
                     client_token: f17_token, oidc_client_id: f17_client.client_id, oidc_scope: "openid profile",
@@ -1855,7 +1855,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                         revoked_at: nil,
                       )))
                   unless @base_browser_rp_credentials[f18_key]
-                    f18_token.rotate_refresh_token! unless f18_token.device_session.current_refresh_token_id
+                    f18_token.rotate_refresh_token! unless f18_token.device_session_record.current_refresh_token_id
                     f18_now = Time.current
                     f18_session = ClientRpSession.create!(
                       client_token: f18_token, oidc_client_id: f18_client.client_id, oidc_scope: "openid profile",
@@ -1940,7 +1940,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f19_key]
-                  f19_token.rotate_refresh_token! unless f19_token.device_session.current_refresh_token_id
+                  f19_token.rotate_refresh_token! unless f19_token.device_session_record.current_refresh_token_id
                   f19_now = Time.current
                   f19_session = ClientRpSession.create!(
                     client_token: f19_token, oidc_client_id: f19_client.client_id, oidc_scope: "openid profile",
@@ -2051,7 +2051,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f20_key]
-                  f20_token.rotate_refresh_token! unless f20_token.device_session.current_refresh_token_id
+                  f20_token.rotate_refresh_token! unless f20_token.device_session_record.current_refresh_token_id
                   f20_now = Time.current
                   f20_session = ClientRpSession.create!(
                     client_token: f20_token, oidc_client_id: f20_client.client_id, oidc_scope: "openid profile",
@@ -2165,7 +2165,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                         revoked_at: nil,
                       )))
                   unless @base_browser_rp_credentials[f21_key]
-                    f21_token.rotate_refresh_token! unless f21_token.device_session.current_refresh_token_id
+                    f21_token.rotate_refresh_token! unless f21_token.device_session_record.current_refresh_token_id
                     f21_now = Time.current
                     f21_session = ClientRpSession.create!(
                       client_token: f21_token, oidc_client_id: f21_client.client_id, oidc_scope: "openid profile",
@@ -2257,7 +2257,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f22_key]
-                  f22_token.rotate_refresh_token! unless f22_token.device_session.current_refresh_token_id
+                  f22_token.rotate_refresh_token! unless f22_token.device_session_record.current_refresh_token_id
                   f22_now = Time.current
                   f22_session = ClientRpSession.create!(
                     client_token: f22_token, oidc_client_id: f22_client.client_id, oidc_scope: "openid profile",
@@ -2366,7 +2366,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f23_key]
-                  f23_token.rotate_refresh_token! unless f23_token.device_session.current_refresh_token_id
+                  f23_token.rotate_refresh_token! unless f23_token.device_session_record.current_refresh_token_id
                   f23_now = Time.current
                   f23_session = ClientRpSession.create!(
                     client_token: f23_token, oidc_client_id: f23_client.client_id, oidc_scope: "openid profile",
@@ -2444,7 +2444,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                         revoked_at: nil,
                       )))
                   unless @base_browser_rp_credentials[f24_key]
-                    f24_token.rotate_refresh_token! unless f24_token.device_session.current_refresh_token_id
+                    f24_token.rotate_refresh_token! unless f24_token.device_session_record.current_refresh_token_id
                     f24_now = Time.current
                     f24_session = ClientRpSession.create!(
                       client_token: f24_token, oidc_client_id: f24_client.client_id, oidc_scope: "openid profile",
@@ -2521,7 +2521,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                         revoked_at: nil,
                       )))
                   unless @base_browser_rp_credentials[f25_key]
-                    f25_token.rotate_refresh_token! unless f25_token.device_session.current_refresh_token_id
+                    f25_token.rotate_refresh_token! unless f25_token.device_session_record.current_refresh_token_id
                     f25_now = Time.current
                     f25_session = ClientRpSession.create!(
                       client_token: f25_token, oidc_client_id: f25_client.client_id, oidc_scope: "openid profile",
@@ -2609,7 +2609,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f26_key]
-                  f26_token.rotate_refresh_token! unless f26_token.device_session.current_refresh_token_id
+                  f26_token.rotate_refresh_token! unless f26_token.device_session_record.current_refresh_token_id
                   f26_now = Time.current
                   f26_session = ClientRpSession.create!(
                     client_token: f26_token, oidc_client_id: f26_client.client_id, oidc_scope: "openid profile",
@@ -2722,7 +2722,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f27_key]
-                  f27_token.rotate_refresh_token! unless f27_token.device_session.current_refresh_token_id
+                  f27_token.rotate_refresh_token! unless f27_token.device_session_record.current_refresh_token_id
                   f27_now = Time.current
                   f27_session = ClientRpSession.create!(
                     client_token: f27_token, oidc_client_id: f27_client.client_id, oidc_scope: "openid profile",
@@ -2813,7 +2813,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f28_key]
-                  f28_token.rotate_refresh_token! unless f28_token.device_session.current_refresh_token_id
+                  f28_token.rotate_refresh_token! unless f28_token.device_session_record.current_refresh_token_id
                   f28_now = Time.current
                   f28_session = ClientRpSession.create!(
                     client_token: f28_token, oidc_client_id: f28_client.client_id, oidc_scope: "openid profile",
@@ -2908,7 +2908,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f29_key]
-                  f29_token.rotate_refresh_token! unless f29_token.device_session.current_refresh_token_id
+                  f29_token.rotate_refresh_token! unless f29_token.device_session_record.current_refresh_token_id
                   f29_now = Time.current
                   f29_session = ClientRpSession.create!(
                     client_token: f29_token, oidc_client_id: f29_client.client_id, oidc_scope: "openid profile",
@@ -2990,7 +2990,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f30_key]
-                  f30_token.rotate_refresh_token! unless f30_token.device_session.current_refresh_token_id
+                  f30_token.rotate_refresh_token! unless f30_token.device_session_record.current_refresh_token_id
                   f30_now = Time.current
                   f30_session = ClientRpSession.create!(
                     client_token: f30_token, oidc_client_id: f30_client.client_id, oidc_scope: "openid profile",
@@ -3080,7 +3080,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f31_key]
-                  f31_token.rotate_refresh_token! unless f31_token.device_session.current_refresh_token_id
+                  f31_token.rotate_refresh_token! unless f31_token.device_session_record.current_refresh_token_id
                   f31_now = Time.current
                   f31_session = ClientRpSession.create!(
                     client_token: f31_token, oidc_client_id: f31_client.client_id, oidc_scope: "openid profile",
@@ -3175,7 +3175,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f32_key]
-                  f32_token.rotate_refresh_token! unless f32_token.device_session.current_refresh_token_id
+                  f32_token.rotate_refresh_token! unless f32_token.device_session_record.current_refresh_token_id
                   f32_now = Time.current
                   f32_session = ClientRpSession.create!(
                     client_token: f32_token, oidc_client_id: f32_client.client_id, oidc_scope: "openid profile",
@@ -3251,7 +3251,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f33_key]
-                  f33_token.rotate_refresh_token! unless f33_token.device_session.current_refresh_token_id
+                  f33_token.rotate_refresh_token! unless f33_token.device_session_record.current_refresh_token_id
                   f33_now = Time.current
                   f33_session = ClientRpSession.create!(
                     client_token: f33_token, oidc_client_id: f33_client.client_id, oidc_scope: "openid profile",
@@ -3336,7 +3336,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                         revoked_at: nil,
                       )))
                   unless @base_browser_rp_credentials[f34_key]
-                    f34_token.rotate_refresh_token! unless f34_token.device_session.current_refresh_token_id
+                    f34_token.rotate_refresh_token! unless f34_token.device_session_record.current_refresh_token_id
                     f34_now = Time.current
                     f34_session = ClientRpSession.create!(
                       client_token: f34_token, oidc_client_id: f34_client.client_id, oidc_scope: "openid profile",
@@ -3438,7 +3438,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                         revoked_at: nil,
                       )))
                   unless @base_browser_rp_credentials[f35_key]
-                    f35_token.rotate_refresh_token! unless f35_token.device_session.current_refresh_token_id
+                    f35_token.rotate_refresh_token! unless f35_token.device_session_record.current_refresh_token_id
                     f35_now = Time.current
                     f35_session = ClientRpSession.create!(
                       client_token: f35_token, oidc_client_id: f35_client.client_id, oidc_scope: "openid profile",
@@ -3533,7 +3533,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                            revoked_at: nil,
                          )))
                      unless @base_browser_rp_credentials[f36_key]
-                       f36_token.rotate_refresh_token! unless f36_token.device_session.current_refresh_token_id
+                       f36_token.rotate_refresh_token! unless f36_token.device_session_record.current_refresh_token_id
                        f36_now = Time.current
                        f36_session = ClientRpSession.create!(
                          client_token: f36_token, oidc_client_id: f36_client.client_id, oidc_scope: "openid profile",
@@ -3621,7 +3621,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f37_key]
-                  f37_token.rotate_refresh_token! unless f37_token.device_session.current_refresh_token_id
+                  f37_token.rotate_refresh_token! unless f37_token.device_session_record.current_refresh_token_id
                   f37_now = Time.current
                   f37_session = ClientRpSession.create!(
                     client_token: f37_token,
@@ -3723,7 +3723,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f38_key]
-                  f38_token.rotate_refresh_token! unless f38_token.device_session.current_refresh_token_id
+                  f38_token.rotate_refresh_token! unless f38_token.device_session_record.current_refresh_token_id
                   f38_now = Time.current
                   f38_session = ClientRpSession.create!(
                     client_token: f38_token, oidc_client_id: f38_client.client_id, oidc_scope: "openid profile",
@@ -3807,7 +3807,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f39_key]
-                  f39_token.rotate_refresh_token! unless f39_token.device_session.current_refresh_token_id
+                  f39_token.rotate_refresh_token! unless f39_token.device_session_record.current_refresh_token_id
                   f39_now = Time.current
                   f39_session = ClientRpSession.create!(
                     client_token: f39_token, oidc_client_id: f39_client.client_id, oidc_scope: "openid profile",
@@ -3898,7 +3898,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f40_key]
-                  f40_token.rotate_refresh_token! unless f40_token.device_session.current_refresh_token_id
+                  f40_token.rotate_refresh_token! unless f40_token.device_session_record.current_refresh_token_id
                   f40_now = Time.current
                   f40_session = ClientRpSession.create!(
                     client_token: f40_token, oidc_client_id: f40_client.client_id, oidc_scope: "openid profile",
@@ -3988,7 +3988,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                         revoked_at: nil,
                       )))
                   unless @base_browser_rp_credentials[f41_key]
-                    f41_token.rotate_refresh_token! unless f41_token.device_session.current_refresh_token_id
+                    f41_token.rotate_refresh_token! unless f41_token.device_session_record.current_refresh_token_id
                     f41_now = Time.current
                     f41_session = ClientRpSession.create!(
                       client_token: f41_token, oidc_client_id: f41_client.client_id, oidc_scope: "openid profile",
@@ -4076,7 +4076,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                         revoked_at: nil,
                       )))
                   unless @base_browser_rp_credentials[f42_key]
-                    f42_token.rotate_refresh_token! unless f42_token.device_session.current_refresh_token_id
+                    f42_token.rotate_refresh_token! unless f42_token.device_session_record.current_refresh_token_id
                     f42_now = Time.current
                     f42_session = ClientRpSession.create!(
                       client_token: f42_token, oidc_client_id: f42_client.client_id, oidc_scope: "openid profile",
@@ -4162,7 +4162,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f43_key]
-                  f43_token.rotate_refresh_token! unless f43_token.device_session.current_refresh_token_id
+                  f43_token.rotate_refresh_token! unless f43_token.device_session_record.current_refresh_token_id
                   f43_now = Time.current
                   f43_session = VisitorRpSession.create!(
                     visitor_token: f43_token, oidc_client_id: f43_client.client_id, oidc_scope: "openid profile",
@@ -4257,7 +4257,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f44_key]
-                  f44_token.rotate_refresh_token! unless f44_token.device_session.current_refresh_token_id
+                  f44_token.rotate_refresh_token! unless f44_token.device_session_record.current_refresh_token_id
                   f44_now = Time.current
                   f44_session = VisitorRpSession.create!(
                     visitor_token: f44_token, oidc_client_id: f44_client.client_id, oidc_scope: "openid profile",
@@ -4344,7 +4344,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f45_key]
-                  f45_token.rotate_refresh_token! unless f45_token.device_session.current_refresh_token_id
+                  f45_token.rotate_refresh_token! unless f45_token.device_session_record.current_refresh_token_id
                   f45_now = Time.current
                   f45_session = VisitorRpSession.create!(
                     visitor_token: f45_token, oidc_client_id: f45_client.client_id, oidc_scope: "openid profile",
@@ -4439,7 +4439,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f46_key]
-                  f46_token.rotate_refresh_token! unless f46_token.device_session.current_refresh_token_id
+                  f46_token.rotate_refresh_token! unless f46_token.device_session_record.current_refresh_token_id
                   f46_now = Time.current
                   f46_session = VisitorRpSession.create!(
                     visitor_token: f46_token, oidc_client_id: f46_client.client_id, oidc_scope: "openid profile",
@@ -4524,7 +4524,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f47_key]
-                  f47_token.rotate_refresh_token! unless f47_token.device_session.current_refresh_token_id
+                  f47_token.rotate_refresh_token! unless f47_token.device_session_record.current_refresh_token_id
                   f47_now = Time.current
                   f47_session = OperatorRpSession.create!(
                     operator_token: f47_token, oidc_client_id: f47_client.client_id, oidc_scope: "openid profile",
@@ -4619,7 +4619,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f48_key]
-                  f48_token.rotate_refresh_token! unless f48_token.device_session.current_refresh_token_id
+                  f48_token.rotate_refresh_token! unless f48_token.device_session_record.current_refresh_token_id
                   f48_now = Time.current
                   f48_session = OperatorRpSession.create!(
                     operator_token: f48_token, oidc_client_id: f48_client.client_id, oidc_scope: "openid profile",
@@ -4706,7 +4706,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f49_key]
-                  f49_token.rotate_refresh_token! unless f49_token.device_session.current_refresh_token_id
+                  f49_token.rotate_refresh_token! unless f49_token.device_session_record.current_refresh_token_id
                   f49_now = Time.current
                   f49_session = OperatorRpSession.create!(
                     operator_token: f49_token, oidc_client_id: f49_client.client_id, oidc_scope: "openid profile",
@@ -4801,7 +4801,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f50_key]
-                  f50_token.rotate_refresh_token! unless f50_token.device_session.current_refresh_token_id
+                  f50_token.rotate_refresh_token! unless f50_token.device_session_record.current_refresh_token_id
                   f50_now = Time.current
                   f50_session = OperatorRpSession.create!(
                     operator_token: f50_token, oidc_client_id: f50_client.client_id, oidc_scope: "openid profile",
@@ -4886,7 +4886,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f51_key]
-                  f51_token.rotate_refresh_token! unless f51_token.device_session.current_refresh_token_id
+                  f51_token.rotate_refresh_token! unless f51_token.device_session_record.current_refresh_token_id
                   f51_now = Time.current
                   f51_session = VisitorRpSession.create!(
                     visitor_token: f51_token, oidc_client_id: f51_client.client_id, oidc_scope: "openid profile",
@@ -4986,7 +4986,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f52_key]
-                  f52_token.rotate_refresh_token! unless f52_token.device_session.current_refresh_token_id
+                  f52_token.rotate_refresh_token! unless f52_token.device_session_record.current_refresh_token_id
                   f52_now = Time.current
                   f52_session = VisitorRpSession.create!(
                     visitor_token: f52_token, oidc_client_id: f52_client.client_id, oidc_scope: "openid profile",
@@ -5109,7 +5109,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f53_key]
-                  f53_token.rotate_refresh_token! unless f53_token.device_session.current_refresh_token_id
+                  f53_token.rotate_refresh_token! unless f53_token.device_session_record.current_refresh_token_id
                   f53_now = Time.current
                   f53_session = VisitorRpSession.create!(
                     visitor_token: f53_token, oidc_client_id: f53_client.client_id, oidc_scope: "openid profile",
@@ -5196,7 +5196,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f54_key]
-                  f54_token.rotate_refresh_token! unless f54_token.device_session.current_refresh_token_id
+                  f54_token.rotate_refresh_token! unless f54_token.device_session_record.current_refresh_token_id
                   f54_now = Time.current
                   f54_session = OperatorRpSession.create!(
                     operator_token: f54_token, oidc_client_id: f54_client.client_id, oidc_scope: "openid profile",
@@ -5296,7 +5296,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f55_key]
-                  f55_token.rotate_refresh_token! unless f55_token.device_session.current_refresh_token_id
+                  f55_token.rotate_refresh_token! unless f55_token.device_session_record.current_refresh_token_id
                   f55_now = Time.current
                   f55_session = OperatorRpSession.create!(
                     operator_token: f55_token, oidc_client_id: f55_client.client_id, oidc_scope: "openid profile",
@@ -5419,7 +5419,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
                       revoked_at: nil,
                     )))
                 unless @base_browser_rp_credentials[f56_key]
-                  f56_token.rotate_refresh_token! unless f56_token.device_session.current_refresh_token_id
+                  f56_token.rotate_refresh_token! unless f56_token.device_session_record.current_refresh_token_id
                   f56_now = Time.current
                   f56_session = OperatorRpSession.create!(
                     operator_token: f56_token, oidc_client_id: f56_client.client_id, oidc_scope: "openid profile",

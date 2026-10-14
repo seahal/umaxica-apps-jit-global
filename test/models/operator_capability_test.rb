@@ -12,6 +12,25 @@ class OperatorCapabilityTest < ActiveSupport::TestCase
 
   test "an operator with no grant holds no capability" do
     assert_not @operator.capability?(OperatorCapabilityGrant::SUPPORT_CONSOLE_READ)
+    assert_not @operator.capability?(OperatorCapabilityGrant::TECH_ACCESS)
+  end
+
+  test "tech access follows the grant validity window and revocation" do
+    grant = OperatorCapabilityGrant.create!(
+      operator: @operator,
+      granted_by_operator: @granter,
+      origin: "grant",
+      capability: OperatorCapabilityGrant::TECH_ACCESS,
+      reason_code: "duty_assignment",
+      starts_at: 1.minute.ago,
+      expires_at: 1.day.from_now,
+    )
+
+    assert @operator.capability?(OperatorCapabilityGrant::TECH_ACCESS)
+
+    grant.update!(revoked_at: Time.current, revoked_by_operator: @granter, revoke_reason_code: "duty_ended")
+
+    assert_not @operator.reload.capability?(OperatorCapabilityGrant::TECH_ACCESS)
   end
 
   test "an in-force grant confers exactly its own capability" do

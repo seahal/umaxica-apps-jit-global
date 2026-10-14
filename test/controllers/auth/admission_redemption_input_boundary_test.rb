@@ -71,7 +71,7 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
 
         assert_equal 303, browser.response.status
         assert_predicate binding.reload, :redeemed?
-        assert_predicate binding.admitted_auth_ceremony_session, :admitted?
+        assert_predicate admitted_auth_ceremony_session_for_test(binding), :admitted?
         assert_equal session_count + 1, model.count
         assert_predicate issuance.transaction.reload, :sign_in_primary_pending?
         admitted_id = binding.admitted_auth_ceremony_session_id

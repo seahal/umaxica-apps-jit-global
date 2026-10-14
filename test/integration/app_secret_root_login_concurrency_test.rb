@@ -106,7 +106,7 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
         end
       entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
       admission = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
-      transaction = admission.authorization_transaction
+      transaction = ClientOidcAuthorizationTransaction.find(admission.authorization_transaction_id)
       auth = open_session
       auth.host!(auth_host)
       auth.https!
@@ -334,7 +334,8 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
       result_action = result_form["action"]
       result_ref = result_form.at_css('input[name="result_ref"]')["value"]
       transaction_ref = result_form.at_css('input[name="transaction_ref"]')["value"]
-      flow = transaction.reload.secret_sign_in_flow
+      authenticity_token = result_form.at_css('input[name="authenticity_token"]')["value"]
+      flow = ClientSignInFlow.find(transaction.reload.secret_sign_in_flow_id)
       credential = ClientSecretCredential.find_by!(issuance_id: issuance.id)
       ceremony = ClientAuthCeremonySession.find(credential.claim_ceremony_session_id)
       duplicate = open_session
@@ -358,7 +359,9 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
                   ready << connection.select_value("SELECT pg_backend_pid()")
                   release.pop
                   browser.post(
-                    result_action, params: { result_ref: result_ref, transaction_ref: transaction_ref },
+                    result_action, params: { result_ref: result_ref,
+                                             transaction_ref: transaction_ref,
+                                             authenticity_token: authenticity_token, },
                                    headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
                                    env: { "rack.response_finished" => response_finished },
                   )
@@ -398,7 +401,9 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
                   ready << connection.select_value("SELECT pg_backend_pid()")
                   release.pop
                   base.post(
-                    result_action, params: { result_ref: result_ref, transaction_ref: transaction_ref },
+                    result_action, params: { result_ref: result_ref,
+                                             transaction_ref: transaction_ref,
+                                             authenticity_token: authenticity_token, },
                                    headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
                                    env: { "rack.response_finished" => response_finished },
                   )
@@ -454,7 +459,9 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
       statuses = Timeout.timeout(15) { futures.map(&:value!) }
       unless outcome == :completion
         duplicate.post(
-          result_action, params: { result_ref: result_ref, transaction_ref: transaction_ref },
+          result_action, params: { result_ref: result_ref,
+                                   transaction_ref: transaction_ref,
+                                   authenticity_token: authenticity_token, },
                          headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
         )
         statuses << duplicate.response.status
@@ -468,7 +475,7 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
 
       assert_equal (outcome == :completion) ? 1 : 0, receipts.count
       if outcome == :completion
-        root = flow.reload.token
+        root = ClientToken.find_by!(id: flow.reload.token_id, user_id: actor.id)
 
         assert_equal root.public_id, receipts.first.root_token_ref
         assert_equal actor.public_id, receipts.first.client_ref
@@ -506,7 +513,7 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
         ClientToken.where(user_id: actor.id).find_each(&:destroy!)
         # An Identity is physically erased only once it has lapsed and is purgeable.
         actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
-        actor.reload.destroy!
+        destroy_test_client_after_cross_database_cleanup!(actor)
       end
     end
   end

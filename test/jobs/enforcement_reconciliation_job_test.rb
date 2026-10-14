@@ -5,7 +5,7 @@ require "test_helper"
 
 class EnforcementReconciliationJobTest < ActiveJob::TestCase
   test "reconciles a case whose sessions_revoked_at and audited_at are still nil after apply!" do
-    client = clients(:one)
+    client = create_test_client!
     operator = operators(:one)
     token = ClientToken.create!(user_id: client.id, established_authentication_method: "passkey")
 
@@ -45,7 +45,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
   end
 
   test "pending_convergence only selects active cases with an unconverged side effect" do
-    client = clients(:one)
+    client = create_test_client!
     operator = operators(:one)
 
     converged_case = AppEnforcementCase.new(
@@ -69,7 +69,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
   end
 
   test "ended cases use end convergence instead of the active-case reconciler" do
-    client = clients(:one)
+    client = create_test_client!
     operator = operators(:one)
 
     ended_case = AppEnforcementCase.new(
@@ -94,7 +94,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
   end
 
   test "records the end audit event for an ended case whose end convergence never ran" do
-    client = clients(:one)
+    client = create_test_client!
     operator = operators(:one)
     ended_case = AppEnforcementCase.new(
       kind: "cooldown",
@@ -119,7 +119,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
   end
 
   test "ends an active case whose approved appeal did not finish ending it" do
-    client = clients(:one)
+    client = create_test_client!
     operator = operators(:one)
     the_case = AppEnforcementCase.new(
       kind: "cooldown",
@@ -156,7 +156,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
   end
 
   test "completes the end audit for an approved appeal whose case already ended" do
-    client = clients(:one)
+    client = create_test_client!
     operator = operators(:one)
     the_case = AppEnforcementCase.new(
       kind: "cooldown",
@@ -194,7 +194,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
   end
 
   test "records a rejected appeal without ending the case" do
-    client = clients(:one)
+    client = create_test_client!
     operator = operators(:one)
     the_case = AppEnforcementCase.new(
       kind: "cooldown",
@@ -229,7 +229,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
   end
 
   test "logs a failed end reconciliation instead of aborting the job" do
-    client = clients(:one)
+    client = create_test_client!
     operator = operators(:one)
     the_case = AppEnforcementCase.new(
       kind: "cooldown",
@@ -260,5 +260,15 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
     assert logged.any? { |line|
       line.include?("enforcement.reconciliation.failed") && line.include?(the_case.public_id)
     }
+  end
+
+  private
+
+  def create_test_client!
+    Client.create!(
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+      status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::BOTH,
+    )
   end
 end

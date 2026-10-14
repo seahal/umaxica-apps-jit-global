@@ -14,9 +14,10 @@ class ClientSecretLookupQuery
 
       AppZenithRecord.connected_to(role: :writing) do
         now = ClientSecretCredential.database_now
-        ClientSecretCredential.available_at(now).where(client_id: client.id).order(:id).find do |credential|
-          next unless credential.issuance&.sign_up_flow_ref.nil? || credential.issuance.signup_completed_at
-
+        eligible_issuance_ids = ClientSecretIssuance.where(client_id: client.id)
+          .where("sign_up_flow_ref IS NULL OR signup_completed_at IS NOT NULL").select(:id)
+        ClientSecretCredential.available_at(now).where(client_id: client.id, issuance_id: eligible_issuance_ids)
+          .order(:id).find do |credential|
           credential.matches_secret?(secret)
         end
       end

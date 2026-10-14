@@ -16,9 +16,8 @@
 #   - It keeps the failure semantics of single-revoke consistent across
 #     callers (current-session logout, bulk revoke, lifecycle suspend).
 #
-# This service handles the batch-level concern that does not belong to a
-# single revoke: emitting a batch failure event when an individual revoke
-# escapes the primitive's narrow rescue.
+# This service handles the batch-level iteration. A failure in one revocation
+# propagates so callers cannot observe a successful batch with a usable token.
 class AuthenticationLogoutAllSessions
   def self.call(...)
     new(...).call
@@ -69,23 +68,5 @@ class AuthenticationLogoutAllSessions
       reason: reason,
       cascade_device_session_tokens: false,
     )
-  rescue ActiveRecord::ActiveRecordError => e
-    # Net for anything escaping the primitive's narrower rescue
-    # (e.g. ConnectionNotEstablished). Surfaced under a batch-specific
-    # event name so operators can distinguish "one token failed inside
-    # a bulk revoke" from "the only session-revoke failed".
-    Rails.logger.info(
-      JitLogEvent.format(
-        "auth.logout_all_sessions.token_failed",
-        reason: reason,
-        resource_class: resource&.class&.name,
-        resource_id: resource&.id,
-        token_class: token&.class&.name,
-        token_id: token&.try(:public_id),
-        error_class: e.class.name,
-        error_message: e.message,
-      ),
-    )
-    true
   end
 end

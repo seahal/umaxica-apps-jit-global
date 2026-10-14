@@ -6,7 +6,7 @@ require "test_helper"
 
 class ReadOnlySurfacesTest < ActionDispatch::IntegrationTest
   STATIC_SURFACES = [
-    ["palm_app_root_url", "PUBLIC_PALM_SERVICE_URL", "palm.app.localhost", "Palm API is available"],
+    ["palm_app_root_url", "PUBLIC_PALM_SERVICE_URL", "palm.app.localhost", "Palm App"],
   ].freeze
 
   BASE_GATEWAY_ROOTS = [
@@ -39,7 +39,7 @@ class ReadOnlySurfacesTest < ActionDispatch::IntegrationTest
     ["news_org_api_v0_entry_url", "PRIVATE_NEWS_STAFF_URL", "news.org.localhost", "news", "org"],
   ].freeze
 
-  test "static palm roots respond without auth redirects" do
+  test "palm browser root responds without an auth redirect" do
     STATIC_SURFACES.each do |helper, env_key, fallback, expected|
       host = ENV.fetch(env_key, fallback)
       host! host

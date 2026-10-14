@@ -65,7 +65,10 @@ class ProcessorErasureNotificationDeliveryContractTest < ActiveSupport::TestCase
 
     assert_equal "PENDING", notification.status_name
     assert_nil notification.notified_at
-    assert_equal "ACCEPTED_PENDING", notification.attempts.first.outcome
+    assert_equal "ACCEPTED_PENDING",
+                 ClientProcessorErasureNotificationAttempt.find_by!(
+                   client_processor_erasure_notification_id: notification.id,
+                 ).outcome
   end
 
   test "only a receipt bound to the current attempt can notify" do
@@ -79,7 +82,10 @@ class ProcessorErasureNotificationDeliveryContractTest < ActiveSupport::TestCase
     notification.reload
 
     assert_equal "NOTIFIED", notification.status_name
-    assert_equal "SUCCEEDED", notification.attempts.first.outcome
+    assert_equal "SUCCEEDED",
+                 ClientProcessorErasureNotificationAttempt.find_by!(
+                   client_processor_erasure_notification_id: notification.id,
+                 ).outcome
     assert_predicate notification.notified_at, :present?
   end
 
@@ -265,7 +271,10 @@ class ProcessorErasureNotificationDeliveryContractTest < ActiveSupport::TestCase
 
     assert_equal "PERMANENT_FAILURE", notification.status_name
     assert_predicate notification.permanent_failed_at, :present?
-    assert_equal "PERMANENT_FAILURE", notification.attempts.first.outcome
+    assert_equal "PERMANENT_FAILURE",
+                 ClientProcessorErasureNotificationAttempt.find_by!(
+                   client_processor_erasure_notification_id: notification.id,
+                 ).outcome
 
     assert_no_difference -> { notification.attempts.count } do
       ProcessorErasureNotificationJob.perform_now(surface: "app", public_id: notification.public_id)
@@ -298,7 +307,9 @@ class ProcessorErasureNotificationDeliveryContractTest < ActiveSupport::TestCase
       ProcessorErasureNotificationJob.perform_now(surface: "app", public_id: notification.public_id)
     end
 
-    old_attempt = notification.attempts.first
+    old_attempt = ClientProcessorErasureNotificationAttempt.find_by!(
+      client_processor_erasure_notification_id: notification.id,
+    )
     operator = Operator.new
     assert_difference(
       -> { ClientOccurrence.where(event_type: "processor_erasure.manual_recovery_requested").count },

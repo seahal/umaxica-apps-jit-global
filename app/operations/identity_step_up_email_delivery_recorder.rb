@@ -28,7 +28,7 @@ class IdentityStepUpEmailDeliveryRecorder
                 session_record = session_model.find_by(step_up_ceremony_transaction_ref: transaction_ref)
                 next false unless session_record
 
-                token = (token_key == :user_token) ? session_record.user_token : session_record.visitor_token
+                token = token_for(session_record, token_key)
                 token.with_lock do
                   session_record.with_lock do
                     transaction.with_lock do
@@ -81,11 +81,21 @@ class IdentityStepUpEmailDeliveryRecorder
     def binding_for(credential)
       case credential
       when ClientEmail
-        [credential.user, ClientStepUpCeremonyTransaction, ClientStepUpSession, :user_token, Email::App::OtpMailer]
+        [Client.find(credential.user_id), ClientStepUpCeremonyTransaction, ClientStepUpSession, :user_token,
+         Email::App::OtpMailer,]
       when VisitorEmail
-        [credential.visitor, VisitorStepUpCeremonyTransaction, VisitorStepUpSession, :visitor_token, Email::Com::OtpMailer]
+        [Visitor.find(credential.visitor_id), VisitorStepUpCeremonyTransaction, VisitorStepUpSession, :visitor_token,
+         Email::Com::OtpMailer,]
       else
         raise ArgumentError, "step-up email surface unsupported"
+      end
+    end
+
+    def token_for(session_record, token_key)
+      case token_key
+      when :user_token then ClientToken.find(session_record.user_token_id)
+      when :visitor_token then VisitorToken.find(session_record.visitor_token_id)
+      else raise ArgumentError, "unsupported step-up token association"
       end
     end
 

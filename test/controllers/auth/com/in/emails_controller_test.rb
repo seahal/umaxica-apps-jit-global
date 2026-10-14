@@ -33,7 +33,11 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :see_other
     @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-      flow: VisitorSignInFlow.find_by!(public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref),
+      flow: VisitorSignInFlow.find_by!(
+        public_id: VisitorAuthCeremonySession.find(
+          binding.reload.admitted_auth_ceremony_session_id,
+        ).local_sign_in_flow_ref,
+      ),
       surface: "com", phase: "PRIMARY_PENDING",
     )
     address = "dummy-budget-#{SecureRandom.hex(8)}@example.test"
@@ -89,7 +93,11 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :see_other
     @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-      flow: VisitorSignInFlow.find_by!(public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref),
+      flow: VisitorSignInFlow.find_by!(
+        public_id: VisitorAuthCeremonySession.find(
+          binding.reload.admitted_auth_ceremony_session_id,
+        ).local_sign_in_flow_ref,
+      ),
       surface: "com", phase: "PRIMARY_PENDING",
     )
 
@@ -102,7 +110,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_equal contact.id, session[:user_email_authentication_id]
 
-    ceremony = binding.reload.admitted_auth_ceremony_session
+    ceremony = VisitorAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
     code = ceremony.issue_email_otp!(contact: contact, destination: contact.address)
     retained = ceremony.reload.email_otp_context
     source = contact.reload.attributes
@@ -160,7 +168,8 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
          params: { entry_ref: admission.reference, authenticity_token: csrf }, headers: { "Host" => @host }
 
     assert_response :see_other
-    flow_ref = binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref
+    ceremony = VisitorAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
+    flow_ref = ceremony.local_sign_in_flow_ref
     flow = VisitorSignInFlow.find_by!(public_id: flow_ref)
     @primary_sign_in_binding = SignInFlowBindingCodec.encode(
       flow: flow, surface: "com", phase: "PRIMARY_PENDING",

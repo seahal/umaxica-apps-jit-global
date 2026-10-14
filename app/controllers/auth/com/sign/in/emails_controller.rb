@@ -135,17 +135,13 @@ module Auth
             return reject_dummy_email_otp if session[:user_email_authentication_id].blank?
 
             unless @user_email.valid?
-              @user_email.errors.add(:pass_code, t("sign.app.authentication.email.update.invalid_code"))
-              return render inertia: "auth/com/sign/in/emails/edit", props: sign_in_email_edit_props,
-                            status: :unprocessable_content
+              return reject_invalid_email_otp
             end
 
             verification = admitted_auth_ceremony_session.verify_email_otp!(code: @user_email.pass_code)
-            visitor = verification.contact&.visitor
+            visitor = Visitor.find_by(id: verification.contact&.visitor_id)
             unless verification.verified_evidence?
-              @user_email.errors.add(:pass_code, t("sign.app.authentication.email.update.invalid_code"))
-              return render inertia: "auth/com/sign/in/emails/edit", props: sign_in_email_edit_props,
-                            status: :unprocessable_content
+              return reject_invalid_email_otp
             end
 
             session.delete(:user_email_authentication_id)
@@ -334,6 +330,10 @@ module Auth
           def reject_dummy_email_otp
             verify_dummy_otp(@user_email.pass_code)
             admitted_auth_ceremony_session.verify_email_otp!(code: @user_email.pass_code)
+            reject_invalid_email_otp
+          end
+
+          def reject_invalid_email_otp
             @user_email.errors.add(:pass_code, t("sign.app.authentication.email.update.invalid_code"))
             render inertia: "auth/com/sign/in/emails/edit", props: sign_in_email_edit_props,
                    status: :unprocessable_content

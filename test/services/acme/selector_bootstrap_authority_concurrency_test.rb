@@ -18,7 +18,11 @@ class BaseSelectorBootstrapAuthorityConcurrencyTest < ActiveSupport::TestCase
     VisitorIdentityState.ensure_defaults!
     IndividualMembershipKind.ensure_defaults!
     IndividualMembershipState.ensure_defaults!
-    @visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    @visitor = Visitor.create!(
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+      status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
   end
 
   teardown do

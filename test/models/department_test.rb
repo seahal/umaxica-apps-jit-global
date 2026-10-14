@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -25,7 +26,6 @@
 #  fk_rails_...                            (workspace_id => organizations.id) ON DELETE => nullify
 #
 
-# frozen_string_literal: true
 
 require "test_helper"
 

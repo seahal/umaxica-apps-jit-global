@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 class CreateComSignSequenceTickets < ActiveRecord::Migration[8.2]
   def change
     create_sequence_ticket_table(:com_sign_in_sequence_tickets, :visitor_tokens)

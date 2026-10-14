@@ -13,7 +13,7 @@ class PreferenceCookieConsentLifecycleTest < ActionDispatch::IntegrationTest
           params: { preference_cookie: { consented: "1", functional: "1", performant: "0", targetable: "0" } }
 
     assert_response :redirect
-    preference = AppPreference.order(:created_at).last
+    preference = AppPreference.includes(:app_preference_cookie).order(:created_at).last
 
     cookie = preference.reload.app_preference_cookie.reload
 

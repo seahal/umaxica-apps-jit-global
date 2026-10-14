@@ -83,6 +83,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     authority_query = Rack::Utils.parse_nested_query(authority_uri.query.to_s)
     challenge = authority_query.fetch("logout_challenge")
     transaction = AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: challenge)
+    origin_session_cookie = session_cookie_pair
 
     assert_equal @base_host, authority_uri.host
     assert_equal "/oidc/logout", authority_uri.path
@@ -105,12 +106,14 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
       logout_challenge: challenge,
       id_token_hint: "untrusted-hint",
       ri: "jp",
-    ), headers: {
-      "Origin" => "https://#{@core_host}",
-      "Sec-Fetch-Site" => "same-site",
-    }
+    ), headers: with_session_cookie(
+      {
+        "Origin" => "https://#{@core_host}",
+        "Sec-Fetch-Site" => "same-site",
+      }, session_cookie: origin_session_cookie,
+    )
 
-    assert_response :unprocessable_entity
+    assert_idp_session_error_response
     assert_predicate root_token.reload, :currently_usable?
     assert_predicate core_session.reload, :active?
     assert_predicate sibling_session.reload, :active?
@@ -120,8 +123,8 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     authority_access_token = AuthenticationToken.encode(
       user,
       host: @base_host,
-      session_public_id: root_token.device_session.public_id,
-      oidc_sid: root_token.device_session.public_id,
+      session_public_id: root_token.device_session_record.public_id,
+      oidc_sid: root_token.device_session_record.public_id,
       oidc_jti: root_token.oidc_jti,
       resource_type: "client",
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
@@ -135,9 +138,10 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     )
 
     assert_equal user.id.to_s, AuthenticationToken.extract_subject(authority_token_payload)
-    assert_equal root_token.device_session.public_id, AuthenticationToken.extract_session_id(authority_token_payload)
+    assert_equal root_token.device_session_record.public_id,
+                 AuthenticationToken.extract_session_id(authority_token_payload)
     assert_equal user.public_id, transaction.actor_ref
-    assert_equal user.public_id, core_session.user.public_id
+    assert ClientDeviceSession.exists?(id: core_session.device_session_id, user_id: user.id)
     assert_equal root_token.device_session_id, core_session.device_session_id
     assert_equal root_token.class, core_session.parent_token.class
     base_authority_cookie =
@@ -183,12 +187,14 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     post base_app_oidc_logout_path(
       logout_challenge: challenge,
       ri: "jp",
-    ), headers: {
-      "Origin" => "https://#{@core_host}",
-      "Sec-Fetch-Site" => "same-site",
-    }
+    ), headers: with_session_cookie(
+      {
+        "Origin" => "https://#{@core_host}",
+        "Sec-Fetch-Site" => "same-site",
+      }, session_cookie: origin_session_cookie,
+    )
 
-    assert_response :unprocessable_entity
+    assert_idp_session_error_response
     assert_includes response.headers.fetch("Cache-Control").downcase, "no-store"
     assert_predicate root_token.reload, :currently_usable?
     assert_predicate core_session.reload, :active?
@@ -198,16 +204,18 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     post base_app_oidc_logout_path(
       logout_challenge: challenge,
       ri: "jp",
-    ), headers: {
-      "Host" => @base_host,
-      "Cookie" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(same_actor_other_parent_access_token)}",
-      "HTTP_COOKIE" =>
-        "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(same_actor_other_parent_access_token)}",
-      "Origin" => "https://#{@core_host}",
-      "Sec-Fetch-Site" => "same-site",
-    }
+    ), headers: with_session_cookie(
+      {
+        "Host" => @base_host,
+        "Cookie" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(same_actor_other_parent_access_token)}",
+        "HTTP_COOKIE" =>
+              "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(same_actor_other_parent_access_token)}",
+        "Origin" => "https://#{@core_host}",
+        "Sec-Fetch-Site" => "same-site",
+      }, session_cookie: origin_session_cookie,
+    )
 
-    assert_response :unprocessable_entity
+    assert_idp_session_error_response
     assert_predicate root_token.reload, :currently_usable?
     assert_predicate same_actor_other_parent.reload, :currently_usable?
     assert_predicate other_actor_parent.reload, :currently_usable?
@@ -215,15 +223,17 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_predicate sibling_session.reload, :active?
     assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED, transaction.reload.expected_step
 
-    post base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: {
-      "Host" => @base_host,
-      "Cookie" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(other_actor_access_token)}",
-      "HTTP_COOKIE" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(other_actor_access_token)}",
-      "Origin" => "https://#{@core_host}",
-      "Sec-Fetch-Site" => "same-site",
-    }
+    post base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
+      {
+        "Host" => @base_host,
+        "Cookie" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(other_actor_access_token)}",
+        "HTTP_COOKIE" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(other_actor_access_token)}",
+        "Origin" => "https://#{@core_host}",
+        "Sec-Fetch-Site" => "same-site",
+      }, session_cookie: origin_session_cookie,
+    )
 
-    assert_response :unprocessable_entity
+    assert_idp_session_error_response
     assert_predicate root_token.reload, :currently_usable?
     assert_predicate same_actor_other_parent.reload, :currently_usable?
     assert_predicate other_actor_parent.reload, :currently_usable?
@@ -235,9 +245,11 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
       logout_challenge: challenge,
       session_ref: same_actor_other_parent.public_id,
       ri: "jp",
-    ), headers: base_authority_headers.merge(
-      "Origin" => "https://#{@core_host}",
-      "Sec-Fetch-Site" => "same-site",
+    ), headers: with_session_cookie(
+      base_authority_headers.merge(
+        "Origin" => "https://#{@core_host}",
+        "Sec-Fetch-Site" => "same-site",
+      ), session_cookie: origin_session_cookie,
     )
 
     assert_not_predicate root_token.reload, :currently_usable?
@@ -246,7 +258,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     origin_uri = URI.parse(response.location)
 
     assert_equal @core_host, origin_uri.host
-    assert_equal "/sign/out", origin_uri.path
+    assert_equal "/sign/out/completion", origin_uri.path
     assert_equal challenge, Rack::Utils.parse_nested_query(origin_uri.query.to_s).fetch("logout_challenge")
 
     transaction.reload
@@ -261,34 +273,76 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_not sibling_session.reload.active?
     assert_not core_session.authenticate_refresh_token(core_refresh)
     assert_not sibling_session.authenticate_refresh_token(sibling_refresh)
-    assert_nil sibling_session.reload.revoked_at
+    assert_predicate sibling_session.reload, :revoked?
+    assert_equal "success", sibling_session.last_logout_status
 
     # The initiating RP can arrive with a row that was revoked independently after the parent
     # phase. Phase 4 is idempotent and must still finalize the durable transaction.
     core_session.revoke!(status: "success")
 
     host! @core_host
-    get core_app_sign_out_path(logout_challenge: challenge, ri: "jp")
+    get core_app_sign_out_completion_path(logout_challenge: challenge, ri: "jp")
 
     assert_response :ok
     assert_includes response.body, "logout_challenge", response.body
+    form = response.parsed_body.at_css('form[method="post"]')
+    form_action = form["action"]
+    form_params =
+      form.css("input[name]").each_with_object({}) do |input, values|
+        values[input["name"]] = input["value"]
+      end
 
-    post core_app_sign_out_path(
+    assert_equal "/sign/out/completion", URI.parse(form_action).path
+    assert_equal AcmeLogoutTransaction::STEP_ORIGIN_CLEANUP_ISSUED, transaction.reload.expected_step
+
+    failed_revoke = RpSessionRevoker::Result.new(success: false, revoked_count: 0)
+    RpSessionRevoker.stub(:call, ->(**) { failed_revoke }) do
+      post core_app_sign_out_completion_path(
+        logout_challenge: challenge,
+        ri: "jp",
+      ), params: form_params, headers: with_session_cookie(
+        {
+          "Origin" => "https://#{@core_host}",
+          "Sec-Fetch-Site" => "same-origin",
+        }, session_cookie: origin_session_cookie,
+      )
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal AcmeLogoutTransaction::STEP_ORIGIN_RP_SESSION_REVOKED, transaction.reload.expected_step
+
+    post core_app_sign_out_completion_path(
       logout_challenge: challenge,
       ri: "jp",
-    ), headers: {
-      "Origin" => "https://#{@core_host}",
-      "Sec-Fetch-Site" => "same-origin",
-    }
+    ), params: form_params.except("logout_intent_proof"), headers: with_session_cookie(
+      {
+        "Origin" => "https://#{@core_host}",
+        "Sec-Fetch-Site" => "same-origin",
+      }, session_cookie: origin_session_cookie,
+    )
+
+    assert_response :unprocessable_entity
+    assert_equal AcmeLogoutTransaction::STEP_ORIGIN_RP_SESSION_REVOKED, transaction.reload.expected_step
+
+    post core_app_sign_out_completion_path(
+      logout_challenge: challenge,
+      ri: "jp",
+    ), params: form_params, headers: with_session_cookie(
+      {
+        "Origin" => "https://#{@core_host}",
+        "Sec-Fetch-Site" => "same-origin",
+      }, session_cookie: origin_session_cookie,
+    )
 
     assert_response :see_other, response.body
     completion_uri = URI.parse(response.location)
 
     assert_equal @core_host, completion_uri.host
-    assert_equal "/sign/out", completion_uri.path
+    assert_equal "/sign/out/completion", completion_uri.path
     assert_predicate transaction.reload, :finalized?
     assert_predicate core_session.reload, :revoked?
-    assert_nil sibling_session.reload.revoked_at
+    assert_predicate sibling_session.reload, :revoked?
+    assert_equal "success", sibling_session.last_logout_status
 
     get completion_uri.request_uri
 
@@ -324,6 +378,11 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
       actor_ref: visitor.public_id,
       session_ref: rp_session.public_id,
       workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
+      **AcmeLogoutTransactionCoordinator.browser_rp_binding_for(
+        session_record: rp_session,
+        resource_type: "visitor",
+        origin_intent_digest: "d".b * 32,
+      ),
       surface: "com",
       ri: "jp",
     )
@@ -346,8 +405,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
       "Sec-Fetch-Site" => "same-site",
     }
 
-    assert_response :unprocessable_entity
-    assert_includes response.headers.fetch("Cache-Control").downcase, "no-store"
+    assert_idp_session_error_response
     assert_predicate root_token.reload, :currently_usable?
     assert_predicate rp_session.reload, :active?
     assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED, transaction.reload.expected_step
@@ -355,8 +413,8 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     authority_access_token = AuthenticationToken.encode(
       visitor,
       host: base_com_host,
-      session_public_id: root_token.device_session.public_id,
-      oidc_sid: root_token.device_session.public_id,
+      session_public_id: root_token.device_session_record.public_id,
+      oidc_sid: root_token.device_session_record.public_id,
       oidc_jti: root_token.oidc_jti,
       resource_type: "visitor",
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("visitor"),
@@ -380,7 +438,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     origin_uri = URI.parse(response.location)
 
     assert_equal core_com_host, origin_uri.host
-    assert_equal "/sign/out", origin_uri.path
+    assert_equal "/sign/out/completion", origin_uri.path
   end
 
   test "an untrusted origin cannot commit authority-first logout" do
@@ -511,6 +569,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     authority_uri = URI.parse(response.location)
     challenge = Rack::Utils.parse_nested_query(authority_uri.query.to_s).fetch("logout_challenge")
+    origin_session_cookie = session_cookie_pair
 
     assert_equal @base_host, authority_uri.host
     assert_equal "/oidc/logout", authority_uri.path
@@ -519,12 +578,14 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
 
     assert_response :ok
 
-    post base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: {
-      "Origin" => "https://#{@base_host}",
-      "Sec-Fetch-Site" => "same-origin",
-    }
+    post base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
+      {
+        "Origin" => "https://#{@base_host}",
+        "Sec-Fetch-Site" => "same-origin",
+      }, session_cookie: origin_session_cookie,
+    )
 
-    assert_response :unprocessable_entity
+    assert_idp_session_error_response
     assert_predicate root_token.reload, :currently_usable?
     assert_predicate rp_session.reload, :active?
     assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
@@ -533,8 +594,8 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     authority_access_token = AuthenticationToken.encode(
       user,
       host: @base_host,
-      session_public_id: root_token.device_session.public_id,
-      oidc_sid: root_token.device_session.public_id,
+      session_public_id: root_token.device_session_record.public_id,
+      oidc_sid: root_token.device_session_record.public_id,
       oidc_jti: root_token.oidc_jti,
       resource_type: "client",
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
@@ -543,25 +604,28 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     authority_cookie =
       "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(authority_access_token)}"
 
-    post base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: {
-      "Host" => @base_host,
-      "Cookie" => authority_cookie,
-      "HTTP_COOKIE" => authority_cookie,
-      "Origin" => "https://#{@base_host}",
-      "Sec-Fetch-Site" => "same-origin",
-    }
+    post base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
+      {
+        "Host" => @base_host,
+        "Cookie" => authority_cookie,
+        "HTTP_COOKIE" => authority_cookie,
+        "Origin" => "https://#{@base_host}",
+        "Sec-Fetch-Site" => "same-origin",
+      }, session_cookie: origin_session_cookie,
+    )
 
     assert_response :see_other
     origin_uri = URI.parse(response.location)
 
     assert_equal @base_host, origin_uri.host
-    assert_equal "/sign/out", origin_uri.path
+    assert_equal "/sign/out/completion", origin_uri.path
 
-    get base_app_sign_out_path(logout_challenge: challenge, ri: "jp")
+    get base_app_sign_out_completion_path(logout_challenge: challenge, ri: "jp")
 
     assert_response :ok
+    form_params = response_form_params
 
-    post base_app_sign_out_path(logout_challenge: challenge, ri: "jp"), headers: {
+    post base_app_sign_out_completion_path(logout_challenge: challenge, ri: "jp"), params: form_params, headers: {
       "Origin" => "https://#{@base_host}",
       "Sec-Fetch-Site" => "same-origin",
     }
@@ -629,6 +693,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     authority_uri = URI.parse(response.location)
     challenge = Rack::Utils.parse_nested_query(authority_uri.query.to_s).fetch("logout_challenge")
+    origin_session_cookie = session_cookie_pair
 
     assert_equal base_staff_host, authority_uri.host
     assert_equal "/oidc/logout", authority_uri.path
@@ -642,12 +707,14 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
                  AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: challenge).expected_step
 
-    post base_org_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: {
-      "Origin" => "https://#{edit_host}",
-      "Sec-Fetch-Site" => "same-site",
-    }
+    post base_org_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
+      {
+        "Origin" => "https://#{edit_host}",
+        "Sec-Fetch-Site" => "same-site",
+      }, session_cookie: origin_session_cookie,
+    )
 
-    assert_response :unprocessable_entity
+    assert_idp_session_error_response
     assert_predicate root_token.reload, :currently_usable?
     assert_predicate rp_session.reload, :active?
     assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
@@ -656,8 +723,8 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     authority_access_token = AuthenticationToken.encode(
       operator,
       host: base_staff_host,
-      session_public_id: root_token.device_session.public_id,
-      oidc_sid: root_token.device_session.public_id,
+      session_public_id: root_token.device_session_record.public_id,
+      oidc_sid: root_token.device_session_record.public_id,
       oidc_jti: root_token.oidc_jti,
       resource_type: "operator",
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("operator"),
@@ -666,26 +733,39 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     authority_cookie =
       "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(authority_access_token)}"
 
-    post base_org_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: {
-      "Host" => base_staff_host,
-      "Cookie" => authority_cookie,
-      "HTTP_COOKIE" => authority_cookie,
-      "Origin" => "https://#{edit_host}",
-      "Sec-Fetch-Site" => "same-site",
-    }
+    post base_org_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
+      {
+        "Host" => base_staff_host,
+        "Cookie" => authority_cookie,
+        "HTTP_COOKIE" => authority_cookie,
+        "Origin" => "https://#{edit_host}",
+        "Sec-Fetch-Site" => "same-site",
+      }, session_cookie: origin_session_cookie,
+    )
 
     assert_response :see_other
     origin_uri = URI.parse(response.location)
 
     assert_equal edit_host, origin_uri.host
-    assert_equal "/sign/out", origin_uri.path
+    assert_equal "/sign/out/completion", origin_uri.path
 
     host! edit_host
-    get edit_org_sign_out_path(logout_challenge: challenge, ri: "jp")
+    get edit_org_sign_out_completion_path(logout_challenge: challenge, ri: "jp")
 
     assert_response :ok
+    form = response.parsed_body.at_css('form[method="post"]')
+    form_action = form["action"]
+    form_params =
+      form.css("input[name]").each_with_object({}) do |input, values|
+        values[input["name"]] = input["value"]
+      end
 
-    post edit_org_sign_out_path(logout_challenge: challenge, ri: "jp"), headers: {
+    assert_equal "/sign/out/completion", URI.parse(form_action).path
+
+    post edit_org_sign_out_completion_path(
+      logout_challenge: challenge,
+      ri: "jp",
+    ), params: form_params, headers: {
       "Origin" => "https://#{edit_host}",
       "Sec-Fetch-Site" => "same-origin",
     }
@@ -697,4 +777,40 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def assert_idp_session_error_response
+    assert_response :bad_request
+    assert_equal I18n.t("sign.shared.sign_out.idp_session_error"), response.body
+    assert_nil response.location
+    assert_includes response.headers.fetch("Cache-Control").downcase, "no-store"
+  end
+
+  def session_cookie_pair
+    key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+    value = cookies.to_hash[key]
+    return if value.blank?
+
+    "#{key}=#{Rack::Utils.escape(value)}"
+  end
+
+  def with_session_cookie(headers, session_cookie:)
+    return headers if session_cookie.blank?
+
+    cookie = headers["Cookie"].presence || headers["HTTP_COOKIE"].to_s
+    cookie = cookie.split(/;\s*/).reject { |entry| entry.start_with?("#{session_cookie.split("=", 2).first}=") }
+    cookie << session_cookie
+    value = cookie.join("; ")
+    headers.merge("Cookie" => value, "HTTP_COOKIE" => value)
+  end
+
+  def response_form_params
+    form = response.parsed_body.at_css('form[method="post"]')
+    return form.css("input[name]").each_with_object({}) do |input, values|
+      values[input["name"]] = input["value"]
+    end if form
+
+    page = response.parsed_body.at_css('script[type="application/json"][data-page]')
+    props = JSON.parse(page.text).fetch("props").fetch("form")
+    props.slice("logout_challenge", "ri", "logout_intent_proof").compact
+  end
 end

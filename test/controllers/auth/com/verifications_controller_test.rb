@@ -95,6 +95,7 @@ class Auth::Com::VerificationsControllerTest < ActionDispatch::IntegrationTest
   # Sentinels of the reference parameter: missing, empty, unknown, NUL-bearing, and two references at once.
   test "the entry refuses a missing, empty, unknown or ambiguous admission reference without redirecting to sign-in" do
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+    existing_session_count = VisitorAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
 
     get auth_com_verification_path(ri: "jp")
 
@@ -111,7 +112,8 @@ class Auth::Com::VerificationsControllerTest < ActionDispatch::IntegrationTest
       assert_equal I18n.t("errors.messages.invalid_request"), response.body
       assert_nil response.headers["Location"]
     end
-    assert_equal 0, VisitorAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
+    assert_equal existing_session_count,
+                 VisitorAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
   end
 
   test "an admission issued for the com surface is refused on the app host" do
@@ -166,12 +168,14 @@ class Auth::Com::VerificationsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
+    existing_session_count = ClientAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
 
     post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
 
     assert_response :bad_request
-    assert_equal 0, ClientAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
+    assert_equal existing_session_count,
+                 ClientAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
     assert_equal "pending", issuance.transaction.reload.status
   end
 end

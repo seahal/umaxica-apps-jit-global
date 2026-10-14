@@ -4,11 +4,16 @@
 module AcmeLogoutTransactionable
   extend ActiveSupport::Concern
 
-  ORIGIN_SURFACES = %w(sign acme base core warp edit palm).freeze
+  ORIGIN_SURFACES = %w(sign acme base core warp edit palm tech).freeze
   LEGACY_WORKFLOW = "legacy"
   BROWSER_RP_WORKFLOW = "browser_rp"
   WORKFLOWS = [LEGACY_WORKFLOW, BROWSER_RP_WORKFLOW].freeze
-  BROWSER_RP_ORIGIN_SURFACES = %w(base core warp edit).freeze
+  BROWSER_RP_ORIGIN_SURFACES = %w(base core warp edit palm tech).freeze
+  BINDING_VERSION_LEGACY = 0
+  BINDING_VERSION_BROWSER_RP = 1
+  BINDING_VERSIONS = [BINDING_VERSION_LEGACY, BINDING_VERSION_BROWSER_RP].freeze
+  BROWSER_RP_REALMS = %w(app com org).freeze
+  BROWSER_RP_LOGOUT_PROOFS_SESSION_KEY = :browser_rp_logout_intent_proofs
   STATUS_INITIATED = "initiated"
   STATUS_IN_PROGRESS = "in_progress"
   STATUS_FINALIZED = "finalized"
@@ -39,15 +44,19 @@ module AcmeLogoutTransactionable
   included do
     include ::PublicId
 
+    attribute :binding_version, default: BINDING_VERSION_LEGACY
+
     validates :origin_surface, inclusion: { in: ORIGIN_SURFACES }
     validates :workflow, inclusion: { in: WORKFLOWS }
     validates :initiating_client_id, :completion_url, :status, :expected_step, :expires_at, presence: true
     validates :status, inclusion: { in: STATUSES }
     validates :expected_step, inclusion: { in: STEPS }
+    validates :binding_version, numericality: { only_integer: true }, inclusion: { in: BINDING_VERSIONS }
     validates :public_id, uniqueness: true
     validate :completed_steps_are_valid
     validate :completed_steps_match_workflow
     validate :expected_step_matches_workflow
+    validate :browser_rp_binding_is_complete
   end
 
   class_methods do
@@ -84,6 +93,10 @@ module AcmeLogoutTransactionable
 
   def browser_rp_workflow?
     workflow == BROWSER_RP_WORKFLOW
+  end
+
+  def browser_rp_binding_v1?
+    binding_version.to_i == BINDING_VERSION_BROWSER_RP
   end
 
   def legacy_workflow?
@@ -213,5 +226,25 @@ module AcmeLogoutTransactionable
     return if invalid.empty?
 
     errors.add(:completed_steps, "contains steps from another logout workflow")
+  end
+
+  def browser_rp_binding_is_complete
+    return unless browser_rp_binding_v1?
+
+    errors.add(:binding_version, "is only supported for Browser RP workflow") unless browser_rp_workflow?
+    errors.add(:realm, "is not a supported Browser RP realm") unless BROWSER_RP_REALMS.include?(realm.to_s)
+    errors.add(:actor_ref, "must be present") if actor_ref.blank?
+    errors.add(:session_ref, "must be present") if session_ref.blank?
+    errors.add(:parent_session_ref, "must be present") if parent_session_ref.blank?
+    errors.add(:captured_root_ref, "must be present") if captured_root_ref.blank?
+    errors.add(:root_refresh_family_ref, "must be present") if root_refresh_family_ref.blank?
+
+    generation = captured_root_generation
+    if !generation.is_a?(Integer) || generation.negative?
+      errors.add(:captured_root_generation, "must be a nonnegative integer")
+    end
+
+    digest_bytes = origin_intent_digest.to_s.b.bytesize
+    errors.add(:origin_intent_digest, "must contain 32 bytes") unless digest_bytes == 32
   end
 end

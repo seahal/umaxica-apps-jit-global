@@ -67,7 +67,7 @@ the native API.
 | Entry               | `GET /sign` (displays, issues no flow), `POST /sign` (CSRF-protected start) | Same                                          |
 | Redirect URI        | `https://tech.umaxica.org/oidc/callback`, exact match                       | The Palm host's `/oidc/callback`, exact match |
 | Sign-out start      | `/sign/out`                                                                 | `/sign/out`                                   |
-| Sign-out completion | `/sign/out/completion`, exact registered URI                                | Same                                          |
+| Sign-out completion | `/sign/out/completion?ri=jp` and `?ri=us`, exact registered URIs          | Same                                          |
 | Back-Channel Logout | none                                                                        | none                                          |
 
 Local development uses the corresponding `*.localhost` hosts. Palm's app-scheme completion URIs are
@@ -147,10 +147,11 @@ days.
   key namespace list change accordingly.
 - Existing native Palm apps, if any are in use, stop authenticating. Whether any are in use has not
   been established; that question is a condition for release, not for this decision.
-- Tech needs a host, environment variables, a capability catalog entry and a database constraint
-  change before any Tech code can run.
-- Admission to the allowlist takes effect in code when the two client IDs are added to
-  `AuthBoundaryAuthorityMap`; until then the surfaces remain Non-Participants in practice.
+- Local execution depends on the Tech host and client credentials being configured, the
+  `tech.access` capability being present, and the org database constraint accepting that capability.
+  Production publication still requires deployment-specific host, secret and database rollout.
+- Admission to the allowlist is active in local code through `AuthBoundaryAuthorityMap` entries for
+  both client IDs; this does not establish deployment readiness.
 
 ## Alternatives considered
 
@@ -161,3 +162,35 @@ days.
   separation exists to prevent.
 - **Skip this ADR because the planning record already approves the work.** Rejected: the allowlist
   ADR makes a new accepted ADR the admission mechanism, and the planning files are not tracked.
+
+## Implementation status (2026-10-14)
+
+The local Rails implementation now includes the Tech and Palm RP routes, callbacks, host-local
+session handling and browser sign-in entry. Tech's `tech.access` checks gate its dashboard and
+credential use. Palm's native client registrations, bearer profile endpoint, app-scheme callback and
+native logout path have been removed. Both browser sign-in POST routes require a valid Rails
+authenticity token, including when `Sec-Fetch-Site` is `same-origin`.
+
+The shared global sign-out contract in this ADR is not complete: the shared parent-and-RP
+revocation transaction is locally implemented and focused-tested, but the full IdP authority
+round trip and independent-connection race evidence remain open. Local sign-out routes do not by
+themselves prove global acceptance. No production or edge deployment, external key provisioning,
+or manual browser acceptance run has been verified. The Avatar isolated-fleet rehearsal was not run
+because this task is restricted to the ordinary test and development databases. See the dated
+evidence in `evidence/` for the executed checks and their limits.
+
+Tech and Palm now issue and consume the common Browser RP logout challenge through their dedicated
+`GET/POST /sign/out/completion` routes. Every first-party client registers the exact URI with its
+allowed `ri` value. Tech validates its RP access or refresh credential at the
+logout boundary without requiring `tech.access`; the completion POST remains bound to the live
+challenge, client and captured RP session and requires the Rails token. Local tests cover the
+capability-revoked Tech start, the post-authority cleanup continuation, Palm callback/retired-client
+boundaries and the shared transaction. All 12 first-party client registrations now use
+`/sign/out/completion`, and Core, Warp, Edit and Base expose the same read-only GET and protected
+POST resource through their existing surface-local controllers. Route and registration matrix
+tests verify exact URIs for every first-party client at both allowed `ri` values. A Rails integration
+matrix exercises challenge GET, token-bearing POST and one-shot completion for all 12 client IDs
+after same-realm parent and RP-session revocation, covering HTML and Inertia responses at `ri=jp`.
+The registration boundary rejects direct `/sign/out` as a post-logout return URI. The matrix does
+not exercise the full IdP authority flow or real browser acceptance. See
+`evidence/2026-10-13-first-party-rp-completion-uri-matrix-P7V4.md` for the latest focused results.

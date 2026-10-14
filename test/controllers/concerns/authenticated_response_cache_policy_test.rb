@@ -13,6 +13,7 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
   setup do
     https!
     @host = configured_host(:base_service)
+    host! @host
     @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
     @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     bootstrap_and_select!(@user, @token)
@@ -44,7 +45,7 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
             !(rp_token.device_session_id && ClientRpSession.exists?(
               device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
             ))
-          rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+          rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
           rp_now = Time.current
           rp_session = ClientRpSession.create!(
             client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -52,16 +53,16 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
             refresh_token_expires_at: rp_now + 10.minutes,
           )
           rp_access = AuthenticationTokenService.encode(
-            rp_token.user, host: rp_host, resource_type: "client",
-                           session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                           oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                           expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                           issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                           subject: OidcSubject.for(
-                             rp_token.user,
-                             resource_type: "client",
-                           ), client_id: rp_client.client_id,
+            rp_token.actor_record, host: rp_host, resource_type: "client",
+                                   session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                   oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                   expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                   issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                   subject: OidcSubject.for(
+                                     rp_token.actor_record,
+                                     resource_type: "client",
+                                   ), client_id: rp_client.client_id,
           )
           @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
         end
@@ -113,7 +114,7 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -121,16 +122,16 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -190,7 +191,7 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
             !(rp_token.device_session_id && ClientRpSession.exists?(
               device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
             ))
-          rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+          rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
           rp_now = Time.current
           rp_session = ClientRpSession.create!(
             client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -198,16 +199,16 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
             refresh_token_expires_at: rp_now + 10.minutes,
           )
           rp_access = AuthenticationTokenService.encode(
-            rp_token.user, host: rp_host, resource_type: "client",
-                           session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                           oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                           expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                           issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                           subject: OidcSubject.for(
-                             rp_token.user,
-                             resource_type: "client",
-                           ), client_id: rp_client.client_id,
+            rp_token.actor_record, host: rp_host, resource_type: "client",
+                                   session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                   oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                   expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                   issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                   subject: OidcSubject.for(
+                                     rp_token.actor_record,
+                                     resource_type: "client",
+                                   ), client_id: rp_client.client_id,
           )
           @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
         end
@@ -251,7 +252,7 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
                 !(rp_token.device_session_id && ClientRpSession.exists?(
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 ))
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = ClientRpSession.create!(
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -259,16 +260,17 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: rp_now + 10.minutes,
               )
               rp_access = AuthenticationTokenService.encode(
-                rp_token.user, host: rp_host, resource_type: "client",
-                               session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                               oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                               expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                               subject: OidcSubject.for(
-                                 rp_token.user,
-                                 resource_type: "client",
-                               ), client_id: rp_client.client_id,
+                rp_token.actor_record, host: rp_host, resource_type: "client",
+                                       session_public_id: rp_token.public_id,
+                                       base_session_public_id: rp_token.public_id,
+                                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                       subject: OidcSubject.for(
+                                         rp_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: rp_client.client_id,
               )
               @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
             end
@@ -316,7 +318,7 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
             !(rp_token.device_session_id && ClientRpSession.exists?(
               device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
             ))
-          rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+          rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
           rp_now = Time.current
           rp_session = ClientRpSession.create!(
             client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -324,16 +326,16 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
             refresh_token_expires_at: rp_now + 10.minutes,
           )
           rp_access = AuthenticationTokenService.encode(
-            rp_token.user, host: rp_host, resource_type: "client",
-                           session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                           oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                           expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                           issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                           subject: OidcSubject.for(
-                             rp_token.user,
-                             resource_type: "client",
-                           ), client_id: rp_client.client_id,
+            rp_token.actor_record, host: rp_host, resource_type: "client",
+                                   session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                   oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                   expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                   issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                   subject: OidcSubject.for(
+                                     rp_token.actor_record,
+                                     resource_type: "client",
+                                   ), client_id: rp_client.client_id,
           )
           @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
         end
@@ -388,7 +390,7 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
             !(rp_token.device_session_id && ClientRpSession.exists?(
               device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
             ))
-          rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+          rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
           rp_now = Time.current
           rp_session = ClientRpSession.create!(
             client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -396,16 +398,16 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
             refresh_token_expires_at: rp_now + 10.minutes,
           )
           rp_access = AuthenticationTokenService.encode(
-            rp_token.user, host: rp_host, resource_type: "client",
-                           session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                           oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                           expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                           issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                           subject: OidcSubject.for(
-                             rp_token.user,
-                             resource_type: "client",
-                           ), client_id: rp_client.client_id,
+            rp_token.actor_record, host: rp_host, resource_type: "client",
+                                   session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                   oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                   expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                   issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                   subject: OidcSubject.for(
+                                     rp_token.actor_record,
+                                     resource_type: "client",
+                                   ), client_id: rp_client.client_id,
           )
           @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
         end
@@ -452,7 +454,7 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
             !(rp_token.device_session_id && ClientRpSession.exists?(
               device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
             ))
-          rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+          rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
           rp_now = Time.current
           rp_session = ClientRpSession.create!(
             client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -460,16 +462,16 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
             refresh_token_expires_at: rp_now + 10.minutes,
           )
           rp_access = AuthenticationTokenService.encode(
-            rp_token.user, host: rp_host, resource_type: "client",
-                           session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                           oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                           expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                           issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                           subject: OidcSubject.for(
-                             rp_token.user,
-                             resource_type: "client",
-                           ), client_id: rp_client.client_id,
+            rp_token.actor_record, host: rp_host, resource_type: "client",
+                                   session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                   oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                   expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                   issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                   subject: OidcSubject.for(
+                                     rp_token.actor_record,
+                                     resource_type: "client",
+                                   ), client_id: rp_client.client_id,
           )
           @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
         end
@@ -517,7 +519,7 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -525,16 +527,16 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -550,7 +552,16 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
-    post base_app_sign_out_url(ri: "jp", host: @host), headers: headers
+    store_raw_cookies(cookies, headers.fetch("Cookie"), URI.parse("https://#{@host}/"))
+    csrf_token = fetch_csrf_token(edit_base_app_sign_out_url(ri: "jp", host: @host), headers: headers)
+    cookie_pairs = headers.fetch("Cookie").split("; ") + cookies.for(URI.parse("https://#{@host}/")).split("; ")
+    cookie_header = cookie_pairs.uniq { |pair| pair.split("=", 2).first }.join("; ")
+    post base_app_sign_out_url(ri: "jp", host: @host), headers: headers.merge(
+      "Cookie" => cookie_header, "HTTP_COOKIE" => cookie_header,
+      "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf_token,
+    )
+
+    assert_response :see_other
     challenge = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("logout_challenge")
     8.times do
       if response.redirect?
@@ -570,9 +581,13 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
           confirmation = inertia_page.fetch("props").fetch("form")
           action = confirmation.fetch("action")
           fields = { logout_challenge: confirmation.fetch("logout_challenge") }
+          fields["logout_intent_proof"] = confirmation["logout_intent_proof"] if
+            confirmation["logout_intent_proof"].present?
         end
+        fields = fields.transform_keys(&:to_s)
+        fields["authenticity_token"] ||= csrf_token
         post action, params: fields, headers: host_headers(@host).merge(
-          "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin",
+          "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf_token,
         )
       end
     end
@@ -617,7 +632,7 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -625,16 +640,16 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -659,6 +674,18 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def fetch_csrf_token(path, headers: {})
+    ActionController::Base.allow_forgery_protection = true
+    get(path, headers: headers)
+    csrf_token = response.body[/<meta name="csrf-token" content="([^"]+)"/, 1] ||
+      response.body[/name="authenticity_token" value="([^"]+)"/, 1]
+
+    assert_predicate csrf_token, :present?, "expected a CSRF token in the response"
+    csrf_token
+  ensure
+    ActionController::Base.allow_forgery_protection = Rails.configuration.action_controller.allow_forgery_protection
+  end
 
   def assert_no_store
     assert_includes response.headers["Cache-Control"].to_s.split(",").map(&:strip), "no-store",

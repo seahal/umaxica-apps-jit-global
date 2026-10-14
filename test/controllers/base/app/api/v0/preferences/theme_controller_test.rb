@@ -171,7 +171,19 @@ class Base::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
   # early and the creation path never ran.
   test "PATCH update creates the actor preference record on a signed-in first write" do
     client = clients(:one)
-    ClientPreference.where(user_id: client.id).destroy_all
+    ClientPreference.includes(
+      :user_preference_language,
+      :user_preference_timezone,
+      :user_preference_region,
+      :user_preference_theme,
+      :client_preference_currency,
+      :client_preference_date_format,
+      :client_preference_time_format,
+      :client_preference_motion,
+      :client_preference_density,
+      :client_preference_page_size,
+      :client_preference_adult_content_gate,
+    ).where(user_id: client.id).destroy_all
     token = ClientToken.create!(
       user: client,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
@@ -200,7 +212,7 @@ class Base::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = ClientRpSession.create!(
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -229,6 +241,8 @@ class Base::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
         end
       cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
     end
+    https!
+    csrf_token = fetch_csrf_token(edit_base_app_sign_out_url(host: @host, ri: "jp"))
 
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
@@ -249,6 +263,9 @@ class Base::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
                 "Authorization" => "Bearer #{access_token}",
                 "Client-Agent" => "Mozilla/5.0",
                 "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
+                "Origin" => "https://#{@host}",
+                "Sec-Fetch-Site" => "same-origin",
+                "X-CSRF-Token" => csrf_token,
               },
               as: :json
       end
@@ -482,6 +499,17 @@ class Base::App::Api::V0::Preferences::ThemeControllerTest
     # of the process and every later test expecting protection off would fail.
     ActionController::Base.allow_forgery_protection =
       Rails.configuration.action_controller.allow_forgery_protection
+  end
+
+  def fetch_csrf_token(path)
+    with_forgery_protection do
+      get(path)
+      csrf_token = response.body[/<meta name="csrf-token" content="([^"]+)"/, 1] ||
+        response.body[/name="authenticity_token" value="([^"]+)"/, 1]
+
+      assert_predicate csrf_token, :present?, "expected a CSRF token in the response"
+      csrf_token
+    end
   end
 
   def csrf_token_value

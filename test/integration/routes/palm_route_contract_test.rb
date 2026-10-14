@@ -9,10 +9,11 @@ class PalmRouteContractTest < ActionDispatch::IntegrationTest
 
   PALM_HOST = ENV.fetch("PUBLIC_PALM_SERVICE_URL")
 
-  test "palm does not expose a dashboard" do
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{PALM_HOST}/dashboard", method: :get)
-    end
+  test "palm exposes the protected dashboard route" do
+    recognized = Rails.application.routes.recognize_path("http://#{PALM_HOST}/dashboard", method: :get)
+
+    assert_equal "palm/app/dashboards", recognized[:controller]
+    assert_equal "show", recognized[:action]
   end
 
   test "palm route contract" do
@@ -88,13 +89,9 @@ class PalmRouteContractTest < ActionDispatch::IntegrationTest
     assert_equal "palm/app/csp_violation_reports", recognized[:controller]
     assert_equal "create", recognized[:action]
 
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{PALM_HOST}/api/v0/profile",
-      method: :get,
-    )
-
-    assert_equal "palm/app/api/v0/profiles", recognized[:controller]
-    assert_equal "show", recognized[:action]
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{PALM_HOST}/api/v0/profile", method: :get)
+    end
 
     recognized = Rails.application.routes.recognize_path(
       "http://#{PALM_HOST}/oidc/callback",
@@ -121,7 +118,9 @@ class PalmRouteContractTest < ActionDispatch::IntegrationTest
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{PALM_HOST}/oauth/callback", method: :get)
     end
+  end
 
+  test "palm sign out route contract" do
     recognized = Rails.application.routes.recognize_path(
       "http://#{PALM_HOST}/sign/out",
       method: :get,
@@ -136,6 +135,22 @@ class PalmRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_equal "palm/app/sign/outs", recognized[:controller]
+    assert_equal "create", recognized[:action]
+
+    recognized = Rails.application.routes.recognize_path(
+      "http://#{PALM_HOST}/sign/out/completion",
+      method: :get,
+    )
+
+    assert_equal "palm/app/sign/out/completions", recognized[:controller]
+    assert_equal "show", recognized[:action]
+
+    recognized = Rails.application.routes.recognize_path(
+      "http://#{PALM_HOST}/sign/out/completion",
+      method: :post,
+    )
+
+    assert_equal "palm/app/sign/out/completions", recognized[:controller]
     assert_equal "create", recognized[:action]
   end
 end

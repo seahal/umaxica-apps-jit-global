@@ -60,6 +60,6 @@ class GroupAvatarMembershipPolicy < ApplicationPolicy
   end
 
   def active_avatar?(avatar)
-    avatar.lifecycle_state&.key == "active" && avatar.accessible?
+    AvatarLifecycleState.exists?(id: avatar.lifecycle_state_id, key: "active") && avatar.accessible?
   end
 end

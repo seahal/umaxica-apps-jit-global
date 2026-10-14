@@ -27,7 +27,10 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
       subject: @app.account,
       capability: "avatar.view",
     )
-    assert_equal @period.id, grant.avatar.enterprise_ownership_periods.current.first.id
+    current_period = AvatarEnterpriseOwnershipPeriod.current.find_by!(avatar_id: @app.avatar.id)
+
+    assert_equal @period.id, current_period.id
+    assert_equal @period.id, grant.avatar_enterprise_ownership_period_id
   end
 
   test "a grant is bound to its ownership generation and cannot be issued for closed history" do
@@ -205,6 +208,41 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
     )
   end
 
+  test "a grant recipient without owner authority cannot issue another grant" do
+    recipient_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    recipient = BaseSelectorBootstrapAuthority.call(surface: :app, principal: recipient_actor)
+
+    grant = AvatarAccessGrants::IssueOperation.call(
+      ownership_period: @period,
+      subject: recipient.account,
+      capability: "avatar.view",
+      granted_by_actor_public_id: @client.public_id,
+      granting_subject_public_id: @app.account.public_id,
+    )
+
+    assert AvatarAccessGrantResolver.call(
+      avatar: @app.avatar,
+      ownership_period: @period,
+      subject: recipient.account,
+      capability: "avatar.view",
+    )
+    assert_instance_of AvatarEnterprisePersonaGrant, grant
+
+    assert_no_difference(
+      -> { AvatarEnterprisePersonaGrant.where(avatar_enterprise_ownership_period_id: @period.id).count },
+    ) do
+      assert_raises(AvatarOwnerMembershipLockService::AuthorizationDenied) do
+        AvatarAccessGrants::IssueOperation.call(
+          ownership_period: @period,
+          subject: @app.account,
+          capability: "avatar.view",
+          granted_by_actor_public_id: recipient_actor.public_id,
+          granting_subject_public_id: recipient.account.public_id,
+        )
+      end
+    end
+  end
+
   test "independent Persona grants allow multiple recipients and multiple Avatars without owner membership" do
     recipient_a_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
     recipient_a = BaseSelectorBootstrapAuthority.call(surface: :app, principal: recipient_a_actor)
@@ -295,20 +333,16 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
       capability: "avatar.view",
       at: granted_at,
     )
-    assert_not AvatarAccessGrantResolver.call(
-      avatar: @app.avatar,
-      ownership_period: @period,
-      subject: @app.account,
-      capability: "avatar.update",
-      at: granted_at,
-    )
-    assert_not AvatarAccessGrantResolver.call(
-      avatar: @app.avatar,
-      ownership_period: @period,
-      subject: @app.account,
-      capability: "avatar.transfer.request",
-      at: granted_at,
-    )
+    %w(avatar.update avatar.grant.manage avatar.transfer.request avatar.transfer.accept avatar.transfer.cancel)
+      .each do |capability|
+      assert_not AvatarAccessGrantResolver.call(
+        avatar: @app.avatar,
+        ownership_period: @period,
+        subject: @app.account,
+        capability: capability,
+        at: granted_at,
+      )
+    end
     assert_equal "avatar.view", grant.capability
 
     assert_no_difference -> { AvatarEnterprisePersonaGrant.count } do

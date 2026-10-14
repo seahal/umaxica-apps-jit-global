@@ -61,7 +61,8 @@ module AvatarOwnershipTransfers
     end
 
     def assert_eligible_avatar!(avatar)
-      return if avatar.lifecycle_state&.key == "active" && avatar.accessible?
+      lifecycle_state = AvatarLifecycleState.find_by(id: avatar.lifecycle_state_id)
+      return if lifecycle_state&.key == "active" && avatar.accessible?
 
       raise InvalidTransfer, "Avatar is not eligible for ownership transfer"
     end

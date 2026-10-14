@@ -12,6 +12,8 @@ class DeprecationNotificationSubscriber
   MAX_CALLSITE_CODEPOINTS = 512
 
   URL_PATTERN = %r{https?://[^\s<>"']+}i.freeze
+  AUTHORIZATION_CREDENTIAL_PATTERN = /\bauthorization\s*[:=]\s*(?:Basic|Bearer)\s+[^\s,;]+/i.freeze
+  COOKIE_HEADER_PATTERN = /\b(?:set-cookie|cookie)\s*[:=][^\r\n]*/i.freeze
   SECRET_ASSIGNMENT_PATTERN = /
     (?<key>
       \b[a-z0-9_.-]*
@@ -63,7 +65,11 @@ class DeprecationNotificationSubscriber
     raise ArgumentError, "deprecation field must be a String" unless value.is_a?(String)
 
     utf8 = value.encode(Encoding::UTF_8, invalid: :replace, undef: :replace)
-    redacted = ObservabilityRedactor.scrub(utf8)
+    utf8_without_authorization = utf8.gsub(AUTHORIZATION_CREDENTIAL_PATTERN, "Authorization=[FILTERED]")
+    # Cookie values span semicolon-separated pairs; redact the header's whole line before
+    # control-character normalization removes the line boundary.
+    utf8_without_headers = utf8_without_authorization.gsub(COOKIE_HEADER_PATTERN, "Cookie=[FILTERED]")
+    redacted = ObservabilityRedactor.scrub(utf8_without_headers)
     redacted =
       redacted.gsub(SECRET_ASSIGNMENT_PATTERN) do
         "#{Regexp.last_match[:key]}=[FILTERED]"

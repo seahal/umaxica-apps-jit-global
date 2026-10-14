@@ -28,6 +28,7 @@ class OperatorCapabilityGrant < OrgPrincipalRecord
   IAM_CAPABILITY_READ = "iam.capability.read"
   IAM_CAPABILITY_GRANT = "iam.capability.grant"
   IAM_CAPABILITY_REVOKE = "iam.capability.revoke"
+  TECH_ACCESS = "tech.access"
 
   CAPABILITIES = [
     SUPPORT_CONSOLE_READ,
@@ -39,6 +40,7 @@ class OperatorCapabilityGrant < OrgPrincipalRecord
     ENFORCEMENT_RELEASE_APP, ENFORCEMENT_RELEASE_COM,
     ENFORCEMENT_REVIEW_APPEAL_APP, ENFORCEMENT_REVIEW_APPEAL_COM,
     IAM_CAPABILITY_READ, IAM_CAPABILITY_GRANT, IAM_CAPABILITY_REVOKE,
+    TECH_ACCESS,
   ].freeze
 
   # IAM capabilities control who can hand out capabilities. They are issued only through the audited
@@ -140,7 +142,10 @@ class OperatorCapabilityGrant < OrgPrincipalRecord
       if CONTINUITY_CAPABILITIES.include?(capability)
         holders = self.class.unrevoked.where(capability: capability).order(:id).lock.to_a
         remaining = holders.select { |grant| grant.id != id && grant.in_force?(now) }
-        unless remaining.any? { |grant| grant.operator.capability_eligible?(now) }
+        operator_ids = remaining.map(&:operator_id)
+        operator_ids.uniq!
+        operators_by_id = Operator.where(id: operator_ids).index_by(&:id)
+        unless remaining.any? { |grant| operators_by_id.fetch(grant.operator_id).capability_eligible?(now) }
           raise LastCapabilityHolderError, "revoking this grant would leave no operator holding #{capability}"
         end
       end

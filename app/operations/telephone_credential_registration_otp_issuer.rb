@@ -9,11 +9,12 @@ class TelephoneCredentialRegistrationOtpIssuer
       actor.class.connection_class_for_self.connected_to(role: :writing) do
         actor.with_lock do
           transaction_model.connection_owner.connected_to(role: :writing) do
-            token.device_session.with_lock do
+            device_session = token.device_session_record!
+            device_session.with_lock do
               token.with_lock do
                 telephone.with_lock do
                   issue_locked(
-                    actor, token, telephone, transaction_model, pending_status, browser_nonce,
+                    actor, token, telephone, transaction_model, pending_status, browser_nonce, device_session:,
                   )
                 end
               end
@@ -37,10 +38,10 @@ class TelephoneCredentialRegistrationOtpIssuer
       end
     end
 
-    def issue_locked(actor, token, telephone, transaction_model, pending_status, browser_nonce)
+    def issue_locked(actor, token, telephone, transaction_model, pending_status, browser_nonce, device_session:)
       ticket_now = transaction_model.database_now
       source_now = telephone.class.database_now
-      unless current_binding?(actor, token, telephone, pending_status, ticket_now, source_now)
+      unless current_binding?(actor, token, telephone, pending_status, ticket_now, source_now, device_session)
         return result(:unavailable)
       end
       return result(:locked) if telephone.locked?(now: source_now)
@@ -117,25 +118,25 @@ class TelephoneCredentialRegistrationOtpIssuer
       end
     end
 
-    def current_binding?(actor, token, telephone, pending_status, ticket_now, source_now)
-      owned_pending?(actor, token, telephone, pending_status) && actor.login_allowed? &&
+    def current_binding?(actor, token, telephone, pending_status, ticket_now, source_now, device_session)
+      owned_pending?(actor, token, telephone, pending_status, device_session) && actor.login_allowed? &&
         actor.accessible?(source_now) && source_pending?(
           telephone,
           source_now,
         ) && token.currently_usable?(ticket_now) &&
-        token.device_session.usable? && token.device_session.current_refresh_token_id == token.id
+        device_session.usable? && device_session.current_refresh_token_id == token.id
     end
 
-    def owned_pending?(actor, token, telephone, pending_status)
+    def owned_pending?(actor, token, telephone, pending_status, device_session)
       case actor
       when Client
-        token.user_id == actor.id && token.device_session.user_id == actor.id && telephone.user_id == actor.id &&
+        token.user_id == actor.id && device_session.user_id == actor.id && telephone.user_id == actor.id &&
           telephone.user_telephone_status_id == pending_status
       when Visitor
-        token.visitor_id == actor.id && token.device_session.visitor_id == actor.id &&
+        token.visitor_id == actor.id && device_session.visitor_id == actor.id &&
           telephone.visitor_id == actor.id && telephone.visitor_telephone_status_id == pending_status
       when Operator
-        token.staff_id == actor.id && token.device_session.staff_id == actor.id && telephone.staff_id == actor.id &&
+        token.staff_id == actor.id && device_session.staff_id == actor.id && telephone.staff_id == actor.id &&
           telephone.staff_telephone_status_id == pending_status
       end
     end

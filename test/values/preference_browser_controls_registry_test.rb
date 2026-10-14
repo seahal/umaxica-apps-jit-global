@@ -55,9 +55,9 @@ class PreferenceBrowserControlsRegistryTest < ActiveSupport::TestCase
   end
 
   test "an unknown family raises" do
-    error = assert_raises(KeyError) { PreferenceBrowserControlsRegistry.fetch(family: "xper", surface: "app") }
+    error = assert_raises(KeyError) { PreferenceBrowserControlsRegistry.fetch(family: "unknown", surface: "app") }
 
-    assert_match "xper", error.message
+    assert_match "unknown", error.message
   end
 
   test "a family/surface pair that does not exist raises" do

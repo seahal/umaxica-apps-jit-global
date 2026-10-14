@@ -14,12 +14,14 @@ class ClientSecretIdentityResolverQuery
       clients = []
       email_digest = IdentifierBlindIndex.bidx_for_email(identifier, realm: :app)
       if email_digest
-        clients << ClientEmail.effective_binding.find_by(address_digest: email_digest)&.user
+        email = ClientEmail.effective_binding.find_by(address_digest: email_digest)
+        clients << Client.find_by(id: email.user_id) if email
       end
 
       telephone_digest = IdentifierBlindIndex.bidx_for_telephone(identifier, realm: :app)
       if telephone_digest
-        clients << ClientTelephone.effective_binding.find_by(number_digest: telephone_digest)&.user
+        telephone = ClientTelephone.effective_binding.find_by(number_digest: telephone_digest)
+        clients << Client.find_by(id: telephone.user_id) if telephone
       end
 
       clients.compact!

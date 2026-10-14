@@ -18,9 +18,12 @@ stateDiagram-v2
     expired --> failed: fail!
     finalized --> [*]
     note right of initiated
-        Steps: origin_cleared, acme_cleared, sign_cleared; then finalized.
+        Legacy steps: origin_cleared, acme_cleared, sign_cleared; then finalized.
         sign uses origin/acme; acme and base use origin/sign.
         core, side and palm use origin/acme/sign.
+        Browser RP origins: base, core, warp, edit, palm and tech.
+        Browser RP steps: authority_revoked, authority_cleanup_issued,
+        origin_cleanup_issued, origin_rp_session_revoked; then finalized.
         Stored expired entry writer UNKNOWN; clock expiry only refuses.
         failed can finalize if live and expected_step is finalized.
     end note

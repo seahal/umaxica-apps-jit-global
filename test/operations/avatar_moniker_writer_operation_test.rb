@@ -8,7 +8,7 @@ class AvatarMonikerWriterOperationTest < ActiveSupport::TestCase
 
   test "replaces the current moniker with one contiguous temporal transition" do
     avatar = avatars(:one)
-    previous = avatar.current_avatar_moniker
+    previous = AvatarMoniker.current.find_by!(avatar_id: avatar.id)
     effective_at = Time.utc(2026, 9, 24, 12, 0, 0)
 
     result =
@@ -43,7 +43,7 @@ class AvatarMonikerWriterOperationTest < ActiveSupport::TestCase
 
   test "same normalized moniker is a no-op and does not add history" do
     avatar = avatars(:one)
-    current = avatar.current_avatar_moniker
+    current = AvatarMoniker.current.find_by!(avatar_id: avatar.id)
     count_before = AvatarMoniker.count
 
     result = AvatarMonikerWriterOperation.call(
@@ -83,7 +83,7 @@ class AvatarMonikerWriterOperationTest < ActiveSupport::TestCase
 
   test "invalid replacement rolls back closing the existing current row" do
     avatar = avatars(:one)
-    current = avatar.current_avatar_moniker
+    current = AvatarMoniker.current.find_by!(avatar_id: avatar.id)
     moniker_count = AvatarMoniker.count
 
     result = AvatarMonikerWriterOperation.call(
@@ -95,7 +95,7 @@ class AvatarMonikerWriterOperationTest < ActiveSupport::TestCase
     assert_not_predicate result, :success?
     assert_not_empty result.errors.fetch(:moniker)
     assert_equal moniker_count, AvatarMoniker.count
-    assert_equal current.id, avatar.reload.current_avatar_moniker.id
+    assert_equal current.id, AvatarMoniker.current.find_by!(avatar_id: avatar.id).id
     assert_equal Float::INFINITY, current.reload.valid_to
   end
 
@@ -110,7 +110,7 @@ class AvatarMonikerWriterOperationTest < ActiveSupport::TestCase
       )
     end
 
-    avatar.current_avatar_moniker.update!(valid_to: Time.current)
+    AvatarMoniker.current.find_by!(avatar_id: avatar.id).update!(valid_to: Time.current)
 
     assert_raises(ActiveRecord::RecordNotFound) do
       AvatarMonikerWriterOperation.call(

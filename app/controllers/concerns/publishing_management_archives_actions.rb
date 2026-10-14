@@ -32,7 +32,7 @@ module PublishingManagementArchivesActions
     )
 
     unless result.ok?
-      render_show_failure(entry.reload, errors: result.errors)
+      render_show_failure(publishing_entries_query.find!(public_id: entry.public_id), errors: result.errors)
       return
     end
 
@@ -46,7 +46,7 @@ module PublishingManagementArchivesActions
     result = Publishing::UnarchiveEntryOperation.call(entry: entry, operator_public_id: operator_public_id)
 
     unless result.ok?
-      render_show_failure(entry.reload, errors: result.errors)
+      render_show_failure(publishing_entries_query.find!(public_id: entry.public_id), errors: result.errors)
       return
     end
 

@@ -83,6 +83,7 @@ class Auth::Org::VerificationsControllerTest < ActionDispatch::IntegrationTest
   # Sentinels of the reference parameter: missing, empty, unknown, NUL-bearing, and two references at once.
   test "the entry refuses a missing, empty, unknown or ambiguous admission reference without redirecting to sign-in" do
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+    existing_session_count = OperatorAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
 
     get auth_org_verification_path(ri: "jp")
 
@@ -99,7 +100,8 @@ class Auth::Org::VerificationsControllerTest < ActionDispatch::IntegrationTest
       assert_equal I18n.t("errors.messages.invalid_request"), response.body
       assert_nil response.headers["Location"]
     end
-    assert_equal 0, OperatorAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
+    assert_equal existing_session_count,
+                 OperatorAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
   end
 
   test "an admission issued for the org surface is refused on the app host" do
@@ -154,10 +156,12 @@ class Auth::Org::VerificationsControllerTest < ActionDispatch::IntegrationTest
       end
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
 
+    existing_session_count = ClientAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
     post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
 
     assert_response :bad_request
-    assert_equal 0, ClientAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
+    assert_equal existing_session_count,
+                 ClientAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
     assert_equal "pending", issuance.transaction.reload.status
   end
 end

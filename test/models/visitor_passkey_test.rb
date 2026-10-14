@@ -46,7 +46,8 @@ require "test_helper"
 
 class VisitorPasskeyTest < ActiveSupport::TestCase
   test "passkey-only Visitor creates a usable credential with zero contacts" do
-    actor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    created_actor = create_visitor!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    actor = Visitor.includes(:visitor_emails, :visitor_telephones).find(created_actor.id)
 
     assert_empty actor.visitor_emails
     assert_empty actor.visitor_telephones
@@ -58,12 +59,12 @@ class VisitorPasskeyTest < ActiveSupport::TestCase
     assert_predicate credential, :persisted?
     assert_equal VisitorPasskeyStatus::ACTIVE, credential.status_id
     assert_equal actor.id, credential.visitor_id
-    assert_empty actor.visitor_emails.reload
-    assert_empty actor.visitor_telephones.reload
+    assert_empty VisitorEmail.where(visitor_id: actor.id)
+    assert_empty VisitorTelephone.where(visitor_id: actor.id)
   end
 
   test "retained terminal history does not consume the four Passkey slots" do
-    actor = Visitor.create!
+    actor = create_visitor!
     actor.visitor_emails.create!(address: "slots-#{SecureRandom.hex(5)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED)
     [VisitorPasskeyStatus::REVOKED, VisitorPasskeyStatus::DELETED].each do |terminal_status|
       historical = actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "history-public-key")
@@ -86,10 +87,9 @@ class VisitorPasskeyTest < ActiveSupport::TestCase
   end
 
   test "a stale loaded owner association cannot admit a fifth Passkey" do
-    actor = Visitor.create!
+    actor = create_visitor!
     actor.visitor_emails.create!(address: "slots-#{SecureRandom.hex(5)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED)
-    stale_actor = Visitor.find(actor.id)
-    stale_actor.visitor_passkeys.load
+    stale_actor = Visitor.includes(:visitor_passkeys).find(actor.id)
     4.times { actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
     candidate = VisitorPasskey.new(
       visitor: stale_actor, webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key",
@@ -151,7 +151,7 @@ class VisitorPasskeyTest < ActiveSupport::TestCase
   end
 
   test "creation does not require a verified recovery identity" do
-    contactless_visitor = Visitor.create!(
+    contactless_visitor = create_visitor!(
       status_id: VisitorStatus::ACTIVE,
       visibility_id: VisitorVisibility::VISITOR,
     )
@@ -175,10 +175,8 @@ class VisitorPasskeyTest < ActiveSupport::TestCase
 
   test "active scope returns only active passkeys" do
     VisitorPasskey.create!(@valid_params.merge(status_id: VisitorPasskeyStatus::ACTIVE))
-    # Assuming status_id != ACTIVE is something else, but let's just check ACTIVE for now
-    # We'd need to know other valid status IDs for VisitorPasskeyStatus
 
-    assert_equal 1, VisitorPasskey.active.count
+    assert_equal 1, VisitorPasskey.active.where(visitor_id: @visitor.id).count
   end
 
   test "to_param returns the public id" do
@@ -517,7 +515,7 @@ class VisitorPasskeyTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = create_visitor!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
@@ -526,6 +524,13 @@ class VisitorPasskeyTest
       public_id: SecureRandom.alphanumeric(21),
     )
     visitor.reload
+  end
+
+  def create_visitor!(**attributes)
+    Visitor.create!(
+      **attributes,
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+    )
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)

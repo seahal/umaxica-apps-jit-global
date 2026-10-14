@@ -120,7 +120,7 @@ module Auth
 
               def passkey_registration_actor = @sign_up_actor
 
-              def passkey_registration_passkeys = @sign_up_actor.client_passkeys
+              def passkey_registration_passkeys = ClientPasskey.where(user_id: @sign_up_actor.id)
 
               def save_passkey_registration!(passkey)
                 @sign_up_actor.with_lock do

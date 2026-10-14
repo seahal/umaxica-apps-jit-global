@@ -251,7 +251,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
       assert_equal 303, browser.response.status
       browser_flow = ClientSignInFlow.find_by!(
-        public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+        public_id: ClientAuthCeremonySession.find(
+          binding.reload.admitted_auth_ceremony_session_id,
+        ).local_sign_in_flow_ref,
       )
       browser_bindings[browser] = SignInFlowBindingCodec.encode(
         flow: browser_flow, surface: "app", phase: "PRIMARY_PENDING",
@@ -374,7 +376,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_equal 303, refused_browser.response.status
     refused_flow = ClientSignInFlow.find_by!(
-      public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+      public_id: ClientAuthCeremonySession.find(
+        binding.reload.admitted_auth_ceremony_session_id,
+      ).local_sign_in_flow_ref,
     )
     refused_binding = SignInFlowBindingCodec.encode(
       flow: refused_flow, surface: "app", phase: "PRIMARY_PENDING",

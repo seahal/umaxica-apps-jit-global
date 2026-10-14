@@ -128,7 +128,7 @@ module Auth
 
         def ceremony_step_up_session_model = ClientStepUpSession
 
-        def ceremony_session_token(record) = record.user_token
+        def ceremony_session_token(record) = ClientToken.find(record.user_token_id)
 
         def ceremony_token_owned_by?(token, actor) = token.user_id == actor.id
 
@@ -227,7 +227,8 @@ module Auth
         end
 
         def account_id
-          @step_up_ceremony_actor.client_emails.first&.address || @step_up_ceremony_actor.public_id
+          email = ClientEmail.find_by(user_id: @step_up_ceremony_actor.id)
+          email&.address || @step_up_ceremony_actor.public_id
         end
 
         def submitted_totp_enrollment_id

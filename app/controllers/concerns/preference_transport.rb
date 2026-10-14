@@ -148,7 +148,7 @@ module PreferenceTransport
     return unless respond_to?(:adopt_preference_for!, true)
 
     adopt_preference_for!(resource)
-  rescue PreferenceBase::ResolutionError
+  rescue PreferenceBase::ResolutionError, ActiveRecord::ConnectionNotEstablished
     raise
   rescue StandardError => e
     Rails.logger.info(

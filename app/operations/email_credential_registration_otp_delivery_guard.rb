@@ -41,12 +41,14 @@ class EmailCredentialRegistrationOtpDeliveryGuard
           token = token_model.find_by(public_id: root_ref)
           next false unless token
 
-          token.device_session.with_lock do
+          device_session = token.device_session_record!
+          device_session.with_lock do
             token.with_lock do
               email.with_lock do
                 with_original_parent(owner, token) do |parent, session, binding|
                   transaction.with_lock do
-                    next false unless current_source?(owner, token) && current_ticket?(owner, token) &&
+                    next false unless current_source?(owner, token, device_session) &&
+                      current_ticket?(owner, token, device_session) &&
                       transaction.bootstrap_ceremony_transaction_ref == parent&.transaction_id
 
                     transaction.deliver_email_otp!(generation: generation, code: code) do
@@ -116,17 +118,17 @@ class EmailCredentialRegistrationOtpDeliveryGuard
       binding.base_token_id == token.id && binding.purpose == "bootstrap_handoff" && binding.retired_at.nil?
   end
 
-  def current_source?(owner, token)
+  def current_source?(owner, token, device_session)
     owned_pending =
       case email
       when ClientEmail
-        email.user_id == owner.id && token.user_id == owner.id && token.device_session.user_id == owner.id &&
+        email.user_id == owner.id && token.user_id == owner.id && device_session.user_id == owner.id &&
         email.user_email_status_id == pending_status
       when VisitorEmail
-        email.visitor_id == owner.id && token.visitor_id == owner.id && token.device_session.visitor_id == owner.id &&
+        email.visitor_id == owner.id && token.visitor_id == owner.id && device_session.visitor_id == owner.id &&
         email.visitor_email_status_id == pending_status
       when OperatorEmail
-        email.staff_id == owner.id && token.staff_id == owner.id && token.device_session.staff_id == owner.id &&
+        email.staff_id == owner.id && token.staff_id == owner.id && device_session.staff_id == owner.id &&
         email.staff_email_status_id == pending_status
       end
     now = email.class.database_now
@@ -142,11 +144,11 @@ class EmailCredentialRegistrationOtpDeliveryGuard
     end
   end
 
-  def current_ticket?(owner, token)
+  def current_ticket?(owner, token, device_session)
     now = transaction.class.database_now
     bound_root = CredentialRegistrationOtpSessionValue.load(session_ref: transaction.session_ref).root_ref
-    return false unless bound_root == token.public_id && token.currently_usable?(now) && token.device_session.usable? &&
-      token.device_session.current_refresh_token_id == token.id
+    return false unless bound_root == token.public_id && token.currently_usable?(now) && device_session.usable? &&
+      device_session.current_refresh_token_id == token.id
     return false unless transaction.operation == "registration" && transaction.purpose == "credential_registration" &&
       transaction.actor_ref == owner.public_id && transaction.email_candidate_ref == email.public_id &&
       transaction.normalized_email_digest == email.address_digest

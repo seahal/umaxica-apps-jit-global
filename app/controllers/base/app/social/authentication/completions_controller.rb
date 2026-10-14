@@ -126,7 +126,8 @@ module Base
               base_token: current_session_token,
               allow_incomplete: true,
             )
-            unless binding.admitted_auth_ceremony_session.completed?
+            ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
+            unless ceremony.completed?
               return complete_admitted_social_signup!(commit, commit.identity.provider, binding)
             end
 
@@ -139,11 +140,13 @@ module Base
 
                 base_app_oauth_authorization_path(
                   result_ref: reference,
-                  transaction_ref: binding.authorization_transaction.transaction_id,
+                  transaction_ref: ClientOidcAuthorizationTransaction.find(
+                    binding.authorization_transaction_id,
+                  ).transaction_id,
                   ri: params[:ri],
                 )
               else
-                parent = binding.sign_in_flow
+                parent = ClientSignInFlow.find(binding.sign_in_flow_id)
                 raise IdentitySocialCeremonyContract::Error, "social completion parent is invalid" unless
                   reference.is_a?(String) && reference == parent.public_id
 
@@ -169,7 +172,7 @@ module Base
 
           def complete_admitted_social_signup!(commit, provider, binding)
             normalized_provider = SocialIdentifiable.normalize_provider(provider)
-            ceremony = binding.admitted_auth_ceremony_session
+            ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
             if binding.parent_kind == :authorization_transaction
               return handoff_social_signup_oidc!(commit, normalized_provider, binding, ceremony)
             end
@@ -180,7 +183,9 @@ module Base
           def handoff_social_signup_oidc!(commit, normalized_provider, binding, ceremony)
             issuance = BaseAuthAdmissionCoordinator.register_result_and_issue!(
               surface: "app",
-              login_challenge: binding.authorization_transaction.login_challenge,
+              login_challenge: ClientOidcAuthorizationTransaction.find(
+                binding.authorization_transaction_id,
+              ).login_challenge,
               actor: commit.user,
               session_ref: nil,
               auth_method: AuthenticationBase::ESTABLISHED_AUTHENTICATION_METHOD_AMR_MAP.fetch(normalized_provider).first,
@@ -197,7 +202,7 @@ module Base
           end
 
           def complete_social_signup_local_login!(commit, normalized_provider, binding, ceremony)
-            flow = binding.sign_in_flow
+            flow = ClientSignInFlow.find(binding.sign_in_flow_id)
             bind_social_signup_local_parent!(commit.user, flow, normalized_provider, ceremony)
             browser_nonce = base_admission_browser_nonce
             result = log_in(

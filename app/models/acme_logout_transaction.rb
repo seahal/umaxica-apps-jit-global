@@ -8,16 +8,23 @@
 #
 #  id                  :bigint           not null, primary key
 #  actor_ref           :string
+#  binding_version     :integer          default(0), not null
 #  callback_state      :string
 #  completion_url      :text             not null
 #  completed_steps     :jsonb            not null
+#  captured_root_generation :integer
+#  captured_root_ref   :string
 #  expected_step       :string           not null
 #  expires_at          :datetime         not null
 #  failed_at           :datetime
 #  finalized_at        :datetime
 #  initiating_client_id :string          not null
 #  origin_surface      :string           not null
+#  origin_intent_digest :binary
+#  parent_session_ref  :string
 #  public_id           :string(21)       not null
+#  realm               :string
+#  root_refresh_family_ref :string
 #  session_ref         :string
 #  status              :string           default("initiated"), not null
 #  workflow            :string           default("legacy"), not null

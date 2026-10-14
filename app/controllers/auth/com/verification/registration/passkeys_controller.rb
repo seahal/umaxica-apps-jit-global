@@ -14,7 +14,7 @@ class Auth::Com::Verification::Registration::PasskeysController < ::Auth::Com::A
 
   def ceremony_step_up_session_model = VisitorStepUpSession
 
-  def ceremony_session_token(record) = record.visitor_token
+  def ceremony_session_token(record) = VisitorToken.find(record.visitor_token_id)
 
   def ceremony_token_owned_by?(token, actor) = token.visitor_id == actor.id
 

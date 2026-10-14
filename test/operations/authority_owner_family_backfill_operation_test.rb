@@ -66,9 +66,11 @@ class AuthorityOwnerFamilyBackfillOperationTest < ActiveSupport::TestCase
     assert_equal :already_applied, second.status
     assert_equal 2, first.results.length
     assert_equal [first_owner.id, second_owner.id],
-                 [first_persona.reload.ownership.client_id, second_persona.reload.ownership.client_id]
+                 [ClientPersonaOwnership.find_by!(client_persona_id: first_persona.id).client_id,
+                  ClientPersonaOwnership.find_by!(client_persona_id: second_persona.id).client_id,]
     assert_equal ["active", "active"],
-                 [first_persona.lifecycle.state, second_persona.lifecycle.state]
+                 [ClientPersonaLifecycle.find_by!(client_persona_id: first_persona.id).state,
+                  ClientPersonaLifecycle.find_by!(client_persona_id: second_persona.id).state,]
   end
 
   test "rolls back every family row when a later reviewed row is rejected" do

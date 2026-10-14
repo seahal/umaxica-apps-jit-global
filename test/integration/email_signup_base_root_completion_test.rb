@@ -83,7 +83,7 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
         assert_equal 303, owner.response.status
       end
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: entry_reference)
-      parent = binding.authorization_transaction
+      parent = authorization_transaction_for_test(binding)
       original_parent_id = parent.id
       original_binding_id = binding.id
       3.times do |index|
@@ -213,7 +213,7 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
           stored_signup.principal_id == actor.id
         }
         assert_withheld("Admission must retain the original OIDC Parent") {
-          binding.reload.authorization_transaction.id == original_parent_id
+          authorization_transaction_for_test(binding.reload).id == original_parent_id
         }
       end
       auth.patch(

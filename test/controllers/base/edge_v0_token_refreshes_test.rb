@@ -234,6 +234,7 @@ class Base::EdgeV0TokenRefreshesTest < ActionDispatch::IntegrationTest
       assert_response :forbidden
       assert_equal "restricted_session", response.parsed_body.fetch("error_code")
       assert_predicate token_record.reload, :revoked?
+      assert_predicate token_record.device_session.reload, :revoked?
     end
   end
 end

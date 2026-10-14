@@ -593,11 +593,12 @@ module SocialAuth
     token = social_auth_current_session_token
     raise SocialAuth::UnauthorizedError.new("errors.social_auth.not_logged_in") unless token
 
-    transaction = active_social_link_transaction!(token, callback_result.principal.provider)
+    device_session = token.device_session_record!
+    transaction = active_social_link_transaction!(callback_result.principal.provider, device_session.public_id)
 
     candidate = IdentitySocialCeremonyCandidateStore.store!(
       surface: "app", actor_ref: current_client.public_id,
-      session_ref: token.device_session.public_id, transaction_id: transaction.transaction_id,
+      session_ref: device_session.public_id, transaction_id: transaction.transaction_id,
       operation: "link", provider: callback_result.principal.provider, callback_result: callback_result,
       expires_at: [transaction.expires_at, IdentitySocialCeremonyCandidate.database_now + STATE_TTL].min,
     )
@@ -610,10 +611,10 @@ module SocialAuth
     nil
   end
 
-  def active_social_link_transaction!(token, provider)
+  def active_social_link_transaction!(provider, device_session_public_id)
     grant = social_ceremony_grant
     unless grant["operation"] == "link" && grant["actor_ref"] == current_client.public_id &&
-        grant["session_ref"] == token.device_session.public_id && grant["provider"] == provider
+        grant["session_ref"] == device_session_public_id && grant["provider"] == provider
       raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
     end
 

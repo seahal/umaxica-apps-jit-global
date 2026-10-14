@@ -71,7 +71,7 @@ class EmailCredentialRegistrationOtpFinalizer
   def with_original_locks
     actor.class.connection_class_for_self.connected_to(role: :writing) do
       actor.with_lock do
-        token.device_session.with_lock do
+        token_device_session.with_lock do
           token.with_lock do
             email.with_lock do
               if bootstrap_transaction
@@ -168,15 +168,19 @@ class EmailCredentialRegistrationOtpFinalizer
   def source_owned?
     case actor
     when Client
-      token.user_id == actor.id && token.device_session.user_id == actor.id && email.user_id == actor.id
+      token.user_id == actor.id && token_device_session.user_id == actor.id && email.user_id == actor.id
     when Visitor
-      token.visitor_id == actor.id && token.device_session.visitor_id == actor.id && email.visitor_id == actor.id
+      token.visitor_id == actor.id && token_device_session.visitor_id == actor.id && email.visitor_id == actor.id
     end
   end
 
   def root_current?(now)
-    token.currently_usable?(now) && token.device_session.usable? &&
-      token.device_session.current_refresh_token_id == token.id
+    token.currently_usable?(now) && token_device_session.usable? &&
+      token_device_session.current_refresh_token_id == token.id
+  end
+
+  def token_device_session
+    token.device_session_record!
   end
 
   def actor_context_matches?
@@ -193,14 +197,20 @@ class EmailCredentialRegistrationOtpFinalizer
   def current_credential?
     credentials =
       case [actor, token.last_step_up_method]
-      in [Client, "passkey"] then actor.client_passkeys.active
-      in [Visitor, "passkey"] then actor.visitor_passkeys.active
+      in [Client, "passkey"] then ClientPasskey.where(user_id: actor.id).active
+      in [Visitor, "passkey"] then VisitorPasskey.where(visitor_id: actor.id).active
       in [Client, "email_otp"]
-        actor.client_emails.effective_binding.where(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
+        ClientEmail.where(user_id: actor.id).effective_binding.where(
+          user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES,
+        )
       in [Visitor, "email_otp"]
-        actor.visitor_emails.effective_binding.where(visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES)
+        VisitorEmail.where(visitor_id: actor.id).effective_binding.where(
+          visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES,
+        )
       in [Client, "totp"]
-        actor.client_totp_credentials.where(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
+        ClientTotpCredential.where(
+          user_id: actor.id, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+        )
       else return false
       end
     credential = credentials.lock.find_by(public_id: token.last_step_up_credential_ref)

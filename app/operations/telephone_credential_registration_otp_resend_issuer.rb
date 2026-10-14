@@ -35,7 +35,7 @@ class TelephoneCredentialRegistrationOtpResendIssuer
     actor.class.connection_class_for_self.connected_to(role: :writing) do
       actor.with_lock do
         transaction.class.connection_owner.connected_to(role: :writing) do
-          token.device_session.with_lock do
+          token_device_session.with_lock do
             token.with_lock do
               telephone.with_lock do
                 transaction.with_lock { resend_locked(expected) }
@@ -50,6 +50,10 @@ class TelephoneCredentialRegistrationOtpResendIssuer
   private
 
   attr_reader :actor, :token, :telephone, :transaction, :browser_nonce, :surface, :pending_status
+
+  def token_device_session
+    @token_device_session ||= token.device_session_record!
+  end
 
   def resend_locked(expected)
     ticket_now = transaction.class.database_now
@@ -77,20 +81,20 @@ class TelephoneCredentialRegistrationOtpResendIssuer
     owner_id = actor.id
     case actor
     when Client
-      token.user_id == owner_id && token.device_session.user_id == owner_id && telephone.user_id == owner_id &&
+      token.user_id == owner_id && token_device_session.user_id == owner_id && telephone.user_id == owner_id &&
         telephone.user_telephone_status_id == pending_status
     when Visitor
-      token.visitor_id == owner_id && token.device_session.visitor_id == owner_id &&
+      token.visitor_id == owner_id && token_device_session.visitor_id == owner_id &&
         telephone.visitor_id == owner_id && telephone.visitor_telephone_status_id == pending_status
     when Operator
-      token.staff_id == owner_id && token.device_session.staff_id == owner_id && telephone.staff_id == owner_id &&
+      token.staff_id == owner_id && token_device_session.staff_id == owner_id && telephone.staff_id == owner_id &&
         telephone.staff_telephone_status_id == pending_status
     end
   end
 
   def root_current?(now)
-    token.currently_usable?(now) && token.device_session.usable? &&
-      token.device_session.current_refresh_token_id == token.id
+    token.currently_usable?(now) && token_device_session.usable? &&
+      token_device_session.current_refresh_token_id == token.id
   end
 
   def ticket_current?(expected, now)

@@ -37,8 +37,6 @@ class RecoveryPasscodeTopUp
     issue_count = [shortfall, available_headroom].min
     return empty_result(active_usable_count_before:) if issue_count <= 0
 
-    preload_recovery_identity_associations!
-
     new_credentials = []
     raw_values = []
     starting_secret_count = total_secret_count
@@ -116,13 +114,6 @@ class RecoveryPasscodeTopUp
 
   def total_secret_count
     secret_credential_relation.count
-  end
-
-  def preload_recovery_identity_associations!
-    actor.visitor_emails.load if actor.respond_to?(:visitor_emails)
-    actor.visitor_telephones.load if actor.respond_to?(:visitor_telephones)
-    actor.staff_emails.load if actor.respond_to?(:staff_emails)
-    actor.staff_telephones.load if actor.respond_to?(:staff_telephones)
   end
 
   def secret_credential_relation

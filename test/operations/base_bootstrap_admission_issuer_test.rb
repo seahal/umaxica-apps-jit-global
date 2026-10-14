@@ -124,9 +124,9 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
 
     assert_equal [[], [], []],
                  [
-                   actor.client_passkeys.pluck(:id),
-                   actor.client_totp_credentials.pluck(:id),
-                   actor.client_emails.pluck(:id),
+                   ClientPasskey.where(user_id: actor.id).pluck(:id),
+                   ClientTotpCredential.where(user_id: actor.id).pluck(:id),
+                   ClientEmail.where(user_id: actor.id).pluck(:id),
                  ],
                  "bootstrap freshness requires an otherwise unregistered test Identity"
 

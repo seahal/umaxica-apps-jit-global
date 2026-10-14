@@ -29,7 +29,7 @@ class IdentityCredentialRemovalCommitter
     actor.class.connection_class_for_self.connected_to(role: :writing) do
       actor.with_lock do
         current_session.class.connection_class_for_self.connected_to(role: :writing) do
-          current_session.device_session.with_lock do
+          current_session.device_session_record!.with_lock do
             current_session.with_lock do
               credential.lock!
               validate_binding!

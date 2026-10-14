@@ -26,16 +26,16 @@ class BasePalmAuthEntrypointsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "palm does not expose a native authorization launcher before a native client exists" do
+  test "retired native Palm client ids are no longer registered" do
     host! PALM_HOST
 
-    %w(app-ios-rp app-android-rp unknown-rp).each do |client_id|
-      assert_raises(ActionController::RoutingError) do
-        Rails.application.routes.recognize_path(
-          "https://#{PALM_HOST}/oidc/authorization?client_id=#{client_id}",
-          method: :get,
-        )
-      end
+    %w(app-ios-rp app-android-rp).each do |client_id|
+      assert_nil OidcClientRegistry.find(client_id), client_id
+    end
+    assert_nil OidcClientRegistry.find("app-ios-rp")
+    assert_nil OidcClientRegistry.find("app-android-rp")
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("https://#{PALM_HOST}/api/v0/profile", method: :get)
     end
   end
 
@@ -48,8 +48,8 @@ class BasePalmAuthEntrypointsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  # Base Root is the control-plane home. Palm does not expose an unfinished native auth launcher.
-  test "base roots render the control-plane home and palm root exposes no native auth links" do
+  # Base Root is the control-plane home. Palm's root links to its neutral browser sign-in page.
+  test "base roots render the control-plane home and palm root links to browser sign-in" do
     host! BASE_APP_HOST
     get "/", params: { ri: "jp" }
 
@@ -80,7 +80,7 @@ class BasePalmAuthEntrypointsTest < ActionDispatch::IntegrationTest
     get "/", params: { ri: "jp" }
 
     assert_response :success
-    assert_empty inertia_props.fetch("links")
+    assert_equal palm_app_sign_show_path(ri: "jp"), inertia_props.fetch("sign_in").fetch("href")
   end
 end
 

@@ -28,4 +28,9 @@ class ComEnforcementCase < ComPrincipalRecord
   def self.realm
     "com"
   end
+  public
+
+  def principal_effect_record
+    ComEnforcementPrincipalEffect.find_by(com_enforcement_case_id: id)
+  end
 end

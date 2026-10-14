@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 class CreateVisitorWithdrawalCycles < ActiveRecord::Migration[8.2]
   def change
     create_table :visitor_withdrawal_cycle_statuses do |_t|

@@ -78,6 +78,9 @@ module Base
           action: sign_out_post_path,
           submit: t("sign.shared.sign_out.button"),
           logout_challenge: params[:logout_challenge].presence,
+          logout_intent_proof: if params[:logout_challenge].present?
+                                 browser_rp_logout_intent_proof_for(@logout_transaction)
+                               end,
           confirm_description: t("sign.shared.sign_out.confirm_description"),
         }
       end

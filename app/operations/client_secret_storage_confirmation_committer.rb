@@ -45,7 +45,7 @@ class ClientSecretStorageConfirmationCommitter
         raise Denied, "Secret confirmation belongs to another authorization context"
       end
 
-      verify_step_up!(current, owned)
+      verify_step_up!(actor, current, owned)
       confirm_owned_batch!(context, owned, Client.database_now)
     end
 
@@ -94,8 +94,7 @@ class ClientSecretStorageConfirmationCommitter
       owned
     end
 
-    def verify_step_up!(token, issuance)
-      actor = issuance.client
+    def verify_step_up!(actor, token, issuance)
       scope = (issuance.origin == "manual") ? "settings_secret_credential" : "settings_passkey"
       requirement = StepUpRequirement.new(
         scope: scope, step_up_required: true, allowed_methods: %i(passkey totp email_otp),

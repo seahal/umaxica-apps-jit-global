@@ -12,12 +12,13 @@ class RpSessionRevoker < ApplicationService
 
   public
 
-  def initialize(scope:, record:, status: "failed", now: Time.current)
+  def initialize(scope:, record:, status: "failed", now: Time.current, allow_missing_current_root: false)
     super()
     @scope = scope.to_sym
     @record = record
     @status = status
     @now = now
+    @allow_missing_current_root = allow_missing_current_root
   end
 
   def call
@@ -38,7 +39,7 @@ class RpSessionRevoker < ApplicationService
 
   private
 
-  attr_reader :scope, :record, :status, :now
+  attr_reader :scope, :record, :status, :now, :allow_missing_current_root
 
   def revoke_rp_session(session)
     return 0 if session.blank? || session.revoked?
@@ -64,13 +65,15 @@ class RpSessionRevoker < ApplicationService
       # row is never treated as the session authority.
       device_session.with_lock do
         current_token = current_token_for(device_session)
+        current_token ||= fallback_current_token_for(record, device_session) if allow_missing_current_root
         raise RpSession::IssuanceRejected, "Browser Session current root token is missing" unless current_token
 
         current_token.with_lock do
           sessions =
             rp_sessions_for(device_session)
-              .currently_usable_at(now)
+              .where(revoked_at: nil)
               .order(:id)
+              .preload(parent_device_session_association(device_session))
               .lock
               .to_a
           sessions.each { |session| session.revoke!(status: status, now: now) }
@@ -127,7 +130,26 @@ class RpSessionRevoker < ApplicationService
   end
 
   def current_token_for(device_session)
-    device_session.current_refresh_token
+    case device_session
+    when ClientDeviceSession
+      ClientToken.find_by(id: device_session.current_refresh_token_id, device_session_id: device_session.id)
+    when VisitorDeviceSession
+      VisitorToken.find_by(id: device_session.current_refresh_token_id, device_session_id: device_session.id)
+    when OperatorDeviceSession
+      OperatorToken.find_by(id: device_session.current_refresh_token_id, device_session_id: device_session.id)
+    else
+      raise ArgumentError, "unsupported Device Session class: #{device_session.class.name}"
+    end
+  end
+
+  def fallback_current_token_for(token, device_session)
+    return unless token.respond_to?(:device_session_id)
+    return unless token.device_session_id == device_session.id
+    return if token.respond_to?(:revoked?) && token.revoked?
+    return if token.respond_to?(:rotated_at) && token.rotated_at.present?
+    return if token.respond_to?(:currently_usable?) && !token.currently_usable?
+
+    token
   end
 
   def rp_sessions_for(device_session)
@@ -137,6 +159,15 @@ class RpSessionRevoker < ApplicationService
     when OperatorDeviceSession then OperatorRpSession.where(device_session_id: device_session.id)
     else
       raise ArgumentError, "unsupported Device Session class: #{device_session.class.name}"
+    end
+  end
+
+  def parent_device_session_association(device_session)
+    case device_session
+    when ClientDeviceSession then :client_device_session
+    when VisitorDeviceSession then :visitor_device_session
+    when OperatorDeviceSession then :operator_device_session
+    else raise ArgumentError, "unsupported Device Session class: #{device_session.class.name}"
     end
   end
 end

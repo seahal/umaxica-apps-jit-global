@@ -30,8 +30,8 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
             [Operator, OperatorTelephone, OperatorTelephoneHistory, :staff_id, :staff_identity_telephone_status_id,
              OperatorTelephoneStatus::VERIFIED, OperatorStatus::ACTIVE,]
           end
-        owner = owner_model.create!(status_id: owner_status, created_at: 4.days.ago)
-        replacement_owner = owner_model.create!(status_id: owner_status)
+        owner = create_test_owner(owner_model, status_id: owner_status, created_at: 4.days.ago)
+        replacement_owner = create_test_owner(owner_model, status_id: owner_status)
         attributes = { :confirm_policy => true, status_key => verified }
         identifier, equivalent =
           if channel == "email"
@@ -119,7 +119,7 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
           model.where(owner_key => actor.id).find_each(&:destroy_without_dead_history!)
           history_model.where(owner_key => actor.id).find_each(&:destroy!)
           actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
-          actor.reload.destroy!
+          StrictLoadingAssociationPreloader.for_destruction(actor.reload).destroy!
         end
       end
     end
@@ -131,17 +131,20 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
         owner, model, history_model, owner_key =
           case [realm, channel]
           when ["app", "email"]
-            [Client.create!(status_id: ClientStatus::ACTIVE), ClientEmail, ClientEmailHistory, :user_id]
+            [create_test_owner(Client, status_id: ClientStatus::ACTIVE), ClientEmail, ClientEmailHistory, :user_id]
           when ["app", "telephone"]
-            [Client.create!(status_id: ClientStatus::ACTIVE), ClientTelephone, ClientTelephoneHistory, :user_id]
+            [create_test_owner(Client, status_id: ClientStatus::ACTIVE), ClientTelephone, ClientTelephoneHistory,
+             :user_id,]
           when ["com", "email"]
-            [Visitor.create!(status_id: VisitorStatus::ACTIVE), VisitorEmail, VisitorEmailHistory, :visitor_id]
+            [create_test_owner(Visitor, status_id: VisitorStatus::ACTIVE), VisitorEmail, VisitorEmailHistory,
+             :visitor_id,]
           when ["com", "telephone"]
-            [Visitor.create!(status_id: VisitorStatus::ACTIVE), VisitorTelephone, VisitorTelephoneHistory, :visitor_id]
+            [create_test_owner(Visitor, status_id: VisitorStatus::ACTIVE), VisitorTelephone, VisitorTelephoneHistory,
+             :visitor_id,]
           when ["org", "email"]
-            [Operator.create!, OperatorEmail, OperatorEmailHistory, :staff_id]
+            [create_test_owner(Operator), OperatorEmail, OperatorEmailHistory, :staff_id]
           when ["org", "telephone"]
-            [Operator.create!, OperatorTelephone, OperatorTelephoneHistory, :staff_id]
+            [create_test_owner(Operator), OperatorTelephone, OperatorTelephoneHistory, :staff_id]
           end
         attributes = { owner_key => owner.id, :confirm_policy => true, :created_at => 3.days.ago }
         if channel == "email"
@@ -192,8 +195,15 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
         history_model&.where(owner_key => owner.id)&.find_each(&:destroy!) if owner
         record&.destroy_without_dead_history! if record&.persisted? && model.exists?(record.id)
         owner&.reload&.update!(discard_at: owner.created_at, purge_eligible_at: owner.created_at)
-        owner&.destroy!
+        StrictLoadingAssociationPreloader.for_destruction(owner.reload).destroy! if owner
       end
     end
+  end
+
+  private
+
+  def create_test_owner(owner_model, **attributes)
+    # Avoid cross-database children left by committed test/dev runs with fixture-range IDs.
+    owner_model.create!(**attributes, id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
   end
 end

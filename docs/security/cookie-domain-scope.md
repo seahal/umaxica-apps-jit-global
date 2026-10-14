@@ -77,10 +77,10 @@ transport binding:
 - `SignRefreshTokenService` is a legacy compatibility subclass; new refresh authority references
   should use `AcmeRefreshTokenService`.
 - Legacy `core-browser` credentials are not accepted by the Core browser API as RP credentials.
-- Palm API tokens use the `palm-api` audience from `Authorization: Bearer`.
-- Core RP cookie validators reject `palm-api` and sibling RP client bindings.
-- Palm bearer validators reject `core-browser`.
-- Palm controllers do not read auth or preference cookies and do not issue browser session cookies.
+- Palm browser credentials use the common Browser RP contract with the `palm-app` audience and
+  host-only RP cookies.
+- Palm and Core RP cookie validators reject sibling RP client bindings. Palm's former native bearer
+  API is retired, and no bearer-to-browser-cookie bridge exists.
 - Acme/Sign do not issue or consume Core/Base regional browser cookies.
 
 Because `__Host-` requires `Path=/`, refresh cookies are not path-restricted. Refresh endpoint

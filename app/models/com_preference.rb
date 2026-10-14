@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -44,7 +45,6 @@
 #  fk_rails_...                             (replaced_by_id => com_preferences.id) ON DELETE => nullify
 #
 
-# frozen_string_literal: true
 
 class ComPreference < ComSettingRecord
   include Retainable

@@ -85,7 +85,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         assert_equal 303, browser.response.status
       end
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_reference)
-      parent = binding.authorization_transaction
+      parent = authorization_transaction_for_test(binding)
       original_parent_id = parent.id
       original_binding_id = binding.id
       3.times do |index|

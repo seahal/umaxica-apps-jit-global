@@ -78,7 +78,7 @@ module BaseSignInLimitations
       challenge: @resolution_challenge,
       browser_binding_digest: @resolution.class.digest_challenge(@resolution_binding),
     )
-    flow = @resolution.sign_in_flow
+    flow = resolution_sign_in_flow
     flow.cancel_sign_in! unless flow.sign_in_completed? || flow.sign_in_expired? ||
       flow.sign_in_cancelled? || flow.sign_in_halted?
     clear_current_sign_in_flow_locator!
@@ -151,8 +151,14 @@ module BaseSignInLimitations
   def validate_loaded_resolution
     @actor = actor_class.find_by(public_id: @resolution.actor_ref)
     @oidc_transaction =
-      ticket_record.connected_to(role: :writing) { @resolution.oidc_authorization_transaction }
-    flow = @resolution.sign_in_flow
+      ticket_record.connected_to(role: :writing) do
+        resolution_oidc_transaction
+      end
+    return @resolution = nil if @resolution.oidc_authorization_transaction_id.present? && !@oidc_transaction
+
+    flow = resolution_sign_in_flow
+    return @resolution = nil unless flow
+
     now = flow.class.database_now
     valid_binding = ActiveSupport::SecurityUtils.secure_compare(
       @resolution.browser_binding_digest,
@@ -167,6 +173,16 @@ module BaseSignInLimitations
   def valid_resolution_parent?(flow, now)
     flow.principal_id == @actor&.id && !flow.expired?(now) &&
       !flow.sign_in_completed? && !flow.sign_in_cancelled? && !flow.sign_in_halted?
+  end
+
+  def resolution_sign_in_flow
+    flow_class = @resolution.class.resolution_sign_in_flow_class
+    flow_class.find(@resolution.sign_in_flow_id)
+  end
+
+  def resolution_oidc_transaction
+    transaction_class = @resolution.class.resolution_oidc_authorization_transaction_class
+    transaction_class.find_by(id: @resolution.oidc_authorization_transaction_id)
   end
 
   def valid_resolution_oidc?(now)

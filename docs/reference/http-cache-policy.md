@@ -51,7 +51,7 @@ are outside it.
    # Freshness lifetime.
    expires_in 5.minutes, public: true
 
-   # Browser-private revalidation (for example a future Xper Experience API):
+   # Browser-private revalidation for an API that owns this representation:
    # `Cache-Control: no-cache, private` with a weak ETag.
    fresh_when(weak_etag: payload, cache_control: { no_cache: true, extras: ["private"] })
    ```
@@ -82,8 +82,6 @@ Subclass counts are from the 2026-10-01 inventory and drift as controllers are a
 
 | Policy root                          | Plane      | Subclasses | Representative routes                          |
 | ------------------------------------ | ---------- | ---------- | ---------------------------------------------- |
-| `Xper::{App,Com,Org}::ApplicationController` | Global | 1 each | `/` |
-| `Xper::{App,Com,Org}::BareController`        | Global | 10 each | `/health`, `/revision`, `/robots.txt`, `/sitemap.xml` |
 | `Auth::App::ApplicationController`   | Global     | 60         | `/`, `/sign/in`, `/preference`                 |
 | `Auth::Com::ApplicationController`   | Global     | 44         | `/`, `/sign/in`                                |
 | `Auth::Org::ApplicationController`   | Global     | 36         | `/`, `/sign/in`                                |

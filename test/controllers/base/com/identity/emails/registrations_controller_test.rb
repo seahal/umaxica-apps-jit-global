@@ -39,7 +39,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = VisitorRpSession.create!(
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -126,7 +126,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = VisitorRpSession.create!(
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -443,7 +443,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
   end
 
   test "revoked credential history does not qualify for the first-contact exception" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
     visitor.visitor_telephones.create!(
       number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
@@ -469,7 +469,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = VisitorRpSession.create!(
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -526,7 +526,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
   end
 
   test "first confirmed contact is registered on Base without freshness and ends the initial exception" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
     token = VisitorToken.create!(visitor: visitor, root_login_established_at: VisitorToken.database_now - 1.minute)
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
@@ -544,7 +544,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = VisitorRpSession.create!(
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",

@@ -31,8 +31,10 @@ module AuthenticationDeviceBinding
   end
 
   def ensure_device_session_for!(resource, token_record, dpop_jkt: nil)
-    return unless token_record.respond_to?(:device_session=)
-    return token_record.device_session if token_record.device_session.present?
+    return unless [ClientToken, VisitorToken, OperatorToken].any? { |token_class| token_record.is_a?(token_class) }
+
+    existing_device_session = token_record.device_session_record
+    return existing_device_session if existing_device_session
 
     klass = device_session_class
     return unless klass
@@ -44,7 +46,7 @@ module AuthenticationDeviceBinding
     }.compact
     attrs[device_session_actor_key] = resource.id
     device_session = klass.create!(attrs)
-    token_record.update!(device_session: device_session)
+    token_record.update!(device_session_id: device_session.id)
     device_session
   end
 

@@ -109,7 +109,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       token&.destroy!
       # An Identity is physically erased only once it has lapsed and is purgeable.
       actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
-      actor.reload.destroy!
+      destroy_test_client_after_cross_database_cleanup!(actor)
     end
   end
 
@@ -239,7 +239,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       token&.destroy!
       # An Identity is physically erased only once it has lapsed and is purgeable.
       actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
-      actor.reload.destroy!
+      destroy_test_client_after_cross_database_cleanup!(actor)
     end
   end
 
@@ -329,7 +329,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       token&.destroy!
       # An Identity is physically erased only once it has lapsed and is purgeable.
       actor.reload.update!(discard_at: actor.created_at, purge_eligible_at: actor.created_at)
-      actor.reload.destroy!
+      destroy_test_client_after_cross_database_cleanup!(actor)
     end
   end
 end

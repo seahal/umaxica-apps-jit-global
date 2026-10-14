@@ -820,7 +820,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
         )
       end
 
-    ClientRpSession.stub(:find_by, ->(**) { raise ActiveRecord::ConnectionNotEstablished }) do
+    ClientRpSession.stub(:includes, ->(*) { raise ActiveRecord::ConnectionNotEstablished }) do
       get("/?ri=jp")
 
       assert_response :service_unavailable

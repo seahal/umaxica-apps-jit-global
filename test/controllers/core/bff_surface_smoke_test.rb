@@ -76,6 +76,10 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
   private
 
   def authenticate_rp!(browser, surface, resource, token, host)
+    if token.refresh_token_family_id.blank?
+      token.update!(refresh_token_family_id: SecureRandom.uuid)
+      token.rotate_refresh_token!
+    end
     client = OidcClientRegistry.find!(surface.fetch(:client_id))
     session_class, association =
       case surface.fetch(:resource_type)

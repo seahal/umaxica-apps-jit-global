@@ -46,11 +46,9 @@ class BranchCoverageBatch31MoreEasyArmsTest < ActiveSupport::TestCase
     end
   end
 
-  test "Palm and OIDC access token authenticators blank tokens" do
-    [PalmAccessTokenAuthenticator, OidcAccessTokenAuthenticator].each do |klass|
-      assert_raises(ArgumentError) { klass.new(token: nil) }
-      assert_raises(ArgumentError) { klass.new(token: " ") }
-    end
+  test "OIDC access token authenticator blank tokens" do
+    assert_raises(ArgumentError) { OidcAccessTokenAuthenticator.new(token: nil) }
+    assert_raises(ArgumentError) { OidcAccessTokenAuthenticator.new(token: " ") }
   end
 
   test "DbscVerificationService blank proof" do

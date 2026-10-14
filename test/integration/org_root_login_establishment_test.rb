@@ -69,7 +69,7 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     assert_equal auth_host, target.host
     entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_ref)
-    flow = binding.authorization_transaction
+    flow = authorization_transaction_for_test(binding)
     auth_browser = open_session
     auth_browser.host!(auth_host)
     auth_browser.https!

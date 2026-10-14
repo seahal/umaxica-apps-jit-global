@@ -80,6 +80,7 @@ require_relative "support/org_entra_first_stage_helper"
 require_relative "support/oidc_authorization_response_helper"
 require_relative "support/auth_ceremony_entry_helper"
 require_relative "support/auth_email_mfa_helper"
+require_relative "support/strict_loading_association_preloader"
 
 # Inject the Turnstile stub for the whole suite. Application code resolves the verifier
 # through Turnstile::VerifierFactory, so no production class knows about the test suite.
@@ -181,6 +182,62 @@ module AuthenticationHarness
   end
 
   private
+
+  def auth_ceremony_session_for_test(binding)
+    case binding
+    when ClientAuthAdmissionBinding
+      ClientAuthCeremonySession.find_by(id: binding.auth_ceremony_session_id)
+    when VisitorAuthAdmissionBinding
+      VisitorAuthCeremonySession.find_by(id: binding.auth_ceremony_session_id)
+    when OperatorAuthAdmissionBinding
+      OperatorAuthCeremonySession.find_by(id: binding.auth_ceremony_session_id)
+    else
+      raise ArgumentError, "unsupported Auth admission binding class: #{binding.class.name}"
+    end
+  end
+
+  def admitted_auth_ceremony_session_for_test(binding)
+    case binding
+    when ClientAuthAdmissionBinding
+      ClientAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
+    when VisitorAuthAdmissionBinding
+      VisitorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
+    when OperatorAuthAdmissionBinding
+      OperatorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
+    else
+      raise ArgumentError, "unsupported Auth admission binding class: #{binding.class.name}"
+    end
+  end
+
+  def authorization_transaction_for_test(binding)
+    case binding
+    when ClientAuthAdmissionBinding
+      ClientOidcAuthorizationTransaction.find_by(id: binding.authorization_transaction_id)
+    when VisitorAuthAdmissionBinding
+      VisitorOidcAuthorizationTransaction.find_by(id: binding.authorization_transaction_id)
+    when OperatorAuthAdmissionBinding
+      OperatorOidcAuthorizationTransaction.find_by(id: binding.authorization_transaction_id)
+    else
+      raise ArgumentError, "unsupported Auth admission binding class: #{binding.class.name}"
+    end
+  end
+
+  def sign_in_flow_for_test(binding)
+    case binding
+    when ClientAuthAdmissionBinding then ClientSignInFlow.find_by(id: binding.sign_in_flow_id)
+    when VisitorAuthAdmissionBinding then VisitorSignInFlow.find_by(id: binding.sign_in_flow_id)
+    when OperatorAuthAdmissionBinding then OperatorSignInFlow.find_by(id: binding.sign_in_flow_id)
+    else raise ArgumentError, "unsupported Auth admission binding class: #{binding.class.name}"
+    end
+  end
+
+  def contact_owner_for_test(contact)
+    case contact
+    when ClientEmail, ClientTelephone then Client.find(contact.user_id)
+    when VisitorEmail, VisitorTelephone then Visitor.find(contact.visitor_id)
+    else raise ArgumentError, "unsupported Contact class: #{contact.class.name}"
+    end
+  end
 
   def jump_rt_url_from_location_for_test(location)
     uri = URI.parse(location.to_s)
@@ -334,6 +391,14 @@ module AuthenticationHarness
         "APP"
       end
     "surface:#{service}_#{surface}"
+  end
+
+  def destroy_test_client_after_cross_database_cleanup!(client)
+    dependent_associations =
+      Client.reflect_on_all_associations.filter_map do |association|
+        association.name if association.options[:dependent]
+      end
+    Client.preload(*dependent_associations).find(client.id).destroy!
   end
 end
 

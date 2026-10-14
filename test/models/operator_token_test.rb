@@ -187,8 +187,13 @@ class OperatorTokenTest < ActiveSupport::TestCase
   end
 
   test "destroying the operator removes tokens before its device sessions" do
-    session_id = @token.device_session.id
+    session_id = @token.device_session_id
 
+    @staff = Operator.includes(
+      :staff_passkeys, :staff_tokens, :operator_device_sessions, :staff_secret_credentials, :oidc_connections,
+      :staff_operators, :operator_workspace_accounts, :staff_bulletins, :staff_banners, :rp_account,
+      :authority_lock, :staff_preference, :core_org_operator_bridge,
+    ).find(@staff.id)
     @staff.destroy!
 
     assert_not OperatorToken.exists?(@token.id)

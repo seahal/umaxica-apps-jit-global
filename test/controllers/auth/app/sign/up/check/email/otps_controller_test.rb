@@ -124,7 +124,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_withheld { transaction.email_candidate_ref == user_email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == user_email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -187,7 +187,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_withheld { transaction.email_candidate_ref == user_email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == user_email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -254,7 +254,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_withheld { transaction.email_candidate_ref == user_email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == user_email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -331,7 +331,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_withheld { transaction.email_candidate_ref == user_email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == user_email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -388,7 +388,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_withheld { transaction.email_candidate_ref == user_email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == user_email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -440,7 +440,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_withheld { transaction.email_candidate_ref == user_email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == user_email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -492,7 +492,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_withheld { transaction.email_candidate_ref == user_email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == user_email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -544,7 +544,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_withheld { transaction.email_candidate_ref == user_email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == user_email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -598,7 +598,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_withheld { transaction.email_candidate_ref == user_email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == user_email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -653,7 +653,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_withheld { transaction.email_candidate_ref == user_email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == user_email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -712,7 +712,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_withheld { transaction.email_candidate_ref == email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -758,7 +758,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_withheld { transaction.email_candidate_ref == email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -805,7 +805,7 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_withheld { transaction.email_candidate_ref == user_email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == user_email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))

@@ -38,7 +38,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = ClientRpSession.create!(
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -110,7 +110,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = ClientRpSession.create!(
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -183,7 +183,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OperatorRpSession.create!(
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -255,7 +255,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OperatorRpSession.create!(
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -327,7 +327,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OperatorRpSession.create!(
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -401,7 +401,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = ClientRpSession.create!(
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",

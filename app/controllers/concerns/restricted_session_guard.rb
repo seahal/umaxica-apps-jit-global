@@ -56,11 +56,13 @@ module RestrictedSessionGuard
 
     # Find the nearest abstract base record that defines the database
     # connection (e.g., AppTicketRecord, OrgTicketRecord)
-    base_class = session.class.connection_class_for_self
-
-    base_class.connected_to(role: :writing) do
-      session.revoke!
-    end
+    AuthenticationLogoutCurrentSession.call(
+      resource: session.respond_to?(:actor_record) ? session.actor_record : nil,
+      token: session,
+      token_class: session.class,
+      session_public_id: session.try(:public_id),
+      reason: "restricted_session_expired",
+    )
 
     Rails.logger.info(
       JitLogEvent.format(

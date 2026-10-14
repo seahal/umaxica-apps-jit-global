@@ -38,6 +38,7 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     edit/org
     warp/app warp/com warp/org
     palm/app
+    tech/org
   ).freeze
 
   # Targets deliberately outside the contract. An unexplained absence is indistinguishable from the
@@ -56,12 +57,8 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     news/app news/com news/org
   ).freeze
 
-  # Experience Phase 0 is a static, non-regional landing surface. It deliberately excludes
-  # PreferenceGlobal and Actor.preferences; no region state or credential is hydrated.
-  RI_EXEMPT_XPER_TARGETS = %w(xper/app xper/com xper/org).freeze
-
   RI_EXEMPT_TARGETS =
-    (RI_EXEMPT_INFRASTRUCTURE_TARGETS + RI_EXEMPT_CONTENT_TARGETS + RI_EXEMPT_XPER_TARGETS).freeze
+    (RI_EXEMPT_INFRASTRUCTURE_TARGETS + RI_EXEMPT_CONTENT_TARGETS).freeze
 
   # Controllers inside a participating target that legitimately do not run `set_region`. Every entry
   # is a machine-to-machine endpoint: protocol redirects and token/cookie transports that must not
@@ -94,6 +91,8 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     app/controllers/core/org/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/org/oidc/callbacks_controller.rb
     app/controllers/edit/org/oidc/callbacks_controller.rb
+    app/controllers/palm/app/oidc/callbacks_controller.rb
+    app/controllers/tech/org/oidc/callbacks_controller.rb
     app/controllers/warp/app/oidc/callbacks_controller.rb
     app/controllers/warp/com/oidc/callbacks_controller.rb
     app/controllers/warp/org/oidc/callbacks_controller.rb

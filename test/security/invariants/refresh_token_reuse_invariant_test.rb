@@ -58,7 +58,9 @@ module Security
           discard_at: 1.day.from_now,
           purge_eligible_at: 2.days.from_now,
         )
-        usage = ClientRpSession.create!(client_token: root_token, oidc_client_id: "core-app")
+        usage = ClientRpSession.create!(
+          client_token: root_token, oidc_client_id: "core-app", refresh_token_expires_at: 1.hour.from_now,
+        )
         reused_refresh = usage.issue_refresh_token!
 
         rotation = OidcRefreshTokenIssuer.call(refresh_token: reused_refresh, resource_type: "client")
@@ -82,7 +84,9 @@ module Security
           discard_at: 1.day.from_now,
           purge_eligible_at: 2.days.from_now,
         )
-        usage = ClientRpSession.create!(client_token: root_token, oidc_client_id: "core-app")
+        usage = ClientRpSession.create!(
+          client_token: root_token, oidc_client_id: "core-app", refresh_token_expires_at: 1.hour.from_now,
+        )
         first_refresh = usage.issue_refresh_token!
 
         first_rotation = OidcRefreshTokenIssuer.call(refresh_token: first_refresh, resource_type: "client")

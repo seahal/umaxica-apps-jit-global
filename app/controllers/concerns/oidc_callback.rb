@@ -42,10 +42,7 @@ module OidcCallback
         return render_callback_failure(e.reason)
       end
     unless token_result.success?
-      return render_callback_failure(
-        token_exchange_failure_reason(token_result.error),
-        status: token_exchange_failure_status(token_result.error),
-      )
+      return render_token_exchange_failure(token_result.error)
     end
 
     token_response = token_result.token_response
@@ -277,6 +274,17 @@ module OidcCallback
     render plain: I18n.t("errors.messages.login_required"), content_type: "text/plain", status: status
   end
 
+  def render_token_exchange_failure(error)
+    if error == "access_denied" && oidc_client_id == "tech-org"
+      return render_oidc_access_denied!
+    end
+
+    render_callback_failure(
+      token_exchange_failure_reason(error),
+      status: token_exchange_failure_status(error),
+    )
+  end
+
   def log_invalid_callback_state!(failure)
     log_callback_failure(reason: failure.reason, status: :unprocessable_content)
   end
@@ -297,18 +305,18 @@ module OidcCallback
 
   def oidc_callback_log_surface
     case oidc_client_id
-    when "base-app-ww", "core-app", "warp-app", "app-ios-rp", "app-android-rp" then "app"
+    when "base-app-ww", "core-app", "warp-app", "palm-app" then "app"
     when "base-com-ww", "core-com", "warp-com" then "com"
-    when "base-org-ww", "core-org", "edit-org", "warp-org" then "org"
+    when "base-org-ww", "core-org", "edit-org", "warp-org", "tech-org" then "org"
     else "unknown"
     end
   end
 
   def oidc_callback_log_face
     case oidc_client_id
-    when "base-app-ww", "core-app", "warp-app", "app-ios-rp", "app-android-rp" then "app"
+    when "base-app-ww", "core-app", "warp-app", "palm-app" then "app"
     when "base-com-ww", "core-com", "warp-com" then "com"
-    when "base-org-ww", "core-org", "edit-org", "warp-org" then "org"
+    when "base-org-ww", "core-org", "edit-org", "warp-org", "tech-org" then "org"
     else "unknown"
     end
   end

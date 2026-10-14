@@ -8,6 +8,12 @@
 > is ceremony-only, and `sign-rp`, `base-rails-rp`, and `side-rails-rp` are not current local
 > browser registrations. Do not use the historical client list below to add a new registration.
 
+> **Participation update (2026-10-13):** Palm is now a first-party browser RP (`palm-app`); its
+> native RP and bearer API roles have been retired. Tech is an operator browser RP (`tech-org`) and
+> requires `tech.access`. This document's Palm-native component model and flow below are retained as
+> historical context. Use `adr/tech-and-palm-browser-rp-participation.md` for the accepted current
+> contract and implementation status.
+
 ## Current Boundary
 
 The accepted component model is:

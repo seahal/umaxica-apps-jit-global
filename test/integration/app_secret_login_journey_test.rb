@@ -133,7 +133,9 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_device_session = ClientDeviceSession.find(rp_token.device_session_id)
+            rp_token.rotate_refresh_token! unless rp_device_session.current_refresh_token_id
+            rp_actor = Client.find(rp_token.user_id)
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -141,16 +143,16 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_actor, host: rp_host, resource_type: "client",
+                        session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                        oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                        expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                        issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                        subject: OidcSubject.for(
+                          rp_actor,
+                          resource_type: "client",
+                        ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -749,6 +751,8 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
 
     assert_no_difference ["ClientSecretIssuance.count", "ClientSecretCredential.count",
                           "ClientSecretAuditOutbox.count",] do
+      get base_app_secrets_path(ri: "jp"), headers: headers
+      csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
       post base_app_secrets_path(ri: "jp"), params: { authenticity_token: csrf, operation_id: operation_id },
                                             headers: headers
     end
@@ -865,8 +869,8 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
         end
       end
     entry_ref = Rack::Utils.parse_query(auth_uri.query).fetch("entry_ref")
-    authorization = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
-      .authorization_transaction
+    admission = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
+    authorization = ClientOidcAuthorizationTransaction.find(admission.authorization_transaction_id)
     browser = open_session
     browser.host!(auth_host)
     browser.https!
@@ -1142,8 +1146,8 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       end
     base.host!(callback_uri.host)
     base.https!
-    flow = authorization.reload.secret_sign_in_flow
-    root = flow.reload.token
+    flow = ClientSignInFlow.find(authorization.reload.secret_sign_in_flow_id)
+    root = ClientToken.find_by!(id: flow.reload.token_id, user_id: actor.id)
     id_token = OidcIdTokenIssuer.call(
       resource: actor,
       client: OidcClientRegistry.find!("base-app-ww"),
@@ -1677,6 +1681,9 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     additional = ClientSecretLookupQuery.call(client: actor, secret: additional_raw)
 
     assert additional
+    base.get(base_app_secret_path(additional.public_id, ri: "jp"), headers: { "Origin" => "https://#{base_host}" })
+    page = JSON.parse(Nokogiri::HTML(base.response.body).at_css("script[data-page='app']").text)
+    csrf = page.fetch("props").fetch("authenticity_token")
     base.patch(
       base_app_secret_path(additional.public_id, ri: "jp"),
       params: { authenticity_token: csrf, name: "Saved after independent Step-Up" },
@@ -1685,6 +1692,9 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, base.response.status
     assert_equal "Saved after independent Step-Up", additional.reload.name
+    base.get(base_app_secret_path(additional.public_id, ri: "jp"), headers: { "Origin" => "https://#{base_host}" })
+    page = JSON.parse(Nokogiri::HTML(base.response.body).at_css("script[data-page='app']").text)
+    csrf = page.fetch("props").fetch("authenticity_token")
     base.delete(
       base_app_secret_path(additional.public_id, ri: "jp"),
       params: { authenticity_token: csrf }, headers: { "Origin" => "https://#{base_host}" },

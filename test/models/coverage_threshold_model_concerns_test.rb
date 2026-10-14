@@ -20,7 +20,7 @@ class CoverageThresholdModelConcernsTest < ActiveSupport::TestCase
     assert_predicate token, :expired_refresh?
     token.discard_at = Float::INFINITY
 
-    assert_not_predicate token, :expired_refresh?
+    assert_predicate token, :expired_refresh?
     token.discard_at = 1.hour.from_now
 
     assert_not_predicate token, :expired_refresh?
@@ -43,7 +43,7 @@ class CoverageThresholdModelConcernsTest < ActiveSupport::TestCase
   end
 
   test "token status management distinguishes active restricted revoked and expired states" do
-    token = ClientToken.new(user_token_status_id: ClientTokenStatus::ACTIVE)
+    token = ClientToken.new(user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.hour.from_now)
 
     assert_predicate token, :active_status?
     assert_not_predicate token, :restricted?

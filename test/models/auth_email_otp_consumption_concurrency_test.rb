@@ -21,7 +21,7 @@ class AuthEmailOtpConsumptionConcurrencyTest < ActiveSupport::TestCase
           [Visitor, :visitor_emails, { visitor_email_status_id: VisitorEmailStatus::VERIFIED },
            VisitorAuthCeremonySession, VisitorAuthAdmissionBinding, ComTicketRecord,]
         end
-      owner = owner_model.create!
+      owner = owner_model.create!(id: next_owner_id(owner_model))
       contact = owner.public_send(contact_association).create!(
         address: "auth-consume-#{SecureRandom.hex(12)}@example.test", confirm_policy: "1", **contact_status,
       ).tap(&:finalize_binding!)
@@ -70,5 +70,13 @@ class AuthEmailOtpConsumptionConcurrencyTest < ActiveSupport::TestCase
       contact&.class&.where(id: contact.id)&.delete_all if contact
       owner_model&.where(id: owner&.id)&.delete_all if owner
     end
+  end
+
+  private
+
+  def next_owner_id(owner_model)
+    return unless owner_model == Visitor
+
+    1_000_000_000_000 + SecureRandom.random_number(1_000_000_000)
   end
 end

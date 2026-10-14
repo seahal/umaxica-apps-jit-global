@@ -9,7 +9,11 @@ class Auth::Com::Verification::SetupsControllerTest < ActionDispatch::Integratio
   test "an admitted bootstrap shows the registration methods and cancellation, never a back link" do
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    actor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    actor = Visitor.create!(
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+      status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     token = VisitorToken.create!(
       visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       root_login_established_at: Time.current,

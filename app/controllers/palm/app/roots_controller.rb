@@ -19,6 +19,10 @@ module Palm
           title: nil,
           heading: "Palm App",
           description: t("palm.app.roots.message"),
+          sign_in: {
+            label: t("palm.app.roots.sign_in"),
+            href: palm_app_sign_show_path(ri: params[:ri]),
+          },
           sign_up: nil,
           links: [],
         }

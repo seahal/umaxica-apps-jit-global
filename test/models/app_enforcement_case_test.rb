@@ -353,8 +353,9 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
   end
 
   test "applying a new open method effect closes the prior open row for the same slot" do
-    client = clients(:one)
+    clients(:one)
     operator = operators(:one)
+    principal_public_id = "test-#{SecureRandom.uuid}"
 
     first_case = AppEnforcementCase.new(
       kind: "method_protection",
@@ -363,11 +364,11 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
       release_mode: "operator",
       effective_at: Time.current,
       reason_code: "abuse",
-      principal_public_id: client.public_id,
+      principal_public_id: principal_public_id,
       applied_by_operator_public_id: operator.public_id,
     )
     first_case.authentication_method_effects.build(
-      principal_public_id: client.public_id,
+      principal_public_id: principal_public_id,
       authentication_method: "email",
       effect: "mutation_locked",
       effective_at: Time.current,
@@ -385,11 +386,11 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
       release_mode: "operator",
       effective_at: Time.current,
       reason_code: "security_incident",
-      principal_public_id: client.public_id,
+      principal_public_id: principal_public_id,
       applied_by_operator_public_id: operator.public_id,
     )
     second_case.authentication_method_effects.build(
-      principal_public_id: client.public_id,
+      principal_public_id: principal_public_id,
       authentication_method: "email",
       effect: "unusable",
       effective_at: Time.current,

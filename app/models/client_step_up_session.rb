@@ -57,9 +57,9 @@ class ClientStepUpSession < AppTicketRecord
 
   def email_transaction_model = ClientStepUpCeremonyTransaction
 
-  def email_session_token = user_token
+  def email_session_token = ClientToken.find(user_token_id)
 
   def passkey_transaction_model = ClientStepUpCeremonyTransaction
 
-  def passkey_session_token = user_token
+  def passkey_session_token = ClientToken.find(user_token_id)
 end

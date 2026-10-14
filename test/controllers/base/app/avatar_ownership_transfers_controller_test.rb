@@ -152,6 +152,17 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
   test "request requires its own Step-Up scope and preserves the selected Avatar" do
     selected_avatar_id = @client_token.reload.selected_avatar_public_id
+    other_surface_avatar = AvatarProvisioning::Create.call(
+      actor: @operator,
+      subject_type: :agent,
+      subject: @target.account,
+      avatar_params: { moniker: "Other surface" },
+      handle_params: { handle: "avatar-transfer-other-surface-#{SecureRandom.hex(5)}" },
+      owner_surface: "org",
+      owner_collective_public_id: @target.collective.public_id,
+    )
+
+    assert_predicate other_surface_avatar, :success?, other_surface_avatar.errors.inspect
     begin
       fv5303 = @client_token
       fv5324 = { scope: "avatar_transfer_accept", surface: "app" }
@@ -244,7 +255,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
                   oidc_client_id: rp_client.client_id,
                   revoked_at: nil,
                 ))
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = ClientRpSession.create!(
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -252,16 +263,17 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
                 refresh_token_expires_at: rp_now + 10.minutes,
               )
               rp_access = AuthenticationTokenService.encode(
-                rp_token.user, host: rp_host, resource_type: "client",
-                               session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                               oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                               expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                               subject: OidcSubject.for(
-                                 rp_token.user,
-                                 resource_type: "client",
-                               ), client_id: rp_client.client_id,
+                rp_token.actor_record, host: rp_host, resource_type: "client",
+                                       session_public_id: rp_token.public_id,
+                                       base_session_public_id: rp_token.public_id,
+                                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                       subject: OidcSubject.for(
+                                         rp_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: rp_client.client_id,
               )
               @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
             end
@@ -373,7 +385,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -381,16 +393,16 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -407,7 +419,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
         rp_headers
       end
     post base_app_avatar_ownership_transfers_url(host: @host, ri: "jp"),
-         params: request_params.merge(avatar_public_id: "attacker-selected-avatar"),
+         params: request_params.merge(avatar_public_id: other_surface_avatar.avatar.public_id),
          headers: http_headers_12, as: :json
 
     assert_response :success
@@ -448,7 +460,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
                   oidc_client_id: rp_client.client_id,
                   revoked_at: nil,
                 ))
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = ClientRpSession.create!(
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -456,16 +468,17 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
                 refresh_token_expires_at: rp_now + 10.minutes,
               )
               rp_access = AuthenticationTokenService.encode(
-                rp_token.user, host: rp_host, resource_type: "client",
-                               session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                               oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                               expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                               subject: OidcSubject.for(
-                                 rp_token.user,
-                                 resource_type: "client",
-                               ), client_id: rp_client.client_id,
+                rp_token.actor_record, host: rp_host, resource_type: "client",
+                                       session_public_id: rp_token.public_id,
+                                       base_session_public_id: rp_token.public_id,
+                                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                       subject: OidcSubject.for(
+                                         rp_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: rp_client.client_id,
               )
               @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
             end
@@ -487,6 +500,107 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
       assert_response :unprocessable_content
     end
+  end
+
+  test "request is denied when the selected persona is no longer an owner member" do
+    grant_step_up!("avatar_transfer_request")
+    membership = @source.account.persona_memberships.find_by!(enterprise: @source.collective)
+    membership.update!(membership_kind_id: PersonaMembershipKind::MEMBER)
+
+    assert_no_difference -> { AvatarOwnershipTransfer.count } do
+      post base_app_avatar_ownership_transfers_url(host: @host),
+           params: request_params,
+           headers: base_browser_headers,
+           as: :json
+
+      assert_response :forbidden
+    end
+  end
+
+  test "request is refused after the client principal enters a login-blocked status" do
+    grant_step_up!("avatar_transfer_request")
+    headers = base_browser_headers
+    @client.update!(status_id: ClientStatus::RESERVED)
+
+    assert_no_difference -> { AvatarOwnershipTransfer.count } do
+      post base_app_avatar_ownership_transfers_url(host: @host),
+           params: request_params,
+           headers: headers,
+           as: :json
+
+      assert_response :forbidden
+    end
+  end
+
+  test "an org principal cannot use the app transfer endpoint" do
+    headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
+
+    assert_no_difference -> { AvatarOwnershipTransfer.count } do
+      post base_app_avatar_ownership_transfers_url(host: @host),
+           params: request_params,
+           headers: headers,
+           as: :json
+
+      assert_response :unauthorized
+    end
+  end
+
+  test "a client cannot accept a transfer addressed to another enterprise" do
+    destination_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    destination = BaseSelectorBootstrapAuthority.call(surface: :app, principal: destination_client)
+    transfer = AvatarOwnershipTransfers::RequestOperation.call(
+      actor: @client,
+      surface: "app",
+      subject_public_id: @source.account.public_id,
+      avatar_public_id: @source.avatar.public_id,
+      target_surface: "app",
+      target_collective_public_id: destination.collective.public_id,
+    )
+    grant_step_up!("avatar_transfer_accept")
+
+    post base_app_accept_avatar_ownership_transfer_url(transfer.public_id, host: @host),
+         headers: base_browser_headers,
+         as: :json
+
+    assert_response :forbidden
+    assert_equal "pending", transfer.reload.state
+    assert_equal "app", @source.avatar.reload.current_ownership_period.owner_surface
+  end
+
+  test "destination-side app authority cannot cancel an org-originated transfer" do
+    source_operator = Operator.create!(
+      status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
+    source = BaseSelectorBootstrapAuthority.call(surface: :org, principal: source_operator)
+    source_avatar_result = AvatarProvisioning::Create.call(
+      actor: source_operator,
+      subject_type: :agent,
+      subject: source.account,
+      avatar_params: { moniker: "Org source" },
+      handle_params: { handle: "avatar-transfer-org-source-#{SecureRandom.hex(5)}" },
+      owner_surface: "org",
+      owner_collective_public_id: source.collective.public_id,
+    )
+
+    assert_predicate source_avatar_result, :success?, source_avatar_result.errors.inspect
+    transfer = AvatarOwnershipTransfers::RequestOperation.call(
+      actor: source_operator,
+      surface: "org",
+      subject_public_id: source.account.public_id,
+      avatar_public_id: source_avatar_result.avatar.public_id,
+      target_surface: "app",
+      target_collective_public_id: @source.collective.public_id,
+    )
+    grant_step_up!("avatar_transfer_cancel")
+
+    post base_app_cancel_avatar_ownership_transfer_url(transfer.public_id, host: @host),
+         headers: base_browser_headers,
+         as: :json
+
+    assert_response :forbidden
+    assert_equal "pending", transfer.reload.state
+    assert_equal "org", source_avatar_result.avatar.reload.current_ownership_period.owner_surface
   end
 
   test "org target accepts with its operation-specific Step-Up and no AAL floor" do
@@ -578,7 +692,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -586,16 +700,16 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -709,7 +823,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               !(rp_token.device_session_id && OperatorRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OperatorRpSession.create!(
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -717,16 +831,16 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.staff, host: rp_host, resource_type: "operator",
-                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                              subject: OidcSubject.for(
-                                rp_token.staff,
-                                resource_type: "operator",
-                              ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "operator",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -841,7 +955,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -849,16 +963,16 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -967,7 +1081,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -975,16 +1089,16 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -1094,7 +1208,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -1102,16 +1216,16 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -1132,6 +1246,50 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
     assert_response :success
     assert_equal "cancelled", response.parsed_body.fetch("status")
+  end
+
+  test "another authorized source persona can cancel a transfer over HTTP" do
+    transfer = AvatarOwnershipTransfers::RequestOperation.call(
+      actor: @client,
+      surface: "app",
+      subject_public_id: @source.account.public_id,
+      avatar_public_id: @source.avatar.public_id,
+      target_surface: "org",
+      target_collective_public_id: @target.collective.public_id,
+    )
+    other_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other = BaseSelectorBootstrapAuthority.call(surface: :app, principal: other_client)
+    other_persona = other.account
+    PersonaMembership.create!(
+      persona: other_persona,
+      enterprise: @source.collective,
+      enterprise_unit: @source.unit,
+      membership_kind_id: PersonaMembershipKind::OWNER,
+      membership_state_id: PersonaMembershipState::ACTIVE,
+      primary: false,
+      metadata: {},
+    )
+    other_token = ClientToken.create!(user: other_client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    BaseSwitcherAuthority.switch(
+      surface: :app,
+      principal: other_client,
+      session: other_token,
+      params: {
+        account_public_id: other_persona.public_id,
+        organization_public_id: other.collective.public_id,
+        organization_unit_public_id: other.unit.public_id,
+        avatar_public_id: other.avatar.public_id,
+      },
+    )
+    grant_step_up!("avatar_transfer_cancel", token: other_token)
+
+    post base_app_cancel_avatar_ownership_transfer_url(transfer.public_id, host: @host),
+         headers: base_browser_headers(principal: other_client, token: other_token),
+         as: :json
+
+    assert_response :success
+    assert_equal "cancelled", response.parsed_body.fetch("status")
+    assert_equal other_persona.public_id, transfer.reload.cancel_actor_public_id
   end
 
   test "the source client cannot accept its own outgoing transfer and the denial is audited" do
@@ -1223,7 +1381,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -1231,16 +1389,16 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -1353,7 +1511,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -1361,16 +1519,16 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -1489,7 +1647,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -1497,16 +1655,16 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -1620,7 +1778,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -1628,16 +1786,16 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -1753,7 +1911,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
                   oidc_client_id: rp_client.client_id,
                   revoked_at: nil,
                 ))
-              rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = ClientRpSession.create!(
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -1761,16 +1919,17 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
                 refresh_token_expires_at: rp_now + 10.minutes,
               )
               rp_access = AuthenticationTokenService.encode(
-                rp_token.user, host: rp_host, resource_type: "client",
-                               session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                               oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                               expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                               subject: OidcSubject.for(
-                                 rp_token.user,
-                                 resource_type: "client",
-                               ), client_id: rp_client.client_id,
+                rp_token.actor_record, host: rp_host, resource_type: "client",
+                                       session_public_id: rp_token.public_id,
+                                       base_session_public_id: rp_token.public_id,
+                                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                       subject: OidcSubject.for(
+                                         rp_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: rp_client.client_id,
               )
               @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
             end
@@ -1885,7 +2044,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -1893,16 +2052,16 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -1926,8 +2085,8 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
   private
 
-  def grant_step_up!(scope)
-    @client_token.update!(
+  def grant_step_up!(scope, token: @client_token)
+    token.update!(
       last_step_up_at: Time.current,
       last_step_up_scope: scope,
       last_step_up_aal: nil,
@@ -1936,14 +2095,14 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       last_step_up_user_verified: true,
       last_step_up_credential_ref: "test-step-up-credential",
       last_step_up_full_reauthentication: false,
-      last_step_up_session_public_id: @client_token.public_id,
+      last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:app",
     )
   end
 
-  def base_browser_headers
-    rp_headers = as_user_headers(@client, host: @host, session_public_id: @client_token.public_id)
+  def base_browser_headers(principal: @client, token: @client_token)
+    rp_headers = as_user_headers(principal, host: @host, session_public_id: token.public_id)
     rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
     rp_client = OidcClientRegistry.find!("base-app-ww")
     rp_key = [rp_client.client_id, rp_token.public_id]
@@ -1966,7 +2125,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       revoked_at: nil,
     )
 
-    rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+    rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
     rp_now = Time.current
     rp_session = ClientRpSession.create!(
       client_token: rp_token,
@@ -1978,7 +2137,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       refresh_token_expires_at: rp_now + 10.minutes,
     )
     rp_access = AuthenticationTokenService.encode(
-      rp_token.user,
+      rp_token.actor_record,
       host: rp_headers.fetch("Host"),
       resource_type: "client",
       session_public_id: rp_token.public_id,
@@ -1990,7 +2149,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       issuer: OidcIssuer.for_client(rp_client),
       audiences: [rp_client.aud],
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-      subject: OidcSubject.for(rp_token.user, resource_type: "client"),
+      subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"),
       client_id: rp_client.client_id,
     )
     @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]

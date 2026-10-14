@@ -65,8 +65,7 @@ class OperatorPasskeyTest < ActiveSupport::TestCase
 
   test "a stale loaded owner association cannot admit a fifth Passkey" do
     actor = Operator.create!
-    stale_actor = Operator.find(actor.id)
-    stale_actor.staff_passkeys.load
+    stale_actor = Operator.includes(:staff_passkeys).find(actor.id)
     4.times { actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
     candidate = OperatorPasskey.new(
       staff: stale_actor, webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key",

@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 class AddClientSignCycleStatuses < ActiveRecord::Migration[8.2]
   disable_ddl_transaction!
 

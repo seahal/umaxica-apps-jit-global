@@ -182,6 +182,12 @@ writer quiescence or the P12b marker.
   in the app/org controller tests. It does not claim that operational backfill, writer quiescence,
   or final cutover has been performed.
 
+  The current consumer ledger also records post-marker authenticated HTTP updates for APP and ORG
+  Avatars and create/reorder/detach for APP Group memberships. Those marker-dependent cases run
+  inside rollback-scoped tests; they verify local source selection and controller behavior, not a
+  persistent cutover or independent committed-history race. See
+  [`A7Q4`](../../evidence/2026-10-14-avatar-ownership-consumer-ledger-A7Q4.md).
+
   A current P10a transfer/Grant matrix covering concrete period and transfer validation, registry
   cardinality and replay, concurrency, cutover barriers, app/org controllers, Grant issuance and
   Avatar authorization passed `130 runs, 600 assertions, 0 failures, 0 errors, 0 skips`; see

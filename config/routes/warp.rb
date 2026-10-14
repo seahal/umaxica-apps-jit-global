@@ -87,9 +87,10 @@ scope module: :warp, as: :warp do
       end
 
       namespace :sign do
-        # Canonical first-party RP start + callback (AuthBoundaryAuthorityMap).
+        # First-party RP sign-out start and completion resources.
 
-        resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
+        resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
+        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
       end
 
       # Browser CSP report sink; keep configured report-uri path.
@@ -189,9 +190,10 @@ scope module: :warp, as: :warp do
       end
 
       namespace :sign do
-        # Canonical first-party RP start + callback (AuthBoundaryAuthorityMap).
+        # First-party RP sign-out start and completion resources.
 
-        resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
+        resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
+        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
       end
 
       # Browser CSP report sink; keep configured report-uri path.
@@ -290,9 +292,10 @@ scope module: :warp, as: :warp do
       end
 
       namespace :sign do
-        # Canonical first-party RP start + callback (AuthBoundaryAuthorityMap).
+        # First-party RP sign-out start and completion resources.
 
-        resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
+        resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
+        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
       end
 
       # Browser CSP report sink; keep configured report-uri path.

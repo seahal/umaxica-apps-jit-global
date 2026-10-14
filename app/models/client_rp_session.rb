@@ -28,7 +28,10 @@ class ClientRpSession < AppTicketRecord
   private
 
   def bind_device_session_from_parent_token
-    self.client_device_session ||= client_token&.device_session
+    return if device_session_id.present?
+
+    token = ClientToken.find_by(id: client_token_id)
+    self.device_session_id = token&.device_session_id
   end
 
   def parent_association_name

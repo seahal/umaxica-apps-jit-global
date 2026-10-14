@@ -68,13 +68,13 @@ class TelephoneSignUpOtpDeliveryGuard
           raise ArgumentError, "APP signup delivery requires its own Telephone ceremony"
         end
 
-        [telephone.user, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
+        [Client.find(telephone.user_id), ClientStatus::UNVERIFIED_WITH_SIGN_UP]
       when VisitorSignUpFlow
         unless telephone.is_a?(VisitorTelephone) && transaction.is_a?(VisitorTelephoneCeremonyTransaction)
           raise ArgumentError, "COM signup delivery requires its own Telephone ceremony"
         end
 
-        [telephone.visitor, VisitorStatus::ACTIVE]
+        [Visitor.find(telephone.visitor_id), VisitorStatus::ACTIVE]
       else raise ArgumentError, "unsupported Telephone signup delivery realm"
       end
     end

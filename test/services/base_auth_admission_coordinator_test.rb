@@ -79,7 +79,8 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     base_token = client_tokens(:one)
     %w(bootstrap credential_registration credential_change).each do |purpose|
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
-        actor_ref: base_token.user.public_id, session_ref: base_token.public_id, required_scope: "settings_totp",
+        actor_ref: base_token.actor_record.public_id,
+        session_ref: base_token.public_id, required_scope: "settings_totp",
         required_aal: "none", allowed_methods: ["totp"], purpose: purpose,
       )
       issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
@@ -758,7 +759,7 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
       local_sign_in_flow_ref: issuance.transaction.public_id,
     )
     binding.redeem!(auth_session: pending, admitted_auth_session: admitted)
-    record = binding.reload.admitted_auth_ceremony_session
+    record = ClientAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
       BaseAuthAdmissionCoordinator.validate_social_result_browser_binding!(
         reference: binding.entry_ref, surface: "app", provider: "google", base_browser_nonce: nonce, base_token: nil,

@@ -56,9 +56,9 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       pref, _token, _cookie_name = assert_preference_created(domain, ri: "us")
 
       assert_equal PreferenceClassRegistry.option_class(domain[:name].camelize, :region)::US,
-                   pref.public_send("#{domain[:name]}_preference_region").option_id
+                   preference_child_for_test(domain, pref, :region).option_id
       assert_equal PreferenceClassRegistry.option_class(domain[:name].camelize, :language)::EN,
-                   pref.public_send("#{domain[:name]}_preference_language").option_id
+                   preference_child_for_test(domain, pref, :language).option_id
     end
 
     test "#{domain[:name]} domain redirects to add ri param when missing" do
@@ -108,16 +108,16 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       pref.reload
       prefix = domain[:name].camelize
 
-      assert_equal 1, pref.try("#{domain[:name]}_preference_region").option_id
+      assert_equal 1, preference_child_for_test(domain, pref, :region).option_id
       # The US regional bundle: English, US month/day/year dates, 12-hour clock, USD.
       assert_equal PreferenceClassRegistry.option_class(prefix, :language)::EN,
-                   pref.try("#{domain[:name]}_preference_language").option_id
+                   preference_child_for_test(domain, pref, :language).option_id
       assert_equal PreferenceClassRegistry.option_class(prefix, :date_format)::US,
-                   pref.try("#{domain[:name]}_preference_date_format").option_id
+                   preference_child_for_test(domain, pref, :date_format).option_id
       assert_equal PreferenceClassRegistry.option_class(prefix, :time_format)::HOUR_12,
-                   pref.try("#{domain[:name]}_preference_time_format").option_id
+                   preference_child_for_test(domain, pref, :time_format).option_id
       assert_equal PreferenceClassRegistry.option_class(prefix, :currency)::USD,
-                   pref.try("#{domain[:name]}_preference_currency").option_id
+                   preference_child_for_test(domain, pref, :currency).option_id
       assert_equal "usd", cookies[PreferenceIoKeys::Cookies::CURRENCY]
       # Each regional default is recorded as an explicit choice so later ?ri seeding cannot
       # silently revert it.
@@ -160,16 +160,16 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       prefix = domain[:name].camelize
 
       assert_equal PreferenceClassRegistry.option_class(prefix, :region)::JP,
-                   pref.try("#{domain[:name]}_preference_region").option_id
+                   preference_child_for_test(domain, pref, :region).option_id
       # The JP regional bundle: Japanese, ISO year-month-day dates, 24-hour clock, JPY.
       assert_equal PreferenceClassRegistry.option_class(prefix, :language)::JA,
-                   pref.try("#{domain[:name]}_preference_language").option_id
+                   preference_child_for_test(domain, pref, :language).option_id
       assert_equal PreferenceClassRegistry.option_class(prefix, :date_format)::ISO,
-                   pref.try("#{domain[:name]}_preference_date_format").option_id
+                   preference_child_for_test(domain, pref, :date_format).option_id
       assert_equal PreferenceClassRegistry.option_class(prefix, :time_format)::HOUR_24,
-                   pref.try("#{domain[:name]}_preference_time_format").option_id
+                   preference_child_for_test(domain, pref, :time_format).option_id
       assert_equal PreferenceClassRegistry.option_class(prefix, :currency)::JPY,
-                   pref.try("#{domain[:name]}_preference_currency").option_id
+                   preference_child_for_test(domain, pref, :currency).option_id
       assert_equal "jpy", cookies[PreferenceIoKeys::Cookies::CURRENCY]
     end
 
@@ -202,13 +202,13 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       pref.reload
 
       assert_equal PreferenceClassRegistry.option_class(prefix, :language)::EN,
-                   pref.try("#{domain[:name]}_preference_language").option_id
+                   preference_child_for_test(domain, pref, :language).option_id
       assert_equal PreferenceClassRegistry.option_class(prefix, :date_format)::US,
-                   pref.try("#{domain[:name]}_preference_date_format").option_id
+                   preference_child_for_test(domain, pref, :date_format).option_id
       assert_equal PreferenceClassRegistry.option_class(prefix, :time_format)::HOUR_12,
-                   pref.try("#{domain[:name]}_preference_time_format").option_id
+                   preference_child_for_test(domain, pref, :time_format).option_id
       assert_equal PreferenceClassRegistry.option_class(prefix, :currency)::USD,
-                   pref.try("#{domain[:name]}_preference_currency").option_id
+                   preference_child_for_test(domain, pref, :currency).option_id
     end
 
     test "#{domain[:name]} domain region write puts the region currency on the JWT and currency screen" do
@@ -225,7 +225,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       pref.reload
 
       assert_equal PreferenceClassRegistry.option_class(prefix, :currency)::USD,
-                   pref.public_send("#{domain[:name]}_preference_currency").option_id
+                   preference_child_for_test(domain, pref, :currency).option_id
       assert_equal "usd", cookies[PreferenceIoKeys::Cookies::CURRENCY]
 
       access_token = cookies[preference_access_cookie_name(domain)]
@@ -244,7 +244,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       host!(domain[:host])
       pref, = assert_preference_created(domain)
       prefix = domain[:name].camelize
-      original_currency_id = pref.public_send("#{domain[:name]}_preference_currency").option_id
+      original_currency_id = preference_child_for_test(domain, pref, :currency).option_id
 
       get public_send("edit_base_#{domain[:name]}_preference_region_url", ri: "jp")
       patch public_send("base_#{domain[:name]}_preference_region_url", ri: "jp"),
@@ -253,9 +253,9 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       pref.reload
 
       assert_equal original_currency_id,
-                   pref.public_send("#{domain[:name]}_preference_currency").option_id
+                   preference_child_for_test(domain, pref, :currency).option_id
       assert_equal PreferenceClassRegistry.option_class(prefix, :currency)::JPY,
-                   pref.public_send("#{domain[:name]}_preference_currency").option_id
+                   preference_child_for_test(domain, pref, :currency).option_id
     end
 
     test "#{domain[:name]} domain region edit and update do not change preference count" do
@@ -280,9 +280,9 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
       pref.reload
 
-      assert_equal 1, pref.try("#{domain[:name]}_preference_region").option_id
+      assert_equal 1, preference_child_for_test(domain, pref, :region).option_id
       assert_equal PreferenceClassRegistry.option_class(domain[:name].camelize, :language)::EN,
-                   pref.try("#{domain[:name]}_preference_language").option_id
+                   preference_child_for_test(domain, pref, :language).option_id
     end
 
     test "#{domain[:name]} domain region edit renders a submit button inside the form" do
@@ -311,7 +311,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
       pref.reload
 
-      assert_equal 1, pref.try("#{domain[:name]}_preference_timezone").option_id
+      assert_equal 1, preference_child_for_test(domain, pref, :timezone).option_id
     end
 
     test "#{domain[:name]} domain timezone edit and update do not change preference count" do
@@ -335,7 +335,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
       pref.reload
 
-      assert_equal 1, pref.try("#{domain[:name]}_preference_timezone").option_id
+      assert_equal 1, preference_child_for_test(domain, pref, :timezone).option_id
     end
 
     test "#{domain[:name]} domain timezone update removes only timezone overlay from redirect" do
@@ -372,7 +372,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
       pref.reload
 
-      assert_equal 2, pref.try("#{domain[:name]}_preference_language").option_id
+      assert_equal 2, preference_child_for_test(domain, pref, :language).option_id
     end
 
     test "#{domain[:name]} domain language edit and update do not change preference count" do
@@ -396,7 +396,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
       pref.reload
 
-      assert_equal 2, pref.try("#{domain[:name]}_preference_language").option_id
+      assert_equal 2, preference_child_for_test(domain, pref, :language).option_id
     end
 
     test "#{domain[:name]} domain applies language setting to locale" do
@@ -522,7 +522,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
       pref.reload
 
-      assert_equal 1, pref.try("#{domain[:name]}_preference_timezone").option_id
+      assert_equal 1, preference_child_for_test(domain, pref, :timezone).option_id
     end
 
     test "#{domain[:name]} domain language select uses localized options" do
@@ -591,7 +591,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
       pref.reload
 
-      assert_equal 2, pref.try("#{domain[:name]}_preference_theme").option_id
+      assert_equal 2, preference_child_for_test(domain, pref, :theme).option_id
     end
 
     test "#{domain[:name]} domain theme edit and update do not change preference count" do
@@ -612,7 +612,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
       pref.reload
 
-      assert_equal 2, pref.try("#{domain[:name]}_preference_theme").option_id
+      assert_equal 2, preference_child_for_test(domain, pref, :theme).option_id
     end
 
     test "#{domain[:name]} domain timezone select omits blank option" do
@@ -638,7 +638,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
       pref.reload
 
-      assert pref.try("#{domain[:name]}_preference_cookie").functional
+      assert preference_child_for_test(domain, pref, :cookie).functional
     end
 
     test "#{domain[:name]} domain cookie edit and update do not change preference count" do
@@ -659,7 +659,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
       pref.reload
 
-      assert pref.try("#{domain[:name]}_preference_cookie").functional
+      assert preference_child_for_test(domain, pref, :cookie).functional
     end
 
     test "#{domain[:name]} domain resets preferences" do
@@ -831,7 +831,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
           pref.reload
 
-          assert_equal expected_id, pref.public_send("#{domain[:name]}_preference_#{association_suffix}").option_id
+          assert_equal expected_id, preference_child_for_test(domain, pref, association_suffix.to_sym).option_id
           get public_send("edit_base_#{domain[:name]}_preference_#{route_suffix}_url", default_state)
 
           assert_equal expected_id, inertia_props.dig("form", "value")
@@ -893,7 +893,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -901,16 +901,16 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -953,8 +953,9 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
   end
 
   test "app extended region preference edit pages do not write missing child records" do
-    host!(DOMAINS.first[:host])
-    pref, = assert_preference_created(DOMAINS.first)
+    domain = DOMAINS.first
+    host!(domain[:host])
+    pref, = assert_preference_created(domain)
 
     Prosopite.pause do
       [
@@ -962,17 +963,18 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
         [:app_preference_date_format, edit_base_app_preference_calendar_url(ri: "jp")],
         [:app_preference_time_format, edit_base_app_preference_clock_url(ri: "jp")],
       ].each do |association, url|
-        pref.public_send(association).destroy!
+        preference_type = association.to_s.delete_prefix("#{domain[:name]}_preference_").to_sym
+        preference_child_for_test(domain, pref, preference_type).destroy!
         pref.reload
 
-        assert_nil pref.public_send(association)
+        assert_nil preference_child_class_for_test(domain, preference_type).find_by(preference_id: pref.id)
 
         get url
 
         assert_response :success
         pref.reload
 
-        assert_nil pref.public_send(association)
+        assert_nil preference_child_class_for_test(domain, preference_type).find_by(preference_id: pref.id)
       end
     end
   end
@@ -1127,6 +1129,17 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
   def preference_status_class(domain)
     "#{domain[:preference_model].name}Status".constantize
+  end
+
+  def preference_child_class_for_test(domain, type)
+    prefix = domain[:name].camelize
+    return PreferenceClassRegistry.cookie_class(prefix) if type == :cookie
+
+    PreferenceClassRegistry.record_class(prefix, type)
+  end
+
+  def preference_child_for_test(domain, preference, type)
+    preference_child_class_for_test(domain, type).find_by!(preference_id: preference.id)
   end
 
   def default_state

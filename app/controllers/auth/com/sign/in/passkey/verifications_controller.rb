@@ -49,7 +49,8 @@ module Auth
             private
 
             def allow_passkey_sign_in?(passkey)
-              return true if passkey.visitor.has_verified_pii?
+              actor = Visitor.find(passkey.visitor_id)
+              return true if actor.has_verified_pii?
 
               Rails.logger.info(
                 JitLogEvent.format(
@@ -65,9 +66,10 @@ module Auth
             end
 
             def perform_passkey_sign_in(passkey)
+              actor = Visitor.find(passkey.visitor_id)
               pt = retrieve_pt_for_checkpoint
               establish_signed_in_session!(
-                passkey.visitor, pt: pt, ri: current_region_identifier, auth_method: "passkey",
+                actor, pt: pt, ri: current_region_identifier, auth_method: "passkey",
               )
             end
 

@@ -50,7 +50,9 @@ module AvatarBackfill
         assert_equal 1, result.summary.fetch(:created_count)
       end
 
-      assert_equal persona, AvatarPersonaBinding.active.find_by!(avatar_id: avatar.id).persona
+      binding = AvatarPersonaBinding.active.find_by!(avatar_id: avatar.id)
+
+      assert_equal persona, ClientPersona.find(binding.persona_id)
     end
 
     test "apply is idempotent" do

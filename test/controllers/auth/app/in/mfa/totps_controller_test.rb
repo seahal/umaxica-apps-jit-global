@@ -44,7 +44,7 @@ module Auth::App::In
       assert_response :see_other
       @primary_sign_in_binding = SignInFlowBindingCodec.encode(
         flow: ClientSignInFlow.find_by!(
-          public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+          public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
         ),
         surface: "app", phase: "PRIMARY_PENDING",
       )
@@ -135,7 +135,7 @@ module Auth::App::In
         .where(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
 
       assert_not_empty otps,
-                       "Client should have active OTPs. All OTPs: #{user.client_totp_credentials.pluck(
+                       "Client should have active OTPs. All OTPs: #{ClientTotpCredential.where(user_id: user.id).pluck(
                          :id,
                          :user_identity_totp_credential_status_id,
                        ).inspect}"

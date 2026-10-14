@@ -1554,6 +1554,7 @@ class OidcProductionCallbackIdentityTest < ActionDispatch::IntegrationTest
     @rp = ClientRpSession.create!(
       client_token: root, oidc_client_id: "core-app", oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_auth_time: ClientRpSession.database_now,
+      refresh_token_expires_at: 1.hour.from_now,
     )
     host!(@core_host)
     https!

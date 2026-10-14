@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -7,7 +8,6 @@
 #  id :bigint           not null, primary key
 #
 
-# frozen_string_literal: true
 
 require "test_helper"
 

@@ -66,7 +66,7 @@ module Auth::App::In
       assert_response :see_other
       @primary_sign_in_binding = SignInFlowBindingCodec.encode(
         flow: ClientSignInFlow.find_by!(
-          public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+          public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
         ),
         surface: "app", phase: "PRIMARY_PENDING",
       )

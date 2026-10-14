@@ -30,6 +30,8 @@ module SignOutInertiaPages
   end
 
   def sign_out_confirmation_props
+    browser_rp_flow = respond_to?(:browser_rp_logout_flow?, true) && browser_rp_logout_flow?
+
     {
       title: t("sign.shared.sign_out.title"),
       heading: t("sign.shared.sign_out.title"),
@@ -40,8 +42,12 @@ module SignOutInertiaPages
       form: {
         action: sign_out_confirmation_form_path,
         logout_challenge: params[:logout_challenge].presence,
+        logout_intent_proof: if params[:logout_challenge].present? &&
+          respond_to?(:browser_rp_logout_intent_proof_for, true)
+          browser_rp_logout_intent_proof_for(@logout_transaction)
+        end,
       },
-      cancel: {
+      cancel: browser_rp_flow ? nil : {
         label: t("actions.cancel"),
         action: sign_out_post_path,
       },
@@ -107,5 +113,11 @@ module SignOutInertiaPages
     render inertia: sign_out_page_component("unavailable"),
            props: sign_out_unavailable_props,
            status: :unprocessable_content
+  end
+
+  def render_oidc_rp_logout_indeterminate
+    render inertia: sign_out_page_component("unavailable"),
+           props: sign_out_unavailable_props,
+           status: :service_unavailable
   end
 end

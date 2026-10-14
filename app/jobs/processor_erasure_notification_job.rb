@@ -114,8 +114,12 @@ class ProcessorErasureNotificationJob < ApplicationJob
 
   def subject_for(notification)
     case notification
-    when ClientProcessorErasureNotification then notification.client_privacy_request.client
-    when VisitorProcessorErasureNotification then notification.visitor_privacy_request.visitor
+    when ClientProcessorErasureNotification
+      request = ClientPrivacyRequest.find(notification.client_privacy_request_id)
+      Client.find(request.client_id)
+    when VisitorProcessorErasureNotification
+      request = VisitorPrivacyRequest.find(notification.visitor_privacy_request_id)
+      Visitor.find(request.visitor_id)
     else
       raise ArgumentError, "unsupported processor notification: #{notification.class.name}"
     end
@@ -123,8 +127,8 @@ class ProcessorErasureNotificationJob < ApplicationJob
 
   def privacy_request_for(notification)
     case notification
-    when ClientProcessorErasureNotification then notification.client_privacy_request
-    when VisitorProcessorErasureNotification then notification.visitor_privacy_request
+    when ClientProcessorErasureNotification then ClientPrivacyRequest.find(notification.client_privacy_request_id)
+    when VisitorProcessorErasureNotification then VisitorPrivacyRequest.find(notification.visitor_privacy_request_id)
     else
       raise ArgumentError, "unsupported processor notification: #{notification.class.name}"
     end

@@ -64,7 +64,9 @@ module Auth
             assert_equal 303, admission_browser.response.status
             @primary_sign_in_binding = SignInFlowBindingCodec.encode(
               flow: ClientSignInFlow.find_by!(
-                public_id: admission_binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+                public_id: ClientAuthCeremonySession.find(
+                  admission_binding.reload.admitted_auth_ceremony_session_id,
+                ).local_sign_in_flow_ref,
               ),
               surface: "app", phase: "PRIMARY_PENDING",
             )

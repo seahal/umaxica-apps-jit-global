@@ -7,11 +7,13 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
   test "first-party RP client ids are unique and named" do
     ids = AuthBoundaryAuthorityMap.first_party_rp_client_ids
 
-    assert_equal 10, ids.size
+    assert_equal 12, ids.size
     assert_predicate AuthBoundaryAuthorityMap, :unique_client_ids?
     assert_includes ids, "core-app"
     assert_includes ids, "edit-org"
     assert_includes ids, "warp-com"
+    assert_includes ids, "palm-app"
+    assert_includes ids, "tech-org"
   end
 
   test "deprecated shared browser client ids do not overlap the first-party RPs" do
@@ -22,10 +24,10 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
     assert_predicate AuthBoundaryAuthorityMap, :no_overlap_with_deprecated_ids?
   end
 
-  test "approved regional target contains twelve regional clients and one global edit client" do
-    assert_equal 13, AuthBoundaryAuthorityMap.approved_rp_client_ids.size
+  test "approved map contains regional clients plus global Edit, Palm, and Tech clients" do
+    assert_equal 15, AuthBoundaryAuthorityMap.approved_rp_client_ids.size
     assert_equal 12, AuthBoundaryAuthorityMap::REGIONAL_RP_CLIENT_IDS.size
-    assert_equal "edit-org", AuthBoundaryAuthorityMap.approved_rp_client_ids.last
+    assert_equal %w(edit-org palm-app tech-org), AuthBoundaryAuthorityMap.approved_rp_client_ids.last(3)
     assert_equal AuthBoundaryAuthorityMap.approved_rp_client_ids.sort,
                  AuthBoundaryAuthorityMap.approved_rp_faces.keys.sort
     regions = AuthBoundaryAuthorityMap::REGIONAL_RP_CLIENT_IDS.map do |client_id|
@@ -35,6 +37,10 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
     assert_equal %w(jp us), regions
 
     assert_nil AuthBoundaryAuthorityMap.approved_rp_faces.fetch("edit-org").fetch(:region)
+    assert_equal "palm", AuthBoundaryAuthorityMap.approved_rp_faces.fetch("palm-app").fetch(:surface)
+    assert_equal "client", AuthBoundaryAuthorityMap.approved_rp_faces.fetch("palm-app").fetch(:actor)
+    assert_equal "tech", AuthBoundaryAuthorityMap.approved_rp_faces.fetch("tech-org").fetch(:surface)
+    assert_equal "operator", AuthBoundaryAuthorityMap.approved_rp_faces.fetch("tech-org").fetch(:actor)
   end
 
   test "approved regional client metadata never crosses surface or region" do
@@ -58,7 +64,7 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
       assert_equal expected_face, meta.fetch(:face)
       assert_includes %w(client visitor operator), meta.fetch(:actor)
       assert_equal "/oidc/callback", AuthBoundaryAuthorityMap.callback_path_for(client_id)
-      assert_equal "/sign/out", AuthBoundaryAuthorityMap.sign_out_path_for(client_id)
+      assert_equal "/sign/out/completion", AuthBoundaryAuthorityMap.sign_out_path_for(client_id)
     end
   end
 

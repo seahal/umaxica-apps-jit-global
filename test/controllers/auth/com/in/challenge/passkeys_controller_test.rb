@@ -21,11 +21,12 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
     TurnstileVerifierStub.challenge_response = { "success" => true }
 
     @visitor = Visitor.create!(id: 9_116_000_000_000 + Zlib.crc32(name))
-    @visitor.visitor_emails.create!(
+    email = VisitorEmail.create!(
+      visitor_id: @visitor.id,
       address: "com_mfa_passkey_#{SecureRandom.hex(4)}@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
-    @visitor.visitor_emails.last.finalize_binding!
+    email.finalize_binding!
     @visitor.reload.update!(mfa_level_enabled: true)
     @visitor.visitor_telephones.create!(
       number: "+8190" + format("%08d", SecureRandom.random_number(100_000_000)),
@@ -64,7 +65,7 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
     assert_response :see_other
     @primary_sign_in_binding = SignInFlowBindingCodec.encode(
       flow: VisitorSignInFlow.find_by!(
-        public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+        public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
       ),
       surface: "com", phase: "PRIMARY_PENDING",
     )

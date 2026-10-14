@@ -110,6 +110,10 @@ class IpOccurrenceTest < ActiveSupport::TestCase
       ip_occurrence: record,
       area_occurrence: AreaOccurrence.find_by!(public_id: "one_area_occ_id_00001"),
     )
+    record = IpOccurrence.includes(
+      :area_ip_occurrences, :ip_visitor_occurrences, :domain_ip_occurrences, :email_ip_occurrences,
+      :ip_staff_occurrences, :ip_telephone_occurrences, :ip_user_occurrences, :ip_zip_occurrences,
+    ).find(record.id)
 
     record.destroy
     assert_raise(ActiveRecord::RecordNotFound) { join.reload }

@@ -30,19 +30,6 @@ class BranchCoverageBatch32ThresholdPushTest < ActiveSupport::TestCase
                  DbscVerificationService.new(record: missing_key, session_id: "s", proof: "p").call[:error_code]
   end
 
-  test "PalmAccessTokenAuthenticator inactive and locked resource arms" do
-    blank = PalmAccessTokenAuthenticator.new(
-      access_token: "", host: "example.test", authorization_scheme: "Bearer",
-    ).call
-    wrong_scheme = PalmAccessTokenAuthenticator.new(
-      access_token: "tok", host: "example.test", authorization_scheme: "Basic",
-    ).call
-
-    assert_equal "invalid_token", blank.error
-    assert_not blank.success?
-    assert_equal "invalid_token", wrong_scheme.error
-  end
-
   test "OidcBackchannelLogoutNotifier blank sid subject early return" do
     count = OidcBackchannelLogoutNotifier.new(resource_type: "client", subject: nil, sid: nil).call
 

@@ -59,16 +59,6 @@ class BranchCoverageBatch6OtpAndOpsTest < ActiveSupport::TestCase
     assert_equal locked_source, email.reload.attributes
   end
 
-  test "PalmAccessTokenAuthenticator rejects blank access token" do
-    result = PalmAccessTokenAuthenticator.new(
-      access_token: "",
-      host: "palm.app.localhost",
-      authorization_scheme: "Bearer",
-    ).call
-
-    assert_not result.success?
-  end
-
   test "OidcTokenRevoker failure arms for missing tokens" do
     result = OidcTokenRevoker.new(
       token: "",

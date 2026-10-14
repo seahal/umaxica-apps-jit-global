@@ -113,13 +113,13 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
       auth.get(auth_app_social_google_callback_path, params: { state:, ri: "jp" }, headers: auth_headers)
     end
     assert_equal 303, auth.response.status
-    ceremony = binding.reload.admitted_auth_ceremony_session
+    ceremony = admitted_auth_ceremony_session_for_test(binding.reload)
 
     assert_predicate ceremony, :authentication_evidence_recorded?
     assert_equal "google", ceremony.authentication_method
     assert_equal [true, true], [auth.cookies[AuthenticationBase::ACCESS_COOKIE_KEY].nil?,
                                 auth.cookies[AuthenticationBase::REFRESH_COOKIE_KEY].nil?,]
-    assert_equal "pending", binding.authorization_transaction.reload.status
+    assert_equal "pending", authorization_transaction_for_test(binding).reload.status
 
     auth.get(auth_app_sign_oidc_handoff_path, params: { ri: "jp" })
 
@@ -146,8 +146,8 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     assert_equal [ceremony.authentication_event_at, "google"],
                  [token.authentication_event_at, token.established_authentication_method]
     assert_not_nil token.root_login_established_at
-    assert_equal token.public_id, binding.authorization_transaction.reload.browser_session_ref
-    assert_predicate binding.authorization_transaction, :consumed?
+    assert_equal token.public_id, authorization_transaction_for_test(binding).reload.browser_session_ref
+    assert_predicate authorization_transaction_for_test(binding), :consumed?
     assert_equal 0, ClientRpSession.where(client_token_id: token.id).count
   end
   test "an admitted Apple callback records Auth evidence and Base issues the original OIDC root" do
@@ -241,13 +241,13 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
       auth.get(auth_app_social_apple_callback_path, params: { state:, ri: "jp" }, headers: auth_headers)
     end
     assert_equal 303, auth.response.status
-    ceremony = binding.reload.admitted_auth_ceremony_session
+    ceremony = admitted_auth_ceremony_session_for_test(binding.reload)
 
     assert_predicate ceremony, :authentication_evidence_recorded?
     assert_equal "apple", ceremony.authentication_method
     assert_equal [true, true], [auth.cookies[AuthenticationBase::ACCESS_COOKIE_KEY].nil?,
                                 auth.cookies[AuthenticationBase::REFRESH_COOKIE_KEY].nil?,]
-    assert_equal "pending", binding.authorization_transaction.reload.status
+    assert_equal "pending", authorization_transaction_for_test(binding).reload.status
 
     auth.get(auth_app_sign_oidc_handoff_path, params: { ri: "jp" })
 
@@ -274,8 +274,8 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     assert_equal [ceremony.authentication_event_at, "apple"],
                  [token.authentication_event_at, token.established_authentication_method]
     assert_not_nil token.root_login_established_at
-    assert_equal token.public_id, binding.authorization_transaction.reload.browser_session_ref
-    assert_predicate binding.authorization_transaction, :consumed?
+    assert_equal token.public_id, authorization_transaction_for_test(binding).reload.browser_session_ref
+    assert_predicate authorization_transaction_for_test(binding), :consumed?
     assert_equal 0, ClientRpSession.where(client_token_id: token.id).count
   end
   test "an existing Google subject started at signup records Auth evidence and Base issues the original OIDC root" do
@@ -369,13 +369,13 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
       auth.get(auth_app_social_google_callback_path, params: { state:, ri: "jp" }, headers: auth_headers)
     end
     assert_equal 303, auth.response.status
-    ceremony = binding.reload.admitted_auth_ceremony_session
+    ceremony = admitted_auth_ceremony_session_for_test(binding.reload)
 
     assert_predicate ceremony, :authentication_evidence_recorded?
     assert_equal "google", ceremony.authentication_method
     assert_equal [true, true], [auth.cookies[AuthenticationBase::ACCESS_COOKIE_KEY].nil?,
                                 auth.cookies[AuthenticationBase::REFRESH_COOKIE_KEY].nil?,]
-    assert_equal "pending", binding.authorization_transaction.reload.status
+    assert_equal "pending", authorization_transaction_for_test(binding).reload.status
 
     auth.get(auth_app_sign_oidc_handoff_path, params: { ri: "jp" })
 
@@ -402,8 +402,8 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     assert_equal [ceremony.authentication_event_at, "google"],
                  [token.authentication_event_at, token.established_authentication_method]
     assert_not_nil token.root_login_established_at
-    assert_equal token.public_id, binding.authorization_transaction.reload.browser_session_ref
-    assert_predicate binding.authorization_transaction, :consumed?
+    assert_equal token.public_id, authorization_transaction_for_test(binding).reload.browser_session_ref
+    assert_predicate authorization_transaction_for_test(binding), :consumed?
     assert_equal 0, ClientRpSession.where(client_token_id: token.id).count
   end
   test "an unknown signup completes its bound source graph before Base issues the original OIDC root" do
@@ -546,12 +546,12 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     assert_equal [303, 303, completion_destination],
                  [original_completion_status, base.response.status, base.response.location]
     identity = ClientExternalIdentity.find_by!(provider: "google", subject:)
-    actor = identity.user
+    actor = Client.find(identity.client_id)
 
     assert_equal [actor.id, true, true, nil],
                  [signup.reload.principal_id, signup.completed?, ClientIdentity.exists?(source_record_id: actor.id),
                   base.cookies[AuthenticationBase::ACCESS_COOKIE_KEY],]
-    ceremony = binding.reload.admitted_auth_ceremony_session
+    ceremony = admitted_auth_ceremony_session_for_test(binding.reload)
     evidence_time = ceremony.authentication_event_at
 
     assert_equal [true, "google"], [binding.redeemed?, ceremony.authentication_method]
@@ -569,8 +569,8 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     assert_equal [evidence_time, "google", true, token.public_id, true],
                  [token.authentication_event_at, token.established_authentication_method,
                   token.root_login_established_at.present?,
-                  binding.authorization_transaction.reload.browser_session_ref,
-                  binding.authorization_transaction.consumed?,]
+                  authorization_transaction_for_test(binding).reload.browser_session_ref,
+                  authorization_transaction_for_test(binding).consumed?,]
   end
   test "a reserved existing social actor receives a terminal refusal without Auth evidence or Root" do
     actor = Client.create!(status_id: ClientStatus::RESERVED, birthdate: "2000-01-01")
@@ -662,18 +662,20 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
       auth.get(auth_app_social_google_callback_path, params: { state:, ri: "jp" }, headers: auth_headers)
     end
     assert_equal 403, auth.response.status
-    ceremony = binding.reload.admitted_auth_ceremony_session
+    ceremony = admitted_auth_ceremony_session_for_test(binding.reload)
 
     assert_equal [false, nil, nil, "pending"],
                  [ceremony.authentication_evidence_recorded?,
                   auth.cookies[AuthenticationBase::ACCESS_COOKIE_KEY], auth.response.location,
-                  binding.authorization_transaction.reload.status,]
+                  authorization_transaction_for_test(binding).reload.status,]
   end
 
   test "a Social start without a redeemed Auth admission creates no security state or flash" do
     auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! auth_host
     https!
+    get auth_app_root_path(ri: "jp")
+    csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
     assert_no_difference(
       [
         "ClientToken.count", "ClientSignUpFlow.count", "ClientSocialCeremonyTransaction.count",
@@ -681,7 +683,9 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
       ],
     ) do
       post auth_app_social_google_session_path, params: { ri: "jp" },
-                                                headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+                                                headers: { "Origin" => "https://#{auth_host}",
+                                                           "Sec-Fetch-Site" => "same-origin",
+                                                           "X-CSRF-Token" => csrf, }
     end
     assert_response :redirect
     assert_predicate session["flash"], :blank?

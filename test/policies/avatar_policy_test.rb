@@ -31,6 +31,29 @@ class AvatarPolicyTest < ActiveSupport::TestCase
     ).exists?(id: @avatar.id)
   end
 
+  test "post-cutover policy reads and scopes by the concrete owner" do
+    AvatarRecord.transaction(joinable: false) do
+      AvatarOwnershipCutover.create!(
+        id: AvatarOwnershipCutover::CUTOVER_ID,
+        cutover_at: Time.utc(2030, 1, 1),
+      )
+
+      policy = AvatarPolicy.new(@avatar, user: @client)
+      scoped = AvatarPolicy.new(Avatar, user: @client).apply_scope(
+        Avatar.where(id: @avatar.id),
+        type: :active_record_relation,
+      )
+
+      assert_predicate policy, :show?
+      assert_predicate policy, :update?
+      assert_equal [@avatar.id], scoped.pluck(:id)
+      assert_instance_of AvatarEnterpriseOwnershipPeriod, @avatar.current_ownership_period
+
+      # Roll back the marker and synthetic graph through the ordinary test transaction.
+      raise ActiveRecord::Rollback
+    end
+  end
+
   test "a forged legacy owner assignment cannot authorize an Avatar owned by another collective" do
     other = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
     other_bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: other)

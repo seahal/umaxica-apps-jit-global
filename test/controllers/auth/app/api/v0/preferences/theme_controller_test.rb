@@ -74,7 +74,9 @@ class Auth::App::Api::V0::Preferences::ThemeControllerTest < ActionDispatch::Int
 
     assert_response :ok
     assert_equal "dr", response.parsed_body["theme"]
-    assert_equal option_class::DARK, AppPreference.order(:created_at).last.app_preference_theme.option_id
+    preference = AppPreference.includes(:app_preference_theme).order(:created_at).last
+
+    assert_equal option_class::DARK, preference.app_preference_theme.option_id
   end
 
   test "PATCH update persists the theme to the preference record so a reload keeps it" do

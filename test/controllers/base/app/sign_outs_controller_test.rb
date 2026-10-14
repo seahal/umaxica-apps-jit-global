@@ -9,6 +9,7 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     @user = create_verified_user_with_email(email_address: "base-app-sign-out-#{SecureRandom.hex(4)}@example.com")
     host! @host
+    https!
     # The shared completion path renders through the jump-aware helpers, which need signing keys.
     load_jump_rt_env!
   end
@@ -68,7 +69,10 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
       name, value = pair.split("=", 2)
       cookies[name] = Rack::Utils.unescape(value)
     end
-    post base_app_sign_out_url(host: @host, ri: "jp")
+    csrf_token = fetch_csrf_token(edit_base_app_sign_out_url(host: @host, ri: "jp"), headers: rp_headers)
+    post base_app_sign_out_url(host: @host, ri: "jp"), headers: {
+      "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf_token,
+    }
 
     assert_response :see_other
     assert_predicate token.reload, :currently_usable?
@@ -80,9 +84,13 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_predicate token.reload, :currently_usable?
+    csrf_token = fetch_csrf_token(authority.request_uri)
     form = response.parsed_body.at_css("form")
     fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    post form["action"], params: fields, headers: { "Origin" => "https://#{@host}" }
+    fields["authenticity_token"] = csrf_token
+    post form["action"], params: fields, headers: {
+      "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf_token,
+    }
 
     assert_response :see_other
     assert_predicate token.reload, :revoked?
@@ -92,8 +100,17 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "base/app/sign_outs/edit", inertia_component
     challenge = Rack::Utils.parse_nested_query(origin.query.to_s).fetch("logout_challenge")
-    post inertia_props.fetch("form").fetch("action"),
-         params: { logout_challenge: challenge, ri: "jp" }, headers: { "Origin" => "https://#{@host}" }
+    csrf_token = fetch_csrf_token(origin.request_uri)
+    form_props = inertia_props.fetch("form")
+    post form_props.fetch("action"),
+         params: {
+           logout_challenge: challenge,
+           ri: "jp",
+           authenticity_token: csrf_token,
+           logout_intent_proof: form_props.fetch("logout_intent_proof"),
+         }, headers: {
+           "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin",
+         }
 
     assert_response :see_other
     completion = response.location
@@ -149,6 +166,7 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
         fixture_root = token
         fixture_actor = @user
         fixture_host = @host
+        base_headers = as_user_headers(fixture_actor, host: fixture_host, session_public_id: fixture_root.public_id)
         fixture_root.rotate_refresh_token! unless fixture_root.device_session.current_refresh_token_id
         fixture_client = OidcClientRegistry.find!("base-app-ww")
         @base_rp_fixture_credentials ||= {}
@@ -175,13 +193,17 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
           )
           fixture_refresh = fixture_rp.issue_refresh_token!
           @base_rp_fixture_credentials[fixture_key] = [
+            base_headers.fetch("Cookie"),
             "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(fixture_access)}",
             "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(fixture_refresh)}",
           ].join("; ")
         end
         @base_rp_fixture_credentials.fetch(fixture_key)
       end
-    { "Host" => @host, "Cookie" => rp_cookie, "X-TEST-SESSION-PUBLIC-ID" => token.public_id }
+    { "Host" => @host,
+      "Cookie" => rp_cookie,
+      "HTTP_COOKIE" => rp_cookie,
+      "X-TEST-SESSION-PUBLIC-ID" => token.public_id, }
   end
 
   def bearer_headers(token, host: nil, headers: {})
@@ -357,9 +379,15 @@ class Base::App::SignOutsControllerTest
     { "X-CSRF-Token" => token }
   end
 
-  def fetch_csrf_token(path)
-    get(path)
-    response.body[/name="authenticity_token" value="([^"]+)"/, 1] || response.body
+  def fetch_csrf_token(path, headers: {})
+    with_forgery_protection do
+      get(path, headers: headers)
+      csrf_token = response.body[/<meta name="csrf-token" content="([^"]+)"/, 1] ||
+        response.body[/name="authenticity_token" value="([^"]+)"/, 1]
+
+      assert_predicate csrf_token, :present?, "expected a CSRF token in the response"
+      csrf_token
+    end
   end
 
   def social_callback_headers(host)

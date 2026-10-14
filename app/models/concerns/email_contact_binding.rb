@@ -141,8 +141,8 @@ module EmailContactBinding
   def retire_for_withdrawal!
     owner, status_column, suspended =
       case self
-      when ClientEmail then [user, :user_email_status_id, ClientEmailStatus::SUSPENDED]
-      when VisitorEmail then [visitor, :visitor_email_status_id, VisitorEmailStatus::SUSPENDED]
+      when ClientEmail then [Client.find(user_id), :user_email_status_id, ClientEmailStatus::SUSPENDED]
+      when VisitorEmail then [Visitor.find(visitor_id), :visitor_email_status_id, VisitorEmailStatus::SUSPENDED]
       else raise ArgumentError, "unsupported withdrawal email"
       end
     owner.with_lock do
@@ -169,10 +169,10 @@ module EmailContactBinding
   def sign_up_binding_components(flow)
     case [self, flow]
     in [ClientEmail, ClientSignUpFlow]
-      [user, ClientEmailCeremonyTransaction, :user_email_status_id,
+      [Client.find(user_id), ClientEmailCeremonyTransaction, :user_email_status_id,
        ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP, ClientEmailStatus::VERIFIED_WITH_SIGN_UP, "app",]
     in [VisitorEmail, VisitorSignUpFlow]
-      [visitor, VisitorEmailCeremonyTransaction, :visitor_email_status_id,
+      [Visitor.find(visitor_id), VisitorEmailCeremonyTransaction, :visitor_email_status_id,
        VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP, VisitorEmailStatus::VERIFIED_WITH_SIGN_UP, "com",]
     else raise ArgumentError, "unsupported Email signup binding realm"
     end

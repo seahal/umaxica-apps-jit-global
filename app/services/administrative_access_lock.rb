@@ -104,7 +104,7 @@ class AdministrativeAccessLock < ApplicationService
   end
 
   def revoke_sessions!
-    AuthenticationSessionRevoker.tokens_for(account).not_revoked.find_each(&:revoke!)
+    AuthenticationLogoutAllSessions.call(resource: account, reason: "administrative_access_lock")
   end
 
   def create_event!(event_type:, previous_state:, next_state:, occurred_at:)

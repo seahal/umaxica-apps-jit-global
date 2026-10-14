@@ -86,7 +86,9 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
     assert_equal client.public_id, first.owner_public_id
     assert_equal :already_applied, second.status
     assert_equal 1, ClientPersonaOwnership.where(client_persona_id: persona.id).count
-    assert_equal client.id, persona.reload.ownership.client_id
+    ownership = ClientPersonaOwnership.find_by!(client_persona_id: persona.id)
+
+    assert_equal client.id, ownership.client_id
 
     detail =
       AuthorityOwnerMigrationInventory.call.details.find do |entry|
@@ -188,7 +190,9 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
 
     assert_equal :applied, result.status
     assert_equal owner.public_id, result.owner_public_id
-    assert_equal owner.id, enterprise.reload.ownership.client_id
+    ownership = EnterpriseOwnership.find_by!(enterprise_id: enterprise.id)
+
+    assert_equal owner.id, ownership.client_id
   end
 
   test "rejects an explicit owner from another surface" do
@@ -260,6 +264,8 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
       end
 
     assert_match(/already has a different explicit owner/, error.message)
-    assert_equal conflicting_owner.id, persona.reload.ownership.client_id
+    ownership = ClientPersonaOwnership.find_by!(client_persona_id: persona.id)
+
+    assert_equal conflicting_owner.id, ownership.client_id
   end
 end

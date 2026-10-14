@@ -21,22 +21,23 @@ class ClientSecretIssuanceExpiryInvalidator
       end
 
       AppZenithRecord.connected_to(role: :writing) do
-        issuance.client.with_lock(requires_new: true) do
+        client = Client.find(issuance.client_id)
+        client.with_lock(requires_new: true) do
           owned = ClientSecretIssuance.lock.find_by!(
-            id: issuance.id, public_id: issuance.public_id, client_id: issuance.client.id,
+            id: issuance.id, public_id: issuance.public_id, client_id: client.id,
           )
-          expire!(owned, executor_job_id, purge_after)
+          expire!(owned, client, executor_job_id, purge_after)
         end
       end
     end
 
     private
 
-    def expire!(issuance, executor_job_id, duration)
+    def expire!(issuance, client, executor_job_id, duration)
       now = Client.database_now
       raise NotExpired, "only expired Secret allocations can be retired" unless issuance.state(at: now) == :expired
 
-      ClientSecretCapacityQuery.call(client: issuance.client, at: now)
+      ClientSecretCapacityQuery.call(client: client, at: now)
       candidates = ClientSecretCredential.where(issuance_id: issuance.id, client_id: issuance.client_id)
         .order(:id).lock.to_a
       finalized =
@@ -48,7 +49,7 @@ class ClientSecretIssuanceExpiryInvalidator
       end
 
       if issuance.discard_at != Float::INFINITY && issuance.discard_at <= now
-        verify_retirement!(issuance, candidates, now)
+        verify_retirement!(issuance, client, candidates, now)
         return issuance
       end
 
@@ -57,14 +58,14 @@ class ClientSecretIssuanceExpiryInvalidator
 
       context = ActorValuesContext.empty
       ClientSecretAuditOutbox.record!(
-        actor_context: context, client_ref: issuance.client.public_id, operation_ref: issuance.origin_operation_id,
+        actor_context: context, client_ref: client.public_id, operation_ref: issuance.origin_operation_id,
         occurred_at: now, event_name: "secret.discarded", reason: "flow_expired",
         item_count: issuance.planned_count, executor_job_id: executor_job_id,
       )
       candidates.each do |candidate|
         candidate.update!(discard_at: now, purge_eligible_at: purge_at)
         ClientSecretAuditOutbox.record!(
-          actor_context: context, client_ref: issuance.client.public_id, credential_ref: candidate.public_id,
+          actor_context: context, client_ref: client.public_id, credential_ref: candidate.public_id,
           operation_ref: issuance.origin_operation_id, occurred_at: now,
           event_name: "secret.discarded", reason: "flow_expired", executor_job_id: executor_job_id,
         )
@@ -73,9 +74,9 @@ class ClientSecretIssuanceExpiryInvalidator
       issuance
     end
 
-    def verify_retirement!(issuance, candidates, now)
+    def verify_retirement!(issuance, client, candidates, now)
       recorded = ClientSecretAuditOutbox.exists?(
-        client_ref: issuance.client.public_id, credential_ref: nil, operation_ref: issuance.origin_operation_id,
+        client_ref: client.public_id, credential_ref: nil, operation_ref: issuance.origin_operation_id,
         event_name: "secret.discarded", reason: "flow_expired", occurred_at: issuance.discard_at,
         actor_type: nil, actor_id: nil, actor_public_ref: nil, item_count: issuance.planned_count,
       )

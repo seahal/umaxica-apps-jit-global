@@ -65,14 +65,15 @@ module RpSession
   end
 
   def parent_token
-    parent_device_session&.current_refresh_token
+    device_session = parent_device_session
+    current_parent_token_for(device_session) if device_session
   end
 
   def parent_token_active?(now = nil)
     device_session = parent_device_session
     return false unless device_session&.usable?
 
-    token = device_session.current_refresh_token
+    token = current_parent_token_for(device_session)
     return false unless token
     return false unless SessionAbsoluteExpiryValue.finite?(token.discard_at)
     return false unless SessionAbsoluteExpiryValue.finite?(refresh_token_expires_at)
@@ -237,7 +238,7 @@ module RpSession
     raise IssuanceRejected, "RP Session device session is missing" unless device_session
 
     device_session.with_lock do
-      parent = device_session.current_refresh_token
+      parent = current_parent_token_for(device_session)
       raise IssuanceRejected, "RP Session current root token is missing" unless parent
 
       parent.with_lock do
@@ -247,12 +248,33 @@ module RpSession
   end
 
   def parent_device_session
-    case self
-    when ClientRpSession then ClientDeviceSession.find_by(id: self[:device_session_id])
-    when VisitorRpSession then VisitorDeviceSession.find_by(id: self[:device_session_id])
-    when OperatorRpSession then OperatorDeviceSession.find_by(id: self[:device_session_id])
+    association_name, device_session_class =
+      case self
+      when ClientRpSession then [:client_device_session, ClientDeviceSession]
+      when VisitorRpSession then [:visitor_device_session, VisitorDeviceSession]
+      when OperatorRpSession then [:operator_device_session, OperatorDeviceSession]
+      else raise IssuanceRejected, "unsupported RP Session class"
+      end
+
+    parent_association = association(association_name)
+    return parent_association.target if parent_association.loaded?
+
+    device_session_class.find_by(id: self[:device_session_id])
+  end
+
+  def current_parent_token_for(device_session)
+    current_token_id = device_session.current_refresh_token_id
+    return unless current_token_id
+
+    case device_session
+    when ClientDeviceSession
+      ClientToken.find_by(id: current_token_id, device_session_id: device_session.id)
+    when VisitorDeviceSession
+      VisitorToken.find_by(id: current_token_id, device_session_id: device_session.id)
+    when OperatorDeviceSession
+      OperatorToken.find_by(id: current_token_id, device_session_id: device_session.id)
     else
-      raise IssuanceRejected, "unsupported RP Session class"
+      raise IssuanceRejected, "unsupported RP device session class"
     end
   end
 

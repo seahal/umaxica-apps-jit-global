@@ -87,7 +87,10 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
   end
 
   test "a verified value binds one irreversible claim to its admitted browser flow" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(
+      id: 9_113_000_000_000 + SecureRandom.random_number(1_000_000_000),
+      status_id: ClientStatus::ACTIVE,
+    )
     token = ClientToken.create!(user: actor)
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",

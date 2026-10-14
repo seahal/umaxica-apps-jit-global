@@ -303,8 +303,10 @@ module AuthEmailOtpChallenge
 
   def email_otp_owner(contact)
     case contact
-    when ClientEmail then contact.user
-    when VisitorEmail then contact.visitor
+    when ClientEmail
+      Client.find_by(id: contact.user_id)
+    when VisitorEmail
+      Visitor.find_by(id: contact.visitor_id)
     else raise ArgumentError, "unsupported email authentication Contact"
     end
   end

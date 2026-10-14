@@ -211,7 +211,13 @@ class WithdrawalLifecycle
   end
 
   def revoke_sessions
-    AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
+    AuthenticationSessionRevoker.tokens_for(actor).find_each do |token|
+      AuthenticationLogoutCurrentSession.call(
+        resource: actor,
+        token: token,
+        reason: "withdrawal_#{actor.class.name.underscore}",
+      )
+    end
   end
 
   def finite_future_time?(value)

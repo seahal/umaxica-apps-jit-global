@@ -216,7 +216,9 @@ class OperatorBulletinTest < ActiveSupport::TestCase
   end
 
   test "dependent behavior on staff destroy" do
-    staff = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    staff = Operator.create!(
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000), status_id: OperatorStatus::ACTIVE,
+    )
     bulletin = OperatorBulletin.create!(
       staff: staff,
       title: "Test",
@@ -225,6 +227,7 @@ class OperatorBulletinTest < ActiveSupport::TestCase
 
     assert_difference("OperatorBulletin.count", -1) do
       assert_nothing_raised do
+        staff = StrictLoadingAssociationPreloader.for_destruction(staff.reload)
         staff.destroy
       end
     end

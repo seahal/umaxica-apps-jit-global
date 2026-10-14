@@ -64,7 +64,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -72,16 +72,16 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -155,7 +155,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f0_client.client_id,
                   revoked_at: nil,
                 ))
-              f0_token.rotate_refresh_token! unless f0_token.device_session.current_refresh_token_id
+              f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
               f0_now = Time.current
               f0_session = ClientRpSession.create!(
                 client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
@@ -163,16 +163,17 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f0_now + 10.minutes,
               )
               f0_access = AuthenticationTokenService.encode(
-                f0_token.user, host: f0_host, resource_type: "client",
-                               session_public_id: f0_token.public_id, base_session_public_id: f0_token.public_id,
-                               oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
-                               expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
-                               subject: OidcSubject.for(
-                                 f0_token.user,
-                                 resource_type: "client",
-                               ), client_id: f0_client.client_id,
+                f0_token.actor_record, host: f0_host, resource_type: "client",
+                                       session_public_id: f0_token.public_id,
+                                       base_session_public_id: f0_token.public_id,
+                                       oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
+                                       expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
+                                       subject: OidcSubject.for(
+                                         f0_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f0_client.client_id,
               )
               @base_browser_rp_credentials[f0_key] =
                 [f0_access, f0_session.issue_refresh_token!]
@@ -250,7 +251,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f1_client.client_id,
                   revoked_at: nil,
                 ))
-              f1_token.rotate_refresh_token! unless f1_token.device_session.current_refresh_token_id
+              f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
               f1_now = Time.current
               f1_session = ClientRpSession.create!(
                 client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
@@ -258,16 +259,17 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f1_now + 10.minutes,
               )
               f1_access = AuthenticationTokenService.encode(
-                f1_token.user, host: f1_host, resource_type: "client",
-                               session_public_id: f1_token.public_id, base_session_public_id: f1_token.public_id,
-                               oidc_sid: f1_session.public_id, oidc_jti: f1_session.oidc_jti,
-                               expires_at: f1_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f1_client), audiences: [f1_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
-                               subject: OidcSubject.for(
-                                 f1_token.user,
-                                 resource_type: "client",
-                               ), client_id: f1_client.client_id,
+                f1_token.actor_record, host: f1_host, resource_type: "client",
+                                       session_public_id: f1_token.public_id,
+                                       base_session_public_id: f1_token.public_id,
+                                       oidc_sid: f1_session.public_id, oidc_jti: f1_session.oidc_jti,
+                                       expires_at: f1_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f1_client), audiences: [f1_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
+                                       subject: OidcSubject.for(
+                                         f1_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f1_client.client_id,
               )
               @base_browser_rp_credentials[f1_key] =
                 [f1_access, f1_session.issue_refresh_token!]
@@ -342,7 +344,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f2_client.client_id,
                   revoked_at: nil,
                 ))
-              f2_token.rotate_refresh_token! unless f2_token.device_session.current_refresh_token_id
+              f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
               f2_now = Time.current
               f2_session = ClientRpSession.create!(
                 client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
@@ -350,16 +352,17 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f2_now + 10.minutes,
               )
               f2_access = AuthenticationTokenService.encode(
-                f2_token.user, host: f2_host, resource_type: "client",
-                               session_public_id: f2_token.public_id, base_session_public_id: f2_token.public_id,
-                               oidc_sid: f2_session.public_id, oidc_jti: f2_session.oidc_jti,
-                               expires_at: f2_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f2_client), audiences: [f2_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
-                               subject: OidcSubject.for(
-                                 f2_token.user,
-                                 resource_type: "client",
-                               ), client_id: f2_client.client_id,
+                f2_token.actor_record, host: f2_host, resource_type: "client",
+                                       session_public_id: f2_token.public_id,
+                                       base_session_public_id: f2_token.public_id,
+                                       oidc_sid: f2_session.public_id, oidc_jti: f2_session.oidc_jti,
+                                       expires_at: f2_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f2_client), audiences: [f2_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
+                                       subject: OidcSubject.for(
+                                         f2_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f2_client.client_id,
               )
               @base_browser_rp_credentials[f2_key] =
                 [f2_access, f2_session.issue_refresh_token!]
@@ -440,7 +443,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f3_client.client_id,
                   revoked_at: nil,
                 ))
-              f3_token.rotate_refresh_token! unless f3_token.device_session.current_refresh_token_id
+              f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
               f3_now = Time.current
               f3_session = ClientRpSession.create!(
                 client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
@@ -448,16 +451,17 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f3_now + 10.minutes,
               )
               f3_access = AuthenticationTokenService.encode(
-                f3_token.user, host: f3_host, resource_type: "client",
-                               session_public_id: f3_token.public_id, base_session_public_id: f3_token.public_id,
-                               oidc_sid: f3_session.public_id, oidc_jti: f3_session.oidc_jti,
-                               expires_at: f3_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f3_client), audiences: [f3_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f3_client),
-                               subject: OidcSubject.for(
-                                 f3_token.user,
-                                 resource_type: "client",
-                               ), client_id: f3_client.client_id,
+                f3_token.actor_record, host: f3_host, resource_type: "client",
+                                       session_public_id: f3_token.public_id,
+                                       base_session_public_id: f3_token.public_id,
+                                       oidc_sid: f3_session.public_id, oidc_jti: f3_session.oidc_jti,
+                                       expires_at: f3_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f3_client), audiences: [f3_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f3_client),
+                                       subject: OidcSubject.for(
+                                         f3_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f3_client.client_id,
               )
               @base_browser_rp_credentials[f3_key] =
                 [f3_access, f3_session.issue_refresh_token!]
@@ -536,7 +540,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f4_client.client_id,
                   revoked_at: nil,
                 ))
-              f4_token.rotate_refresh_token! unless f4_token.device_session.current_refresh_token_id
+              f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
               f4_now = Time.current
               f4_session = ClientRpSession.create!(
                 client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
@@ -544,16 +548,17 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f4_now + 10.minutes,
               )
               f4_access = AuthenticationTokenService.encode(
-                f4_token.user, host: f4_host, resource_type: "client",
-                               session_public_id: f4_token.public_id, base_session_public_id: f4_token.public_id,
-                               oidc_sid: f4_session.public_id, oidc_jti: f4_session.oidc_jti,
-                               expires_at: f4_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f4_client), audiences: [f4_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f4_client),
-                               subject: OidcSubject.for(
-                                 f4_token.user,
-                                 resource_type: "client",
-                               ), client_id: f4_client.client_id,
+                f4_token.actor_record, host: f4_host, resource_type: "client",
+                                       session_public_id: f4_token.public_id,
+                                       base_session_public_id: f4_token.public_id,
+                                       oidc_sid: f4_session.public_id, oidc_jti: f4_session.oidc_jti,
+                                       expires_at: f4_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f4_client), audiences: [f4_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f4_client),
+                                       subject: OidcSubject.for(
+                                         f4_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f4_client.client_id,
               )
               @base_browser_rp_credentials[f4_key] =
                 [f4_access, f4_session.issue_refresh_token!]
@@ -629,7 +634,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f5_client.client_id,
                   revoked_at: nil,
                 ))
-              f5_token.rotate_refresh_token! unless f5_token.device_session.current_refresh_token_id
+              f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
               f5_now = Time.current
               f5_session = ClientRpSession.create!(
                 client_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
@@ -637,16 +642,17 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f5_now + 10.minutes,
               )
               f5_access = AuthenticationTokenService.encode(
-                f5_token.user, host: f5_host, resource_type: "client",
-                               session_public_id: f5_token.public_id, base_session_public_id: f5_token.public_id,
-                               oidc_sid: f5_session.public_id, oidc_jti: f5_session.oidc_jti,
-                               expires_at: f5_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f5_client), audiences: [f5_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f5_client),
-                               subject: OidcSubject.for(
-                                 f5_token.user,
-                                 resource_type: "client",
-                               ), client_id: f5_client.client_id,
+                f5_token.actor_record, host: f5_host, resource_type: "client",
+                                       session_public_id: f5_token.public_id,
+                                       base_session_public_id: f5_token.public_id,
+                                       oidc_sid: f5_session.public_id, oidc_jti: f5_session.oidc_jti,
+                                       expires_at: f5_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f5_client), audiences: [f5_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f5_client),
+                                       subject: OidcSubject.for(
+                                         f5_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f5_client.client_id,
               )
               @base_browser_rp_credentials[f5_key] =
                 [f5_access, f5_session.issue_refresh_token!]
@@ -734,7 +740,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f6_client.client_id,
                   revoked_at: nil,
                 ))
-              f6_token.rotate_refresh_token! unless f6_token.device_session.current_refresh_token_id
+              f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
               f6_now = Time.current
               f6_session = ClientRpSession.create!(
                 client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
@@ -742,16 +748,17 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f6_now + 10.minutes,
               )
               f6_access = AuthenticationTokenService.encode(
-                f6_token.user, host: f6_host, resource_type: "client",
-                               session_public_id: f6_token.public_id, base_session_public_id: f6_token.public_id,
-                               oidc_sid: f6_session.public_id, oidc_jti: f6_session.oidc_jti,
-                               expires_at: f6_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f6_client), audiences: [f6_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f6_client),
-                               subject: OidcSubject.for(
-                                 f6_token.user,
-                                 resource_type: "client",
-                               ), client_id: f6_client.client_id,
+                f6_token.actor_record, host: f6_host, resource_type: "client",
+                                       session_public_id: f6_token.public_id,
+                                       base_session_public_id: f6_token.public_id,
+                                       oidc_sid: f6_session.public_id, oidc_jti: f6_session.oidc_jti,
+                                       expires_at: f6_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f6_client), audiences: [f6_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f6_client),
+                                       subject: OidcSubject.for(
+                                         f6_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f6_client.client_id,
               )
               @base_browser_rp_credentials[f6_key] =
                 [f6_access, f6_session.issue_refresh_token!]
@@ -835,7 +842,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f7_client.client_id,
                   revoked_at: nil,
                 ))
-              f7_token.rotate_refresh_token! unless f7_token.device_session.current_refresh_token_id
+              f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
               f7_now = Time.current
               f7_session = ClientRpSession.create!(
                 client_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
@@ -843,16 +850,17 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f7_now + 10.minutes,
               )
               f7_access = AuthenticationTokenService.encode(
-                f7_token.user, host: f7_host, resource_type: "client",
-                               session_public_id: f7_token.public_id, base_session_public_id: f7_token.public_id,
-                               oidc_sid: f7_session.public_id, oidc_jti: f7_session.oidc_jti,
-                               expires_at: f7_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f7_client), audiences: [f7_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f7_client),
-                               subject: OidcSubject.for(
-                                 f7_token.user,
-                                 resource_type: "client",
-                               ), client_id: f7_client.client_id,
+                f7_token.actor_record, host: f7_host, resource_type: "client",
+                                       session_public_id: f7_token.public_id,
+                                       base_session_public_id: f7_token.public_id,
+                                       oidc_sid: f7_session.public_id, oidc_jti: f7_session.oidc_jti,
+                                       expires_at: f7_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f7_client), audiences: [f7_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f7_client),
+                                       subject: OidcSubject.for(
+                                         f7_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f7_client.client_id,
               )
               @base_browser_rp_credentials[f7_key] =
                 [f7_access, f7_session.issue_refresh_token!]
@@ -926,7 +934,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f8_client.client_id,
                   revoked_at: nil,
                 ))
-              f8_token.rotate_refresh_token! unless f8_token.device_session.current_refresh_token_id
+              f8_token.rotate_refresh_token! unless f8_token.device_session_record.current_refresh_token_id
               f8_now = Time.current
               f8_session = ClientRpSession.create!(
                 client_token: f8_token, oidc_client_id: f8_client.client_id, oidc_scope: "openid profile",
@@ -934,16 +942,17 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f8_now + 10.minutes,
               )
               f8_access = AuthenticationTokenService.encode(
-                f8_token.user, host: f8_host, resource_type: "client",
-                               session_public_id: f8_token.public_id, base_session_public_id: f8_token.public_id,
-                               oidc_sid: f8_session.public_id, oidc_jti: f8_session.oidc_jti,
-                               expires_at: f8_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f8_client), audiences: [f8_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f8_client),
-                               subject: OidcSubject.for(
-                                 f8_token.user,
-                                 resource_type: "client",
-                               ), client_id: f8_client.client_id,
+                f8_token.actor_record, host: f8_host, resource_type: "client",
+                                       session_public_id: f8_token.public_id,
+                                       base_session_public_id: f8_token.public_id,
+                                       oidc_sid: f8_session.public_id, oidc_jti: f8_session.oidc_jti,
+                                       expires_at: f8_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f8_client), audiences: [f8_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f8_client),
+                                       subject: OidcSubject.for(
+                                         f8_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f8_client.client_id,
               )
               @base_browser_rp_credentials[f8_key] =
                 [f8_access, f8_session.issue_refresh_token!]
@@ -1012,7 +1021,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f9_client.client_id,
                   revoked_at: nil,
                 ))
-              f9_token.rotate_refresh_token! unless f9_token.device_session.current_refresh_token_id
+              f9_token.rotate_refresh_token! unless f9_token.device_session_record.current_refresh_token_id
               f9_now = Time.current
               f9_session = ClientRpSession.create!(
                 client_token: f9_token, oidc_client_id: f9_client.client_id, oidc_scope: "openid profile",
@@ -1020,16 +1029,17 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f9_now + 10.minutes,
               )
               f9_access = AuthenticationTokenService.encode(
-                f9_token.user, host: f9_host, resource_type: "client",
-                               session_public_id: f9_token.public_id, base_session_public_id: f9_token.public_id,
-                               oidc_sid: f9_session.public_id, oidc_jti: f9_session.oidc_jti,
-                               expires_at: f9_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f9_client), audiences: [f9_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f9_client),
-                               subject: OidcSubject.for(
-                                 f9_token.user,
-                                 resource_type: "client",
-                               ), client_id: f9_client.client_id,
+                f9_token.actor_record, host: f9_host, resource_type: "client",
+                                       session_public_id: f9_token.public_id,
+                                       base_session_public_id: f9_token.public_id,
+                                       oidc_sid: f9_session.public_id, oidc_jti: f9_session.oidc_jti,
+                                       expires_at: f9_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f9_client), audiences: [f9_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f9_client),
+                                       subject: OidcSubject.for(
+                                         f9_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f9_client.client_id,
               )
               @base_browser_rp_credentials[f9_key] =
                 [f9_access, f9_session.issue_refresh_token!]
@@ -1115,7 +1125,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f10_client.client_id,
                   revoked_at: nil,
                 ))
-              f10_token.rotate_refresh_token! unless f10_token.device_session.current_refresh_token_id
+              f10_token.rotate_refresh_token! unless f10_token.device_session_record.current_refresh_token_id
               f10_now = Time.current
               f10_session = ClientRpSession.create!(
                 client_token: f10_token, oidc_client_id: f10_client.client_id, oidc_scope: "openid profile",
@@ -1123,7 +1133,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f10_now + 10.minutes,
               )
               f10_access = AuthenticationTokenService.encode(
-                f10_token.user,
+                f10_token.actor_record,
                 host: f10_host,
                 resource_type: "client",
                 session_public_id: f10_token.public_id,
@@ -1136,7 +1146,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 audiences: [f10_client.aud],
                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f10_client),
                 subject: OidcSubject.for(
-                  f10_token.user,
+                  f10_token.actor_record,
                   resource_type: "client",
                 ),
                 client_id: f10_client.client_id,
@@ -1213,7 +1223,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f11_client.client_id,
                   revoked_at: nil,
                 ))
-              f11_token.rotate_refresh_token! unless f11_token.device_session.current_refresh_token_id
+              f11_token.rotate_refresh_token! unless f11_token.device_session_record.current_refresh_token_id
               f11_now = Time.current
               f11_session = ClientRpSession.create!(
                 client_token: f11_token, oidc_client_id: f11_client.client_id, oidc_scope: "openid profile",
@@ -1221,7 +1231,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f11_now + 10.minutes,
               )
               f11_access = AuthenticationTokenService.encode(
-                f11_token.user,
+                f11_token.actor_record,
                 host: f11_host,
                 resource_type: "client",
                 session_public_id: f11_token.public_id,
@@ -1234,7 +1244,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
                 audiences: [f11_client.aud],
                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f11_client),
                 subject: OidcSubject.for(
-                  f11_token.user,
+                  f11_token.actor_record,
                   resource_type: "client",
                 ),
                 client_id: f11_client.client_id,

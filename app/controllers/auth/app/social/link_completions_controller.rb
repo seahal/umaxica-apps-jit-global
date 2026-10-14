@@ -31,8 +31,9 @@ module Auth
 
           current_client.with_lock do
             AppTicketRecord.connected_to(role: :writing) do
-              token.device_session.with_lock do
-                token.with_lock { commit_link_candidate!(reference, token) }
+              device_session = token.device_session_record!
+              device_session.with_lock do
+                token.with_lock { commit_link_candidate!(reference, token, device_session) }
               end
             end
           end
@@ -46,10 +47,10 @@ module Auth
 
         private
 
-        def commit_link_candidate!(reference, token)
+        def commit_link_candidate!(reference, token, device_session)
           now = token.class.database_now
-          unless current_client.login_allowed? && token.currently_usable?(now) && token.device_session.usable? &&
-              token.device_session.current_refresh_token_id == token.id
+          unless current_client.login_allowed? && token.currently_usable?(now) && device_session.usable? &&
+              device_session.current_refresh_token_id == token.id
             raise SocialAuth::UnauthorizedError.new("errors.social_auth.not_logged_in")
           end
 
@@ -57,14 +58,14 @@ module Auth
           require_recent_step_up!
           record = IdentitySocialCeremonyCandidate.lock.find_by!(ref: reference)
           unless record.surface == "app" && record.operation == "link" &&
-              record.actor_ref == current_client.public_id && record.session_ref == token.device_session.public_id &&
+              record.actor_ref == current_client.public_id && record.session_ref == device_session.public_id &&
               record.consumed_at.nil? && record.expires_at > now
             raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
           end
 
           candidate = IdentitySocialCeremonyCandidateStore.fetch!(reference)
           grant = ClientSocialCeremonyTransaction.lock.find_by!(transaction_id: record.transaction_id)
-          validate_link_grant!(grant, candidate, token, now)
+          validate_link_grant!(grant, candidate, device_session, now)
 
           ExternalAuthenticationLinkUseCase.call(
             principal: candidate.callback_result.principal,
@@ -79,10 +80,10 @@ module Auth
           grant.expire!
         end
 
-        def validate_link_grant!(grant, candidate, token, now)
+        def validate_link_grant!(grant, candidate, device_session, now)
           return if grant.operation == "link" && grant.provider == candidate.provider &&
             grant.actor_ref == current_client.public_id &&
-            grant.session_ref == token.device_session.public_id &&
+            grant.session_ref == device_session.public_id &&
             grant.status == SocialCeremonyTransactionable::STATUS_PENDING &&
             grant.consumed_at.nil? && grant.expires_at > now
 

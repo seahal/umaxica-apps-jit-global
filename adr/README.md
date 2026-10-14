@@ -21,6 +21,10 @@ Current Inertia decision:
   fork, patch, or compatibility layer; history encryption is mandatory, each origin is its own
   Inertia application, and leaving an origin is a `409` with `X-Inertia-Location`.
 
+- `adr/inertia-initializer-file-name.md` — the configuration stays in
+  `config/initializers/inertia_rails.rb` (gem-named); upstream's `inertia.rb` example is merged
+  into it, never added as a second file.
+
 Current org federated sign-in decision:
 
 - `adr/org-entra-id-sign-in-boundary.md` — accepted decision for org-surface Microsoft Entra ID SSO:
@@ -39,33 +43,47 @@ Current identity authority decision:
   Palm browser/native handoff, development trust prerequisites, and rollout boundaries.
 
 - `adr/base-auth-ceremony-and-seven-rp-boundary.md` — **current** physical boundary: Base is the
-  sole IdP/AS, Auth is ceremony-only, seven first-party RPs (`core-*`/`side-*`/`edit-org`), opaque
-  handoff/result, Root homes, one-shot `/sign/out`, and Valkey auth-state topology for nonprod.
+  sole IdP/AS and Auth is ceremony-only. It records the original seven-RP baseline and later Base
+  implementation amendments; `adr/tech-and-palm-browser-rp-participation.md` updates RP membership
+  with Tech and Palm. The current authority-driven sign-out route is defined by the first-party
+  shared-database sign-out ADR below.
 
 - `adr/oidc-oauth-participation-allowlist-and-non-participant-surfaces.md` — OAuth/OIDC
   participation is allowlisted and never inferred from hostname, TLD, or shared code; all `.dev` and
-  `.net` surfaces, the Info/Docs/News/Help content faces, Auth, and Xper are Non-Participants, and
-  reclassifying one requires a new accepted ADR.
+  `.net` surfaces, the Info/Docs/News/Help content faces, Auth, and any future Xper surface are
+  Non-Participants, and reclassifying one requires a new accepted ADR. The Phase 0 Rails surface is
+  retired by `adr/xper-rails-surface-retirement.md`.
 
 - `adr/defer-auth-xper-transient-workflow-redesign.md` — scope decision for the current Base/RP
   cycle: no Auth or Xper workflow, token, or cookie redesign and no shared transient-capability
-  implementation now; `auth.*` origins and Xper apex origins stay stable; the redesign is retained
-  as backlog.
+  implementation now; Auth remains unchanged, and the Xper Phase 0 Rails surface is retired by the
+  decision below.
 
-Current participation change (target contract; runtime not yet migrated):
+- `adr/xper-rails-surface-retirement.md` — retires the Xper Phase 0 Rails surface without changing
+  data, Preference/Auth behavior, Flipper records, or Edge/Cloudflare ownership; the future Web Push
+  requirement remains open.
+
+Current participation change (implemented locally; deployment and shared sign-out follow-up remain):
 
 - `adr/tech-and-palm-browser-rp-participation.md` — Tech (`tech-org`, operator, `tech.umaxica.org`,
   requires `tech.access`) is admitted as a first-party browser RP, and Palm (`palm-app`) changes
   from native RP to first-party browser RP with its native role retired. Answers the
   Reclassification Rule of `adr/oidc-oauth-participation-allowlist-and-non-participant-surfaces.md`.
 
-Current sign-out decision (target contract; runtime not yet migrated):
+The repository currently implements Tech and Palm browser RP entry, callback, host-local session,
+and local sign-out routes. The shared parent-and-RP sign-out transaction is locally implemented and
+focused-tested; full authority, race and deployment acceptance remain incomplete. See the
+implementation status in the participation ADR before relying on global revocation behavior.
+
+Current sign-out decision (target contract; local runtime is partial):
 
 - `adr/first-party-sign-out-shared-database-without-backchannel-logout.md` — the parent session on
   the realm Ticket writer is the single source of truth; a global sign-out revokes the parent and
   all of its RP session rows in one transaction, and a confirmed COMMIT is the point of no return.
   Back-Channel Logout is not used between the IdP and first-party RPs and must not be reintroduced
-  without a new ADR. The rejected design is recorded in
+  without a new ADR. Local first-party completion routes and the 12-client continuation matrix are
+  implemented; the shared global transaction is locally implemented and focused-tested, while BCL
+  removal and final authority/browser acceptance remain open. The rejected design is recorded in
   `research/2026-10-13-first-party-backchannel-logout-rejected-design.md`.
 
 Current IdP flow lifecycle decisions (target contract; runtime not yet migrated):
@@ -136,9 +154,10 @@ Legacy identity authority notes (superseded where they conflict):
   sign-out paths, and step-up freshness writes; superseded where it conflicts with Sign as a special
   RP and Acme as the only IdP / Authorization Server.
 
-Implementation note: the accepted Acme / Sign / Core / Base / Palm boundary is ahead of parts of the
-current code and older plans. Active implementation work is tracked in GH issue #829; existing
-Rails-only compatibility routes or storage do not create a competing ADR-level authority assignment.
+Implementation note: the accepted Acme / Sign / Core / Base / Palm boundary remains historical
+component context. Current Rails authority and RP membership are defined by the Base/Auth boundary
+and `adr/tech-and-palm-browser-rp-participation.md`; existing Rails storage does not create a
+competing authority assignment.
 
 Superseded IdP/RP-centered ADRs:
 
@@ -443,6 +462,12 @@ Repository / application boundary decisions:
   `adr/global-regional-database-ownership.md`.
 - `adr/acme-rp-boundary-naming.md` — superseded where it treats `acme/www` as an RP boundary instead
   of the identity authority boundary.
+
+Testing decisions:
+
+- `adr/model-standalone-coverage-without-enforced-threshold.md` — models SHOULD be measured with
+  model tests alone and that coverage raised over time; no threshold or gate is added to SimpleCov
+  or CI configuration.
 
 Historical engine-era ADRs are retained for traceability only. They do not authorize reintroducing
 `engines/`, wrapper apps under `apps/<name>`, `Jit::<EngineName>` namespaces, or `isolate_namespace`

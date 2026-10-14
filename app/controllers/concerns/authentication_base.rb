@@ -759,7 +759,7 @@ module AuthenticationBase
 
     # Load resource from token record
     # Use the same code path for all environments.
-    resource = token_record.public_send(token_resource_prefix)
+    resource = resource_class.find(token_record_attribute(token_record, resource_foreign_key))
 
     if administratively_locked_resource?(resource)
       return handle_administrative_access_locked_refresh(resource, refresh_public_id, token_record)
@@ -1499,7 +1499,7 @@ module AuthenticationBase
 
   def access_token_response_type(token_record)
     dpop_jkt = token_record_attribute(token_record, :dpop_jkt).presence ||
-      token_record&.try(:device_session)&.dpop_jkt.presence
+      token_device_session(token_record)&.dpop_jkt.presence
     dpop_jkt.present? ? "DPoP" : "Bearer"
   end
 
@@ -1603,9 +1603,13 @@ module AuthenticationBase
     expired = restricted_expires_at.present? && restricted_expires_at <= Time.current
 
     if expired && !token_record.revoked?
-      token_record_connection_owner(token_record.class).connected_to(role: :writing) do
-        token_record.revoke!
-      end
+      AuthenticationLogoutCurrentSession.call(
+        resource: defined?(@current_resource) ? @current_resource : nil,
+        token: token_record,
+        token_class: token_record.class,
+        session_public_id: token_record.try(:public_id),
+        reason: "restricted_session_expired",
+      )
       Rails.logger.info(
         JitLogEvent.format(
           "session.restricted.expired",
@@ -1667,8 +1671,10 @@ module AuthenticationBase
   end
 
   def refresh_dpop_allowed?(token_record)
-    expected_jkt = token_record_attribute(token_record, :dpop_jkt).presence ||
-      token_record&.try(:device_session)&.dpop_jkt.presence
+    return true if token_record.blank?
+
+    device_session_jkt = device_session_for_token(token_record)&.dpop_jkt
+    expected_jkt = token_record_attribute(token_record, :dpop_jkt).presence || device_session_jkt.presence
     return true if expected_jkt.blank?
 
     proof = request.headers["DPoP"]
@@ -1697,8 +1703,9 @@ module AuthenticationBase
   end
 
   def refresh_binding_allowed?(token_record)
-    return false if token_record&.respond_to?(:device_session) && token_record.device_session&.revoked?
-    return false unless device_session_refresh_allowed?(token_record)
+    device_session = device_session_for_token(token_record)
+    return false if device_session&.revoked?
+    return false unless device_session_refresh_allowed?(token_record, device_session)
     return refresh_dbsc_allowed?(token_record) if token_record&.binding_method_dbsc?
 
     # Any token reaching here is not DBSC-bound. DPoP (if present) is enforced
@@ -1768,8 +1775,7 @@ module AuthenticationBase
     end
   end
 
-  def device_session_refresh_allowed?(token_record)
-    device_session = token_record&.try(:device_session)
+  def device_session_refresh_allowed?(token_record, device_session = device_session_for_token(token_record))
     return true if device_session.blank?
     return false if device_session.revoked?
     return true if @refresh_dbsc_verified && device_session.dbsc_bound?
@@ -1806,6 +1812,12 @@ module AuthenticationBase
     true
   end
 
+  def device_session_for_token(token_record)
+    return if token_record.blank?
+
+    token_record.device_session_record
+  end
+
   def refresh_dbsc_allowed?(token_record)
     return true if token_record.blank?
     return false unless token_record.dbsc_status_active?
@@ -1827,24 +1839,12 @@ module AuthenticationBase
   def revoke_refresh_session_after_dbsc_failure!(token_record)
     return if token_record.blank?
 
-    token_record.class.transaction do
-      if token_record.respond_to?(:device_session) && token_record.device_session.present?
-        token_record.device_session.revoke!(reason: "dbsc_refresh_failed")
-        token_record.class.where(device_session_id: token_record.device_session_id).find_each do |session_token|
-          session_token.revoke! if session_token.respond_to?(:revoke!) && !session_token.revoked?
-        end
-      elsif token_record.respond_to?(:revoke!) && !token_record.revoked?
-        token_record.revoke!
-      end
-    end
-  rescue ActiveRecord::ActiveRecordError => e
-    Rails.logger.info(
-      JitLogEvent.format(
-        "auth.refresh.dbsc_logout_failed",
-        token_id: token_record&.try(:public_id),
-        error_class: e.class.name,
-        error_message: e.message,
-      ),
+    AuthenticationLogoutCurrentSession.call(
+      resource: defined?(@current_resource) ? @current_resource : nil,
+      token: token_record,
+      token_class: token_record.class,
+      session_public_id: token_record.try(:public_id),
+      reason: "dbsc_refresh_failed",
     )
   end
 

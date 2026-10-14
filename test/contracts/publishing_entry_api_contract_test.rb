@@ -318,7 +318,8 @@ class PublishingEntryApiContractTest < ActionDispatch::IntegrationTest
   # (adr/api-collection-contract.md). The API addresses entries by opaque
   # `public_id`; tests still name them by slug for readability and resolve here.
   def public_id_for(slug)
-    Publishing::Docs::App::EntrySlug.find_by!(slug:).entry.public_id
+    entry_slug = Publishing::Docs::App::EntrySlug.find_by!(slug:)
+    Publishing::Docs::App::Entry.find(entry_slug.entry_id).public_id
   end
 
   def show(slug)

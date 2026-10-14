@@ -126,6 +126,10 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
           params: fv5074.merge("authenticity_token" => fv5073),
           headers: fv5065,
         )
+        fv5064.follow_redirect!
+        fv5065 = fv5065.merge(
+          "X-CSRF-Token" => Nokogiri::HTML(fv5064.response.body).at_css('meta[name="csrf-token"]')["content"],
+        )
         clear_enqueued_jobs
         fv5064.post(
           auth_app_sign_in_email_path(
@@ -211,7 +215,15 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
     assert_predicate resolution, :open?
 
     selected = SessionLimitResolutionTokenRef.find_client_token(items.first.fetch("session_ref"))
-    base.patch(base_app_sign_in_limitation_path(ri: "jp"), params: { session_ref: items.first.fetch("session_ref") })
+    csrf = Nokogiri::HTML(base.response.body).at_css('meta[name="csrf-token"]')["content"]
+    base.patch(
+      base_app_sign_in_limitation_path(ri: "jp"), params: { session_ref: items.first.fetch("session_ref") },
+                                                  headers: {
+                                                    "Origin" => "https://#{@base_host}",
+                                                    "Sec-Fetch-Site" => "same-origin",
+                                                    "X-CSRF-Token" => csrf,
+                                                  },
+    )
 
     assert_equal 303, base.response.status
     assert_not_equal base_app_sign_in_limitation_path(ri: "jp"), base.response.location
@@ -315,6 +327,10 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
           params: fv5045.merge("authenticity_token" => fv5044),
           headers: fv5036,
         )
+        fv5035.follow_redirect!
+        fv5036 = fv5036.merge(
+          "X-CSRF-Token" => Nokogiri::HTML(fv5035.response.body).at_css('meta[name="csrf-token"]')["content"],
+        )
         clear_enqueued_jobs
         fv5035.post(
           auth_app_sign_in_email_path(
@@ -388,7 +404,15 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
         fv5029
       end
 
-    base.patch(base_app_sign_in_limitation_path(ri: "jp"), params: { session_ref: "" })
+    csrf = Nokogiri::HTML(base.response.body).at_css('meta[name="csrf-token"]')["content"]
+    base.patch(
+      base_app_sign_in_limitation_path(ri: "jp"), params: { session_ref: "" },
+                                                  headers: {
+                                                    "Origin" => "https://#{@base_host}",
+                                                    "Sec-Fetch-Site" => "same-origin",
+                                                    "X-CSRF-Token" => csrf,
+                                                  },
+    )
 
     assert_equal 422, base.response.status
     assert_predicate ClientSessionLimitResolutionTransaction.order(:id).last, :open?
@@ -488,6 +512,10 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
           params: fv5016.merge("authenticity_token" => fv5015),
           headers: fv5007,
         )
+        fv5006.follow_redirect!
+        fv5007 = fv5007.merge(
+          "X-CSRF-Token" => Nokogiri::HTML(fv5006.response.body).at_css('meta[name="csrf-token"]')["content"],
+        )
         clear_enqueued_jobs
         fv5006.post(
           auth_app_sign_in_email_path(
@@ -563,7 +591,15 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
     cycle = ClientSignInFlow.where(principal_id: user.id).recent_first.first
     resolution = ClientSessionLimitResolutionTransaction.find_by!(sign_in_flow_id: cycle.id)
 
-    base.delete(base_app_sign_in_limitation_path(ri: "jp"))
+    csrf = Nokogiri::HTML(base.response.body).at_css('meta[name="csrf-token"]')["content"]
+    base.delete(
+      base_app_sign_in_limitation_path(ri: "jp"),
+      headers: {
+        "Origin" => "https://#{@base_host}",
+        "Sec-Fetch-Site" => "same-origin",
+        "X-CSRF-Token" => csrf,
+      },
+    )
 
     assert_equal 303, base.response.status
     assert_predicate cycle.reload, :sign_in_cancelled?

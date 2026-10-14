@@ -9,7 +9,7 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
   fixtures :client_statuses
 
   test "GET with a Base admission reference shows a continuation and consumes nothing" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000), status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance =
       begin
@@ -79,7 +79,7 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "POST redeems the admission once and the clean entry page lists only the actor's usable methods" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000), status_id: ClientStatus::ACTIVE)
     email = ClientEmail.create!(
       user: actor, address: "verification-entry-#{SecureRandom.hex(4)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
@@ -168,7 +168,7 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "an admission reference cannot be redeemed twice" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000), status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance =
       begin
@@ -234,6 +234,7 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
   # Sentinels of the reference parameter: missing, empty, unknown, NUL-bearing, and two references at once.
   test "the entry refuses a missing, empty, unknown or ambiguous admission reference without redirecting to sign-in" do
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    existing_session_count = ClientAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
 
     get auth_app_verification_path(ri: "jp")
 
@@ -250,11 +251,17 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
       assert_equal I18n.t("errors.messages.invalid_request"), response.body
       assert_nil response.headers["Location"]
     end
-    assert_equal 0, ClientAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
+    assert_equal existing_session_count,
+                 ClientAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
   end
 
   test "a bootstrap admission is not accepted by the verification entry and stays redeemable for setup" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    # Credential tables use another database connection and can retain records after the test
+    # transaction rolls back; keep this unregistered actor outside fixture-generated ID ranges.
+    actor = Client.create!(
+      id: 9_112_000_000_000 + SecureRandom.random_number(1_000_000_000),
+      status_id: ClientStatus::ACTIVE,
+    )
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance =
       begin
@@ -317,7 +324,7 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "an admission issued for the app surface is refused on the com host" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000), status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance =
       begin
@@ -366,17 +373,19 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
         )
         admission_issuance
       end
+    existing_session_count = VisitorAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
 
     post auth_com_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
 
     assert_response :bad_request
-    assert_equal 0, VisitorAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
+    assert_equal existing_session_count,
+                 VisitorAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
     assert_equal "pending", issuance.transaction.reload.status
   end
 
   test "the entry page is refused once the Base session behind the ceremony is revoked" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000), status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance =
       begin

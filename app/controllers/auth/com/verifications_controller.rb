@@ -18,7 +18,7 @@ module Auth
 
       def ceremony_step_up_session_model = VisitorStepUpSession
 
-      def ceremony_session_token(session_record) = session_record.visitor_token
+      def ceremony_session_token(session_record) = VisitorToken.find(session_record.visitor_token_id)
 
       def ceremony_token_owned_by?(token, actor) = token.visitor_id == actor.id
 

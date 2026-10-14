@@ -18,17 +18,18 @@ module Base
         step_up only: %i(edit update destroy), scope: "settings_email"
 
         def index
-          render inertia: true, props: emails_index_props(current_client.client_emails)
+          emails = ClientEmail.where(user_id: current_client.id)
+          render inertia: true, props: emails_index_props(emails)
         end
 
         def edit
-          @user_email = current_client.client_emails.find_by!(public_id: params.expect(:id))
+          @user_email = ClientEmail.find_by!(user_id: current_client.id, public_id: params.expect(:id))
           authorize!(@user_email)
           render inertia: true, props: email_edit_props(@user_email)
         end
 
         def update
-          @user_email = current_client.client_emails.find_by!(public_id: params.expect(:id))
+          @user_email = ClientEmail.find_by!(user_id: current_client.id, public_id: params.expect(:id))
           authorize!(@user_email)
           unless cloudflare_turnstile_stealth_validation["success"]
             return render(
@@ -49,7 +50,7 @@ module Base
         end
 
         def destroy
-          @user_email = current_client.client_emails.find_by!(public_id: params.expect(:id))
+          @user_email = ClientEmail.find_by!(user_id: current_client.id, public_id: params.expect(:id))
           authorize!(@user_email)
           if @user_email.undeletable? || (verified_email?(@user_email) && !AuthMethodGuard.can_remove_email?(
             current_client, @user_email,

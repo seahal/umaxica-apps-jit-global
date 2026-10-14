@@ -34,9 +34,9 @@ module Base
 
         render inertia: true, props: {
           title: "Avatar",
-          moniker: avatar.moniker,
+          moniker: current_avatar_moniker!(avatar).moniker,
           up_link: { label: t("actions.up"), href: base_app_avatars_path(ri: params[:ri]) },
-          handle: avatar.active_handle&.handle,
+          handle: Handle.find_by(id: avatar.active_handle_id)&.handle,
           edit: { label: "Edit", href: edit_base_app_avatar_path(avatar.public_id, ri: params[:ri]) },
         }
       end
@@ -141,9 +141,14 @@ module Base
       def serialize_avatar_entry(avatar)
         {
           public_id: avatar.public_id,
-          label: avatar.moniker,
+          label: current_avatar_moniker!(avatar).moniker,
           href: base_app_avatar_path(avatar.public_id, ri: params[:ri]),
         }
+      end
+
+      def current_avatar_moniker!(avatar)
+        avatar.current_avatar_moniker ||
+          raise(ActiveRecord::RecordNotFound, "Avatar #{avatar.public_id} has no current AvatarMoniker")
       end
 
       def new_avatar_props(moniker_value: nil)

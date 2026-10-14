@@ -11,7 +11,8 @@ class EmailCredentialRegistrationOtpFormQuery
 
       surface, owned, parent_model = components(actor, token, email, transaction)
       now = transaction.class.database_now
-      return false unless owned && source_current?(actor, token, email, now)
+      device_session = token_device_session(token)
+      return false unless owned && device_session && source_current?(actor, token, email, device_session, now)
 
       expected = CredentialRegistrationOtpSessionValue.for(
         surface: surface, channel: :email, transaction_ref: transaction.transaction_id,
@@ -37,11 +38,15 @@ class EmailCredentialRegistrationOtpFormQuery
       end
     end
 
-    def source_current?(actor, token, email, now)
+    def source_current?(actor, token, email, device_session, now)
       actor.login_allowed? && actor.accessible?(actor.class.database_now) &&
         source_available?(email) &&
-        token.currently_usable?(now) && token.device_session.usable? &&
-        token.device_session.current_refresh_token_id == token.id
+        token.currently_usable?(now) && device_session.usable? &&
+        device_session.current_refresh_token_id == token.id
+    end
+
+    def token_device_session(token)
+      token.device_session_record
     end
 
     def source_available?(email)

@@ -411,7 +411,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     post_oidc_handoff!
 
     assert_response :success
-    flow = @transaction.reload.secret_sign_in_flow
+    flow = ClientSignInFlow.find(@transaction.reload.secret_sign_in_flow_id)
 
     assert_equal ["passcode", "secret", @user.public_id, nil, nil, "SELECTOR_PENDING"],
                  [@transaction.auth_method, flow.authentication_method, @transaction.actor_ref,
@@ -438,7 +438,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
       assert_response :redirect, response.body
     end
     assert credential.reload.consumed_at
-    assert_equal @transaction.secret_sign_in_flow.reload.token.public_id,
+    assert_equal ClientToken.find(
+      ClientSignInFlow.find(@transaction.secret_sign_in_flow_id).token_id,
+    ).public_id,
                  ClientSecretSignInReceipt.find_by!(operation_id: credential.claim_operation_id).root_token_ref
     root_token_ref = @transaction.reload.browser_session_ref
     consumed_at = credential.consumed_at
@@ -490,13 +492,15 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_equal [true, ClientTokenStatus::ACTIVE],
                  [ClientOidcAuthorizationTransaction.exists?(@transaction.id),
-                  @transaction.secret_sign_in_flow.token.reload.user_token_status_id,],
+                  ClientToken.find(
+                    ClientSignInFlow.find(@transaction.secret_sign_in_flow_id).token_id,
+                  ).user_token_status_id,],
                  "a surviving successful receipt retains its authorization proof and active root"
     assert_equal :pending, ClientSecretSignInReceiptPurger.call!(
       receipt: ClientSecretSignInReceipt.find_by!(operation_id: credential.claim_operation_id),
       retention_after: 1.second,
     )
-    flow = @transaction.secret_sign_in_flow
+    flow = ClientSignInFlow.find(@transaction.secret_sign_in_flow_id)
     # Shortening the persisted parent deadline bounds the real continuation without extending its binding.
     deadline = [flow.expires_at, @transaction.expires_at, @transaction.login_challenge_expires_at].max + 1.second
     Timeout.timeout(15) do
@@ -523,7 +527,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     ClientSecretLifecycleJob.perform_now(batch_size: 500)
 
     assert_equal [false, ClientTokenStatus::ACTIVE],
-                 [ClientSecretSignInReceipt.exists?(receipt.id), flow.token.reload.user_token_status_id]
+                 [ClientSecretSignInReceipt.exists?(receipt.id), ClientToken.find(flow.token_id).user_token_status_id]
   end
 
   test "expired OIDC Secret flow rejects a delayed result without releasing its claim" do
@@ -640,7 +644,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     action = @oidc_result_action
-    flow = @transaction.reload.secret_sign_in_flow
+    flow = ClientSignInFlow.find(@transaction.reload.secret_sign_in_flow_id)
     flow.update!(expires_at: ClientSignInFlow.database_now)
     operation_id = credential.reload.claim_operation_id
 
@@ -851,7 +855,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     action = @oidc_result_action
-    flow = @transaction.reload.secret_sign_in_flow
+    flow = ClientSignInFlow.find(@transaction.reload.secret_sign_in_flow_id)
     flow.halt_sign_in!
 
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
@@ -1008,7 +1012,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :see_other
     limitation = response.location
-    flow = @transaction.reload.secret_sign_in_flow
+    flow = ClientSignInFlow.find(@transaction.reload.secret_sign_in_flow_id)
     challenge =
       begin
         fv5066 = session[:session_limit_gate] || session["session_limit_gate"]
@@ -1167,7 +1171,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
       delete limitation
     end
     assert_response :see_other
-    assert_predicate @transaction.reload.secret_sign_in_flow, :sign_in_cancelled?
+    assert_predicate ClientSignInFlow.find(@transaction.reload.secret_sign_in_flow_id), :sign_in_cancelled?
     assert_operator credential.reload.discard_at, :<=, Client.database_now
     assert_nil credential.consumed_at
     assert_nil ClientSecretLookupQuery.call(client: @user, secret: "a" * 32)
@@ -1324,7 +1328,8 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     limitation = response.location
 
-    assert_predicate @transaction.reload.secret_sign_in_flow, :sign_in_session_issuance_pending?
+    assert_predicate ClientSignInFlow.find(@transaction.reload.secret_sign_in_flow_id),
+                     :sign_in_session_issuance_pending?
     assert_nil credential.reload.consumed_at
     assert_nil ClientSecretLookupQuery.call(client: @user, secret: "a" * 32)
     challenge =
@@ -1341,7 +1346,8 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     }
 
     assert_response :unprocessable_content
-    assert_predicate @transaction.secret_sign_in_flow.reload, :sign_in_session_issuance_pending?
+    assert_predicate ClientSignInFlow.find(@transaction.secret_sign_in_flow_id),
+                     :sign_in_session_issuance_pending?
     assert_nil credential.reload.consumed_at
     assert_equal I18n.t("base.app.sign.in.limitations.capacity_still_full"),
                  JSON.parse(css_select("script[data-page=app]").first.text).fetch("props").fetch("notice")

@@ -13,6 +13,8 @@ class SecurityJwtJumpRtTokenCodec
   PRIVATE_JWK_FIELDS = JitSecurityJwtJwk::PRIVATE_FIELDS
 
   class << self
+    public
+
     def encode(payload, private_key:, kid:)
       JWT.encode(
         payload,

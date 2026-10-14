@@ -268,13 +268,14 @@ module SessionLimitResolutionTransactionable
           raise FlowInvalidTransition, "selected session is not owned by the actor"
         end
 
-        device = token.device_session
+        device = self.class.resolution_device_session_class.find_by(id: token.device_session_id)
         raise FlowInvalidTransition, "selected session device is missing" unless device
 
-        device.with_lock do
-          device.revoke!(reason: "session_limit_selected_revoke", now: self.class.database_now)
-          self.class.resolution_token_class.where(device_session_id: device.id).find_each(&:revoke!)
-        end
+        AuthenticationLogoutCurrentSession.call(
+          resource: actor,
+          token: token,
+          reason: "session_limit_selected_revoke",
+        )
       end
 
       # two.md 4.2 folds finalization into this transition; there is no later finalize step.
@@ -311,9 +312,9 @@ module SessionLimitResolutionTransactionable
                                        validate_same_state: false)
     expired_during_transition = false
     result =
-      with_resolution_lock(actor:) do
+      with_resolution_lock(actor:) do |parent|
         writer_now = self.class.database_now
-        ensure_resolution_binding!(actor, challenge, browser_binding_digest, writer_now)
+        ensure_resolution_binding!(actor, challenge, browser_binding_digest, writer_now, parent)
         current = state_id
         # A retry of the exact terminal operation returns the stored outcome. A
         # terminal row is still immutable: a different operation, challenge,
@@ -351,13 +352,14 @@ module SessionLimitResolutionTransactionable
     actor.class.connection_class_for_self.connected_to(role: :writing) do
       actor.with_lock do
         self.class.connection_class_for_self.connected_to(role: :writing) do
-          authorization = oidc_authorization_transaction
+          authorization = self.class.resolution_oidc_authorization_transaction_class
+            .find_by(id: oidc_authorization_transaction_id)
           if authorization
             authorization.with_lock do
-              lock_parent_and_resolution { yield }
+              lock_parent_and_resolution { |parent| yield parent }
             end
           else
-            lock_parent_and_resolution { yield }
+            lock_parent_and_resolution { |parent| yield parent }
           end
         end
       end
@@ -366,17 +368,18 @@ module SessionLimitResolutionTransactionable
 
   def lock_parent_and_resolution
     self.class.transaction do
-      sign_in_flow.with_lock do
+      parent = self.class.resolution_sign_in_flow_class.find(sign_in_flow_id)
+      parent.with_lock do
         lock!
-        yield
+        yield parent
       end
     end
   end
 
-  def ensure_resolution_binding!(actor, challenge, binding_digest, _now)
+  def ensure_resolution_binding!(actor, challenge, binding_digest, _now, parent)
     raise FlowInvalidTransition, "resolution binding mismatch" unless
       actor.is_a?(self.class.resolution_actor_class) && actor.public_id == actor_ref &&
-        sign_in_flow.principal_id == actor.id &&
+        parent.principal_id == actor.id &&
         binding_digest.present? && ActiveSupport::SecurityUtils.secure_compare(
           browser_binding_digest.to_s, binding_digest.to_s,
         ) && challenge_digest == self.class.digest_challenge(challenge)

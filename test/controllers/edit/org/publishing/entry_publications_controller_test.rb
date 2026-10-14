@@ -35,7 +35,7 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
               !(rp_token.device_session_id && OperatorRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OperatorRpSession.create!(
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -43,16 +43,16 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.staff, host: rp_host, resource_type: "operator",
-                              session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                              oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                              expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                              issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                              subject: OidcSubject.for(
-                                rp_token.staff,
-                                resource_type: "operator",
-                              ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "operator",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -76,11 +76,12 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
     post edit_org_publishing_docs_app_entry_publications_path(entry.public_id), headers: @staff_headers
 
     assert_response :see_other
-    entry.reload
+    entry = publication_entry_for_test(entry)
     publication = entry.active_publication
 
     assert_not_nil publication
-    assert_equal entry.current_revision.id, publication.entry_version.entry_revision_id
+    assert_equal entry.current_revision_id,
+                 Publishing::Docs::App::EntryVersion.find(publication.entry_version_id).entry_revision_id
     assert_equal @staff.public_id, publication.created_by_operator_public_id
     assert_equal @staff.public_id, entry.versions.sole.created_by_operator_public_id
     assert_equal(
@@ -96,15 +97,15 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
     post edit_org_publishing_docs_app_entry_publications_path(entry.public_id), headers: @staff_headers
 
     assert_response :see_other
-    first = entry.reload.active_publication
+    first = publication_entry_for_test(entry).active_publication
 
     post edit_org_publishing_docs_app_entry_publications_path(entry.public_id), headers: @staff_headers
 
     assert_response :see_other
-    entry.reload
+    entry = publication_entry_for_test(entry)
 
     assert_equal first.id, entry.active_publication.id
-    assert_equal 1, entry.publications.count
+    assert_equal 1, publication_entry_for_test(entry).publications.count
     assert_equal 1, entry.versions.count
   end
 
@@ -114,7 +115,7 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
     post edit_org_publishing_docs_app_entry_publications_path(entry.public_id), headers: @staff_headers
 
     assert_response :see_other
-    first_publication = entry.reload.active_publication
+    first_publication = publication_entry_for_test(entry).active_publication
 
     patch edit_org_publishing_docs_app_entry_path(entry.public_id),
           params: {
@@ -132,7 +133,7 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
     post edit_org_publishing_docs_app_entry_publications_path(entry.public_id), headers: @staff_headers
 
     assert_response :see_other
-    entry.reload
+    entry = publication_entry_for_test(entry)
     first_publication.reload
     current = entry.active_publication
 
@@ -140,7 +141,7 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
     assert_equal "superseded by a newer version", first_publication.termination_reason
     assert_equal @staff.public_id, first_publication.ended_by_operator_public_id
     assert_equal first_publication.effective_until, current.effective_from
-    assert_equal "Second", current.entry_version.title
+    assert_equal "Second", Publishing::Docs::App::EntryVersion.find(current.entry_version_id).title
     assert_equal 2, entry.versions.count
   end
 
@@ -154,9 +155,9 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
     assert_response :see_other
     entry.reload
 
-    assert_nil entry.active_publication
-    assert_equal 1, entry.publications.count
-    assert_operator entry.publications.sole.effective_from, :>, Time.current
+    assert_nil publication_entry_for_test(entry).active_publication
+    assert_equal 1, publication_entry_for_test(entry).publications.count
+    assert_operator publication_entry_for_test(entry).publications.sole.effective_from, :>, Time.current
   end
 
   test "an effective_from that is not a date is refused on the entry page" do
@@ -168,7 +169,7 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
 
     assert_response :unprocessable_content
     assert_match "must be a date and time", response.body
-    assert_equal 0, entry.reload.publications.count
+    assert_equal 0, publication_entry_for_test(entry.reload).publications.count
   end
 
   test "an entry with no current revision cannot be published" do
@@ -178,26 +179,26 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
 
     assert_response :unprocessable_content
     assert_match "entry has no current revision to publish", response.body
-    assert_equal 0, entry.reload.publications.count
+    assert_equal 0, publication_entry_for_test(entry.reload).publications.count
   end
 
   test "unpublishing without a reason is refused because the row cannot hold one" do
     entry = publishing_draft(audience: "app", surface: "docs", slug: "no-reason", title: "No Reason")
     publishing_publish(entry: entry)
-    publication = entry.reload.active_publication
+    publication = publication_entry_for_test(entry).active_publication
 
     delete edit_org_publishing_docs_app_entry_publication_path(entry.public_id, publication.public_id),
            headers: @staff_headers
 
     assert_response :unprocessable_content
     assert_select "span#publication_reason-error", text: "can't be blank"
-    assert_not_nil entry.reload.active_publication
+    assert_not_nil publication_entry_for_test(entry).active_publication
   end
 
   test "unpublishing terminates the live window and removes the entry from the public read path" do
     entry = publishing_draft(audience: "app", surface: "docs", slug: "unpublish", title: "Unpublish")
     publishing_publish(entry: entry)
-    publication = entry.reload.active_publication
+    publication = publication_entry_for_test(entry).active_publication
 
     delete edit_org_publishing_docs_app_entry_publication_path(entry.public_id, publication.public_id),
            params: { publication: { reason: "withdrawn by legal" } },
@@ -209,7 +210,7 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
     assert_equal "withdrawn by legal", publication.termination_reason
     assert_equal publication.terminated_at, publication.effective_until
     assert_equal @staff.public_id, publication.ended_by_operator_public_id
-    assert_nil entry.reload.active_publication
+    assert_nil publication_entry_for_test(entry).active_publication
     assert_nil(
       PublishingPublishedEntriesQuery.new(entry_class: Publishing::Docs::App::Entry, locale: "ja")
         .find_published(public_id: entry.public_id),
@@ -224,7 +225,7 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
          headers: @staff_headers
 
     assert_response :see_other
-    scheduled = entry.reload.publications.sole
+    scheduled = publication_entry_for_test(entry).publications.sole
 
     delete edit_org_publishing_docs_app_entry_publication_path(entry.public_id, scheduled.public_id),
            params: { publication: { reason: "campaign called off" } },
@@ -241,7 +242,7 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
   test "a window that has already ended cannot be ended twice" do
     entry = publishing_draft(audience: "app", surface: "docs", slug: "ended-twice", title: "Ended Twice")
     publishing_publish(entry: entry)
-    publication = entry.reload.active_publication
+    publication = publication_entry_for_test(entry).active_publication
 
     delete edit_org_publishing_docs_app_entry_publication_path(entry.public_id, publication.public_id),
            params: { publication: { reason: "first" } },
@@ -275,5 +276,13 @@ class Edit::Org::Publishing::EntryPublicationsControllerTest < ActionDispatch::I
     assert_response :redirect
     assert_equal 0, entry.reload.publications.count
     assert_equal 0, entry.versions.count
+  end
+
+  private
+
+  def publication_entry_for_test(entry)
+    Publishing::Docs::App::Entry.includes(
+      :current_revision, :publications, :versions, active_publication: :entry_version,
+    ).find(entry.id)
   end
 end

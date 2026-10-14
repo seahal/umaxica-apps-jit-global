@@ -6,10 +6,13 @@ require "uri"
 class RegionalRpClientMatrixTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  test "contains exactly the approved twelve regional clients and global edit client" do
-    assert_equal AuthBoundaryAuthorityMap.approved_rp_client_ids.sort,
+  test "contains exactly the twelve regional clients and global edit client" do
+    expected = AuthBoundaryAuthorityMap::REGIONAL_RP_CLIENT_IDS + ["edit-org"]
+
+    assert_equal expected.sort,
                  RegionalRpClientMatrix.client_ids.sort
     assert_equal 13, RegionalRpClientMatrix.client_ids.length
+    assert_not_includes RegionalRpClientMatrix.client_ids, "palm-app"
     namespaces =
       RegionalRpClientMatrix.client_ids.map do |client_id|
         RegionalRpClientMatrix.jwt_namespace_for(client_id)
@@ -62,7 +65,7 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
 
     assert_equal "core-app-jp", binding.fetch(:client_id)
     assert_equal "https://jp.umaxica.app/oidc/callback", binding.fetch(:redirect_uri)
-    assert_equal "https://jp.umaxica.app/sign/out", binding.fetch(:post_logout_redirect_uri)
+    assert_equal "https://jp.umaxica.app/sign/out/completion?ri=jp", binding.fetch(:post_logout_redirect_uri)
     assert_equal "https://jp.umaxica.app/oidc/backchannel/logout", binding.fetch(:backchannel_logout_uri)
     assert_equal "CORE_APP_JP", binding.fetch(:jwt_namespace)
     assert_equal "core-app-jp", binding.fetch(:rp_session_client_id)
@@ -94,7 +97,7 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
 
     assert_equal "warp-app-jp", binding.fetch(:client_id)
     assert_equal "https://www-jp.umaxica.app/oidc/callback", binding.fetch(:redirect_uri)
-    assert_equal "https://www-jp.umaxica.app/sign/out", binding.fetch(:post_logout_redirect_uri)
+    assert_equal "https://www-jp.umaxica.app/sign/out/completion?ri=jp", binding.fetch(:post_logout_redirect_uri)
     assert_equal "https://www-jp.umaxica.app/oidc/backchannel/logout", binding.fetch(:backchannel_logout_uri)
   end
 
@@ -120,6 +123,17 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
   test "does not treat the global Edit RP as a regional cell" do
     assert_raises(ArgumentError) do
       RegionalRpClientMatrix.client_id_for(surface: "edit", face: "org", region: "")
+    end
+  end
+
+  test "does not treat global Palm and Tech RPs as regional cells" do
+    %w(palm-app tech-org).each do |client_id|
+      assert_raises(ArgumentError) do
+        RegionalRpClientMatrix.uri_binding_for(client_id)
+      end
+      assert_raises(ArgumentError) do
+        RegionalRpClientMatrix.jwt_namespace_for(client_id)
+      end
     end
   end
 
@@ -217,6 +231,7 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
       audience: "core-app-us-resource",
       origin: "https://us.umaxica.app",
       jwt_namespace: "CORE_APP_US",
+      region: "us",
     )
 
     binding =
@@ -228,7 +243,7 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
       end
 
     assert_equal "https://us.umaxica.app/oidc/callback", binding.fetch(:redirect_uri)
-    assert_equal "https://us.umaxica.app/sign/out", binding.fetch(:post_logout_redirect_uri)
+    assert_equal "https://us.umaxica.app/sign/out/completion?ri=us", binding.fetch(:post_logout_redirect_uri)
     assert_equal "CORE_APP_US", binding.fetch(:jwt_namespace)
     assert_equal "core-app-us-resource", binding.fetch(:audience)
   end
@@ -328,6 +343,8 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
       client_id: "core-app-us",
       audience: "shared-regional-audience",
       redirect_uri: "https://us.umaxica.app/oidc/callback",
+      origin: "https://us.umaxica.app",
+      region: "us",
     )
 
     error =
@@ -353,7 +370,7 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
 
   private
 
-  def registered_client_for(client_id:, audience:, origin: "https://jp.umaxica.app",
+  def registered_client_for(client_id:, audience:, origin: "https://jp.umaxica.app", region: "jp",
                             redirect_uri: "https://jp.umaxica.app/oidc/callback",
                             private_key_jwt: true, resource_type: "client", jwt_namespace: "CORE_APP_JP")
     redirect_uri = "#{origin}/oidc/callback" if origin != "https://jp.umaxica.app"
@@ -365,7 +382,7 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
       client_id,
       resource_type,
       { "client" => [redirect_uri] },
-      ["#{origin}/sign/out"],
+      ["#{origin}#{RegionalRpClientMatrix::POST_LOGOUT_PATH}?ri=#{region}"],
       ["#{origin}/oidc/backchannel/logout"],
       jwt_namespace,
       private_key_jwt,

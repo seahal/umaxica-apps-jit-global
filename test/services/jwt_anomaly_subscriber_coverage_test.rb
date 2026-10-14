@@ -42,7 +42,7 @@ class JwtAnomalySubscriberCoverageTest < ActiveSupport::TestCase
 
     event = JwtAnomalyEvent.order(:id).last
 
-    assert_equal jwt_occurrences(:auth_user_malformed_token), event.jwt_occurrence
+    assert_equal jwt_occurrences(:auth_user_malformed_token).id, event.jwt_occurrence_id
     assert_equal({}, event.metadata)
   end
 

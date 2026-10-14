@@ -491,11 +491,12 @@ class OperatorTest < ActiveSupport::TestCase
   end
 
   test "association deletion: destroys dependent operator_tokens" do
-    staff = Operator.create!
+    staff = Operator.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
     token = OperatorToken.create!(
       staff: staff,
       discard_at: 1.day.from_now,
     )
+    staff = StrictLoadingAssociationPreloader.for_destruction(staff.reload)
     staff.destroy
     assert_raise(ActiveRecord::RecordNotFound) { token.reload }
   end

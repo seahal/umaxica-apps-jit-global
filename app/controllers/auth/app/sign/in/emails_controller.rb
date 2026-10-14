@@ -394,7 +394,7 @@ module Auth
 
           def verify_existing_email_otp(user_email)
             verification = admitted_auth_ceremony_session.verify_email_otp!(code: user_email.pass_code)
-            user = verification.contact&.user
+            user = Client.find(verification.contact.user_id) if verification.contact
 
             if verification.verified_evidence?
               SignAppInEmailAuthenticationState.clear!(session)

@@ -118,8 +118,10 @@ Rails.application.configure do
 
   # Detect N+1 queries and raise errors immediately.
   config.active_record.strict_loading_by_default = true
-  config.active_record.strict_loading_mode = :n_plus_one_only
+  config.active_record.strict_loading_mode = :all
   config.active_record.action_on_strict_loading_violation = :raise
+  # Include query callsites when debug logging is requested; keep the normal log level at info.
+  config.active_record.verbose_query_logs = true
 
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true

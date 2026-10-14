@@ -7,8 +7,10 @@ require Rails.root.join("lib/config_values_origin_value").to_s
 require Rails.root.join("lib/config_values_host_family_values").to_s
 
 class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
+  TECH_HOST_ENV = { "PUBLIC_TECH_STAFF_URL" => "tech.example.test" }.freeze
+
   test "build in non-production mode applies localhost fallbacks for every family" do
-    values = ConfigValues::HostFamilyValues.build(env: {}, production: false)
+    values = ConfigValues::HostFamilyValues.build(env: TECH_HOST_ENV, production: false)
 
     assert_equal "https://base.app.localhost", values.acme_service.to_s
     assert_equal "https://base.com.localhost", values.acme_corporate.to_s
@@ -43,7 +45,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
   end
 
   test "origins helpers group each family into its three surfaces" do
-    values = ConfigValues::HostFamilyValues.build(env: {}, production: false)
+    values = ConfigValues::HostFamilyValues.build(env: TECH_HOST_ENV, production: false)
 
     assert_equal 3, values.acme_origins.size
     assert_equal [values.acme_service, values.acme_corporate, values.acme_staff], values.acme_origins
@@ -56,8 +58,6 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
 
     assert_equal 3, values.base_origins.size
     assert_equal [values.base_service, values.base_corporate, values.base_staff], values.base_origins
-
-    assert_equal [values.xper_service, values.xper_corporate, values.xper_staff], values.xper_origins
 
     assert_equal 3, values.warp_origins.size
     assert_equal [values.warp_service, values.warp_corporate, values.warp_staff], values.warp_origins
@@ -82,9 +82,6 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "BASE_SERVICE_URL" => "base.example.test",
       "BASE_CORPORATE_URL" => "base-com.example.test",
       "BASE_STAFF_URL" => "base-org.example.test",
-      "PUBLIC_XPER_SERVICE_URL" => "umaxica.app",
-      "PUBLIC_XPER_CORPORATE_URL" => "umaxica.com",
-      "PUBLIC_XPER_STAFF_URL" => "umaxica.org",
       "PUBLIC_WARP_SERVICE_URL" => "warp.example.test",
       "PUBLIC_WARP_CORPORATE_URL" => "warp-com.example.test",
       "PUBLIC_WARP_STAFF_URL" => "warp-org.example.test",
@@ -104,23 +101,10 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "GUID_SERVICE_URL" => "guid.example.test",
       "EDIT_STAFF_URL" => "edit-org.example.test",
     }
-    values = ConfigValues::HostFamilyValues.build(env: env, production: true)
+    values = ConfigValues::HostFamilyValues.build(env: TECH_HOST_ENV.merge(env), production: true)
 
     assert_equal "https://base.example.test", values.acme_service.to_s
     assert_equal "https://sign-org.example.test", values.sign_staff.to_s
-    assert_equal "https://umaxica.app", values.xper_service.to_s
-    assert_equal "https://umaxica.com", values.xper_corporate.to_s
-    assert_equal "https://umaxica.org", values.xper_staff.to_s
-    %w(PUBLIC_XPER_SERVICE_URL PUBLIC_XPER_CORPORATE_URL PUBLIC_XPER_STAFF_URL).each do |key|
-      missing = env.except(key)
-      error = assert_raises(KeyError) { ConfigValues::HostFamilyValues.build(env: missing, production: true) }
-
-      assert_includes error.message, key
-      [nil, ""].each do |empty|
-        assert_raises(ArgumentError) { ConfigValues::HostFamilyValues.build(env: env.merge(key => empty), production: true) }
-      end
-    end
-
     assert_equal "https://warp.example.test", values.warp_service.to_s
     assert_equal "https://info-org.example.test", values.info_staff.to_s
     assert_equal "https://guid.example.test", values.guid_service.to_s
@@ -140,7 +124,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "PUBLIC_BASE_CORPORATE_URL" => "www.umaxica.com",
       "PUBLIC_BASE_STAFF_URL" => "www.umaxica.org",
     }
-    values = ConfigValues::HostFamilyValues.build(env: env, production: false)
+    values = ConfigValues::HostFamilyValues.build(env: TECH_HOST_ENV.merge(env), production: false)
 
     assert_equal "www.umaxica.app", values.base_service.host
     assert_equal "www.umaxica.com", values.base_corporate.host
@@ -156,7 +140,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "PUBLIC_BASE_CORPORATE_URL" => "www.umaxica.com",
       "PUBLIC_BASE_STAFF_URL" => "www.umaxica.org",
     }
-    values = ConfigValues::HostFamilyValues.build(env: env, production: false)
+    values = ConfigValues::HostFamilyValues.build(env: TECH_HOST_ENV.merge(env), production: false)
 
     assert_equal "www.umaxica.app", values.base_service.host
     assert_equal "www.umaxica.com", values.base_corporate.host
@@ -175,7 +159,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "PUBLIC_BASE_CORPORATE_URL" => "www.umaxica.com",
       "PUBLIC_BASE_STAFF_URL" => "www.umaxica.org",
     }
-    values = ConfigValues::HostFamilyValues.build(env: env, production: false)
+    values = ConfigValues::HostFamilyValues.build(env: TECH_HOST_ENV.merge(env), production: false)
 
     assert_equal "base.umaxica.app", values.base_service.host
     assert_equal "base.umaxica.com", values.base_corporate.host
@@ -188,7 +172,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "PUBLIC_AUTH_CORPORATE_URL" => "auth.umaxica.com",
       "PUBLIC_AUTH_STAFF_URL" => "auth.umaxica.org",
     }
-    values = ConfigValues::HostFamilyValues.build(env: env, production: false)
+    values = ConfigValues::HostFamilyValues.build(env: TECH_HOST_ENV.merge(env), production: false)
 
     assert_equal "auth.umaxica.app", values.sign_service.host
     assert_equal "auth.umaxica.com", values.sign_corporate.host
@@ -203,7 +187,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "PUBLIC_HELP_SERVICE_URL" => "help.umaxica.app",
       "PUBLIC_INFO_SERVICE_URL" => "info.umaxica.app",
     }
-    values = ConfigValues::HostFamilyValues.build(env: env, production: false)
+    values = ConfigValues::HostFamilyValues.build(env: TECH_HOST_ENV.merge(env), production: false)
 
     assert_equal "help.app.localhost", values.help_service.host
     assert_equal "info.app.localhost", values.info_service.host
@@ -219,7 +203,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "PUBLIC_CORE_CORPORATE_URL" => "core-jp.umaxica.com",
       "PUBLIC_CORE_STAFF_URL" => "core-jp.umaxica.org",
     }
-    values = ConfigValues::HostFamilyValues.build(env: env, production: false)
+    values = ConfigValues::HostFamilyValues.build(env: TECH_HOST_ENV.merge(env), production: false)
 
     assert_equal "core-jp.umaxica.app", values.core_service.host
     assert_equal "core-jp.umaxica.com", values.core_corporate.host
@@ -228,7 +212,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
 
   test "CORE_*_URL still configures core origins when no PUBLIC_CORE_* key exists" do
     env = { "CORE_SERVICE_URL" => "core.example.test" }
-    values = ConfigValues::HostFamilyValues.build(env: env, production: false)
+    values = ConfigValues::HostFamilyValues.build(env: TECH_HOST_ENV.merge(env), production: false)
 
     assert_equal "core.example.test", values.core_service.host
   end
@@ -241,7 +225,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "PUBLIC_CORE_SERVICE_URL" => "core-jp.umaxica.app",
       "CORE_SERVICE_URL" => "jpx.umaxica.app",
     }
-    values = ConfigValues::HostFamilyValues.build(env: env, production: false)
+    values = ConfigValues::HostFamilyValues.build(env: TECH_HOST_ENV.merge(env), production: false)
 
     assert_equal "core-jp.umaxica.app", values.core_service.host
   end
@@ -251,7 +235,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "AUTH_SERVICE_URL" => "sign.example.test",
       "PUBLIC_AUTH_SERVICE_URL" => "auth.umaxica.app",
     }
-    values = ConfigValues::HostFamilyValues.build(env: env, production: false)
+    values = ConfigValues::HostFamilyValues.build(env: TECH_HOST_ENV.merge(env), production: false)
 
     assert_equal "sign.example.test", values.sign_service.host
   end
@@ -267,9 +251,6 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "BASE_SERVICE_URL" => "base.example.test",
       "BASE_CORPORATE_URL" => "base-com.example.test",
       "BASE_STAFF_URL" => "base-org.example.test",
-      "PUBLIC_XPER_SERVICE_URL" => "umaxica.app",
-      "PUBLIC_XPER_CORPORATE_URL" => "umaxica.com",
-      "PUBLIC_XPER_STAFF_URL" => "umaxica.org",
       "PUBLIC_WARP_SERVICE_URL" => "warp.example.test",
       "PUBLIC_WARP_CORPORATE_URL" => "warp-com.example.test",
       "PUBLIC_WARP_STAFF_URL" => "warp-org.example.test",
@@ -289,7 +270,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "GUID_SERVICE_URL" => "guid.example.test",
       "EDIT_STAFF_URL" => "edit-org.example.test",
     }
-    values = ConfigValues::HostFamilyValues.build(env: env, production: true)
+    values = ConfigValues::HostFamilyValues.build(env: TECH_HOST_ENV.merge(env), production: true)
 
     assert_equal "https://base.example.test", values.acme_service.to_s
     assert_equal "https://sign.example.test", values.sign_service.to_s

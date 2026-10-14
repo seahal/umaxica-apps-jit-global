@@ -467,7 +467,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
 
   test "an access credential stops authenticating as soon as its Browser Session is revoked" do
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
-    @root_token.device_session.revoke!(reason: "rp-authentication-test")
+    @root_token.device_session_record.revoke!(reason: "rp-authentication-test")
 
     get :show, params: { required: "1" }
 
@@ -510,7 +510,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
   end
 
   test "a revoked Browser Session cannot issue a new RP refresh credential" do
-    @root_token.device_session.revoke!(reason: "rp-authentication-test")
+    @root_token.device_session_record.revoke!(reason: "rp-authentication-test")
 
     assert_raises(RpSession::IssuanceRejected) { @rp_session.reload.issue_refresh_token! }
   end
@@ -541,7 +541,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
   test "an access credential stops authenticating once the Browser Session points at another root token" do
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
     replacement = ClientToken.create!(user: @client)
-    @root_token.device_session.update_columns(current_refresh_token_id: replacement.id)
+    @root_token.device_session_record.update_columns(current_refresh_token_id: replacement.id)
 
     get :show, params: { required: "1" }
 
@@ -579,7 +579,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = @refresh_token
 
-    ClientRpSession.stub(:find_by, ->(*) { raise ActiveRecord::ConnectionNotEstablished, "injected" }) do
+    ClientRpSession.stub(:includes, ->(*) { raise ActiveRecord::ConnectionNotEstablished, "injected" }) do
       OidcTokenExchangeCoordinator.stub(:call, ->(**) { raise RuntimeError, "refresh must not run" }) do
         get :show, params: { required: "1" }
       end
@@ -594,7 +594,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
   test "an exhausted connection pool while reading live state answers 503 and keeps the cookies" do
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
 
-    ClientRpSession.stub(:find_by, ->(*) { raise ActiveRecord::ConnectionTimeoutError, "injected" }) do
+    ClientRpSession.stub(:includes, ->(*) { raise ActiveRecord::ConnectionTimeoutError, "injected" }) do
       get :show, params: { required: "1" }
     end
 
@@ -610,7 +610,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
 
     assert_response :success
 
-    @root_token.device_session.revoke!(reason: "rp-authentication-test")
+    @root_token.device_session_record.revoke!(reason: "rp-authentication-test")
     get :show, params: { required: "1" }
 
     assert_response :unauthorized

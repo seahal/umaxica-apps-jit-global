@@ -58,6 +58,25 @@ class Warp::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal auth_refresh_generation, token.refresh_token_generation
   end
 
+  # docs/architecture/preference-behavior-contract.md, Surface Matrix: a Com tier that authenticates
+  # a visitor and can create a ComPreference synchronizes the VisitorPreference mirror, as App and
+  # Org do for their own mirrors.
+  test "a write that creates the browser preference synchronizes the visitor preference mirror" do
+    visitor = visitors(:reserved_visitor)
+    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+    authenticate_rp!(visitor, token)
+    mirror = -> { ComZenithRecord.connected_to(role: :writing) { VisitorPreference.find_by(visitor_id: visitor.id) } }
+
+    assert_nil mirror.call
+
+    post warp_com_sign_out_url(ri: "jp")
+
+    assert_response :see_other
+    assert_predicate cookies[PreferenceCookieName.refresh(surface: :com)], :present?
+    assert_not_nil mirror.call
+  end
+
   test "get sign out without a one-shot notice is not found" do
     get warp_com_sign_out_url(ri: "jp")
 

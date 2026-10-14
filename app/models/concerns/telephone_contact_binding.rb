@@ -60,8 +60,8 @@ module TelephoneContactBinding
   def retire_for_withdrawal!
     owner, status_column, suspended =
       case self
-      when ClientTelephone then [user, :user_telephone_status_id, ClientTelephoneStatus::SUSPENDED]
-      when VisitorTelephone then [visitor, :visitor_telephone_status_id, VisitorTelephoneStatus::SUSPENDED]
+      when ClientTelephone then [Client.find(user_id), :user_telephone_status_id, ClientTelephoneStatus::SUSPENDED]
+      when VisitorTelephone then [Visitor.find(visitor_id), :visitor_telephone_status_id, VisitorTelephoneStatus::SUSPENDED]
       else raise ArgumentError, "unsupported withdrawal telephone"
       end
     owner.with_lock do
@@ -88,8 +88,8 @@ module TelephoneContactBinding
   def registration_ceremony_evidence?(transaction, code, session_ref)
     owner =
       case [self, transaction]
-      in [ClientTelephone, ClientTelephoneCeremonyTransaction] then user
-      in [VisitorTelephone, VisitorTelephoneCeremonyTransaction] then visitor
+      in [ClientTelephone, ClientTelephoneCeremonyTransaction] then Client.find(user_id)
+      in [VisitorTelephone, VisitorTelephoneCeremonyTransaction] then Visitor.find(visitor_id)
       else raise ArgumentError, "unsupported Telephone registration ceremony realm"
       end
     transaction.normalized_number_digest == number_digest && transaction.telephone_otp_verified_evidence?(

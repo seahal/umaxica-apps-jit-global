@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 class CreateOrgSignSequenceTickets < ActiveRecord::Migration[8.2]
   def change
     create_sequence_ticket_table(:org_sign_in_sequence_tickets, :staff_tokens)

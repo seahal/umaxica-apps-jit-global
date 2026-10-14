@@ -20,10 +20,14 @@ module Publishing
       super()
       @revision = revision
       @operator_public_id = operator_public_id
+      @cell = ContentFamilies::CELL_BY_REVISION[revision.class]
     end
 
     def call
-      entry = revision.entry
+      raise RevisionMismatchError, "unsupported publishing revision class" unless cell
+
+      entry_class = cell.fetch(:entry)
+      entry = entry_class.find_by(id: revision.entry_id)
       raise(RevisionMismatchError, "revision #{revision.id} has no entry") unless entry
 
       entry.with_lock do
@@ -38,7 +42,7 @@ module Publishing
 
     private
 
-    attr_reader :revision, :operator_public_id
+    attr_reader :revision, :operator_public_id, :cell
 
     def create_version(entry)
       version =
@@ -92,13 +96,13 @@ module Publishing
     end
 
     def lock_taxonomy!
-      vocabulary_ids =
-        (revision.single_taxonomy_assignments.pluck(:vocabulary_id) +
-          revision.multiple_taxonomy_assignments.pluck(:vocabulary_id)).uniq
+      single_assignments = cell.fetch(:revision_single).where(entry_revision_id: revision.id)
+      multiple_assignments = cell.fetch(:revision_multiple).where(entry_revision_id: revision.id)
+      vocabulary_ids = (single_assignments.pluck(:vocabulary_id) + multiple_assignments.pluck(:vocabulary_id)).uniq
       vocabulary_ids.sort!
       return if vocabulary_ids.empty?
 
-      vocab_class = revision.single_taxonomy_assignments.klass.reflect_on_association(:vocabulary).klass
+      vocab_class = cell.fetch(:vocabulary)
       vocab_class.where(id: vocabulary_ids).order(:id).lock("FOR SHARE").load
     end
 
@@ -107,35 +111,44 @@ module Publishing
     end
 
     def copy_taxonomy_assignments(version)
-      revision.single_taxonomy_assignments.includes(:vocabulary, :taxonomy_term).find_each do |assignment|
-        version.single_taxonomy_assignments
-          .new(
-            vocabulary_id: assignment.vocabulary_id,
-            vocabulary_kind: assignment.vocabulary_kind,
-            taxonomy_term_id: assignment.taxonomy_term_id,
-            locale: assignment.locale,
-          )
+      single_assignments = cell.fetch(:revision_single).where(entry_revision_id: revision.id).includes(
+        :vocabulary,
+        :taxonomy_term,
+      )
+      single_assignments.find_each do |assignment|
+        cell.fetch(:version_single).new(
+          entry_version_id: version.id,
+          vocabulary_id: assignment.vocabulary_id,
+          vocabulary_kind: assignment.vocabulary_kind,
+          taxonomy_term_id: assignment.taxonomy_term_id,
+          locale: assignment.locale,
+        )
           .apply_snapshot(vocabulary: assignment.vocabulary, term: assignment.taxonomy_term)
           .save!
       end
 
-      revision.multiple_taxonomy_assignments.includes(:vocabulary, :taxonomy_term).find_each do |assignment|
-        version.multiple_taxonomy_assignments
-          .new(
-            vocabulary_id: assignment.vocabulary_id,
-            vocabulary_kind: assignment.vocabulary_kind,
-            taxonomy_term_id: assignment.taxonomy_term_id,
-            locale: assignment.locale,
-            position: assignment.position,
-          )
+      multiple_assignments = cell.fetch(:revision_multiple).where(entry_revision_id: revision.id).includes(
+        :vocabulary,
+        :taxonomy_term,
+      )
+      multiple_assignments.find_each do |assignment|
+        cell.fetch(:version_multiple).new(
+          entry_version_id: version.id,
+          vocabulary_id: assignment.vocabulary_id,
+          vocabulary_kind: assignment.vocabulary_kind,
+          taxonomy_term_id: assignment.taxonomy_term_id,
+          locale: assignment.locale,
+          position: assignment.position,
+        )
           .apply_snapshot(vocabulary: assignment.vocabulary, term: assignment.taxonomy_term)
           .save!
       end
     end
 
     def copy_media_usages(version)
-      revision.media_usages.find_each do |usage|
-        version.media_usages.create!(
+      cell.fetch(:revision_media).where(entry_revision_id: revision.id).find_each do |usage|
+        cell.fetch(:version_media).create!(
+          entry_version_id: version.id,
           media_file_id: usage.media_file_id,
           role: usage.role,
           field_path: usage.field_path,
@@ -175,9 +188,9 @@ module Publishing
         raise(RevisionMismatchError, "version #{version.id} does not belong to revision #{revision.id}")
       end
 
-      expected_single = revision.single_taxonomy_assignments.count
-      expected_multiple = revision.multiple_taxonomy_assignments.count
-      expected_media = revision.media_usages.count
+      expected_single = cell.fetch(:revision_single).where(entry_revision_id: revision.id).count
+      expected_multiple = cell.fetch(:revision_multiple).where(entry_revision_id: revision.id).count
+      expected_media = cell.fetch(:revision_media).where(entry_revision_id: revision.id).count
       actual_single = version.single_taxonomy_assignments.count
       actual_multiple = version.multiple_taxonomy_assignments.count
       actual_media = version.media_usages.count

@@ -91,7 +91,7 @@ class SignUpTermination
       schedule_terminal_retention! if terminal_status_reached?
       decision = decision.merge(
         halted: cycle.respond_to?(:sign_up_halted?) && cycle.sign_up_halted?,
-        subject: cycle.principal,
+        subject: sign_up_principal,
       )
     end
 
@@ -104,6 +104,16 @@ class SignUpTermination
   private
 
   attr_reader :cycle, :event, :actor_context
+
+  def sign_up_principal
+    return if cycle.principal_id.blank?
+
+    case cycle
+    when ClientSignUpFlow then Client.find(cycle.principal_id)
+    when VisitorSignUpFlow then Visitor.find(cycle.principal_id)
+    else raise ArgumentError, "unsupported sign-up cycle realm"
+    end
+  end
 
   def already_terminal_for_event?
     case event

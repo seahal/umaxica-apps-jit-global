@@ -13,7 +13,8 @@ class ClientSecretClaimFinalizer
       end
 
       AppZenithRecord.connected_to(role: :writing) do
-        credential.client.with_lock do
+        client = Client.find(credential.client_id)
+        client.with_lock do
           AppTicketRecord.connected_to(role: :writing) do
             ClientSignInFlow.transaction do
               flow = ClientSignInFlow.find_by(public_id: credential.claim_sign_in_flow_ref)
@@ -24,7 +25,7 @@ class ClientSecretClaimFinalizer
               credential.lock!
               return :retired if credential.discard_at != Float::INFINITY
 
-              finalize_locked!(credential, flow, purge_after)
+              finalize_locked!(credential, client, flow, purge_after)
             end
           end
         end
@@ -33,25 +34,25 @@ class ClientSecretClaimFinalizer
 
     private
 
-    def finalize_locked!(credential, flow, purge_after)
+    def finalize_locked!(credential, client, flow, purge_after)
       receipt = ClientSecretSignInReceipt.find_by(operation_id: credential.claim_operation_id)
-      reason = receipt ? verify_receipt!(credential, flow, receipt) : failure_reason!(credential, flow)
+      reason = receipt ? verify_receipt!(credential, client, flow, receipt) : failure_reason!(credential, flow)
       return reason if %i(unknown pending).include?(reason)
 
       now = Client.database_now
       credential.commit_sign_in_retirement!(
         actor_context: ActorValuesContext.empty.with(
-          subject: credential.client, actor_type: :client, tld: :app, surface: :base,
+          subject: client, actor_type: :client, tld: :app, surface: :base,
         ),
         at: now, purge_at: now + purge_after, successful: receipt.present?, flow: flow, reason: reason,
       )
       receipt ? :consumed : :abandoned
     end
 
-    def verify_receipt!(credential, flow, receipt)
-      token = flow.token
+    def verify_receipt!(credential, client, flow, receipt)
+      token = ClientToken.find_by(id: flow.token_id, user_id: client.id)
       unless receipt.credential_ref == credential.public_id && receipt.sign_in_flow_id == flow.id &&
-          receipt.client_ref == credential.client.public_id && flow.principal_id == credential.client_id &&
+          receipt.client_ref == client.public_id && flow.principal_id == credential.client_id &&
           flow.sign_in_completed? && flow.authentication_method == "secret" && token &&
           receipt.root_token_ref == token.public_id && receipt.committed_at == flow.session_issued_at &&
           token.root_login_established_at == receipt.committed_at

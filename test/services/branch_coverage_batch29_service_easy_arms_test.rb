@@ -12,20 +12,6 @@ class BranchCoverageBatch29ServiceEasyArmsTest < ActiveSupport::TestCase
     assert_equal :secret_credential_mismatch, result.reason
   end
 
-  test "PalmAccessTokenAuthenticator blank token arms" do
-    missing = PalmAccessTokenAuthenticator.new(
-      access_token: nil, host: "example.test", authorization_scheme: "Bearer",
-    ).call
-    blank = PalmAccessTokenAuthenticator.new(
-      access_token: "", host: "example.test", authorization_scheme: "Bearer",
-    ).call
-
-    assert_equal "invalid_token", missing.error
-    assert_not missing.success?
-    assert_equal "invalid_token", blank.error
-    assert_not blank.success?
-  end
-
   test "OidcAccessTokenAuthenticator blank token arms" do
     missing = OidcAccessTokenAuthenticator.new(
       access_token: nil, resource_type: "client", host: "example.test",

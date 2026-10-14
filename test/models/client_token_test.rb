@@ -81,7 +81,10 @@ require "test_helper"
 
 class ClientTokenTest < ActiveSupport::TestCase
   def setup
-    @user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING)
+    @user = Client.create!(
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+      public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING,
+    )
     @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
   end
 
@@ -226,6 +229,7 @@ class ClientTokenTest < ActiveSupport::TestCase
 
     # An Identity is physically erased only once it has lapsed and is purgeable.
     @user.reload.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
+    @user = StrictLoadingAssociationPreloader.for_destruction(@user.reload)
     @user.destroy!
 
     assert_not ClientToken.exists?(@token.id)
@@ -526,6 +530,7 @@ class ClientTokenTest < ActiveSupport::TestCase
     @token.reload # Ensure it exists
     # An Identity is physically erased only once it has lapsed and is purgeable.
     @user.reload.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
+    @user = StrictLoadingAssociationPreloader.for_destruction(@user.reload)
     @user.destroy
     assert_raise(ActiveRecord::RecordNotFound) { @token.reload }
   end

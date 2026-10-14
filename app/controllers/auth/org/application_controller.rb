@@ -31,8 +31,6 @@ module Auth
 
       AUTHENTICATION_MODE = :deny_all
 
-      prepend_before_action :apply_default_no_store
-
       AUTH_CEREMONY_SURFACE = "org"
 
       layout "auth/org/application"
@@ -42,6 +40,8 @@ module Auth
       # Rails validates Origin and Fetch Metadata first; require its session-bound token before surface callbacks.
       prepend_before_action :require_authenticity_token_for_unsafe_request!
       protect_from_forgery using: :header_or_legacy_token, with: :exception, prepend: true
+      ensure_fqdn_gate_first!
+      prepend_before_action :apply_default_no_store
 
       authorize :user, through: :current_policy_user
       authorize :actor, through: :current_actor

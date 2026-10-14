@@ -735,7 +735,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
         provider: flow0_config.fetch(:provider),
         subject: flow0_uid,
       )
-      flow0_user = flow0_identity.user
+      flow0_user = Client.find(flow0_identity.client_id)
 
       assert_response :redirect
       assert_equal "2000-02-03", flow0_user.reload.birthdate
@@ -1439,7 +1439,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
         provider: flow7_config.fetch(:provider),
         subject: flow7_uid,
       )
-      flow7_user = flow7_identity.user
+      flow7_user = Client.find(flow7_identity.client_id)
 
       assert_response :redirect
       assert_equal "2000-02-03", flow7_user.reload.birthdate
@@ -2259,7 +2259,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                       oidc_client_id: rr0_client.client_id,
                       revoked_at: nil,
                     ))
-                  rr0_token.rotate_refresh_token! unless rr0_token.device_session.current_refresh_token_id
+                  rr0_token.rotate_refresh_token! unless rr0_token.device_session_record.current_refresh_token_id
                   rr0_now = Time.current
                   rr0_session = ClientRpSession.create!(
                     client_token: rr0_token,
@@ -2271,7 +2271,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     refresh_token_expires_at: rr0_now + 10.minutes,
                   )
                   rr0_access = AuthenticationTokenService.encode(
-                    rr0_token.user,
+                    rr0_token.actor_record,
                     host: rr0_host,
                     resource_type: "client",
                     session_public_id: rr0_token.public_id,
@@ -2284,7 +2284,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     audiences: [rr0_client.aud],
                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr0_client),
                     subject: OidcSubject.for(
-                      rr0_token.user,
+                      rr0_token.actor_record,
                       resource_type: "client",
                     ),
                     client_id: rr0_client.client_id,
@@ -2309,7 +2309,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
             end
           lf0_session_public_id = lf0_user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
           lf0_token = ClientToken.find_by(public_id: lf0_session_public_id)
-          lf0_session_ref = lf0_token&.try(:device_session)&.public_id.presence || lf0_session_public_id
+          lf0_session_ref = lf0_token&.device_session_record&.public_id.presence || lf0_session_public_id
           mark_token_step_up_satisfied_for_test(
             lf0_token,
             scope: SocialAuth::SOCIAL_LINK_SCOPE,
@@ -2635,7 +2635,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                       oidc_client_id: rr1_client.client_id,
                       revoked_at: nil,
                     ))
-                  rr1_token.rotate_refresh_token! unless rr1_token.device_session.current_refresh_token_id
+                  rr1_token.rotate_refresh_token! unless rr1_token.device_session_record.current_refresh_token_id
                   rr1_now = Time.current
                   rr1_session = ClientRpSession.create!(
                     client_token: rr1_token,
@@ -2647,7 +2647,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     refresh_token_expires_at: rr1_now + 10.minutes,
                   )
                   rr1_access = AuthenticationTokenService.encode(
-                    rr1_token.user,
+                    rr1_token.actor_record,
                     host: rr1_host,
                     resource_type: "client",
                     session_public_id: rr1_token.public_id,
@@ -2660,7 +2660,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     audiences: [rr1_client.aud],
                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr1_client),
                     subject: OidcSubject.for(
-                      rr1_token.user,
+                      rr1_token.actor_record,
                       resource_type: "client",
                     ),
                     client_id: rr1_client.client_id,
@@ -2685,7 +2685,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
             end
           lf1_session_public_id = lf1_user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
           lf1_token = ClientToken.find_by(public_id: lf1_session_public_id)
-          lf1_session_ref = lf1_token&.try(:device_session)&.public_id.presence || lf1_session_public_id
+          lf1_session_ref = lf1_token&.device_session_record&.public_id.presence || lf1_session_public_id
           mark_token_step_up_satisfied_for_test(
             lf1_token,
             scope: SocialAuth::SOCIAL_LINK_SCOPE,
@@ -3009,7 +3009,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f0_client.client_id,
                     revoked_at: nil,
                   ))
-                f0_token.rotate_refresh_token! unless f0_token.device_session.current_refresh_token_id
+                f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                 f0_now = Time.current
                 f0_session = ClientRpSession.create!(
                   client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
@@ -3017,16 +3017,17 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f0_now + 10.minutes,
                 )
                 f0_access = AuthenticationTokenService.encode(
-                  f0_token.user, host: f0_host, resource_type: "client",
-                                 session_public_id: f0_token.public_id, base_session_public_id: f0_token.public_id,
-                                 oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
-                                 expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
-                                 subject: OidcSubject.for(
-                                   f0_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f0_client.client_id,
+                  f0_token.actor_record, host: f0_host, resource_type: "client",
+                                         session_public_id: f0_token.public_id,
+                                         base_session_public_id: f0_token.public_id,
+                                         oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
+                                         expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
+                                         subject: OidcSubject.for(
+                                           f0_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f0_client.client_id,
                 )
                 @base_browser_rp_credentials[f0_key] =
                   [f0_access, f0_session.issue_refresh_token!]
@@ -3098,7 +3099,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f1_client.client_id,
                     revoked_at: nil,
                   ))
-                f1_token.rotate_refresh_token! unless f1_token.device_session.current_refresh_token_id
+                f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                 f1_now = Time.current
                 f1_session = ClientRpSession.create!(
                   client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
@@ -3106,16 +3107,17 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f1_now + 10.minutes,
                 )
                 f1_access = AuthenticationTokenService.encode(
-                  f1_token.user, host: f1_host, resource_type: "client",
-                                 session_public_id: f1_token.public_id, base_session_public_id: f1_token.public_id,
-                                 oidc_sid: f1_session.public_id, oidc_jti: f1_session.oidc_jti,
-                                 expires_at: f1_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f1_client), audiences: [f1_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
-                                 subject: OidcSubject.for(
-                                   f1_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f1_client.client_id,
+                  f1_token.actor_record, host: f1_host, resource_type: "client",
+                                         session_public_id: f1_token.public_id,
+                                         base_session_public_id: f1_token.public_id,
+                                         oidc_sid: f1_session.public_id, oidc_jti: f1_session.oidc_jti,
+                                         expires_at: f1_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f1_client), audiences: [f1_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
+                                         subject: OidcSubject.for(
+                                           f1_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f1_client.client_id,
                 )
                 @base_browser_rp_credentials[f1_key] =
                   [f1_access, f1_session.issue_refresh_token!]
@@ -3185,7 +3187,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f2_client.client_id,
                   revoked_at: nil,
                 ))
-              f2_token.rotate_refresh_token! unless f2_token.device_session.current_refresh_token_id
+              f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
               f2_now = Time.current
               f2_session = ClientRpSession.create!(
                 client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
@@ -3193,16 +3195,17 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f2_now + 10.minutes,
               )
               f2_access = AuthenticationTokenService.encode(
-                f2_token.user, host: f2_host, resource_type: "client",
-                               session_public_id: f2_token.public_id, base_session_public_id: f2_token.public_id,
-                               oidc_sid: f2_session.public_id, oidc_jti: f2_session.oidc_jti,
-                               expires_at: f2_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f2_client), audiences: [f2_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
-                               subject: OidcSubject.for(
-                                 f2_token.user,
-                                 resource_type: "client",
-                               ), client_id: f2_client.client_id,
+                f2_token.actor_record, host: f2_host, resource_type: "client",
+                                       session_public_id: f2_token.public_id,
+                                       base_session_public_id: f2_token.public_id,
+                                       oidc_sid: f2_session.public_id, oidc_jti: f2_session.oidc_jti,
+                                       expires_at: f2_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f2_client), audiences: [f2_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
+                                       subject: OidcSubject.for(
+                                         f2_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f2_client.client_id,
               )
               @base_browser_rp_credentials[f2_key] =
                 [f2_access, f2_session.issue_refresh_token!]
@@ -3278,7 +3281,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f3_client.client_id,
                   revoked_at: nil,
                 ))
-              f3_token.rotate_refresh_token! unless f3_token.device_session.current_refresh_token_id
+              f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
               f3_now = Time.current
               f3_session = ClientRpSession.create!(
                 client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
@@ -3286,16 +3289,17 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f3_now + 10.minutes,
               )
               f3_access = AuthenticationTokenService.encode(
-                f3_token.user, host: f3_host, resource_type: "client",
-                               session_public_id: f3_token.public_id, base_session_public_id: f3_token.public_id,
-                               oidc_sid: f3_session.public_id, oidc_jti: f3_session.oidc_jti,
-                               expires_at: f3_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f3_client), audiences: [f3_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f3_client),
-                               subject: OidcSubject.for(
-                                 f3_token.user,
-                                 resource_type: "client",
-                               ), client_id: f3_client.client_id,
+                f3_token.actor_record, host: f3_host, resource_type: "client",
+                                       session_public_id: f3_token.public_id,
+                                       base_session_public_id: f3_token.public_id,
+                                       oidc_sid: f3_session.public_id, oidc_jti: f3_session.oidc_jti,
+                                       expires_at: f3_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f3_client), audiences: [f3_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f3_client),
+                                       subject: OidcSubject.for(
+                                         f3_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f3_client.client_id,
               )
               @base_browser_rp_credentials[f3_key] =
                 [f3_access, f3_session.issue_refresh_token!]
@@ -3338,7 +3342,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     google_identity = create_social_identity(PROVIDERS.fetch(:google), user:, uid: "unlink_google")
     begin
       fv5028 = user
-      fv5027 = fv5028.client_emails.first
+      fv5027 = ClientEmail.find_by!(user_id: fv5028.id)
       fv5027.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
       fv5027.finalize_binding! unless fv5027.binding_effective?
     end
@@ -3385,7 +3389,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     oidc_client_id: rr2_client.client_id,
                     revoked_at: nil,
                   ))
-                rr2_token.rotate_refresh_token! unless rr2_token.device_session.current_refresh_token_id
+                rr2_token.rotate_refresh_token! unless rr2_token.device_session_record.current_refresh_token_id
                 rr2_now = Time.current
                 rr2_session = ClientRpSession.create!(
                   client_token: rr2_token,
@@ -3397,7 +3401,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: rr2_now + 10.minutes,
                 )
                 rr2_access = AuthenticationTokenService.encode(
-                  rr2_token.user,
+                  rr2_token.actor_record,
                   host: rr2_host,
                   resource_type: "client",
                   session_public_id: rr2_token.public_id,
@@ -3410,7 +3414,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   audiences: [rr2_client.aud],
                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr2_client),
                   subject: OidcSubject.for(
-                    rr2_token.user,
+                    rr2_token.actor_record,
                     resource_type: "client",
                   ),
                   client_id: rr2_client.client_id,
@@ -3451,7 +3455,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     apple_identity = create_social_identity(PROVIDERS.fetch(:apple), user:, uid: "unlink_apple")
     begin
       fv5023 = user
-      fv5022 = fv5023.client_emails.first
+      fv5022 = ClientEmail.find_by!(user_id: fv5023.id)
       fv5022.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
       fv5022.finalize_binding! unless fv5022.binding_effective?
     end
@@ -3498,7 +3502,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     oidc_client_id: rr3_client.client_id,
                     revoked_at: nil,
                   ))
-                rr3_token.rotate_refresh_token! unless rr3_token.device_session.current_refresh_token_id
+                rr3_token.rotate_refresh_token! unless rr3_token.device_session_record.current_refresh_token_id
                 rr3_now = Time.current
                 rr3_session = ClientRpSession.create!(
                   client_token: rr3_token,
@@ -3510,7 +3514,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: rr3_now + 10.minutes,
                 )
                 rr3_access = AuthenticationTokenService.encode(
-                  rr3_token.user,
+                  rr3_token.actor_record,
                   host: rr3_host,
                   resource_type: "client",
                   session_public_id: rr3_token.public_id,
@@ -3523,7 +3527,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   audiences: [rr3_client.aud],
                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr3_client),
                   subject: OidcSubject.for(
-                    rr3_token.user,
+                    rr3_token.actor_record,
                     resource_type: "client",
                   ),
                   client_id: rr3_client.client_id,
@@ -3564,7 +3568,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     apple_identity = create_social_identity(PROVIDERS.fetch(:apple), user:, uid: "relink_old_apple")
     begin
       fv5018 = user
-      fv5017 = fv5018.client_emails.first
+      fv5017 = ClientEmail.find_by!(user_id: fv5018.id)
       fv5017.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
       fv5017.finalize_binding! unless fv5017.binding_effective?
     end
@@ -3611,7 +3615,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     oidc_client_id: rr4_client.client_id,
                     revoked_at: nil,
                   ))
-                rr4_token.rotate_refresh_token! unless rr4_token.device_session.current_refresh_token_id
+                rr4_token.rotate_refresh_token! unless rr4_token.device_session_record.current_refresh_token_id
                 rr4_now = Time.current
                 rr4_session = ClientRpSession.create!(
                   client_token: rr4_token,
@@ -3623,7 +3627,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: rr4_now + 10.minutes,
                 )
                 rr4_access = AuthenticationTokenService.encode(
-                  rr4_token.user,
+                  rr4_token.actor_record,
                   host: rr4_host,
                   resource_type: "client",
                   session_public_id: rr4_token.public_id,
@@ -3636,7 +3640,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   audiences: [rr4_client.aud],
                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr4_client),
                   subject: OidcSubject.for(
-                    rr4_token.user,
+                    rr4_token.actor_record,
                     resource_type: "client",
                   ),
                   client_id: rr4_client.client_id,
@@ -3708,7 +3712,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f4_client.client_id,
                     revoked_at: nil,
                   ))
-                f4_token.rotate_refresh_token! unless f4_token.device_session.current_refresh_token_id
+                f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                 f4_now = Time.current
                 f4_session = ClientRpSession.create!(
                   client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
@@ -3716,16 +3720,17 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f4_now + 10.minutes,
                 )
                 f4_access = AuthenticationTokenService.encode(
-                  f4_token.user, host: f4_host, resource_type: "client",
-                                 session_public_id: f4_token.public_id, base_session_public_id: f4_token.public_id,
-                                 oidc_sid: f4_session.public_id, oidc_jti: f4_session.oidc_jti,
-                                 expires_at: f4_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f4_client), audiences: [f4_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f4_client),
-                                 subject: OidcSubject.for(
-                                   f4_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f4_client.client_id,
+                  f4_token.actor_record, host: f4_host, resource_type: "client",
+                                         session_public_id: f4_token.public_id,
+                                         base_session_public_id: f4_token.public_id,
+                                         oidc_sid: f4_session.public_id, oidc_jti: f4_session.oidc_jti,
+                                         expires_at: f4_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f4_client), audiences: [f4_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f4_client),
+                                         subject: OidcSubject.for(
+                                           f4_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f4_client.client_id,
                 )
                 @base_browser_rp_credentials[f4_key] =
                   [f4_access, f4_session.issue_refresh_token!]
@@ -3747,7 +3752,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
           end
         fx4_session_public_id = fx4_user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
         fx4_token = ClientToken.find_by(public_id: fx4_session_public_id)
-        fx4_session_ref = fx4_token&.try(:device_session)&.public_id.presence || fx4_session_public_id
+        fx4_session_ref = fx4_token&.device_session_record&.public_id.presence || fx4_session_public_id
         mark_token_step_up_satisfied_for_test(
           fx4_token,
           scope: SocialAuth::SOCIAL_LINK_SCOPE,
@@ -4086,7 +4091,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                       oidc_client_id: cc0_f8_client.client_id,
                       revoked_at: nil,
                     ))
-                  cc0_f8_token.rotate_refresh_token! unless cc0_f8_token.device_session.current_refresh_token_id
+                  cc0_f8_token.rotate_refresh_token! unless cc0_f8_token.device_session_record.current_refresh_token_id
                   cc0_f8_now = Time.current
                   cc0_f8_session = ClientRpSession.create!(
                     client_token: cc0_f8_token,
@@ -4098,7 +4103,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     refresh_token_expires_at: cc0_f8_now + 10.minutes,
                   )
                   cc0_f8_access = AuthenticationTokenService.encode(
-                    cc0_f8_token.user,
+                    cc0_f8_token.actor_record,
                     host: cc0_f8_host,
                     resource_type: "client",
                     session_public_id: cc0_f8_token.public_id,
@@ -4111,7 +4116,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     audiences: [cc0_f8_client.aud],
                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(cc0_f8_client),
                     subject: OidcSubject.for(
-                      cc0_f8_token.user,
+                      cc0_f8_token.actor_record,
                       resource_type: "client",
                     ),
                     client_id: cc0_f8_client.client_id,
@@ -4209,7 +4214,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                       oidc_client_id: cc3_f8_client.client_id,
                       revoked_at: nil,
                     ))
-                  cc3_f8_token.rotate_refresh_token! unless cc3_f8_token.device_session.current_refresh_token_id
+                  cc3_f8_token.rotate_refresh_token! unless cc3_f8_token.device_session_record.current_refresh_token_id
                   cc3_f8_now = Time.current
                   cc3_f8_session = ClientRpSession.create!(
                     client_token: cc3_f8_token,
@@ -4221,7 +4226,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     refresh_token_expires_at: cc3_f8_now + 10.minutes,
                   )
                   cc3_f8_access = AuthenticationTokenService.encode(
-                    cc3_f8_token.user,
+                    cc3_f8_token.actor_record,
                     host: cc3_f8_host,
                     resource_type: "client",
                     session_public_id: cc3_f8_token.public_id,
@@ -4234,7 +4239,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     audiences: [cc3_f8_client.aud],
                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(cc3_f8_client),
                     subject: OidcSubject.for(
-                      cc3_f8_token.user,
+                      cc3_f8_token.actor_record,
                       resource_type: "client",
                     ),
                     client_id: cc3_f8_client.client_id,
@@ -4276,7 +4281,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     google_identity = create_social_identity(PROVIDERS.fetch(:google), user:, uid: "step_up_google")
     begin
       fv5013 = user
-      fv5012 = fv5013.client_emails.first
+      fv5012 = ClientEmail.find_by!(user_id: fv5013.id)
       fv5012.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
       fv5012.finalize_binding! unless fv5012.binding_effective?
     end
@@ -4317,7 +4322,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f5_client.client_id,
                   revoked_at: nil,
                 ))
-              f5_token.rotate_refresh_token! unless f5_token.device_session.current_refresh_token_id
+              f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
               f5_now = Time.current
               f5_session = ClientRpSession.create!(
                 client_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
@@ -4325,16 +4330,17 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f5_now + 10.minutes,
               )
               f5_access = AuthenticationTokenService.encode(
-                f5_token.user, host: f5_host, resource_type: "client",
-                               session_public_id: f5_token.public_id, base_session_public_id: f5_token.public_id,
-                               oidc_sid: f5_session.public_id, oidc_jti: f5_session.oidc_jti,
-                               expires_at: f5_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f5_client), audiences: [f5_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f5_client),
-                               subject: OidcSubject.for(
-                                 f5_token.user,
-                                 resource_type: "client",
-                               ), client_id: f5_client.client_id,
+                f5_token.actor_record, host: f5_host, resource_type: "client",
+                                       session_public_id: f5_token.public_id,
+                                       base_session_public_id: f5_token.public_id,
+                                       oidc_sid: f5_session.public_id, oidc_jti: f5_session.oidc_jti,
+                                       expires_at: f5_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f5_client), audiences: [f5_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f5_client),
+                                       subject: OidcSubject.for(
+                                         f5_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f5_client.client_id,
               )
               @base_browser_rp_credentials[f5_key] =
                 [f5_access, f5_session.issue_refresh_token!]
@@ -4370,7 +4376,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     apple_identity = create_social_identity(PROVIDERS.fetch(:apple), user:, uid: "step_up_apple")
     begin
       fv5011 = user
-      fv5010 = fv5011.client_emails.first
+      fv5010 = ClientEmail.find_by!(user_id: fv5011.id)
       fv5010.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
       fv5010.finalize_binding! unless fv5010.binding_effective?
     end
@@ -4411,7 +4417,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   oidc_client_id: f6_client.client_id,
                   revoked_at: nil,
                 ))
-              f6_token.rotate_refresh_token! unless f6_token.device_session.current_refresh_token_id
+              f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
               f6_now = Time.current
               f6_session = ClientRpSession.create!(
                 client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
@@ -4419,16 +4425,17 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 refresh_token_expires_at: f6_now + 10.minutes,
               )
               f6_access = AuthenticationTokenService.encode(
-                f6_token.user, host: f6_host, resource_type: "client",
-                               session_public_id: f6_token.public_id, base_session_public_id: f6_token.public_id,
-                               oidc_sid: f6_session.public_id, oidc_jti: f6_session.oidc_jti,
-                               expires_at: f6_now + 10.minutes, scopes: %w(openid profile),
-                               issuer: OidcIssuer.for_client(f6_client), audiences: [f6_client.aud],
-                               jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f6_client),
-                               subject: OidcSubject.for(
-                                 f6_token.user,
-                                 resource_type: "client",
-                               ), client_id: f6_client.client_id,
+                f6_token.actor_record, host: f6_host, resource_type: "client",
+                                       session_public_id: f6_token.public_id,
+                                       base_session_public_id: f6_token.public_id,
+                                       oidc_sid: f6_session.public_id, oidc_jti: f6_session.oidc_jti,
+                                       expires_at: f6_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(f6_client), audiences: [f6_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f6_client),
+                                       subject: OidcSubject.for(
+                                         f6_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: f6_client.client_id,
               )
               @base_browser_rp_credentials[f6_key] =
                 [f6_access, f6_session.issue_refresh_token!]
@@ -4490,7 +4497,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -4498,16 +4505,16 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -4591,7 +4598,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     oidc_client_id: rr5_client.client_id,
                     revoked_at: nil,
                   ))
-                rr5_token.rotate_refresh_token! unless rr5_token.device_session.current_refresh_token_id
+                rr5_token.rotate_refresh_token! unless rr5_token.device_session_record.current_refresh_token_id
                 rr5_now = Time.current
                 rr5_session = ClientRpSession.create!(
                   client_token: rr5_token,
@@ -4603,7 +4610,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: rr5_now + 10.minutes,
                 )
                 rr5_access = AuthenticationTokenService.encode(
-                  rr5_token.user,
+                  rr5_token.actor_record,
                   host: rr5_host,
                   resource_type: "client",
                   session_public_id: rr5_token.public_id,
@@ -4616,7 +4623,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   audiences: [rr5_client.aud],
                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr5_client),
                   subject: OidcSubject.for(
-                    rr5_token.user,
+                    rr5_token.actor_record,
                     resource_type: "client",
                   ),
                   client_id: rr5_client.client_id,
@@ -4657,7 +4664,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     google_identity = create_social_identity(PROVIDERS.fetch(:google), user:, uid: "turnstile_google")
     begin
       fv5006 = user
-      fv5005 = fv5006.client_emails.first
+      fv5005 = ClientEmail.find_by!(user_id: fv5006.id)
       fv5005.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
       fv5005.finalize_binding! unless fv5005.binding_effective?
     end
@@ -4705,7 +4712,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                     oidc_client_id: rr6_client.client_id,
                     revoked_at: nil,
                   ))
-                rr6_token.rotate_refresh_token! unless rr6_token.device_session.current_refresh_token_id
+                rr6_token.rotate_refresh_token! unless rr6_token.device_session_record.current_refresh_token_id
                 rr6_now = Time.current
                 rr6_session = ClientRpSession.create!(
                   client_token: rr6_token,
@@ -4717,7 +4724,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: rr6_now + 10.minutes,
                 )
                 rr6_access = AuthenticationTokenService.encode(
-                  rr6_token.user,
+                  rr6_token.actor_record,
                   host: rr6_host,
                   resource_type: "client",
                   session_public_id: rr6_token.public_id,
@@ -4730,7 +4737,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   audiences: [rr6_client.aud],
                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rr6_client),
                   subject: OidcSubject.for(
-                    rr6_token.user,
+                    rr6_token.actor_record,
                     resource_type: "client",
                   ),
                   client_id: rr6_client.client_id,
@@ -5171,8 +5178,8 @@ class SocialAuthAppFlowContractTest
   end
 
   def mark_token_step_up_satisfied_for_test(token, scope:)
-    actor = token.user
-    token.rotate_refresh_token! unless token.device_session.current_refresh_token_id
+    actor = token.actor_record
+    token.rotate_refresh_token! unless token.device_session_record.current_refresh_token_id
     credential = actor.client_totp_credentials.find_by(
       user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     ) || ClientTotpCredential.create_for_user!(

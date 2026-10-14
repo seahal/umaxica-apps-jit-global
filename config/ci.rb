@@ -19,6 +19,10 @@ CI.run do
 
   step "Style: JavaScript", "bun run check"
   step "Style: Ruby", "bin/rubocop"
+  step "Style: Frozen string literal placement", "ruby scripts/check_frozen_string_literal_directives.rb"
+  step "Style: Frozen string literals",
+       "bundle exec rubocop --config .rubocop_frozen_string_literal.yml " \
+       "--only Style/FrozenStringLiteralComment,Style/DisableCopsWithinSourceCodeDirective ."
   step "Style: ERB", "bundle exec erb_lint --lint-all"
 
   step "Security: Gem audit", "bin/bundler-audit"

@@ -4332,7 +4332,10 @@ Sources: `app/models/concerns/acme_logout_transactionable.rb`,
 
 Tests read: `test/models/acme_logout_transaction_test.rb`,
 `test/models/acme_logout_race_branch_coverage_test.rb`,
-`test/services/acme_logout_transaction_coordinator_test.rb`.
+`test/services/acme_logout_transaction_coordinator_test.rb`,
+`test/integration/oidc_rp_authority_first_logout_test.rb`,
+`test/integration/oidc_rp_completion_matrix_test.rb`, and
+`test/controllers/tech/org/sign/out/completions_controller_test.rb`.
 
 | Transition ID               | Mutation kind         | From        | Event / Trigger              | To          | Guard                                                                                   | Side effect                                   | Source file                                        | Confidence |
 | --------------------------- | --------------------- | ----------- | ---------------------------- | ----------- | --------------------------------------------------------------------------------------- | --------------------------------------------- | -------------------------------------------------- | ---------- |
@@ -4346,16 +4349,22 @@ Tests read: `test/models/acme_logout_transaction_test.rb`,
 | idp-shared-acme-logout:T008 | DOCUMENTED_TRANSITION | initiated   | fail!                        | failed      | Not finalized or failed; no own row lock                                                | failed_at and status                          | app/models/concerns/acme_logout_transactionable.rb | CONFIRMED  |
 | idp-shared-acme-logout:T009 | DOCUMENTED_TRANSITION | in_progress | fail!                        | failed      | Not finalized or failed; no own row lock                                                | failed_at and status                          | app/models/concerns/acme_logout_transactionable.rb | CONFIRMED  |
 | idp-shared-acme-logout:T010 | DOCUMENTED_TRANSITION | expired     | fail!                        | failed      | Not finalized or failed; no own row lock                                                | failed_at and status                          | app/models/concerns/acme_logout_transactionable.rb | CONFIRMED  |
+| idp-shared-acme-logout:T011 | DOCUMENTED_TRANSITION | initiated   | Browser RP authority revoke  | in_progress | Binding v1; current authority session matches captured parent; writer lock; live TTL       | Revoke captured parent and child RP sessions; append authority_revoked                  | app/controllers/concerns/oidc_rp_logout_authority.rb | CONFIRMED  |
+| idp-shared-acme-logout:T012 | DOCUMENTED_TRANSITION | in_progress | Authority cleanup issued     | in_progress | Expected step authority_cleanup_issued; same durable challenge and live TTL              | Clear authority cookies; append authority_cleanup_issued                                | app/controllers/concerns/oidc_rp_logout_authority.rb | CONFIRMED  |
+| idp-shared-acme-logout:T013 | DOCUMENTED_TRANSITION | in_progress | Origin cleanup issued       | in_progress | Origin proof, client, sid and parent binding; protected origin continuation               | Clear origin cookies/session; append origin_cleanup_issued                              | app/controllers/concerns/oidc_rp_logout_launcher.rb | CONFIRMED  |
+| idp-shared-acme-logout:T014 | DOCUMENTED_TRANSITION | in_progress | Origin RP session revoked    | in_progress | Captured origin RP session still bound to the parent; writer lock; no successor revocation | Revoke captured origin RP session; append origin_rp_session_revoked                    | app/controllers/concerns/oidc_rp_logout_launcher.rb | CONFIRMED  |
 
-Ordered step sequences: sign origin_cleared->acme_cleared; acme/base origin_cleared->sign_cleared;
-core/side/palm origin_cleared->acme_cleared->sign_cleared; then finalize. Steps are exact runtime
-events, not target external_result. Status EXPIRED declared but no writer; clock expiry refuses
-calls without writing. Edges from declared expired require a future expires_at (public API
-tests/model-permitted only); no invented clock transition to stored expired. finalize! lacks failed
-guard and can finalize failed row when expected step ready/live; failed is therefore not absorbing.
-fail! not serialized. Duplicate completed step is no-op; locked advance/finalize recheck. TTL10m.
-SQL status, expected_step and completed_steps duplicate progress authority, and SQL/model
-constraints recorded.
+Legacy ordered step sequences: sign origin_cleared->acme_cleared; acme/base
+origin_cleared->sign_cleared; core/side/palm origin_cleared->acme_cleared->sign_cleared; then
+finalize. Browser RP origins are base/core/warp/edit/palm/tech and use
+authority_revoked->authority_cleanup_issued->origin_cleanup_issued->origin_rp_session_revoked;
+then finalize. Steps are exact runtime events, not target external_result. Status EXPIRED declared
+but no writer; clock expiry refuses calls without writing. Edges from declared expired require a
+future expires_at (public API tests/model-permitted only); no invented clock transition to stored
+expired. finalize! lacks failed guard and can finalize failed row when expected step ready/live; failed
+is therefore not absorbing. fail! not serialized. Duplicate completed step is no-op; locked
+advance/finalize recheck. TTL10m. SQL status, expected_step and completed_steps duplicate progress
+authority, and SQL/model constraints recorded.
 
 ## idp-shared-webauthn-challenge
 

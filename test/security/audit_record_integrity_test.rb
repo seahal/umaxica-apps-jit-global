@@ -32,7 +32,7 @@ class AuditRecordIntegrityTest < ActiveSupport::TestCase
     chronicle = Chronicle.where(action: "authentication.security_event.sign_in.failure").order(:created_at).last
 
     assert_equal "succeeded", chronicle.result
-    assert_equal "security", chronicle.chronicle_retention_policy.code
+    assert_equal "security", ChronicleRetentionPolicy.find(chronicle.chronicle_retention_policy_id).code
     assert_equal "invalid_credential", chronicle.reason
     assert_equal "audit-integrity-test", chronicle.request_id
     assert_not chronicle.metadata.key?("token")
@@ -61,7 +61,8 @@ class AuditRecordIntegrityTest < ActiveSupport::TestCase
 
     chronicle = Chronicle.where(action: "notification.delivery.email.enqueued").order(:created_at).last
 
-    assert_equal email, chronicle.subject
+    assert_equal "ClientEmail", chronicle.subject_type
+    assert_equal email.id, chronicle.subject_id
     assert_equal({ "purpose" => "sign_in" }, chronicle.metadata)
     assert_not chronicle.metadata.key?("recipient")
     assert_not chronicle.metadata.key?("code")

@@ -275,7 +275,7 @@ class Avatar < AvatarRecord
   end
 
   def moniker
-    current_avatar_moniker&.moniker ||
+    AvatarMoniker.current.find_by(avatar_id: id)&.moniker ||
       raise(ActiveRecord::RecordNotFound, "Avatar #{public_id} has no current AvatarMoniker")
   end
 
@@ -294,7 +294,8 @@ class Avatar < AvatarRecord
   end
 
   def current_persona
-    current_avatar_persona_binding&.persona
+    binding = current_avatar_persona_binding
+    ClientPersona.find_by(id: binding&.persona_id)
   end
 
   private

@@ -134,7 +134,7 @@ module Jit
           with_registry_inputs("JWT_AUTH_APP_PUBLIC_KEYSET" => "not-json") do
             error = assert_raises(JitSecurityJwtRegistry::ConfigurationError) { JitSecurityJwtRegistry.reload! }
 
-            assert_match(/JWT_AUTH_APP_PUBLIC_KEYSET contains invalid JSON/, error.message)
+            assert_match(/surface:AUTH_APP public JWKS contains invalid JSON/, error.message)
           end
         end
 
@@ -367,6 +367,8 @@ module Jit
             "OIDC_CLIENT_WARP_COM_PRIVATE_KEY" => base64_der(@surface_key),
             "OIDC_CLIENT_WARP_ORG_ACTIVE_KID" => "warp-org-kid",
             "OIDC_CLIENT_WARP_ORG_PRIVATE_KEY" => base64_der(@surface_key),
+            "OIDC_CLIENT_TECH_ORG_ACTIVE_KID" => "tech-org-kid",
+            "OIDC_CLIENT_TECH_ORG_PRIVATE_KEY" => base64_der(@surface_key),
             "OIDC_CLIENT_BASE_RP_APP_WW_ACTIVE_KID" => "base-rp-app-kid",
             "OIDC_CLIENT_BASE_RP_APP_WW_PRIVATE_KEY" => base64_der(@surface_key),
             "OIDC_CLIENT_BASE_RP_COM_WW_ACTIVE_KID" => "base-rp-com-kid",
@@ -374,6 +376,12 @@ module Jit
             "OIDC_CLIENT_BASE_RP_ORG_WW_ACTIVE_KID" => "base-rp-org-kid",
             "OIDC_CLIENT_BASE_RP_ORG_WW_PRIVATE_KEY" => base64_der(@surface_key),
           }.merge(extra_env)
+          JumpRtSurface::ISSUER_NAMESPACES.each do |namespace|
+            next if namespace == "AUTH_APP"
+
+            env["JWT_#{namespace}_ACTIVE_KID"] = "jump-#{namespace.downcase.tr("_", "-")}-kid"
+            env["JWT_#{namespace}_PRIVATE_KEY"] = base64_der(@surface_key)
+          end
           clear_unused_registry_namespace_env(env)
           env["AUTH_JWT_PRIVATE_KEYSET"] =
             JSON.generate((env["AUTH_JWT_ACTIVE_KID"] || "auth-kid") => base64_der(@auth_key))
@@ -390,7 +398,7 @@ module Jit
 
         def clear_unused_registry_namespace_env(env)
           JitSecurityJwtRegistry::SURFACE_NAMESPACES.each do |namespace|
-            next if namespace == "AUTH_APP"
+            next if JumpRtSurface::ISSUER_NAMESPACES.include?(namespace)
 
             env["JWT_#{namespace}_ACTIVE_KID"] = nil
             env["JWT_#{namespace}_PUBLIC_KEYSET"] = nil

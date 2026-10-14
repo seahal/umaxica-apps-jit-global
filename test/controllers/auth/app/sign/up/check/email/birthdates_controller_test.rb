@@ -127,7 +127,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     assert_withheld { transaction.email_candidate_ref == email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -146,7 +146,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     assert_not_nil transaction.otp_receipt_verifier
     flow = cycle.reload
 
-    assert_equal email.user_id, flow.principal_id
+    assert_equal contact_owner_for_test(email).id, flow.principal_id
     assert_equal email.id, flow.pending_contact_id
     assert Client.exists?(id: flow.principal_id), "Birthdate requires the same realm-local owner"
 
@@ -163,7 +163,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     assert_response :redirect
     assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
     assert_equal ClientSignUpFlowStatus::COMPLETED, flow.reload.status_id
-    source_before = [email.user.reload.attributes, email.reload.attributes]
+    source_before = [contact_owner_for_test(email).reload.attributes, email.reload.attributes]
     flow_before = flow.attributes
     roots_before = ClientToken.order(:id).map(&:attributes)
     proof_before = transaction.reload.attributes
@@ -185,7 +185,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     assert_nil response.location
     assert_includes response.headers.fetch("Cache-Control"), "no-store"
     # Boolean snapshots keep credential and keyed proof material out of failure output.
-    assert_withheld { source_before == [email.user.reload.attributes, email.reload.attributes] }
+    assert_withheld { source_before == [contact_owner_for_test(email).reload.attributes, email.reload.attributes] }
     assert_withheld { flow_before == flow.reload.attributes }
     assert_withheld { roots_before == ClientToken.order(:id).map(&:attributes) }
     assert_withheld { proof_before == transaction.reload.attributes }
@@ -289,7 +289,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                 assert_withheld { transaction.email_candidate_ref == email.public_id }
                 assert_withheld { transaction.purpose == "sign_up" }
                 assert_withheld { transaction.operation == "sign_up" }
-                assert_withheld { transaction.actor_ref == email.user.public_id }
+                assert_withheld { transaction.actor_ref == contact_owner_for_test(email).public_id }
                 assert_withheld {
                   transaction.session_ref ==
                     Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -309,7 +309,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                 assert_not_nil transaction.otp_receipt_verifier
                 flow = cycle.reload
 
-                assert_equal email.user_id, flow.principal_id
+                assert_equal contact_owner_for_test(email).id, flow.principal_id
                 assert_equal email.id, flow.pending_contact_id
                 assert Client.exists?(id: flow.principal_id), "Birthdate requires the same realm-local owner"
 
@@ -372,7 +372,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                 assert_withheld { transaction.email_candidate_ref == email.public_id }
                 assert_withheld { transaction.purpose == "sign_up" }
                 assert_withheld { transaction.operation == "sign_up" }
-                assert_withheld { transaction.actor_ref == email.user.public_id }
+                assert_withheld { transaction.actor_ref == contact_owner_for_test(email).public_id }
                 assert_withheld {
                   transaction.session_ref ==
                     Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -392,7 +392,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                 assert_not_nil transaction.otp_receipt_verifier
                 flow = cycle.reload
 
-                assert_equal email.user_id, flow.principal_id
+                assert_equal contact_owner_for_test(email).id, flow.principal_id
                 assert_equal email.id, flow.pending_contact_id
                 assert Client.exists?(id: flow.principal_id), "Birthdate requires the same realm-local owner"
 
@@ -453,7 +453,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                 assert_withheld { transaction.email_candidate_ref == email.public_id }
                 assert_withheld { transaction.purpose == "sign_up" }
                 assert_withheld { transaction.operation == "sign_up" }
-                assert_withheld { transaction.actor_ref == email.user.public_id }
+                assert_withheld { transaction.actor_ref == contact_owner_for_test(email).public_id }
                 assert_withheld {
                   transaction.session_ref ==
                     Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -473,7 +473,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                 assert_not_nil transaction.otp_receipt_verifier
                 flow = cycle.reload
 
-                assert_equal email.user_id, flow.principal_id
+                assert_equal contact_owner_for_test(email).id, flow.principal_id
                 assert_equal email.id, flow.pending_contact_id
                 assert Client.exists?(id: flow.principal_id), "Birthdate requires the same realm-local owner"
 
@@ -534,7 +534,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                 assert_withheld { transaction.email_candidate_ref == email.public_id }
                 assert_withheld { transaction.purpose == "sign_up" }
                 assert_withheld { transaction.operation == "sign_up" }
-                assert_withheld { transaction.actor_ref == email.user.public_id }
+                assert_withheld { transaction.actor_ref == contact_owner_for_test(email).public_id }
                 assert_withheld {
                   transaction.session_ref ==
                     Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -554,7 +554,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
                 assert_not_nil transaction.otp_receipt_verifier
                 flow = cycle.reload
 
-                assert_equal email.user_id, flow.principal_id
+                assert_equal contact_owner_for_test(email).id, flow.principal_id
                 assert_equal email.id, flow.pending_contact_id
                 assert Client.exists?(id: flow.principal_id), "Birthdate requires the same realm-local owner"
 
@@ -613,7 +613,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     assert_withheld { transaction.email_candidate_ref == first_email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == first_email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(first_email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -621,7 +621,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
     first_flow = cycle.reload
 
-    assert_equal first_email.user_id, first_flow.principal_id
+    assert_equal contact_owner_for_test(first_email).id, first_flow.principal_id
     assert_equal first_email.id, first_flow.pending_contact_id
     get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: @headers
 
@@ -681,7 +681,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     assert_withheld { transaction.email_candidate_ref == email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -742,7 +742,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     assert_withheld { transaction.email_candidate_ref == email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -796,7 +796,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
       assert_withheld { transaction.email_candidate_ref == email.public_id }
       assert_withheld { transaction.purpose == "sign_up" }
       assert_withheld { transaction.operation == "sign_up" }
-      assert_withheld { transaction.actor_ref == email.user.public_id }
+      assert_withheld { transaction.actor_ref == contact_owner_for_test(email).public_id }
       assert_withheld {
         transaction.session_ref ==
           Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -815,7 +815,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
       assert_not_nil transaction.otp_receipt_verifier
       flow = cycle.reload
 
-      assert_equal email.user_id, flow.principal_id
+      assert_equal contact_owner_for_test(email).id, flow.principal_id
       assert_equal email.id, flow.pending_contact_id
       assert Client.exists?(id: flow.principal_id), "Birthdate requires the same realm-local owner"
 
@@ -866,7 +866,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     assert_withheld { transaction.email_candidate_ref == email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
@@ -916,7 +916,7 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     assert_withheld { transaction.email_candidate_ref == user_email.public_id }
     assert_withheld { transaction.purpose == "sign_up" }
     assert_withheld { transaction.operation == "sign_up" }
-    assert_withheld { transaction.actor_ref == user_email.user.public_id }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
     assert_withheld {
       transaction.session_ref ==
         Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))

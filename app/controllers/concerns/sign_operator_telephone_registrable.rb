@@ -26,7 +26,7 @@ module SignOperatorTelephoneRegistrable
       return false
     end
 
-    existing = staff.staff_telephones.detect { |telephone| telephone.number == normalized_number }
+    existing = staff.staff_telephones.find_by(number: normalized_number)
     if existing && existing.staff_telephone_status_id != OperatorTelephoneStatus::UNVERIFIED
       probe.errors.add(:raw_number, :taken)
       @staff_telephone = probe

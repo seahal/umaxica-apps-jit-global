@@ -1050,10 +1050,10 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal ClientEmailStatus::VERIFIED_WITH_SIGN_UP, user_email.user_email_status_id
 
     # Verify Client has correct status
-    user = user_email.user
+    user = contact_owner_for_test(user_email)
 
     assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, user.status_id
-    assert_nil user.rp_account
+    assert_nil ClientAccount.find_by(user_id: user.id)
   end
 
   test "successful OTP verification creates audit log in transaction" do
@@ -1201,7 +1201,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_nil cookies[::AuthenticationClient::ACCESS_COOKIE_KEY]
 
     # Verify user and token were created
-    user = user_email.reload.user
+    user = contact_owner_for_test(user_email.reload)
 
     assert_not_nil user, "Pending client should exist"
     assert_not ClientToken.exists?(user_id: user.id), "Client token should not be created before finalization"
@@ -1326,7 +1326,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), uri.host
     assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
 
-    user = user_email.reload.user
+    user = contact_owner_for_test(user_email.reload)
 
     assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
     assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, user.status_id
@@ -1493,8 +1493,9 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     email_id = ClientEmail.order(:created_at).last.public_id
     user_email = ClientEmail.find_by(public_id: email_id)
 
-    assert_not_nil user_email.user
-    assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, user_email.user.status_id
+    user = contact_owner_for_test(user_email)
+
+    assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, user.status_id
     assert_equal ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP, user_email.user_email_status_id
   end
 
@@ -1598,7 +1599,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
           headers: default_headers
 
     assert_response :redirect
-    assert_equal "2000-02-03", user_email.user.reload.birthdate
+    assert_equal "2000-02-03", contact_owner_for_test(user_email).birthdate
     assert cycle.reload.requirement_cleared?(:birthdate)
     assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.status_id
   end
@@ -1917,7 +1918,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       second_email = ClientEmail.find_by(public_id: second_email_id)
 
       assert_not_equal first_user_id, second_email.user_id
-      assert_not_nil second_email.user
+      assert_predicate second_email.user_id, :present?
     end
   end
 

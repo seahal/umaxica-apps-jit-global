@@ -172,7 +172,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       ensure_binding_token_matches!(binding, base_token)
       validate_admission_parent!(binding)
       validate_admission_root!(binding)
-      ceremony = binding.admitted_auth_ceremony_session
+      ceremony = admitted_ceremony_session(binding)
       unless ceremony&.active? && ceremony.admitted? && ceremony.authentication_evidence_recorded? &&
           ceremony.authentication_method == provider.to_s
         raise Denied.new("social authentication evidence is unavailable", code: "return_binding_mismatch")
@@ -192,7 +192,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       end
 
       ensure_binding_browser_matches!(binding, surface:, nonce: base_browser_nonce)
-      ceremony = binding.admitted_auth_ceremony_session
+      ceremony = admitted_ceremony_session(binding)
       unless ceremony && (ceremony.completed? || (allow_incomplete && ceremony.active?)) &&
           !ceremony.cancelled? && !ceremony.revoked_at &&
           ceremony.authentication_method == commit.identity.provider && ceremony.authentication_evidence_recorded?
@@ -211,7 +211,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         raise Denied.new("registration restart is unavailable", code: "invalid_admission")
       end
 
-      transaction = binding.step_up_ceremony_transaction
+      transaction = admission_parent_record(binding)
       unless transaction.purpose == "credential_registration" && transaction.required_scope == scope &&
           transaction.allowed_methods_array == [method.to_s]
         raise Denied.new("registration restart intent mismatch", code: "invalid_admission")
@@ -544,7 +544,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def with_admission_binding_lock!(binding, &)
-      token = binding.base_token
+      token = admission_base_token_record(binding)
       if token
         actor = admission_root_actor(token)
         actor.class.connection_class_for_self.connected_to(role: :writing) do
@@ -605,6 +605,19 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     private
+
+    def admitted_ceremony_session(binding)
+      case binding
+      when ClientAuthAdmissionBinding
+        ClientAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
+      when VisitorAuthAdmissionBinding
+        VisitorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
+      when OperatorAuthAdmissionBinding
+        OperatorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
+      else
+        raise Denied.new("Auth continuation is unavailable", code: "invalid_admission")
+      end
+    end
 
     private :handoff_purpose_for, :result_purpose_for, :local_entry_purpose_for
 
@@ -904,7 +917,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     def completed_social_sign_in_parent_pending?(binding, commit, parent)
       return true if parent.sign_in_primary_pending? && parent.principal_id.nil?
 
-      ceremony = binding.admitted_auth_ceremony_session
+      ceremony = admitted_ceremony_session(binding)
       (parent.sign_in_primary_pending? || parent.sign_in_session_issuance_pending?) &&
         parent.principal_id == commit.user.id && parent.authentication_method == ceremony.authentication_method &&
         parent.authentication_event_at == ceremony.authentication_event_at
@@ -973,20 +986,94 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def admission_parent_record(binding)
-      case binding.parent_kind
-      when :sign_in_flow then binding.sign_in_flow&.reload
-      when :authorization_transaction then binding.authorization_transaction&.reload
-      when :step_up_ceremony_transaction then binding.step_up_ceremony_transaction&.reload
+      case binding
+      when ClientAuthAdmissionBinding
+        admission_parent_record_for_surface(
+          binding.parent_kind,
+          sign_in_flow_id: binding.sign_in_flow_id,
+          authorization_transaction_id: binding.authorization_transaction_id,
+          step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
+          sign_in_flow_class: ClientSignInFlow,
+          authorization_transaction_class: ClientOidcAuthorizationTransaction,
+          step_up_ceremony_transaction_class: ClientStepUpCeremonyTransaction,
+        )
+      when VisitorAuthAdmissionBinding
+        admission_parent_record_for_surface(
+          binding.parent_kind,
+          sign_in_flow_id: binding.sign_in_flow_id,
+          authorization_transaction_id: binding.authorization_transaction_id,
+          step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
+          sign_in_flow_class: VisitorSignInFlow,
+          authorization_transaction_class: VisitorOidcAuthorizationTransaction,
+          step_up_ceremony_transaction_class: VisitorStepUpCeremonyTransaction,
+        )
+      when OperatorAuthAdmissionBinding
+        admission_parent_record_for_surface(
+          binding.parent_kind,
+          sign_in_flow_id: binding.sign_in_flow_id,
+          authorization_transaction_id: binding.authorization_transaction_id,
+          step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
+          sign_in_flow_class: OperatorSignInFlow,
+          authorization_transaction_class: OperatorOidcAuthorizationTransaction,
+          step_up_ceremony_transaction_class: OperatorStepUpCeremonyTransaction,
+        )
+      else
+        raise Denied.new("admission binding is invalid", code: "invalid_admission")
       end
-    rescue ActiveRecord::RecordNotFound
-      nil
+    end
+
+    def admission_parent_record_for_surface(
+      parent_kind,
+      sign_in_flow_id:,
+      authorization_transaction_id:,
+      step_up_ceremony_transaction_id:,
+      sign_in_flow_class:,
+      authorization_transaction_class:,
+      step_up_ceremony_transaction_class:
+    )
+      case parent_kind
+      when :sign_in_flow
+        sign_in_flow_class.find_by(id: sign_in_flow_id)
+      when :authorization_transaction
+        authorization_transaction_class.find_by(id: authorization_transaction_id)
+      when :step_up_ceremony_transaction
+        step_up_ceremony_transaction_class.find_by(id: step_up_ceremony_transaction_id)
+      else
+        raise Denied.new("admission parent is invalid", code: "invalid_admission")
+      end
+    end
+
+    def admission_base_token_record(binding)
+      return if binding.base_token_id.nil?
+
+      case binding
+      when ClientAuthAdmissionBinding then ClientToken.find_by(id: binding.base_token_id)
+      when VisitorAuthAdmissionBinding then VisitorToken.find_by(id: binding.base_token_id)
+      when OperatorAuthAdmissionBinding then OperatorToken.find_by(id: binding.base_token_id)
+      else raise Denied.new("admission binding is invalid", code: "invalid_admission")
+      end
+    end
+
+    def admission_device_session_record(token)
+      return if token.device_session_id.nil?
+
+      case token
+      when ClientToken then ClientDeviceSession.find_by(id: token.device_session_id)
+      when VisitorToken then VisitorDeviceSession.find_by(id: token.device_session_id)
+      when OperatorToken then OperatorDeviceSession.find_by(id: token.device_session_id)
+      else raise Denied.new("Base token is invalid", code: "session_binding_mismatch")
+      end
     end
 
     def validate_admission_root!(binding)
       return if binding.base_token_id.nil?
 
-      token = binding.base_token.reload
-      device = token.device_session.reload
+      token = admission_base_token_record(binding)
+      raise Denied.new("Base session is unavailable", code: "session_expired") unless token
+
+      device = admission_device_session_record(token)
+      raise Denied.new("Base device session is unavailable", code: "session_expired") unless device
+
       validate_step_up_root_context!(binding, token) if binding.parent_kind == :step_up_ceremony_transaction
       return if token.currently_usable?(token.class.database_now) && device.usable? &&
         device.current_refresh_token_id == token.id && admission_root_actor(token).login_allowed?
@@ -1003,7 +1090,8 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         transaction.base_finalized_at.present? && transaction.browser_session_ref == token.public_id &&
           transaction.actor_ref == admission_root_actor(token).public_id
       when ClientStepUpCeremonyTransaction, VisitorStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction
-        transaction.purpose == "reauthentication" && binding.base_token.device_session_id == token.device_session_id &&
+        transaction.purpose == "reauthentication" && binding.base_token_id.present? &&
+          admission_base_token_record(binding)&.device_session_id == token.device_session_id &&
           transaction.actor_ref == admission_root_actor(token).public_id
       else
         false
@@ -1011,7 +1099,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def validate_step_up_root_context!(binding, token)
-      transaction = binding.step_up_ceremony_transaction
+      transaction = admission_parent_record(binding)
       return if transaction.actor_ref == admission_root_actor(token).public_id &&
         transaction.session_ref == token.public_id && transaction.token_binding == token.public_id &&
         transaction.require_session_binding
@@ -1021,9 +1109,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def admission_root_actor(token)
       case token
-      when ClientToken then token.user
-      when VisitorToken then token.visitor
-      when OperatorToken then token.staff
+      when ClientToken then Client.find_by(id: token.user_id)
+      when VisitorToken then Visitor.find_by(id: token.visitor_id)
+      when OperatorToken then Operator.find_by(id: token.staff_id)
       else raise Denied.new("Base token is invalid", code: "session_binding_mismatch")
       end
     end
@@ -1032,7 +1120,10 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       binding.class.connection_owner.connected_to(role: :writing) do
         binding.class.transaction do
           if token
-            token.device_session.with_lock do
+            device_session = admission_device_session_record(token)
+            raise Denied.new("Base device session is missing", code: "session_expired") unless device_session
+
+            device_session.with_lock do
               token.with_lock { with_admission_parent_lock!(binding, &) }
             end
           else
@@ -1043,13 +1134,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def with_admission_parent_lock!(binding)
-      parent =
-        case binding.parent_kind
-        when :sign_in_flow then binding.sign_in_flow
-        when :authorization_transaction then binding.authorization_transaction
-        when :step_up_ceremony_transaction then binding.step_up_ceremony_transaction
-        else raise Denied.new("admission parent is missing", code: "invalid_admission")
-        end
+      parent = admission_parent_record(binding)
+      raise Denied.new("admission parent is missing", code: "invalid_admission") unless parent
+
       parent.with_lock do
         binding.with_lock do
           ids = [binding.auth_ceremony_session_id, binding.admitted_auth_ceremony_session_id].compact
@@ -1068,8 +1155,8 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
       actual =
         case binding.parent_kind
-        when :authorization_transaction then binding.authorization_transaction.intent
-        when :step_up_ceremony_transaction then binding.step_up_ceremony_transaction.purpose
+        when :authorization_transaction then admission_parent_record(binding).intent
+        when :step_up_ceremony_transaction then admission_parent_record(binding).purpose
         end
       return if actual == expected_intent.to_s ||
         (actual == "authentication" && %w(sign_in sign_up).include?(expected_intent.to_s))
@@ -1097,11 +1184,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     def binding_parent_reference(binding)
       case binding.parent_kind
       when :sign_in_flow
-        binding.sign_in_flow.public_id
-      when :authorization_transaction
-        binding.authorization_transaction.transaction_id
-      when :step_up_ceremony_transaction
-        binding.step_up_ceremony_transaction.transaction_id
+        admission_parent_record(binding).public_id
+      when :authorization_transaction, :step_up_ceremony_transaction
+        admission_parent_record(binding).transaction_id
       else
         raise Denied.new("admission parent missing", code: "invalid_admission")
       end

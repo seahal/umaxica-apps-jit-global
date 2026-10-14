@@ -80,7 +80,7 @@ module Publishing
 
       assert_equal media.id, usage.media_file_id
       version = Publishing::PromoteRevisionOperation.call(revision: revision)
-      copied = version.media_usages.first
+      copied = Publishing::Docs::App::VersionMediaUsage.find_by!(entry_version_id: version.id)
 
       assert_equal media.id, copied.media_file_id
     end

@@ -68,13 +68,13 @@ class EmailSignUpOtpDeliveryGuard
           raise ArgumentError, "APP signup delivery requires its own Email ceremony"
         end
 
-        [email.user, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
+        [Client.find(email.user_id), ClientStatus::UNVERIFIED_WITH_SIGN_UP]
       when VisitorSignUpFlow
         unless email.is_a?(VisitorEmail) && transaction.is_a?(VisitorEmailCeremonyTransaction)
           raise ArgumentError, "COM signup delivery requires its own Email ceremony"
         end
 
-        [email.visitor, VisitorStatus::ACTIVE]
+        [Visitor.find(email.visitor_id), VisitorStatus::ACTIVE]
       else raise ArgumentError, "unsupported Email signup delivery realm"
       end
     end

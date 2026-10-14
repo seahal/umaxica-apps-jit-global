@@ -66,7 +66,7 @@ class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
               !(rp_token.device_session_id && ClientRpSession.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
-            rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = ClientRpSession.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -74,16 +74,16 @@ class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
               refresh_token_expires_at: rp_now + 10.minutes,
             )
             rp_access = AuthenticationTokenService.encode(
-              rp_token.user, host: rp_host, resource_type: "client",
-                             session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                             subject: OidcSubject.for(
-                               rp_token.user,
-                               resource_type: "client",
-                             ), client_id: rp_client.client_id,
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
             )
             @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
           end
@@ -146,10 +146,31 @@ class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
     satisfy_user_verification(@token)
     mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
 
+    ActionController::Base.allow_forgery_protection = true
+    cookie_header = @headers.fetch("Cookie")
+    cookie_header.split("; ").each do |pair|
+      name, value = pair.split("=", 2)
+      cookies[name] = Rack::Utils.unescape(value)
+    end
+    get(
+      auth_app_settings_apple_url(ri: "jp", host: @host),
+      headers: @headers.merge("Accept" => "text/html", "HTTP_COOKIE" => cookie_header),
+    )
+
+    assert_response :success
+    csrf_token = response.body[/<meta name="csrf-token" content="([^"]+)"/, 1] ||
+      response.body[/name="authenticity_token" value="([^"]+)"/, 1]
+
+    assert_predicate csrf_token, :present?
+
     # Try to unlink Apple
     delete(
       auth_app_settings_apple_url(ri: "jp", host: @host),
-      headers: @headers,
+      headers: {
+        "Origin" => "https://#{@host}",
+        "Sec-Fetch-Site" => "same-origin",
+        "X-CSRF-Token" => csrf_token,
+      },
       params: { "cf-turnstile-response": "test" },
     )
 
@@ -159,6 +180,9 @@ class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
     assert ClientExternalIdentity.exists?(identity.id)
     assert @secret.reload.available_at?(at: Client.database_now)
     assert_nil @secret.claimed_at
+  ensure
+    ActionController::Base.allow_forgery_protection =
+      Rails.configuration.action_controller.allow_forgery_protection
   end
 end
 

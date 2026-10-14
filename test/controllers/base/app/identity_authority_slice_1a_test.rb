@@ -10,6 +10,8 @@ class Base::App::IdentityAuthoritySlice1ATest < ActionDispatch::IntegrationTest
   setup do
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     @user = clients(:one)
+    host! @host
+    https!
   end
 
   # Base is the session authority: it revokes directly and keeps the ceremony surface-local.
@@ -17,8 +19,16 @@ class Base::App::IdentityAuthoritySlice1ATest < ActionDispatch::IntegrationTest
   test "base_sign_out_create_is_session_mutation_and_completes_on_the_base_surface" do
     token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+    headers = session_headers(token)
+    headers.fetch("Cookie").split("; ").each do |pair|
+      name, value = pair.split("=", 2)
+      cookies[name] = Rack::Utils.unescape(value)
+    end
+    csrf_token = fetch_csrf_token(edit_base_app_sign_out_url(ri: "jp"), headers: headers)
 
-    post base_app_sign_out_url(ri: "jp"), headers: session_headers(token)
+    post base_app_sign_out_url(ri: "jp"), headers: {
+      "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf_token,
+    }
 
     assert_response :see_other
     assert_not_predicate token.reload, :revoked?
@@ -33,10 +43,16 @@ class Base::App::IdentityAuthoritySlice1ATest < ActionDispatch::IntegrationTest
       else
         receiver = inertia_props.fetch("form")
         fields = { logout_challenge: receiver.fetch("logout_challenge"), ri: "jp" }
+        fields["logout_intent_proof"] = receiver["logout_intent_proof"] if
+          receiver["logout_intent_proof"].present?
         action = receiver.fetch("action")
       end
+      fields = fields.transform_keys(&:to_s)
+      fields["authenticity_token"] ||= csrf_token
       post action, params: fields, headers: {
-        "Origin" => "https://#{request.host}", "Sec-Fetch-Site" => "same-origin",
+        "Origin" => "https://#{request.host}",
+        "Sec-Fetch-Site" => "same-origin",
+        "X-CSRF-Token" => csrf_token,
       }
 
       assert_response :see_other
@@ -45,11 +61,23 @@ class Base::App::IdentityAuthoritySlice1ATest < ActionDispatch::IntegrationTest
     location = URI.parse(response.location)
 
     assert_equal @host, location.host
-    assert_equal base_app_sign_out_path(ri: "jp"), location.request_uri
+    assert_equal base_app_sign_out_completion_path(ri: "jp"), location.request_uri
     assert_nil Rack::Utils.parse_nested_query(location.query.to_s)["logout_token"]
   end
 
   private
+
+  def fetch_csrf_token(path, headers: {})
+    ActionController::Base.allow_forgery_protection = true
+    get(path, headers: headers)
+    csrf_token = response.body[/<meta name="csrf-token" content="([^"]+)"/, 1] ||
+      response.body[/name="authenticity_token" value="([^"]+)"/, 1]
+
+    assert_predicate csrf_token, :present?, "expected a CSRF token in the response"
+    csrf_token
+  ensure
+    ActionController::Base.allow_forgery_protection = Rails.configuration.action_controller.allow_forgery_protection
+  end
 
   def session_headers(token, user: @user, host: @host)
     headers = as_user_headers(user, host: host, session_public_id: token.public_id)

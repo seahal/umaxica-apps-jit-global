@@ -4,6 +4,14 @@
 - Date: 2026-10-01
 - Approval source: the user's Xper Phase 0 specification.
 
+## Supersession (2026-10-13)
+
+`adr/xper-rails-surface-retirement.md` supersedes this decision for the current Rails surface. The
+Phase 0 route, controller, view, layout, stylesheet, frontend stack, host-slot, and Rails host
+allowlist decisions are retired. This document remains the history of the bootstrap and its
+constraints. The retirement changes no persistent data or Preference/Auth authority. Edge and
+Cloudflare ownership remain separate, and the future Web Push requirement remains unimplemented.
+
 ## Decision
 
 The concept name is **Experience**. Its internal Rails surface code is **xper**.

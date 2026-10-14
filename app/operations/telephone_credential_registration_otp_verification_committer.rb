@@ -61,11 +61,15 @@ class TelephoneCredentialRegistrationOtpVerificationCommitter
 
   attr_reader :actor, :token, :telephone, :transaction, :browser_nonce, :code, :surface, :pending_status, :session_ref
 
+  def token_device_session
+    @token_device_session ||= token.device_session_record!
+  end
+
   def with_locks
     actor.class.connection_class_for_self.connected_to(role: :writing) do
       actor.with_lock do
         transaction.class.connection_owner.connected_to(role: :writing) do
-          token.device_session.with_lock do
+          token_device_session.with_lock do
             token.with_lock do
               telephone.with_lock do
                 transaction.with_lock { yield }
@@ -81,18 +85,18 @@ class TelephoneCredentialRegistrationOtpVerificationCommitter
     now = transaction.class.database_now
     source_now = telephone.class.database_now
     source_owned? && actor.login_allowed? && actor.accessible?(source_now) && source_current?(source_now) &&
-      token.currently_usable?(now) && token.device_session.usable? &&
-      token.device_session.current_refresh_token_id == token.id && ticket_current?(now)
+      token.currently_usable?(now) && token_device_session.usable? &&
+      token_device_session.current_refresh_token_id == token.id && ticket_current?(now)
   end
 
   def source_owned?
     case actor
     when Client
-      token.user_id == actor.id && token.device_session.user_id == actor.id && telephone.user_id == actor.id
+      token.user_id == actor.id && token_device_session.user_id == actor.id && telephone.user_id == actor.id
     when Visitor
-      token.visitor_id == actor.id && token.device_session.visitor_id == actor.id && telephone.visitor_id == actor.id
+      token.visitor_id == actor.id && token_device_session.visitor_id == actor.id && telephone.visitor_id == actor.id
     when Operator
-      token.staff_id == actor.id && token.device_session.staff_id == actor.id && telephone.staff_id == actor.id
+      token.staff_id == actor.id && token_device_session.staff_id == actor.id && telephone.staff_id == actor.id
     end
   end
 

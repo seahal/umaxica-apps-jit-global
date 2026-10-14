@@ -29,7 +29,8 @@ module Publishing
       term.class.transaction do
         # Locking the vocabulary serializes concurrent moves within one tree,
         # so two moves cannot interleave into a cycle that each alone avoids.
-        term.vocabulary.lock!
+        vocabulary_class = ContentFamilies.cell_for_taxonomy_term(term).fetch(:vocabulary)
+        vocabulary_class.find(term.vocabulary_id).lock!
 
         term.reload
         validate_scope!

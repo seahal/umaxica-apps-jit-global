@@ -41,15 +41,12 @@ module Base
                     :current_session, :logged_in?
       before_action :authenticate_browser_rp_safe_request!
       prepend_before_action :authenticate_browser_rp_unsafe_request!
-      ensure_fqdn_gate_first!
 
       class << self
         public
 
         def base_admission_surface_name = "org"
       end
-
-      prepend_before_action :apply_default_no_store
 
       layout "base/org/application"
 
@@ -102,6 +99,8 @@ module Base
       # Rails validates Origin and Fetch Metadata first; require its session-bound token before surface callbacks.
       prepend_before_action :require_authenticity_token_for_unsafe_request!
       protect_from_forgery using: :header_or_legacy_token, with: :exception, prepend: true
+      ensure_fqdn_gate_first!
+      prepend_before_action :apply_default_no_store
 
       private
 

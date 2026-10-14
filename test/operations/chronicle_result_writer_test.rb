@@ -8,19 +8,21 @@ class ChronicleResultWriterTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   setup do
-    @policy = ChronicleRetentionPolicy.create!(
-      code: "security",
-      name: "Security",
-      duration_days: 0,
-      permanent: true,
-    )
+    @policy =
+      ChronicleRetentionPolicy.find_or_create_by!(code: "security") do |policy|
+        policy.name = "Security"
+        policy.duration_days = 365
+        policy.permanent = false
+      end
+    occurred_at = Time.current
     @chronicle = Chronicle.create!(
       event_uuid: SecureRandom.uuid,
       action: "auth.sign_in.failed",
       result: "intent",
       metadata: {},
       changeset: {},
-      occurred_at: Time.current,
+      occurred_at: occurred_at,
+      erasable_at: ChronicleRecordPolicy.erasable_at_for(policy: @policy, occurred_at: occurred_at),
       chronicle_retention_policy: @policy,
     )
   end

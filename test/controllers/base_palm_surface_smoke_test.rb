@@ -48,7 +48,7 @@ class BasePalmSurfaceSmokeTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "palm app public endpoints and bearer profile api respond on the native surface" do
+  test "palm app landing and machine endpoints remain available after browser RP migration" do
     host = ENV.fetch("PUBLIC_PALM_SERVICE_URL")
     host! host
 
@@ -60,15 +60,23 @@ class BasePalmSurfaceSmokeTest < ActionDispatch::IntegrationTest
       heading: "Palm App",
       message: I18n.t("palm.app.roots.message"),
     )
+    assert_equal palm_app_sign_show_path(ri: "jp"), inertia_props.fetch("sign_in").fetch("href")
 
     get "/health", headers: { "Host" => host }
 
     assert_response :success
 
-    get "/api/v0/profile", headers: json_headers
+    get "/api/v0/health.json", headers: json_headers
 
-    assert_response :unauthorized
-    assert_equal "urn:umaxica:problem:authentication-required", response.parsed_body.fetch("type")
+    assert_response :success
+
+    get "/api/v0/revision.json", headers: json_headers
+
+    assert_response :success
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("https://#{host}/api/v0/profile", method: :get)
+    end
   end
 
   private

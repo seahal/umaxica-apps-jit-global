@@ -10,6 +10,18 @@ This is a **target contract; the repository does not yet conform**. Writing this
 file and no RuboCop configuration. It is the single authority for this topic: do not create a second
 ADR, rule or plan that restates or varies it; amend this one.
 
+Progress recorded on 2026-10-14: directives were added or repositioned in writable owned Ruby files,
+and local CI now runs a leading-directive inventory before the scoped RuboCop check. The inventory
+and cop still report ten missing directives in `bin/`; the `bin/` ZFS mount is read-only. The GitHub
+Actions lint job also has not been updated because `.github/` is a separate read-only ZFS mount.
+Migration replay was not run: the current database constraint permits only the standard development
+and test databases, while this ADR requires an isolated disposable fleet for that check. The change
+therefore remains incomplete. After the Passkey-slot test correction, the full standard Rails suite
+was rerun: 15,256 runs, 128,994 assertions, 0 failures and 14 Avatar worker-receipt errors. No Strict
+Loading errors appeared. This result does not clear the remaining directive, CI or migration gates.
+See `evidence/2026-10-14-frozen-string-directives-followup-Q3M7.md` and
+`evidence/2026-10-14-passkey-slot-standard-test-followup-C9R2.md`.
+
 ## Context
 
 `# frozen_string_literal: true` makes every string literal in a file immutable. A literal that is

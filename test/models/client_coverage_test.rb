@@ -10,7 +10,9 @@ class ClientCoverageTest < ActiveSupport::TestCase
   setup do
     ClientStatus.find_or_create_by!(id: 1)
     ClientVisibility.find_or_create_by!(id: 1)
-    @user = Client.create!(status_id: 1, visibility_id: 1)
+    @user = Client.create!(
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000), status_id: 1, visibility_id: 1,
+    )
     ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
     ClientTelephoneStatus.find_or_create_by!(id: ClientTelephoneStatus::VERIFIED)
     ClientTotpCredentialStatus.find_or_create_by!(id: ClientTotpCredentialStatus::ACTIVE)
@@ -25,7 +27,7 @@ class ClientCoverageTest < ActiveSupport::TestCase
 
     assert_predicate @user, :totp_enabled?
 
-    @user.client_totp_credentials.load
+    @user = Client.includes(:client_totp_credentials).find(@user.id)
 
     assert_predicate @user, :totp_enabled?
   end

@@ -28,8 +28,11 @@ Rails flash remains forbidden (`generic/no-flash-messages.mdc`). Sign-out alread
 session-bound, one-time marker in `SignOutNotice`. That marker is the transport for the one-shot
 completion message.
 
-Auth, Core, Side, and Palm keep their own `/sign/out/complete` pages. Those surfaces are relying
-parties; their completion URLs stay surface-local.
+Base local sign-out continues to finish at `/lobby`. In the separate authority-driven Browser RP
+flow, Base Self-RP, Core, Warp, Edit, Palm and Tech use their exact registered
+`/sign/out/completion?ri=jp|us` destination for origin cleanup. The all-client route and registration
+contract is owned by `adr/first-party-sign-out-shared-database-without-backchannel-logout.md`;
+Palm and Tech's participation is recorded in `adr/tech-and-palm-browser-rp-participation.md`.
 
 ## Decision
 
@@ -61,11 +64,11 @@ POST /sign/out
 `GET /lobby` consumes the notice. A later GET does not keep showing it. The lobby after a just
 completed sign-out sets Inertia `clearHistory` so Back cannot restore a signed-in page.
 
-`GET /sign/out/complete` is removed from Base app, com, and org. Base OIDC
-`post_logout_redirect_uri` values for Base hosts, and Base logout-transaction completion URLs, point
-at `/lobby`. Historically, Side hosts registered on `base-rails-rp` completed at
-`/sign/out/complete`; that sentence is retained only as migration context and is not a current
-registration instruction.
+`GET /sign/out/complete` is removed from Base app, com, and org. Base local sign-out still redirects
+to `/lobby`. Base Self-RP `post_logout_redirect_uri` registrations and its authority-driven logout
+transaction completion URLs use `/sign/out/completion?ri=jp|us`, with exact client and region binding.
+Historically, Side hosts registered on `base-rails-rp` completed at `/sign/out/complete`; that
+sentence is retained only as migration context and is not a current registration instruction.
 
 GET is never a logout mutation.
 
@@ -75,7 +78,8 @@ GET is never a logout mutation.
 - Authenticated visitors cannot stay on `/lobby`.
 - `/` is unchanged.
 - Rails flash is not reintroduced.
-- Auth/Core/Side/Palm completion pages remain.
+- Base local sign-out continues to use `/lobby`; Base Self-RP and the other participating Browser
+  RPs use `/sign/out/completion` for authority-driven origin cleanup.
 
 ## Related
 

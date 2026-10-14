@@ -52,7 +52,7 @@ class AuthenticationLogoutResolverRoundTripTest < ActiveSupport::TestCase
     user = clients(:one)
     headers = authenticated_headers_for(user, host: ENV.fetch("PRIVATE_AUTH_SERVICE_URL"))
     token = ClientToken.find_by(public_id: headers["X-TEST-SESSION-PUBLIC-ID"])
-    device_session = token.device_session
+    device_session = token.device_session_record
 
     device_session.update!(current_refresh_token_id: nil)
 

@@ -41,6 +41,9 @@ scope module: :docs, as: :docs do
           # Published documentation entries. `param: :public_id` addresses the
           # resource by its opaque API identity, distinct from the presentation
           # slug; the route stays fully resourceful.
+          # FIXME: [routing] Replace this custom parameter after the endpoint adopts standard `:id`;
+          # removing it sooner breaks the current controller lookup contract. See
+          # `adr/rails-routing-resourceful-policy.md`, Exception ledger.
           resources :entries, only: %i(index show), param: :public_id
 
           # Machine-readable health and revision. The literal ".json" is part of the
@@ -90,6 +93,9 @@ scope module: :docs, as: :docs do
         # Versioned documentation API.
         namespace :v0 do
           # Published documentation entries, addressed by opaque public_id.
+          # FIXME: [routing] Replace this custom parameter after the endpoint adopts standard `:id`;
+          # removing it sooner breaks the current controller lookup contract. See
+          # `adr/rails-routing-resourceful-policy.md`, Exception ledger.
           resources :entries, only: %i(index show), param: :public_id
 
           # Machine-readable health and revision. The literal ".json" is part of the
@@ -139,6 +145,9 @@ scope module: :docs, as: :docs do
         # Versioned documentation API.
         namespace :v0 do
           # Published documentation entries, addressed by opaque public_id.
+          # FIXME: [routing] Replace this custom parameter after the endpoint adopts standard `:id`;
+          # removing it sooner breaks the current controller lookup contract. See
+          # `adr/rails-routing-resourceful-policy.md`, Exception ledger.
           resources :entries, only: %i(index show), param: :public_id
 
           # Machine-readable health and revision. The literal ".json" is part of the

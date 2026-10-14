@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -37,7 +38,6 @@
 #  fk_rails_...  (level_id => app_preference_chronicle_levels.id)
 #
 
-# frozen_string_literal: true
 
 require "test_helper"
 

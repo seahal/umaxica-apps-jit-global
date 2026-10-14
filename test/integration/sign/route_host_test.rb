@@ -135,15 +135,13 @@ class SignRouteHostTest < ActionDispatch::IntegrationTest
       info_corporate: OpenStruct.new(host: ENV.fetch("PRIVATE_INFO_CORPORATE_URL", "info.com.localhost")),
       info_staff: OpenStruct.new(host: ENV.fetch("PRIVATE_INFO_STAFF_URL", "info.org.localhost")),
       edit_staff: OpenStruct.new(host: ENV.fetch("PUBLIC_EDIT_STAFF_URL", "edit.org.localhost")),
+      tech_staff: OpenStruct.new(host: ENV.fetch("PUBLIC_TECH_STAFF_URL", "tech.org.localhost")),
       docs_service: OpenStruct.new(host: "docs.app.localhost"),
       docs_corporate: OpenStruct.new(host: "docs.com.localhost"),
       docs_staff: OpenStruct.new(host: "docs.org.localhost"),
       news_service: OpenStruct.new(host: "news.app.localhost"),
       news_corporate: OpenStruct.new(host: "news.com.localhost"),
       news_staff: OpenStruct.new(host: "news.org.localhost"),
-      xper_service: OpenStruct.new(host: ENV.fetch("PUBLIC_XPER_SERVICE_URL", "umaxica.app")),
-      xper_corporate: OpenStruct.new(host: ENV.fetch("PUBLIC_XPER_CORPORATE_URL", "umaxica.com")),
-      xper_staff: OpenStruct.new(host: ENV.fetch("PUBLIC_XPER_STAFF_URL", "umaxica.org")),
     }
   end
 end

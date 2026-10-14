@@ -141,17 +141,28 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
   test "com revoke other sessions requires a fresh step-up" do
     host! @com_host
     setup_com_actor!
+    sessions_url = base_com_identity_sessions_url(ri: "jp", host: @com_host)
+    with_forgery_protection do
+      get sessions_url, headers: @com_headers
 
-    delete base_com_identity_other_sessions_url(ri: "jp", host: @com_host), headers: @com_headers
+      assert_response :success
+      csrf_token = response.parsed_body.at_css('meta[name="csrf-token"]')&.[]("content")
 
-    assert_response :see_other
-    gateway = URI.parse(response.location)
+      assert_predicate csrf_token, :present?
 
-    assert_equal @com_host, gateway.host
-    assert_equal "/verification/setup", gateway.path
-    assert_nil Rack::Utils.parse_nested_query(gateway.query)["rt"]
-    assert_predicate @current_token.reload, :currently_usable?
-    assert_predicate @other_token.reload, :currently_usable?
+      delete base_com_identity_other_sessions_url(ri: "jp", host: @com_host),
+             headers: @com_headers.merge("X-CSRF-Token" => csrf_token)
+
+      assert_response :see_other
+      gateway = URI.parse(response.location)
+
+      assert_equal @com_host, gateway.host
+      assert_includes %w(/verification /verification/setup), gateway.path
+      assert_equal "session_revoke_all", Rack::Utils.parse_nested_query(gateway.query)["scope"]
+      assert_nil Rack::Utils.parse_nested_query(gateway.query)["rt"]
+      assert_predicate @current_token.reload, :currently_usable?
+      assert_predicate @other_token.reload, :currently_usable?
+    end
   end
 
   private
@@ -180,6 +191,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     @actor = Visitor.create!(
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
       status_id: VisitorStatus::NOTHING,
       visibility_id: VisitorVisibility::VISITOR,
       mfa_level_id: VisitorMfaLevel::NOTHING,
@@ -214,11 +226,11 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
              audiences: [client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
              subject: OidcSubject.for(actor, resource_type: resource_type), client_id: client.client_id,
     )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = rp_session.issue_refresh_token!
     {
       "Host" => host,
       "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-      "Cookie" => "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access)}; " \
-                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_session.issue_refresh_token!)}",
     }
   end
 
@@ -258,5 +270,13 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
       last_step_up_purpose: "step_up",
       last_step_up_audience: audience,
     )
+  end
+
+  def with_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    yield
+  ensure
+    ActionController::Base.allow_forgery_protection =
+      Rails.configuration.action_controller.allow_forgery_protection
   end
 end

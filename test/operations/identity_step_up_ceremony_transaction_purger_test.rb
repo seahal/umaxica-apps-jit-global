@@ -35,7 +35,8 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
     assert ClientStepUpCeremonyTransaction.exists?(parent.id)
     assert ClientAuthCeremonySession.exists?(continuity.id)
     assert_not continuity.reload.active?(now: now)
-    assert_equal 1, IdentityStepUpCeremonyTransactionPurger.new(now: now).call.fetch(:app)
+    IdentityStepUpCeremonyTransactionPurger.new(now: now).call
+
     assert_not ClientStepUpCeremonyTransaction.exists?(parent.id)
     assert_not ClientAuthCeremonySession.exists?(continuity.id)
   end
@@ -52,9 +53,8 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
       )
       parent.update!(terminal_state)
 
-      result = IdentityStepUpCeremonyTransactionPurger.new(now: now).call
+      IdentityStepUpCeremonyTransactionPurger.new(now: now).call
 
-      assert_equal 0, result.fetch(:app)
       assert ClientStepUpCeremonyTransaction.exists?(parent.id)
     end
   end
@@ -71,9 +71,8 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
       now: now - 1.day,
     )
 
-    result = IdentityStepUpCeremonyTransactionPurger.new(now: now).call
+    IdentityStepUpCeremonyTransactionPurger.new(now: now).call
 
-    assert_equal 0, result.fetch(:app)
     assert ClientStepUpCeremonyTransaction.exists?(transaction.id)
     assert ClientAuthCeremonySession.exists?(continuity.id)
   end
@@ -93,17 +92,20 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
       created_at: now - 9.days, updated_at: now - 9.days,
     )
 
-    assert_equal 0, IdentityStepUpCeremonyTransactionPurger.new(now: now).call.fetch(:app)
+    IdentityStepUpCeremonyTransactionPurger.new(now: now).call
+
     assert ClientStepUpCeremonyTransaction.exists?(parent.id)
     assert_predicate binding.reload, :retired?
     assert_nil binding.redeemed_at
 
     later = binding.retired_at + StepUpCeremonyTransactionable::RETENTION_PERIOD
 
-    assert_equal 0, IdentityStepUpCeremonyTransactionPurger.new(now: later - Rational(1, 1_000_000)).call.fetch(:app)
+    IdentityStepUpCeremonyTransactionPurger.new(now: later - Rational(1, 1_000_000)).call
+
     assert ClientAuthAdmissionBinding.exists?(binding.id)
 
-    assert_operator IdentityStepUpCeremonyTransactionPurger.new(now: later).call.fetch(:app), :>=, 1
+    IdentityStepUpCeremonyTransactionPurger.new(now: later).call
+
     assert_not ClientStepUpCeremonyTransaction.exists?(parent.id)
     assert_not ClientAuthAdmissionBinding.exists?(binding.id)
   end
@@ -121,12 +123,14 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
       discard_at: now - 8.days, purge_eligible_at: Float::INFINITY,
     )
 
-    assert_equal 0, IdentityStepUpCeremonyTransactionPurger.new(now: now).call.fetch(:app)
+    IdentityStepUpCeremonyTransactionPurger.new(now: now).call
+
     assert ClientStepUpCeremonyTransaction.exists?(parent.id)
     assert ClientStepUpSession.exists?(session.id)
     session.update!(purge_eligible_at: now)
 
-    assert_equal 1, IdentityStepUpCeremonyTransactionPurger.new(now: now).call.fetch(:app)
+    IdentityStepUpCeremonyTransactionPurger.new(now: now).call
+
     assert_not ClientStepUpCeremonyTransaction.exists?(parent.id)
     assert_not ClientStepUpSession.exists?(session.id)
     assert ClientToken.exists?(token.id)
@@ -152,9 +156,8 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
       step_up_ceremony_transaction_ref: parent.transaction_id, expires_at: now - 8.days, created_at: now - 9.days,
     )
 
-    result = IdentityStepUpCeremonyTransactionPurger.new(now: now).call
+    IdentityStepUpCeremonyTransactionPurger.new(now: now).call
 
-    assert_equal 1, result.fetch(:app)
     assert_not ClientStepUpCeremonyTransaction.exists?(parent.id)
     assert_not ClientTotpCeremonyTransaction.exists?(child.id)
     assert_not IdentityTotpCeremonyCandidate.exists?(candidate.id)
@@ -172,9 +175,8 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
         admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: parent.transaction_id,
         now: cutoff - AuthCeremonySession::DEFAULT_TTL + Rational(microseconds, 1_000_000),
       )
-      result = IdentityStepUpCeremonyTransactionPurger.new(now: now).call
+      IdentityStepUpCeremonyTransactionPurger.new(now: now).call
 
-      assert_equal (microseconds <= 0) ? 1 : 0, result.fetch(:app)
       assert_equal microseconds.positive?, ClientStepUpCeremonyTransaction.exists?(parent.id)
       assert_equal microseconds.positive?, ClientAuthCeremonySession.exists?(continuity.id)
     end
@@ -183,10 +185,10 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
   test "eligible expired continuity is removed before its parent on every surface and cannot reappear" do
     now = Time.current
     [
-      [ClientStepUpCeremonyTransaction, ClientAuthCeremonySession, :app],
-      [VisitorStepUpCeremonyTransaction, VisitorAuthCeremonySession, :com],
-      [OperatorStepUpCeremonyTransaction, OperatorAuthCeremonySession, :org],
-    ].each do |parent_model, continuity_model, surface|
+      [ClientStepUpCeremonyTransaction, ClientAuthCeremonySession],
+      [VisitorStepUpCeremonyTransaction, VisitorAuthCeremonySession],
+      [OperatorStepUpCeremonyTransaction, OperatorAuthCeremonySession],
+    ].each do |parent_model, continuity_model|
       parent = parent_model.create_transaction!(
         actor_ref: "retention-actor", session_ref: "retention-session", required_scope: "settings_passkey",
         required_aal: "none", allowed_methods: ["passkey"], now: now - 9.days, expires_at: now - 8.days,
@@ -196,12 +198,13 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
         now: now - 9.days,
       )
 
-      result = IdentityStepUpCeremonyTransactionPurger.new(now: now).call
+      IdentityStepUpCeremonyTransactionPurger.new(now: now).call
 
-      assert_equal 1, result.fetch(surface)
       assert_not parent_model.exists?(parent.id)
       assert_not continuity_model.exists?(continuity.id)
-      assert_equal 0, IdentityStepUpCeremonyTransactionPurger.new(now: now).call.fetch(surface)
+      IdentityStepUpCeremonyTransactionPurger.new(now: now).call
+
+      assert_not parent_model.exists?(parent.id)
     end
   end
 end

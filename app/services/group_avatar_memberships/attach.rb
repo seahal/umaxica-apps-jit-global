@@ -54,7 +54,7 @@ module GroupAvatarMemberships
     attr_reader :group, :avatar, :actor, :surface, :subject_public_id, :account_public_id, :position
 
     def active_avatar?(record)
-      record.lifecycle_state&.key == "active" && record.accessible?
+      AvatarLifecycleState.find_by(id: record.lifecycle_state_id)&.key == "active" && record.accessible?
     end
 
     def authorize_same_owner!(locked_group, locked_avatar, observed_group_owner)

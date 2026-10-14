@@ -4,10 +4,11 @@
 
 Accepted (2026-10-13). User decision, confirmed by an escalation ruling on the same day.
 
-This is a **target contract; the runtime is not yet migrated**. At commit
-`4828aeedd141b54163236672890799b9b01128c2` the application still contains a Back-Channel Logout
+This is a **target contract with partial local implementation**. At the historical checkpoint
+`4828aeedd141b54163236672890799b9b01128c2` the application still contained a Back-Channel Logout
 (BCL) sender, receivers and declarations, and the missing authority check described below.
-Acceptance of this ADR establishes neither implementation conformity nor that any test has run.
+Acceptance of this ADR establishes neither implementation conformity nor that any test has run; the
+current local status and verification limits are recorded at the end of this document.
 
 Supersedes, for first-party relying parties only:
 
@@ -155,10 +156,11 @@ extension under a new ADR, with these constraints carried over:
   Notification timeouts, retries and partial delivery do not exist.
 - Sibling RP rows become revoked at the same instant as the parent, so stored state matches what the
   acceptance checks already enforced.
-- The parent sign-out primitive must become one transaction. Today it writes the sign-out flow
-  record, the Device Session and the tokens without one enclosing transaction and falls back to
-  token-only revocation after a Device Session failure. That primitive also serves ordinary
-  sign-out, so its other callers are affected by the change.
+- The parent sign-out primitive is now implemented as one realm Ticket writer transaction. It
+  composes the Device → current root → RP lock order with SignOutFlow, Device Session, root-lineage
+  and child-row writes; a Device or child failure raises and rolls the transaction back. Focused
+  standard-database tests cover ordinary, selected and OIDC parent-ending callers; the full
+  authority round trip and independent-connection acceptance remain open.
 - Until the removal is implemented, the defective receivers remain reachable. Removing them is not
   optional follow-up work.
 - An open screen at another RP keeps showing what it already rendered until it next communicates. An
@@ -190,3 +192,27 @@ Relevant specifications: OpenID Connect RP-Initiated Logout 1.0, OpenID Connect 
 that BCL, an optional extension, is not offered. It makes no conformance claim. The escalation
 ruling was issued from a description of the system, without reading the code, and certifies no
 implementation.
+
+## Local implementation status (2026-10-14)
+
+The local Rails application exposes a surface-local read-only GET and protected POST
+`/sign/out/completion` resource for all 12 registered first-party Browser RPs. Each client registers
+exact completion URIs for both allowed `ri` values, and coordinator destinations match those entries
+exactly. Core, Warp, Edit and Base reuse their surface-local sign-out controllers; Palm and Tech
+retain dedicated completion controllers. Tech sign-out remains available after `tech.access` is
+revoked. Route and registration tests cover every client at both allowed `ri` values. The integration
+matrix exercises the challenge GET, protected POST and one-shot final notice for all 12 first-party
+client IDs. Each case begins after same-realm parent and RP-session revocation, checks that GET
+leaves the transaction unchanged, and submits the HTML form or Inertia props with the Rails token.
+It covers both response styles at `ri=jp`, but not the full IdP authority flow or real browser
+behavior. The static registration test also verifies that `/sign/out` is refused as a post-logout
+return URI for every registered first-party client. See
+`evidence/2026-10-13-first-party-rp-completion-uri-matrix-P7V4.md` and
+`evidence/2026-10-14-first-party-rp-postlogout-uri-P4K8.md`.
+
+This does not mean the target contract is complete. The shared parent-and-all-RP revocation
+transaction is locally implemented and focused-tested, but the full authority round trip,
+independent-connection race evidence and final acceptance remain open. First-party BCL
+senders/receivers/declarations remain pending the required consumer confirmation, and real
+browser/manual acceptance is open. No production deployment or external key provisioning is
+claimed. Follow the current implementation notes in `four.md` for step-level gates.

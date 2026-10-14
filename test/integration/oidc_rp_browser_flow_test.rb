@@ -262,7 +262,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
         surface: "app", reference: sign_query.fetch("entry_ref"),
       )
-      transaction = binding.authorization_transaction
+      transaction = authorization_transaction_for_test(binding)
       original_transaction_id = transaction.id
 
       host!(sign_host)

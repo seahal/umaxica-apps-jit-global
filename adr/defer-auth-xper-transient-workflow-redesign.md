@@ -75,3 +75,11 @@ D-82 is implemented only as the Base browser nonce, Auth admission, confirmation
 restart and cancellation exchange. It does not create an Auth login session, shared-domain cookie,
 generic workflow framework or Xper redesign. The old lifecycle and RP references in this document
 remain scope history and are superseded by the current Base/Auth controller and admission tests.
+
+## Xper Rails surface retirement (2026-10-13)
+
+`adr/xper-rails-surface-retirement.md` retires the Phase 0 Xper Rails placeholder. This supersedes
+the current Rails-surface assumptions in this decision, including its planned apex route surface;
+Auth's ceremony boundary and the D-82 exception remain unchanged. A future Experience workflow still
+requires a separate accepted design. The future Web Push requirement is retained, and this retirement
+does not change Edge or Cloudflare ownership.

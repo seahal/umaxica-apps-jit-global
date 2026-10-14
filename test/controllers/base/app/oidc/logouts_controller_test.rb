@@ -57,7 +57,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f0_family}-#{f0_surface}"
                 end
-              f0_token = ClientToken.find_by!(public_id: f0_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f0_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f0_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f0_client = OidcClientRegistry.find!(f0_client_id)
               f0_key = [f0_client.client_id, f0_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -67,7 +70,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f0_client.client_id,
                     revoked_at: nil,
                   ))
-                f0_token.rotate_refresh_token! unless f0_token.device_session.current_refresh_token_id
+                f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                 f0_now = Time.current
                 f0_session = ClientRpSession.create!(
                   client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
@@ -75,16 +78,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f0_now + 10.minutes,
                 )
                 f0_access = AuthenticationTokenService.encode(
-                  f0_token.user, host: f0_host, resource_type: "client",
-                                 session_public_id: f0_token.public_id, base_session_public_id: f0_token.public_id,
-                                 oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
-                                 expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
-                                 subject: OidcSubject.for(
-                                   f0_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f0_client.client_id,
+                  f0_token.actor_record, host: f0_host, resource_type: "client",
+                                         session_public_id: f0_token.public_id,
+                                         base_session_public_id: f0_token.public_id,
+                                         oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
+                                         expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
+                                         subject: OidcSubject.for(
+                                           f0_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f0_client.client_id,
                 )
                 @base_browser_rp_credentials[f0_key] = [f0_access, f0_session.issue_refresh_token!]
               end
@@ -139,7 +143,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f1_family}-#{f1_surface}"
                 end
-              f1_token = ClientToken.find_by!(public_id: f1_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f1_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f1_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f1_client = OidcClientRegistry.find!(f1_client_id)
               f1_key = [f1_client.client_id, f1_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -149,7 +156,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f1_client.client_id,
                     revoked_at: nil,
                   ))
-                f1_token.rotate_refresh_token! unless f1_token.device_session.current_refresh_token_id
+                f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                 f1_now = Time.current
                 f1_session = ClientRpSession.create!(
                   client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
@@ -157,16 +164,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f1_now + 10.minutes,
                 )
                 f1_access = AuthenticationTokenService.encode(
-                  f1_token.user, host: f1_host, resource_type: "client",
-                                 session_public_id: f1_token.public_id, base_session_public_id: f1_token.public_id,
-                                 oidc_sid: f1_session.public_id, oidc_jti: f1_session.oidc_jti,
-                                 expires_at: f1_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f1_client), audiences: [f1_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
-                                 subject: OidcSubject.for(
-                                   f1_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f1_client.client_id,
+                  f1_token.actor_record, host: f1_host, resource_type: "client",
+                                         session_public_id: f1_token.public_id,
+                                         base_session_public_id: f1_token.public_id,
+                                         oidc_sid: f1_session.public_id, oidc_jti: f1_session.oidc_jti,
+                                         expires_at: f1_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f1_client), audiences: [f1_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
+                                         subject: OidcSubject.for(
+                                           f1_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f1_client.client_id,
                 )
                 @base_browser_rp_credentials[f1_key] =
                   [f1_access, f1_session.issue_refresh_token!]
@@ -223,7 +231,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f2_family}-#{f2_surface}"
                 end
-              f2_token = ClientToken.find_by!(public_id: f2_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f2_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f2_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f2_client = OidcClientRegistry.find!(f2_client_id)
               f2_key = [f2_client.client_id, f2_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -233,7 +244,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f2_client.client_id,
                     revoked_at: nil,
                   ))
-                f2_token.rotate_refresh_token! unless f2_token.device_session.current_refresh_token_id
+                f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                 f2_now = Time.current
                 f2_session = ClientRpSession.create!(
                   client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
@@ -241,16 +252,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f2_now + 10.minutes,
                 )
                 f2_access = AuthenticationTokenService.encode(
-                  f2_token.user, host: f2_host, resource_type: "client",
-                                 session_public_id: f2_token.public_id, base_session_public_id: f2_token.public_id,
-                                 oidc_sid: f2_session.public_id, oidc_jti: f2_session.oidc_jti,
-                                 expires_at: f2_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f2_client), audiences: [f2_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
-                                 subject: OidcSubject.for(
-                                   f2_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f2_client.client_id,
+                  f2_token.actor_record, host: f2_host, resource_type: "client",
+                                         session_public_id: f2_token.public_id,
+                                         base_session_public_id: f2_token.public_id,
+                                         oidc_sid: f2_session.public_id, oidc_jti: f2_session.oidc_jti,
+                                         expires_at: f2_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f2_client), audiences: [f2_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
+                                         subject: OidcSubject.for(
+                                           f2_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f2_client.client_id,
                 )
                 @base_browser_rp_credentials[f2_key] = [f2_access, f2_session.issue_refresh_token!]
               end
@@ -309,7 +321,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f3_family}-#{f3_surface}"
                 end
-              f3_token = ClientToken.find_by!(public_id: f3_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f3_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f3_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f3_client = OidcClientRegistry.find!(f3_client_id)
               f3_key = [f3_client.client_id, f3_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -319,7 +334,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f3_client.client_id,
                     revoked_at: nil,
                   ))
-                f3_token.rotate_refresh_token! unless f3_token.device_session.current_refresh_token_id
+                f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                 f3_now = Time.current
                 f3_session = ClientRpSession.create!(
                   client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
@@ -327,16 +342,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f3_now + 10.minutes,
                 )
                 f3_access = AuthenticationTokenService.encode(
-                  f3_token.user, host: f3_host, resource_type: "client",
-                                 session_public_id: f3_token.public_id, base_session_public_id: f3_token.public_id,
-                                 oidc_sid: f3_session.public_id, oidc_jti: f3_session.oidc_jti,
-                                 expires_at: f3_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f3_client), audiences: [f3_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f3_client),
-                                 subject: OidcSubject.for(
-                                   f3_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f3_client.client_id,
+                  f3_token.actor_record, host: f3_host, resource_type: "client",
+                                         session_public_id: f3_token.public_id,
+                                         base_session_public_id: f3_token.public_id,
+                                         oidc_sid: f3_session.public_id, oidc_jti: f3_session.oidc_jti,
+                                         expires_at: f3_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f3_client), audiences: [f3_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f3_client),
+                                         subject: OidcSubject.for(
+                                           f3_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f3_client.client_id,
                 )
                 @base_browser_rp_credentials[f3_key] =
                   [f3_access, f3_session.issue_refresh_token!]
@@ -391,7 +407,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f4_family}-#{f4_surface}"
                 end
-              f4_token = ClientToken.find_by!(public_id: f4_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f4_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f4_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f4_client = OidcClientRegistry.find!(f4_client_id)
               f4_key = [f4_client.client_id, f4_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -401,7 +420,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f4_client.client_id,
                     revoked_at: nil,
                   ))
-                f4_token.rotate_refresh_token! unless f4_token.device_session.current_refresh_token_id
+                f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                 f4_now = Time.current
                 f4_session = ClientRpSession.create!(
                   client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
@@ -409,16 +428,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f4_now + 10.minutes,
                 )
                 f4_access = AuthenticationTokenService.encode(
-                  f4_token.user, host: f4_host, resource_type: "client",
-                                 session_public_id: f4_token.public_id, base_session_public_id: f4_token.public_id,
-                                 oidc_sid: f4_session.public_id, oidc_jti: f4_session.oidc_jti,
-                                 expires_at: f4_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f4_client), audiences: [f4_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f4_client),
-                                 subject: OidcSubject.for(
-                                   f4_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f4_client.client_id,
+                  f4_token.actor_record, host: f4_host, resource_type: "client",
+                                         session_public_id: f4_token.public_id,
+                                         base_session_public_id: f4_token.public_id,
+                                         oidc_sid: f4_session.public_id, oidc_jti: f4_session.oidc_jti,
+                                         expires_at: f4_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f4_client), audiences: [f4_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f4_client),
+                                         subject: OidcSubject.for(
+                                           f4_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f4_client.client_id,
                 )
                 @base_browser_rp_credentials[f4_key] =
                   [f4_access, f4_session.issue_refresh_token!]
@@ -473,7 +493,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f5_family}-#{f5_surface}"
                 end
-              f5_token = ClientToken.find_by!(public_id: f5_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f5_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f5_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f5_client = OidcClientRegistry.find!(f5_client_id)
               f5_key = [f5_client.client_id, f5_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -483,7 +506,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f5_client.client_id,
                     revoked_at: nil,
                   ))
-                f5_token.rotate_refresh_token! unless f5_token.device_session.current_refresh_token_id
+                f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
                 f5_now = Time.current
                 f5_session = ClientRpSession.create!(
                   client_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
@@ -491,16 +514,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f5_now + 10.minutes,
                 )
                 f5_access = AuthenticationTokenService.encode(
-                  f5_token.user, host: f5_host, resource_type: "client",
-                                 session_public_id: f5_token.public_id, base_session_public_id: f5_token.public_id,
-                                 oidc_sid: f5_session.public_id, oidc_jti: f5_session.oidc_jti,
-                                 expires_at: f5_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f5_client), audiences: [f5_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f5_client),
-                                 subject: OidcSubject.for(
-                                   f5_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f5_client.client_id,
+                  f5_token.actor_record, host: f5_host, resource_type: "client",
+                                         session_public_id: f5_token.public_id,
+                                         base_session_public_id: f5_token.public_id,
+                                         oidc_sid: f5_session.public_id, oidc_jti: f5_session.oidc_jti,
+                                         expires_at: f5_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f5_client), audiences: [f5_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f5_client),
+                                         subject: OidcSubject.for(
+                                           f5_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f5_client.client_id,
                 )
                 @base_browser_rp_credentials[f5_key] = [f5_access, f5_session.issue_refresh_token!]
               end
@@ -552,7 +576,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f6_family}-#{f6_surface}"
                 end
-              f6_token = ClientToken.find_by!(public_id: f6_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f6_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f6_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f6_client = OidcClientRegistry.find!(f6_client_id)
               f6_key = [f6_client.client_id, f6_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -562,7 +589,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f6_client.client_id,
                     revoked_at: nil,
                   ))
-                f6_token.rotate_refresh_token! unless f6_token.device_session.current_refresh_token_id
+                f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
                 f6_now = Time.current
                 f6_session = ClientRpSession.create!(
                   client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
@@ -570,16 +597,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f6_now + 10.minutes,
                 )
                 f6_access = AuthenticationTokenService.encode(
-                  f6_token.user, host: f6_host, resource_type: "client",
-                                 session_public_id: f6_token.public_id, base_session_public_id: f6_token.public_id,
-                                 oidc_sid: f6_session.public_id, oidc_jti: f6_session.oidc_jti,
-                                 expires_at: f6_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f6_client), audiences: [f6_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f6_client),
-                                 subject: OidcSubject.for(
-                                   f6_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f6_client.client_id,
+                  f6_token.actor_record, host: f6_host, resource_type: "client",
+                                         session_public_id: f6_token.public_id,
+                                         base_session_public_id: f6_token.public_id,
+                                         oidc_sid: f6_session.public_id, oidc_jti: f6_session.oidc_jti,
+                                         expires_at: f6_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f6_client), audiences: [f6_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f6_client),
+                                         subject: OidcSubject.for(
+                                           f6_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f6_client.client_id,
                 )
                 @base_browser_rp_credentials[f6_key] =
                   [f6_access, f6_session.issue_refresh_token!]
@@ -645,7 +673,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f7_family}-#{f7_surface}"
                 end
-              f7_token = ClientToken.find_by!(public_id: f7_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f7_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f7_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f7_client = OidcClientRegistry.find!(f7_client_id)
               f7_key = [f7_client.client_id, f7_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -655,7 +686,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f7_client.client_id,
                     revoked_at: nil,
                   ))
-                f7_token.rotate_refresh_token! unless f7_token.device_session.current_refresh_token_id
+                f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
                 f7_now = Time.current
                 f7_session = ClientRpSession.create!(
                   client_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
@@ -663,16 +694,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f7_now + 10.minutes,
                 )
                 f7_access = AuthenticationTokenService.encode(
-                  f7_token.user, host: f7_host, resource_type: "client",
-                                 session_public_id: f7_token.public_id, base_session_public_id: f7_token.public_id,
-                                 oidc_sid: f7_session.public_id, oidc_jti: f7_session.oidc_jti,
-                                 expires_at: f7_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f7_client), audiences: [f7_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f7_client),
-                                 subject: OidcSubject.for(
-                                   f7_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f7_client.client_id,
+                  f7_token.actor_record, host: f7_host, resource_type: "client",
+                                         session_public_id: f7_token.public_id,
+                                         base_session_public_id: f7_token.public_id,
+                                         oidc_sid: f7_session.public_id, oidc_jti: f7_session.oidc_jti,
+                                         expires_at: f7_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f7_client), audiences: [f7_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f7_client),
+                                         subject: OidcSubject.for(
+                                           f7_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f7_client.client_id,
                 )
                 @base_browser_rp_credentials[f7_key] =
                   [f7_access, f7_session.issue_refresh_token!]
@@ -729,7 +761,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f8_family}-#{f8_surface}"
                 end
-              f8_token = ClientToken.find_by!(public_id: f8_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f8_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f8_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f8_client = OidcClientRegistry.find!(f8_client_id)
               f8_key = [f8_client.client_id, f8_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -739,7 +774,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f8_client.client_id,
                     revoked_at: nil,
                   ))
-                f8_token.rotate_refresh_token! unless f8_token.device_session.current_refresh_token_id
+                f8_token.rotate_refresh_token! unless f8_token.device_session_record.current_refresh_token_id
                 f8_now = Time.current
                 f8_session = ClientRpSession.create!(
                   client_token: f8_token, oidc_client_id: f8_client.client_id, oidc_scope: "openid profile",
@@ -747,16 +782,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f8_now + 10.minutes,
                 )
                 f8_access = AuthenticationTokenService.encode(
-                  f8_token.user, host: f8_host, resource_type: "client",
-                                 session_public_id: f8_token.public_id, base_session_public_id: f8_token.public_id,
-                                 oidc_sid: f8_session.public_id, oidc_jti: f8_session.oidc_jti,
-                                 expires_at: f8_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f8_client), audiences: [f8_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f8_client),
-                                 subject: OidcSubject.for(
-                                   f8_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f8_client.client_id,
+                  f8_token.actor_record, host: f8_host, resource_type: "client",
+                                         session_public_id: f8_token.public_id,
+                                         base_session_public_id: f8_token.public_id,
+                                         oidc_sid: f8_session.public_id, oidc_jti: f8_session.oidc_jti,
+                                         expires_at: f8_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f8_client), audiences: [f8_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f8_client),
+                                         subject: OidcSubject.for(
+                                           f8_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f8_client.client_id,
                 )
                 @base_browser_rp_credentials[f8_key] =
                   [f8_access, f8_session.issue_refresh_token!]
@@ -823,7 +859,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f9_family}-#{f9_surface}"
                 end
-              f9_token = ClientToken.find_by!(public_id: f9_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f9_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f9_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f9_client = OidcClientRegistry.find!(f9_client_id)
               f9_key = [f9_client.client_id, f9_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -833,7 +872,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f9_client.client_id,
                     revoked_at: nil,
                   ))
-                f9_token.rotate_refresh_token! unless f9_token.device_session.current_refresh_token_id
+                f9_token.rotate_refresh_token! unless f9_token.device_session_record.current_refresh_token_id
                 f9_now = Time.current
                 f9_session = ClientRpSession.create!(
                   client_token: f9_token, oidc_client_id: f9_client.client_id, oidc_scope: "openid profile",
@@ -841,16 +880,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f9_now + 10.minutes,
                 )
                 f9_access = AuthenticationTokenService.encode(
-                  f9_token.user, host: f9_host, resource_type: "client",
-                                 session_public_id: f9_token.public_id, base_session_public_id: f9_token.public_id,
-                                 oidc_sid: f9_session.public_id, oidc_jti: f9_session.oidc_jti,
-                                 expires_at: f9_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f9_client), audiences: [f9_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f9_client),
-                                 subject: OidcSubject.for(
-                                   f9_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f9_client.client_id,
+                  f9_token.actor_record, host: f9_host, resource_type: "client",
+                                         session_public_id: f9_token.public_id,
+                                         base_session_public_id: f9_token.public_id,
+                                         oidc_sid: f9_session.public_id, oidc_jti: f9_session.oidc_jti,
+                                         expires_at: f9_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f9_client), audiences: [f9_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f9_client),
+                                         subject: OidcSubject.for(
+                                           f9_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f9_client.client_id,
                 )
                 @base_browser_rp_credentials[f9_key] =
                   [f9_access, f9_session.issue_refresh_token!]
@@ -916,7 +956,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f10_family}-#{f10_surface}"
                 end
-              f10_token = ClientToken.find_by!(public_id: f10_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f10_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f10_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f10_client = OidcClientRegistry.find!(f10_client_id)
               f10_key = [f10_client.client_id, f10_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -926,7 +969,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f10_client.client_id,
                     revoked_at: nil,
                   ))
-                f10_token.rotate_refresh_token! unless f10_token.device_session.current_refresh_token_id
+                f10_token.rotate_refresh_token! unless f10_token.device_session_record.current_refresh_token_id
                 f10_now = Time.current
                 f10_session = ClientRpSession.create!(
                   client_token: f10_token, oidc_client_id: f10_client.client_id, oidc_scope: "openid profile",
@@ -934,16 +977,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f10_now + 10.minutes,
                 )
                 f10_access = AuthenticationTokenService.encode(
-                  f10_token.user, host: f10_host, resource_type: "client",
-                                  session_public_id: f10_token.public_id, base_session_public_id: f10_token.public_id,
-                                  oidc_sid: f10_session.public_id, oidc_jti: f10_session.oidc_jti,
-                                  expires_at: f10_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f10_client), audiences: [f10_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f10_client),
-                                  subject: OidcSubject.for(
-                                    f10_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f10_client.client_id,
+                  f10_token.actor_record, host: f10_host, resource_type: "client",
+                                          session_public_id: f10_token.public_id,
+                                          base_session_public_id: f10_token.public_id,
+                                          oidc_sid: f10_session.public_id, oidc_jti: f10_session.oidc_jti,
+                                          expires_at: f10_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f10_client), audiences: [f10_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f10_client),
+                                          subject: OidcSubject.for(
+                                            f10_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f10_client.client_id,
                 )
                 @base_browser_rp_credentials[f10_key] =
                   [f10_access, f10_session.issue_refresh_token!]
@@ -1017,7 +1061,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    when "edit" then "edit-org"
                    else "#{f11_family}-#{f11_surface}"
                    end
-                 f11_token = ClientToken.find_by!(public_id: f11_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                 f11_token = ClientToken.includes(
+                   :user,
+                   :device_session,
+                 ).find_by!(public_id: f11_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                  f11_client = OidcClientRegistry.find!(f11_client_id)
                  f11_key = [f11_client.client_id, f11_token.public_id]
                  @base_browser_rp_credentials ||= {}
@@ -1027,7 +1074,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                        oidc_client_id: f11_client.client_id,
                        revoked_at: nil,
                      ))
-                   f11_token.rotate_refresh_token! unless f11_token.device_session.current_refresh_token_id
+                   f11_token.rotate_refresh_token! unless f11_token.device_session_record.current_refresh_token_id
                    f11_now = Time.current
                    f11_session = ClientRpSession.create!(
                      client_token: f11_token, oidc_client_id: f11_client.client_id, oidc_scope: "openid profile",
@@ -1035,7 +1082,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      refresh_token_expires_at: f11_now + 10.minutes,
                    )
                    f11_access = AuthenticationTokenService.encode(
-                     f11_token.user,
+                     f11_token.actor_record,
                      host: f11_host,
                      resource_type: "client",
                      session_public_id: f11_token.public_id,
@@ -1048,7 +1095,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      audiences: [f11_client.aud],
                      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f11_client),
                      subject: OidcSubject.for(
-                       f11_token.user,
+                       f11_token.actor_record,
                        resource_type: "client",
                      ),
                      client_id: f11_client.client_id,
@@ -1120,7 +1167,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    when "edit" then "edit-org"
                    else "#{f12_family}-#{f12_surface}"
                    end
-                 f12_token = ClientToken.find_by!(public_id: f12_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                 f12_token = ClientToken.includes(
+                   :user,
+                   :device_session,
+                 ).find_by!(public_id: f12_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                  f12_client = OidcClientRegistry.find!(f12_client_id)
                  f12_key = [f12_client.client_id, f12_token.public_id]
                  @base_browser_rp_credentials ||= {}
@@ -1130,7 +1180,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                        oidc_client_id: f12_client.client_id,
                        revoked_at: nil,
                      ))
-                   f12_token.rotate_refresh_token! unless f12_token.device_session.current_refresh_token_id
+                   f12_token.rotate_refresh_token! unless f12_token.device_session_record.current_refresh_token_id
                    f12_now = Time.current
                    f12_session = ClientRpSession.create!(
                      client_token: f12_token, oidc_client_id: f12_client.client_id, oidc_scope: "openid profile",
@@ -1138,7 +1188,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      refresh_token_expires_at: f12_now + 10.minutes,
                    )
                    f12_access = AuthenticationTokenService.encode(
-                     f12_token.user,
+                     f12_token.actor_record,
                      host: f12_host,
                      resource_type: "client",
                      session_public_id: f12_token.public_id,
@@ -1151,7 +1201,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      audiences: [f12_client.aud],
                      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f12_client),
                      subject: OidcSubject.for(
-                       f12_token.user,
+                       f12_token.actor_record,
                        resource_type: "client",
                      ),
                      client_id: f12_client.client_id,
@@ -1225,7 +1275,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    when "edit" then "edit-org"
                    else "#{f13_family}-#{f13_surface}"
                    end
-                 f13_token = ClientToken.find_by!(public_id: f13_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                 f13_token = ClientToken.includes(
+                   :user,
+                   :device_session,
+                 ).find_by!(public_id: f13_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                  f13_client = OidcClientRegistry.find!(f13_client_id)
                  f13_key = [f13_client.client_id, f13_token.public_id]
                  @base_browser_rp_credentials ||= {}
@@ -1235,7 +1288,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                        oidc_client_id: f13_client.client_id,
                        revoked_at: nil,
                      ))
-                   f13_token.rotate_refresh_token! unless f13_token.device_session.current_refresh_token_id
+                   f13_token.rotate_refresh_token! unless f13_token.device_session_record.current_refresh_token_id
                    f13_now = Time.current
                    f13_session = ClientRpSession.create!(
                      client_token: f13_token, oidc_client_id: f13_client.client_id, oidc_scope: "openid profile",
@@ -1243,7 +1296,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      refresh_token_expires_at: f13_now + 10.minutes,
                    )
                    f13_access = AuthenticationTokenService.encode(
-                     f13_token.user,
+                     f13_token.actor_record,
                      host: f13_host,
                      resource_type: "client",
                      session_public_id: f13_token.public_id,
@@ -1256,7 +1309,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      audiences: [f13_client.aud],
                      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f13_client),
                      subject: OidcSubject.for(
-                       f13_token.user,
+                       f13_token.actor_record,
                        resource_type: "client",
                      ),
                      client_id: f13_client.client_id,
@@ -1290,7 +1343,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     location = URI.parse(jump_rt_url_from_location(response.location))
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
-    assert_equal "/sign/out", location.path
+    assert_equal "/sign/out/completion", location.path
     assert_equal transaction.logout_challenge, query["logout_challenge"]
     assert_equal "cb-state-xyz", query["state"]
   end
@@ -1316,7 +1369,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f14_family}-#{f14_surface}"
                 end
-              f14_token = ClientToken.find_by!(public_id: f14_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f14_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f14_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f14_client = OidcClientRegistry.find!(f14_client_id)
               f14_key = [f14_client.client_id, f14_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -1326,7 +1382,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f14_client.client_id,
                     revoked_at: nil,
                   ))
-                f14_token.rotate_refresh_token! unless f14_token.device_session.current_refresh_token_id
+                f14_token.rotate_refresh_token! unless f14_token.device_session_record.current_refresh_token_id
                 f14_now = Time.current
                 f14_session = ClientRpSession.create!(
                   client_token: f14_token, oidc_client_id: f14_client.client_id, oidc_scope: "openid profile",
@@ -1334,7 +1390,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f14_now + 10.minutes,
                 )
                 f14_access = AuthenticationTokenService.encode(
-                  f14_token.user,
+                  f14_token.actor_record,
                   host: f14_host,
                   resource_type: "client",
                   session_public_id: f14_token.public_id,
@@ -1347,7 +1403,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   audiences: [f14_client.aud],
                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f14_client),
                   subject: OidcSubject.for(
-                    f14_token.user,
+                    f14_token.actor_record,
                     resource_type: "client",
                   ),
                   client_id: f14_client.client_id,
@@ -1411,7 +1467,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f15_family}-#{f15_surface}"
                 end
-              f15_token = ClientToken.find_by!(public_id: f15_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f15_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f15_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f15_client = OidcClientRegistry.find!(f15_client_id)
               f15_key = [f15_client.client_id, f15_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -1421,7 +1480,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f15_client.client_id,
                     revoked_at: nil,
                   ))
-                f15_token.rotate_refresh_token! unless f15_token.device_session.current_refresh_token_id
+                f15_token.rotate_refresh_token! unless f15_token.device_session_record.current_refresh_token_id
                 f15_now = Time.current
                 f15_session = ClientRpSession.create!(
                   client_token: f15_token, oidc_client_id: f15_client.client_id, oidc_scope: "openid profile",
@@ -1429,7 +1488,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f15_now + 10.minutes,
                 )
                 f15_access = AuthenticationTokenService.encode(
-                  f15_token.user,
+                  f15_token.actor_record,
                   host: f15_host,
                   resource_type: "client",
                   session_public_id: f15_token.public_id,
@@ -1442,7 +1501,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   audiences: [f15_client.aud],
                   jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f15_client),
                   subject: OidcSubject.for(
-                    f15_token.user,
+                    f15_token.actor_record,
                     resource_type: "client",
                   ),
                   client_id: f15_client.client_id,
@@ -1504,7 +1563,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f16_family}-#{f16_surface}"
                 end
-              f16_token = ClientToken.find_by!(public_id: f16_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f16_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f16_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f16_client = OidcClientRegistry.find!(f16_client_id)
               f16_key = [f16_client.client_id, f16_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -1514,7 +1576,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f16_client.client_id,
                     revoked_at: nil,
                   ))
-                f16_token.rotate_refresh_token! unless f16_token.device_session.current_refresh_token_id
+                f16_token.rotate_refresh_token! unless f16_token.device_session_record.current_refresh_token_id
                 f16_now = Time.current
                 f16_session = ClientRpSession.create!(
                   client_token: f16_token, oidc_client_id: f16_client.client_id, oidc_scope: "openid profile",
@@ -1522,16 +1584,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f16_now + 10.minutes,
                 )
                 f16_access = AuthenticationTokenService.encode(
-                  f16_token.user, host: f16_host, resource_type: "client",
-                                  session_public_id: f16_token.public_id, base_session_public_id: f16_token.public_id,
-                                  oidc_sid: f16_session.public_id, oidc_jti: f16_session.oidc_jti,
-                                  expires_at: f16_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f16_client), audiences: [f16_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f16_client),
-                                  subject: OidcSubject.for(
-                                    f16_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f16_client.client_id,
+                  f16_token.actor_record, host: f16_host, resource_type: "client",
+                                          session_public_id: f16_token.public_id,
+                                          base_session_public_id: f16_token.public_id,
+                                          oidc_sid: f16_session.public_id, oidc_jti: f16_session.oidc_jti,
+                                          expires_at: f16_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f16_client), audiences: [f16_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f16_client),
+                                          subject: OidcSubject.for(
+                                            f16_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f16_client.client_id,
                 )
                 @base_browser_rp_credentials[f16_key] =
                   [f16_access, f16_session.issue_refresh_token!]
@@ -1583,7 +1646,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f17_family}-#{f17_surface}"
                 end
-              f17_token = ClientToken.find_by!(public_id: f17_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f17_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f17_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f17_client = OidcClientRegistry.find!(f17_client_id)
               f17_key = [f17_client.client_id, f17_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -1593,7 +1659,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f17_client.client_id,
                     revoked_at: nil,
                   ))
-                f17_token.rotate_refresh_token! unless f17_token.device_session.current_refresh_token_id
+                f17_token.rotate_refresh_token! unless f17_token.device_session_record.current_refresh_token_id
                 f17_now = Time.current
                 f17_session = ClientRpSession.create!(
                   client_token: f17_token, oidc_client_id: f17_client.client_id, oidc_scope: "openid profile",
@@ -1601,16 +1667,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f17_now + 10.minutes,
                 )
                 f17_access = AuthenticationTokenService.encode(
-                  f17_token.user, host: f17_host, resource_type: "client",
-                                  session_public_id: f17_token.public_id, base_session_public_id: f17_token.public_id,
-                                  oidc_sid: f17_session.public_id, oidc_jti: f17_session.oidc_jti,
-                                  expires_at: f17_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f17_client), audiences: [f17_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f17_client),
-                                  subject: OidcSubject.for(
-                                    f17_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f17_client.client_id,
+                  f17_token.actor_record, host: f17_host, resource_type: "client",
+                                          session_public_id: f17_token.public_id,
+                                          base_session_public_id: f17_token.public_id,
+                                          oidc_sid: f17_session.public_id, oidc_jti: f17_session.oidc_jti,
+                                          expires_at: f17_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f17_client), audiences: [f17_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f17_client),
+                                          subject: OidcSubject.for(
+                                            f17_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f17_client.client_id,
                 )
                 @base_browser_rp_credentials[f17_key] = [f17_access, f17_session.issue_refresh_token!]
               end
@@ -1665,7 +1732,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f18_family}-#{f18_surface}"
                 end
-              f18_token = ClientToken.find_by!(public_id: f18_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f18_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f18_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f18_client = OidcClientRegistry.find!(f18_client_id)
               f18_key = [f18_client.client_id, f18_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -1675,7 +1745,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f18_client.client_id,
                     revoked_at: nil,
                   ))
-                f18_token.rotate_refresh_token! unless f18_token.device_session.current_refresh_token_id
+                f18_token.rotate_refresh_token! unless f18_token.device_session_record.current_refresh_token_id
                 f18_now = Time.current
                 f18_session = ClientRpSession.create!(
                   client_token: f18_token, oidc_client_id: f18_client.client_id, oidc_scope: "openid profile",
@@ -1683,16 +1753,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f18_now + 10.minutes,
                 )
                 f18_access = AuthenticationTokenService.encode(
-                  f18_token.user, host: f18_host, resource_type: "client",
-                                  session_public_id: f18_token.public_id, base_session_public_id: f18_token.public_id,
-                                  oidc_sid: f18_session.public_id, oidc_jti: f18_session.oidc_jti,
-                                  expires_at: f18_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f18_client), audiences: [f18_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f18_client),
-                                  subject: OidcSubject.for(
-                                    f18_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f18_client.client_id,
+                  f18_token.actor_record, host: f18_host, resource_type: "client",
+                                          session_public_id: f18_token.public_id,
+                                          base_session_public_id: f18_token.public_id,
+                                          oidc_sid: f18_session.public_id, oidc_jti: f18_session.oidc_jti,
+                                          expires_at: f18_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f18_client), audiences: [f18_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f18_client),
+                                          subject: OidcSubject.for(
+                                            f18_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f18_client.client_id,
                 )
                 @base_browser_rp_credentials[f18_key] =
                   [f18_access, f18_session.issue_refresh_token!]
@@ -1745,7 +1816,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   when "edit" then "edit-org"
                   else "#{f19_family}-#{f19_surface}"
                   end
-                f19_token = ClientToken.find_by!(public_id: f19_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                f19_token = ClientToken.includes(
+                  :user,
+                  :device_session,
+                ).find_by!(public_id: f19_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                 f19_client = OidcClientRegistry.find!(f19_client_id)
                 f19_key = [f19_client.client_id, f19_token.public_id]
                 @base_browser_rp_credentials ||= {}
@@ -1755,7 +1829,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       oidc_client_id: f19_client.client_id,
                       revoked_at: nil,
                     ))
-                  f19_token.rotate_refresh_token! unless f19_token.device_session.current_refresh_token_id
+                  f19_token.rotate_refresh_token! unless f19_token.device_session_record.current_refresh_token_id
                   f19_now = Time.current
                   f19_session = ClientRpSession.create!(
                     client_token: f19_token, oidc_client_id: f19_client.client_id, oidc_scope: "openid profile",
@@ -1763,16 +1837,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     refresh_token_expires_at: f19_now + 10.minutes,
                   )
                   f19_access = AuthenticationTokenService.encode(
-                    f19_token.user, host: f19_host, resource_type: "client",
-                                    session_public_id: f19_token.public_id, base_session_public_id: f19_token.public_id,
-                                    oidc_sid: f19_session.public_id, oidc_jti: f19_session.oidc_jti,
-                                    expires_at: f19_now + 10.minutes, scopes: %w(openid profile),
-                                    issuer: OidcIssuer.for_client(f19_client), audiences: [f19_client.aud],
-                                    jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f19_client),
-                                    subject: OidcSubject.for(
-                                      f19_token.user,
-                                      resource_type: "client",
-                                    ), client_id: f19_client.client_id,
+                    f19_token.actor_record, host: f19_host, resource_type: "client",
+                                            session_public_id: f19_token.public_id,
+                                            base_session_public_id: f19_token.public_id,
+                                            oidc_sid: f19_session.public_id, oidc_jti: f19_session.oidc_jti,
+                                            expires_at: f19_now + 10.minutes, scopes: %w(openid profile),
+                                            issuer: OidcIssuer.for_client(f19_client), audiences: [f19_client.aud],
+                                            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f19_client),
+                                            subject: OidcSubject.for(
+                                              f19_token.actor_record,
+                                              resource_type: "client",
+                                            ), client_id: f19_client.client_id,
                   )
                   @base_browser_rp_credentials[f19_key] = [f19_access, f19_session.issue_refresh_token!]
                 end
@@ -1802,6 +1877,57 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       assert_response :ok
       assert_not_predicate @token.reload, :revoked?
     end
+  end
+
+  test "D1 a valid hint without an IdP session stops without staging or redirecting" do
+    redirect_uri = @client.post_logout_redirect_uris.first
+    cookies.delete(AuthenticationBase::ACCESS_COOKIE_KEY)
+    before_count = AcmeLogoutTransaction.count
+
+    with_forgery_protection do
+      get base_app_oidc_logout_url(host: @host),
+          params: {
+            id_token_hint: id_token,
+            post_logout_redirect_uri: redirect_uri,
+            state: "should-not-echo",
+            ri: "jp",
+          },
+          headers: browser_headers.merge("Host" => @host, "Sec-Fetch-Site" => "same-origin")
+    end
+
+    assert_response :bad_request
+    assert_equal I18n.t("sign.shared.sign_out.idp_session_error"), response.body
+    assert_nil response.location
+    assert_includes response.headers["Cache-Control"].to_s, "no-store"
+    assert_equal before_count, AcmeLogoutTransaction.count
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
+    assert_not_predicate @token.reload, :revoked?
+  end
+
+  test "D1 JSON valid hint without an IdP session returns login_required without staging" do
+    redirect_uri = @client.post_logout_redirect_uris.first
+    cookies.delete(AuthenticationBase::ACCESS_COOKIE_KEY)
+    before_count = AcmeLogoutTransaction.count
+
+    with_forgery_protection do
+      get base_app_oidc_logout_url(host: @host, format: :json),
+          params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+          headers: browser_headers.merge("Host" => @host, "Sec-Fetch-Site" => "same-origin")
+    end
+
+    assert_response :bad_request
+    assert_equal(
+      {
+        "error" => "login_required",
+        "error_description" => I18n.t("sign.shared.sign_out.idp_session_error"),
+      },
+      response.parsed_body,
+    )
+    assert_nil response.location
+    assert_includes response.headers["Cache-Control"].to_s, "no-store"
+    assert_equal before_count, AcmeLogoutTransaction.count
+    assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
+    assert_not_predicate @token.reload, :revoked?
   end
 
   # D1: an id_token_hint is evidence of which RP session the RP wants ended, not authority for the
@@ -1869,7 +1995,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     when "edit" then "edit-org"
                     else "#{f20_family}-#{f20_surface}"
                     end
-                  f20_token = ClientToken.find_by!(public_id: f20_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                  f20_token = ClientToken.includes(
+                    :user,
+                    :device_session,
+                  ).find_by!(public_id: f20_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                   f20_client = OidcClientRegistry.find!(f20_client_id)
                   f20_key = [f20_client.client_id, f20_token.public_id]
                   @base_browser_rp_credentials ||= {}
@@ -1879,7 +2008,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                         oidc_client_id: f20_client.client_id,
                         revoked_at: nil,
                       ))
-                    f20_token.rotate_refresh_token! unless f20_token.device_session.current_refresh_token_id
+                    f20_token.rotate_refresh_token! unless f20_token.device_session_record.current_refresh_token_id
                     f20_now = Time.current
                     f20_session = ClientRpSession.create!(
                       client_token: f20_token, oidc_client_id: f20_client.client_id, oidc_scope: "openid profile",
@@ -1887,7 +2016,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: f20_now + 10.minutes,
                     )
                     f20_access = AuthenticationTokenService.encode(
-                      f20_token.user,
+                      f20_token.actor_record,
                       host: f20_host,
                       resource_type: "client",
                       session_public_id: f20_token.public_id,
@@ -1900,7 +2029,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       audiences: [f20_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f20_client),
                       subject: OidcSubject.for(
-                        f20_token.user,
+                        f20_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: f20_client.client_id,
@@ -1930,6 +2059,11 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
             browser_headers.merge(fx20_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
           end.merge("Sec-Fetch-Site" => "same-origin")
 
+      assert_response :bad_request
+      assert_equal I18n.t("sign.shared.sign_out.idp_session_error"), response.body
+      assert_nil response.location
+      assert_includes response.headers["Cache-Control"].to_s, "no-store"
+
       assert_no_enqueued_jobs(only: OidcBackchannelLogoutDeliveryJob) do
         post base_app_oidc_logout_url(host: @host),
              params: { id_token_hint: other_hint, post_logout_redirect_uri: redirect_uri, ri: "jp" },
@@ -1952,7 +2086,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                        when "edit" then "edit-org"
                        else "#{f21_family}-#{f21_surface}"
                        end
-                     f21_token = ClientToken.find_by!(public_id: f21_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                     f21_token = ClientToken.includes(
+                       :user,
+                       :device_session,
+                     ).find_by!(public_id: f21_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                      f21_client = OidcClientRegistry.find!(f21_client_id)
                      f21_key = [f21_client.client_id, f21_token.public_id]
                      @base_browser_rp_credentials ||= {}
@@ -1962,7 +2099,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                            oidc_client_id: f21_client.client_id,
                            revoked_at: nil,
                          ))
-                       f21_token.rotate_refresh_token! unless f21_token.device_session.current_refresh_token_id
+                       f21_token.rotate_refresh_token! unless f21_token.device_session_record.current_refresh_token_id
                        f21_now = Time.current
                        f21_session = ClientRpSession.create!(
                          client_token: f21_token, oidc_client_id: f21_client.client_id, oidc_scope: "openid profile",
@@ -1970,7 +2107,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                          refresh_token_expires_at: f21_now + 10.minutes,
                        )
                        f21_access = AuthenticationTokenService.encode(
-                         f21_token.user,
+                         f21_token.actor_record,
                          host: f21_host,
                          resource_type: "client",
                          session_public_id: f21_token.public_id,
@@ -1983,7 +2120,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                          audiences: [f21_client.aud],
                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f21_client),
                          subject: OidcSubject.for(
-                           f21_token.user,
+                           f21_token.actor_record,
                            resource_type: "client",
                          ),
                          client_id: f21_client.client_id,
@@ -2051,7 +2188,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     when "edit" then "edit-org"
                     else "#{f22_family}-#{f22_surface}"
                     end
-                  f22_token = ClientToken.find_by!(public_id: f22_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                  f22_token = ClientToken.includes(
+                    :user,
+                    :device_session,
+                  ).find_by!(public_id: f22_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                   f22_client = OidcClientRegistry.find!(f22_client_id)
                   f22_key = [f22_client.client_id, f22_token.public_id]
                   @base_browser_rp_credentials ||= {}
@@ -2061,7 +2201,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                         oidc_client_id: f22_client.client_id,
                         revoked_at: nil,
                       ))
-                    f22_token.rotate_refresh_token! unless f22_token.device_session.current_refresh_token_id
+                    f22_token.rotate_refresh_token! unless f22_token.device_session_record.current_refresh_token_id
                     f22_now = Time.current
                     f22_session = ClientRpSession.create!(
                       client_token: f22_token, oidc_client_id: f22_client.client_id, oidc_scope: "openid profile",
@@ -2069,7 +2209,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: f22_now + 10.minutes,
                     )
                     f22_access = AuthenticationTokenService.encode(
-                      f22_token.user,
+                      f22_token.actor_record,
                       host: f22_host,
                       resource_type: "client",
                       session_public_id: f22_token.public_id,
@@ -2082,7 +2222,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       audiences: [f22_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f22_client),
                       subject: OidcSubject.for(
-                        f22_token.user,
+                        f22_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: f22_client.client_id,
@@ -2111,6 +2251,12 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
             end
             browser_headers.merge(fx22_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
           end.merge("Sec-Fetch-Site" => "same-origin")
+
+      assert_response :bad_request
+      assert_equal I18n.t("sign.shared.sign_out.idp_session_error"), response.body
+      assert_nil response.location
+      assert_includes response.headers["Cache-Control"].to_s, "no-store"
+
       post base_app_oidc_logout_url(host: @host), headers: begin
         fx23_harness =
           begin
@@ -2130,7 +2276,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f23_family}-#{f23_surface}"
                 end
-              f23_token = ClientToken.find_by!(public_id: f23_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f23_token =
+                ClientToken.includes(:user, :device_session).find_by!(
+                  public_id: f23_headers.fetch("X-TEST-SESSION-PUBLIC-ID"),
+                )
               f23_client = OidcClientRegistry.find!(f23_client_id)
               f23_key = [f23_client.client_id, f23_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -2140,7 +2289,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f23_client.client_id,
                     revoked_at: nil,
                   ))
-                f23_token.rotate_refresh_token! unless f23_token.device_session.current_refresh_token_id
+                f23_token.rotate_refresh_token! unless f23_token.device_session_record.current_refresh_token_id
                 f23_now = Time.current
                 f23_session = ClientRpSession.create!(
                   client_token: f23_token, oidc_client_id: f23_client.client_id, oidc_scope: "openid profile",
@@ -2148,16 +2297,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f23_now + 10.minutes,
                 )
                 f23_access = AuthenticationTokenService.encode(
-                  f23_token.user, host: f23_host, resource_type: "client",
-                                  session_public_id: f23_token.public_id, base_session_public_id: f23_token.public_id,
-                                  oidc_sid: f23_session.public_id, oidc_jti: f23_session.oidc_jti,
-                                  expires_at: f23_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f23_client), audiences: [f23_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f23_client),
-                                  subject: OidcSubject.for(
-                                    f23_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f23_client.client_id,
+                  f23_token.actor_record, host: f23_host, resource_type: "client",
+                                          session_public_id: f23_token.public_id,
+                                          base_session_public_id: f23_token.public_id,
+                                          oidc_sid: f23_session.public_id, oidc_jti: f23_session.oidc_jti,
+                                          expires_at: f23_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f23_client), audiences: [f23_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f23_client),
+                                          subject: OidcSubject.for(
+                                            f23_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f23_client.client_id,
                 )
                 @base_browser_rp_credentials[f23_key] = [f23_access, f23_session.issue_refresh_token!]
               end
@@ -2206,6 +2356,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
             id_token_hint: id_token(sid: sibling_token.public_id), post_logout_redirect_uri: redirect_uri, ri: "jp",
           },
           headers: headers
+
+      assert_response :bad_request
+      assert_equal I18n.t("sign.shared.sign_out.idp_session_error"), response.body
+      assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
       post base_app_oidc_logout_url(host: @host), headers: headers
     end
 
@@ -2247,7 +2401,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     when "edit" then "edit-org"
                     else "#{f24_family}-#{f24_surface}"
                     end
-                  f24_token = ClientToken.find_by!(public_id: f24_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                  f24_token = ClientToken.includes(
+                    :user,
+                    :device_session,
+                  ).find_by!(public_id: f24_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                   f24_client = OidcClientRegistry.find!(f24_client_id)
                   f24_key = [f24_client.client_id, f24_token.public_id]
                   @base_browser_rp_credentials ||= {}
@@ -2257,7 +2414,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                         oidc_client_id: f24_client.client_id,
                         revoked_at: nil,
                       ))
-                    f24_token.rotate_refresh_token! unless f24_token.device_session.current_refresh_token_id
+                    f24_token.rotate_refresh_token! unless f24_token.device_session_record.current_refresh_token_id
                     f24_now = Time.current
                     f24_session = ClientRpSession.create!(
                       client_token: f24_token, oidc_client_id: f24_client.client_id, oidc_scope: "openid profile",
@@ -2265,7 +2422,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: f24_now + 10.minutes,
                     )
                     f24_access = AuthenticationTokenService.encode(
-                      f24_token.user,
+                      f24_token.actor_record,
                       host: f24_host,
                       resource_type: "client",
                       session_public_id: f24_token.public_id,
@@ -2278,7 +2435,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       audiences: [f24_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f24_client),
                       subject: OidcSubject.for(
-                        f24_token.user,
+                        f24_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: f24_client.client_id,
@@ -2328,7 +2485,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      when "edit" then "edit-org"
                      else "#{f25_family}-#{f25_surface}"
                      end
-                   f25_token = ClientToken.find_by!(public_id: f25_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                   f25_token = ClientToken.includes(
+                     :user,
+                     :device_session,
+                   ).find_by!(public_id: f25_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                    f25_client = OidcClientRegistry.find!(f25_client_id)
                    f25_key = [f25_client.client_id, f25_token.public_id]
                    @base_browser_rp_credentials ||= {}
@@ -2338,7 +2498,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                          oidc_client_id: f25_client.client_id,
                          revoked_at: nil,
                        ))
-                     f25_token.rotate_refresh_token! unless f25_token.device_session.current_refresh_token_id
+                     f25_token.rotate_refresh_token! unless f25_token.device_session_record.current_refresh_token_id
                      f25_now = Time.current
                      f25_session = ClientRpSession.create!(
                        client_token: f25_token, oidc_client_id: f25_client.client_id, oidc_scope: "openid profile",
@@ -2346,7 +2506,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                        refresh_token_expires_at: f25_now + 10.minutes,
                      )
                      f25_access = AuthenticationTokenService.encode(
-                       f25_token.user,
+                       f25_token.actor_record,
                        host: f25_host,
                        resource_type: "client",
                        session_public_id: f25_token.public_id,
@@ -2359,7 +2519,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                        audiences: [f25_client.aud],
                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f25_client),
                        subject: OidcSubject.for(
-                         f25_token.user,
+                         f25_token.actor_record,
                          resource_type: "client",
                        ),
                        client_id: f25_client.client_id,
@@ -2421,7 +2581,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f26_family}-#{f26_surface}"
                 end
-              f26_token = ClientToken.find_by!(public_id: f26_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f26_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f26_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f26_client = OidcClientRegistry.find!(f26_client_id)
               f26_key = [f26_client.client_id, f26_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -2431,7 +2594,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f26_client.client_id,
                     revoked_at: nil,
                   ))
-                f26_token.rotate_refresh_token! unless f26_token.device_session.current_refresh_token_id
+                f26_token.rotate_refresh_token! unless f26_token.device_session_record.current_refresh_token_id
                 f26_now = Time.current
                 f26_session = ClientRpSession.create!(
                   client_token: f26_token, oidc_client_id: f26_client.client_id, oidc_scope: "openid profile",
@@ -2439,16 +2602,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f26_now + 10.minutes,
                 )
                 f26_access = AuthenticationTokenService.encode(
-                  f26_token.user, host: f26_host, resource_type: "client",
-                                  session_public_id: f26_token.public_id, base_session_public_id: f26_token.public_id,
-                                  oidc_sid: f26_session.public_id, oidc_jti: f26_session.oidc_jti,
-                                  expires_at: f26_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f26_client), audiences: [f26_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f26_client),
-                                  subject: OidcSubject.for(
-                                    f26_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f26_client.client_id,
+                  f26_token.actor_record, host: f26_host, resource_type: "client",
+                                          session_public_id: f26_token.public_id,
+                                          base_session_public_id: f26_token.public_id,
+                                          oidc_sid: f26_session.public_id, oidc_jti: f26_session.oidc_jti,
+                                          expires_at: f26_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f26_client), audiences: [f26_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f26_client),
+                                          subject: OidcSubject.for(
+                                            f26_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f26_client.client_id,
                 )
                 @base_browser_rp_credentials[f26_key] =
                   [f26_access, f26_session.issue_refresh_token!]
@@ -2499,7 +2663,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f27_family}-#{f27_surface}"
                 end
-              f27_token = ClientToken.find_by!(public_id: f27_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f27_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f27_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f27_client = OidcClientRegistry.find!(f27_client_id)
               f27_key = [f27_client.client_id, f27_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -2509,7 +2676,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f27_client.client_id,
                     revoked_at: nil,
                   ))
-                f27_token.rotate_refresh_token! unless f27_token.device_session.current_refresh_token_id
+                f27_token.rotate_refresh_token! unless f27_token.device_session_record.current_refresh_token_id
                 f27_now = Time.current
                 f27_session = ClientRpSession.create!(
                   client_token: f27_token, oidc_client_id: f27_client.client_id, oidc_scope: "openid profile",
@@ -2517,16 +2684,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f27_now + 10.minutes,
                 )
                 f27_access = AuthenticationTokenService.encode(
-                  f27_token.user, host: f27_host, resource_type: "client",
-                                  session_public_id: f27_token.public_id, base_session_public_id: f27_token.public_id,
-                                  oidc_sid: f27_session.public_id, oidc_jti: f27_session.oidc_jti,
-                                  expires_at: f27_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f27_client), audiences: [f27_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f27_client),
-                                  subject: OidcSubject.for(
-                                    f27_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f27_client.client_id,
+                  f27_token.actor_record, host: f27_host, resource_type: "client",
+                                          session_public_id: f27_token.public_id,
+                                          base_session_public_id: f27_token.public_id,
+                                          oidc_sid: f27_session.public_id, oidc_jti: f27_session.oidc_jti,
+                                          expires_at: f27_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f27_client), audiences: [f27_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f27_client),
+                                          subject: OidcSubject.for(
+                                            f27_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f27_client.client_id,
                 )
                 @base_browser_rp_credentials[f27_key] = [f27_access, f27_session.issue_refresh_token!]
               end
@@ -2581,7 +2749,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f28_family}-#{f28_surface}"
                 end
-              f28_token = ClientToken.find_by!(public_id: f28_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f28_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f28_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f28_client = OidcClientRegistry.find!(f28_client_id)
               f28_key = [f28_client.client_id, f28_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -2591,7 +2762,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f28_client.client_id,
                     revoked_at: nil,
                   ))
-                f28_token.rotate_refresh_token! unless f28_token.device_session.current_refresh_token_id
+                f28_token.rotate_refresh_token! unless f28_token.device_session_record.current_refresh_token_id
                 f28_now = Time.current
                 f28_session = ClientRpSession.create!(
                   client_token: f28_token, oidc_client_id: f28_client.client_id, oidc_scope: "openid profile",
@@ -2599,16 +2770,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f28_now + 10.minutes,
                 )
                 f28_access = AuthenticationTokenService.encode(
-                  f28_token.user, host: f28_host, resource_type: "client",
-                                  session_public_id: f28_token.public_id, base_session_public_id: f28_token.public_id,
-                                  oidc_sid: f28_session.public_id, oidc_jti: f28_session.oidc_jti,
-                                  expires_at: f28_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f28_client), audiences: [f28_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f28_client),
-                                  subject: OidcSubject.for(
-                                    f28_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f28_client.client_id,
+                  f28_token.actor_record, host: f28_host, resource_type: "client",
+                                          session_public_id: f28_token.public_id,
+                                          base_session_public_id: f28_token.public_id,
+                                          oidc_sid: f28_session.public_id, oidc_jti: f28_session.oidc_jti,
+                                          expires_at: f28_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f28_client), audiences: [f28_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f28_client),
+                                          subject: OidcSubject.for(
+                                            f28_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f28_client.client_id,
                 )
                 @base_browser_rp_credentials[f28_key] =
                   [f28_access, f28_session.issue_refresh_token!]
@@ -2659,7 +2831,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f29_family}-#{f29_surface}"
                 end
-              f29_token = ClientToken.find_by!(public_id: f29_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f29_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f29_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f29_client = OidcClientRegistry.find!(f29_client_id)
               f29_key = [f29_client.client_id, f29_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -2669,7 +2844,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f29_client.client_id,
                     revoked_at: nil,
                   ))
-                f29_token.rotate_refresh_token! unless f29_token.device_session.current_refresh_token_id
+                f29_token.rotate_refresh_token! unless f29_token.device_session_record.current_refresh_token_id
                 f29_now = Time.current
                 f29_session = ClientRpSession.create!(
                   client_token: f29_token, oidc_client_id: f29_client.client_id, oidc_scope: "openid profile",
@@ -2677,16 +2852,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f29_now + 10.minutes,
                 )
                 f29_access = AuthenticationTokenService.encode(
-                  f29_token.user, host: f29_host, resource_type: "client",
-                                  session_public_id: f29_token.public_id, base_session_public_id: f29_token.public_id,
-                                  oidc_sid: f29_session.public_id, oidc_jti: f29_session.oidc_jti,
-                                  expires_at: f29_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f29_client), audiences: [f29_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f29_client),
-                                  subject: OidcSubject.for(
-                                    f29_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f29_client.client_id,
+                  f29_token.actor_record, host: f29_host, resource_type: "client",
+                                          session_public_id: f29_token.public_id,
+                                          base_session_public_id: f29_token.public_id,
+                                          oidc_sid: f29_session.public_id, oidc_jti: f29_session.oidc_jti,
+                                          expires_at: f29_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f29_client), audiences: [f29_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f29_client),
+                                          subject: OidcSubject.for(
+                                            f29_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f29_client.client_id,
                 )
                 @base_browser_rp_credentials[f29_key] = [f29_access, f29_session.issue_refresh_token!]
               end
@@ -2739,7 +2915,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f30_family}-#{f30_surface}"
                 end
-              f30_token = ClientToken.find_by!(public_id: f30_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f30_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f30_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f30_client = OidcClientRegistry.find!(f30_client_id)
               f30_key = [f30_client.client_id, f30_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -2749,7 +2928,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f30_client.client_id,
                     revoked_at: nil,
                   ))
-                f30_token.rotate_refresh_token! unless f30_token.device_session.current_refresh_token_id
+                f30_token.rotate_refresh_token! unless f30_token.device_session_record.current_refresh_token_id
                 f30_now = Time.current
                 f30_session = ClientRpSession.create!(
                   client_token: f30_token, oidc_client_id: f30_client.client_id, oidc_scope: "openid profile",
@@ -2757,16 +2936,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f30_now + 10.minutes,
                 )
                 f30_access = AuthenticationTokenService.encode(
-                  f30_token.user, host: f30_host, resource_type: "client",
-                                  session_public_id: f30_token.public_id, base_session_public_id: f30_token.public_id,
-                                  oidc_sid: f30_session.public_id, oidc_jti: f30_session.oidc_jti,
-                                  expires_at: f30_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f30_client), audiences: [f30_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f30_client),
-                                  subject: OidcSubject.for(
-                                    f30_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f30_client.client_id,
+                  f30_token.actor_record, host: f30_host, resource_type: "client",
+                                          session_public_id: f30_token.public_id,
+                                          base_session_public_id: f30_token.public_id,
+                                          oidc_sid: f30_session.public_id, oidc_jti: f30_session.oidc_jti,
+                                          expires_at: f30_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f30_client), audiences: [f30_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f30_client),
+                                          subject: OidcSubject.for(
+                                            f30_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f30_client.client_id,
                 )
                 @base_browser_rp_credentials[f30_key] =
                   [f30_access, f30_session.issue_refresh_token!]
@@ -2815,7 +2995,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f31_family}-#{f31_surface}"
                 end
-              f31_token = ClientToken.find_by!(public_id: f31_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f31_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f31_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f31_client = OidcClientRegistry.find!(f31_client_id)
               f31_key = [f31_client.client_id, f31_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -2825,7 +3008,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f31_client.client_id,
                     revoked_at: nil,
                   ))
-                f31_token.rotate_refresh_token! unless f31_token.device_session.current_refresh_token_id
+                f31_token.rotate_refresh_token! unless f31_token.device_session_record.current_refresh_token_id
                 f31_now = Time.current
                 f31_session = ClientRpSession.create!(
                   client_token: f31_token, oidc_client_id: f31_client.client_id, oidc_scope: "openid profile",
@@ -2833,16 +3016,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f31_now + 10.minutes,
                 )
                 f31_access = AuthenticationTokenService.encode(
-                  f31_token.user, host: f31_host, resource_type: "client",
-                                  session_public_id: f31_token.public_id, base_session_public_id: f31_token.public_id,
-                                  oidc_sid: f31_session.public_id, oidc_jti: f31_session.oidc_jti,
-                                  expires_at: f31_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f31_client), audiences: [f31_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f31_client),
-                                  subject: OidcSubject.for(
-                                    f31_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f31_client.client_id,
+                  f31_token.actor_record, host: f31_host, resource_type: "client",
+                                          session_public_id: f31_token.public_id,
+                                          base_session_public_id: f31_token.public_id,
+                                          oidc_sid: f31_session.public_id, oidc_jti: f31_session.oidc_jti,
+                                          expires_at: f31_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f31_client), audiences: [f31_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f31_client),
+                                          subject: OidcSubject.for(
+                                            f31_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f31_client.client_id,
                 )
                 @base_browser_rp_credentials[f31_key] = [f31_access, f31_session.issue_refresh_token!]
               end
@@ -2897,7 +3081,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f32_family}-#{f32_surface}"
                 end
-              f32_token = ClientToken.find_by!(public_id: f32_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f32_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f32_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f32_client = OidcClientRegistry.find!(f32_client_id)
               f32_key = [f32_client.client_id, f32_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -2907,7 +3094,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f32_client.client_id,
                     revoked_at: nil,
                   ))
-                f32_token.rotate_refresh_token! unless f32_token.device_session.current_refresh_token_id
+                f32_token.rotate_refresh_token! unless f32_token.device_session_record.current_refresh_token_id
                 f32_now = Time.current
                 f32_session = ClientRpSession.create!(
                   client_token: f32_token, oidc_client_id: f32_client.client_id, oidc_scope: "openid profile",
@@ -2915,16 +3102,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f32_now + 10.minutes,
                 )
                 f32_access = AuthenticationTokenService.encode(
-                  f32_token.user, host: f32_host, resource_type: "client",
-                                  session_public_id: f32_token.public_id, base_session_public_id: f32_token.public_id,
-                                  oidc_sid: f32_session.public_id, oidc_jti: f32_session.oidc_jti,
-                                  expires_at: f32_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f32_client), audiences: [f32_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f32_client),
-                                  subject: OidcSubject.for(
-                                    f32_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f32_client.client_id,
+                  f32_token.actor_record, host: f32_host, resource_type: "client",
+                                          session_public_id: f32_token.public_id,
+                                          base_session_public_id: f32_token.public_id,
+                                          oidc_sid: f32_session.public_id, oidc_jti: f32_session.oidc_jti,
+                                          expires_at: f32_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f32_client), audiences: [f32_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f32_client),
+                                          subject: OidcSubject.for(
+                                            f32_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f32_client.client_id,
                 )
                 @base_browser_rp_credentials[f32_key] = [f32_access, f32_session.issue_refresh_token!]
               end
@@ -2987,7 +3175,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   when "edit" then "edit-org"
                   else "#{f33_family}-#{f33_surface}"
                   end
-                f33_token = ClientToken.find_by!(public_id: f33_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                f33_token = ClientToken.includes(
+                  :user,
+                  :device_session,
+                ).find_by!(public_id: f33_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                 f33_client = OidcClientRegistry.find!(f33_client_id)
                 f33_key = [f33_client.client_id, f33_token.public_id]
                 @base_browser_rp_credentials ||= {}
@@ -2997,7 +3188,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       oidc_client_id: f33_client.client_id,
                       revoked_at: nil,
                     ))
-                  f33_token.rotate_refresh_token! unless f33_token.device_session.current_refresh_token_id
+                  f33_token.rotate_refresh_token! unless f33_token.device_session_record.current_refresh_token_id
                   f33_now = Time.current
                   f33_session = ClientRpSession.create!(
                     client_token: f33_token, oidc_client_id: f33_client.client_id, oidc_scope: "openid profile",
@@ -3005,16 +3196,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     refresh_token_expires_at: f33_now + 10.minutes,
                   )
                   f33_access = AuthenticationTokenService.encode(
-                    f33_token.user, host: f33_host, resource_type: "client",
-                                    session_public_id: f33_token.public_id, base_session_public_id: f33_token.public_id,
-                                    oidc_sid: f33_session.public_id, oidc_jti: f33_session.oidc_jti,
-                                    expires_at: f33_now + 10.minutes, scopes: %w(openid profile),
-                                    issuer: OidcIssuer.for_client(f33_client), audiences: [f33_client.aud],
-                                    jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f33_client),
-                                    subject: OidcSubject.for(
-                                      f33_token.user,
-                                      resource_type: "client",
-                                    ), client_id: f33_client.client_id,
+                    f33_token.actor_record, host: f33_host, resource_type: "client",
+                                            session_public_id: f33_token.public_id,
+                                            base_session_public_id: f33_token.public_id,
+                                            oidc_sid: f33_session.public_id, oidc_jti: f33_session.oidc_jti,
+                                            expires_at: f33_now + 10.minutes, scopes: %w(openid profile),
+                                            issuer: OidcIssuer.for_client(f33_client), audiences: [f33_client.aud],
+                                            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f33_client),
+                                            subject: OidcSubject.for(
+                                              f33_token.actor_record,
+                                              resource_type: "client",
+                                            ), client_id: f33_client.client_id,
                   )
                   @base_browser_rp_credentials[f33_key] = [f33_access, f33_session.issue_refresh_token!]
                 end
@@ -3060,7 +3252,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   when "edit" then "edit-org"
                   else "#{f34_family}-#{f34_surface}"
                   end
-                f34_token = ClientToken.find_by!(public_id: f34_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                f34_token = ClientToken.includes(
+                  :user,
+                  :device_session,
+                ).find_by!(public_id: f34_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                 f34_client = OidcClientRegistry.find!(f34_client_id)
                 f34_key = [f34_client.client_id, f34_token.public_id]
                 @base_browser_rp_credentials ||= {}
@@ -3070,7 +3265,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       oidc_client_id: f34_client.client_id,
                       revoked_at: nil,
                     ))
-                  f34_token.rotate_refresh_token! unless f34_token.device_session.current_refresh_token_id
+                  f34_token.rotate_refresh_token! unless f34_token.device_session_record.current_refresh_token_id
                   f34_now = Time.current
                   f34_session = ClientRpSession.create!(
                     client_token: f34_token, oidc_client_id: f34_client.client_id, oidc_scope: "openid profile",
@@ -3078,16 +3273,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     refresh_token_expires_at: f34_now + 10.minutes,
                   )
                   f34_access = AuthenticationTokenService.encode(
-                    f34_token.user, host: f34_host, resource_type: "client",
-                                    session_public_id: f34_token.public_id, base_session_public_id: f34_token.public_id,
-                                    oidc_sid: f34_session.public_id, oidc_jti: f34_session.oidc_jti,
-                                    expires_at: f34_now + 10.minutes, scopes: %w(openid profile),
-                                    issuer: OidcIssuer.for_client(f34_client), audiences: [f34_client.aud],
-                                    jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f34_client),
-                                    subject: OidcSubject.for(
-                                      f34_token.user,
-                                      resource_type: "client",
-                                    ), client_id: f34_client.client_id,
+                    f34_token.actor_record, host: f34_host, resource_type: "client",
+                                            session_public_id: f34_token.public_id,
+                                            base_session_public_id: f34_token.public_id,
+                                            oidc_sid: f34_session.public_id, oidc_jti: f34_session.oidc_jti,
+                                            expires_at: f34_now + 10.minutes, scopes: %w(openid profile),
+                                            issuer: OidcIssuer.for_client(f34_client), audiences: [f34_client.aud],
+                                            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f34_client),
+                                            subject: OidcSubject.for(
+                                              f34_token.actor_record,
+                                              resource_type: "client",
+                                            ), client_id: f34_client.client_id,
                   )
                   @base_browser_rp_credentials[f34_key] = [f34_access, f34_session.issue_refresh_token!]
                 end
@@ -3140,7 +3336,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f35_family}-#{f35_surface}"
                 end
-              f35_token = ClientToken.find_by!(public_id: f35_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f35_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f35_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f35_client = OidcClientRegistry.find!(f35_client_id)
               f35_key = [f35_client.client_id, f35_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -3150,7 +3349,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f35_client.client_id,
                     revoked_at: nil,
                   ))
-                f35_token.rotate_refresh_token! unless f35_token.device_session.current_refresh_token_id
+                f35_token.rotate_refresh_token! unless f35_token.device_session_record.current_refresh_token_id
                 f35_now = Time.current
                 f35_session = ClientRpSession.create!(
                   client_token: f35_token, oidc_client_id: f35_client.client_id, oidc_scope: "openid profile",
@@ -3158,16 +3357,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f35_now + 10.minutes,
                 )
                 f35_access = AuthenticationTokenService.encode(
-                  f35_token.user, host: f35_host, resource_type: "client",
-                                  session_public_id: f35_token.public_id, base_session_public_id: f35_token.public_id,
-                                  oidc_sid: f35_session.public_id, oidc_jti: f35_session.oidc_jti,
-                                  expires_at: f35_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f35_client), audiences: [f35_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f35_client),
-                                  subject: OidcSubject.for(
-                                    f35_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f35_client.client_id,
+                  f35_token.actor_record, host: f35_host, resource_type: "client",
+                                          session_public_id: f35_token.public_id,
+                                          base_session_public_id: f35_token.public_id,
+                                          oidc_sid: f35_session.public_id, oidc_jti: f35_session.oidc_jti,
+                                          expires_at: f35_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f35_client), audiences: [f35_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f35_client),
+                                          subject: OidcSubject.for(
+                                            f35_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f35_client.client_id,
                 )
                 @base_browser_rp_credentials[f35_key] =
                   [f35_access, f35_session.issue_refresh_token!]
@@ -3216,7 +3416,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f36_family}-#{f36_surface}"
                 end
-              f36_token = ClientToken.find_by!(public_id: f36_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f36_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f36_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f36_client = OidcClientRegistry.find!(f36_client_id)
               f36_key = [f36_client.client_id, f36_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -3226,7 +3429,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f36_client.client_id,
                     revoked_at: nil,
                   ))
-                f36_token.rotate_refresh_token! unless f36_token.device_session.current_refresh_token_id
+                f36_token.rotate_refresh_token! unless f36_token.device_session_record.current_refresh_token_id
                 f36_now = Time.current
                 f36_session = ClientRpSession.create!(
                   client_token: f36_token, oidc_client_id: f36_client.client_id, oidc_scope: "openid profile",
@@ -3234,16 +3437,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f36_now + 10.minutes,
                 )
                 f36_access = AuthenticationTokenService.encode(
-                  f36_token.user, host: f36_host, resource_type: "client",
-                                  session_public_id: f36_token.public_id, base_session_public_id: f36_token.public_id,
-                                  oidc_sid: f36_session.public_id, oidc_jti: f36_session.oidc_jti,
-                                  expires_at: f36_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f36_client), audiences: [f36_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f36_client),
-                                  subject: OidcSubject.for(
-                                    f36_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f36_client.client_id,
+                  f36_token.actor_record, host: f36_host, resource_type: "client",
+                                          session_public_id: f36_token.public_id,
+                                          base_session_public_id: f36_token.public_id,
+                                          oidc_sid: f36_session.public_id, oidc_jti: f36_session.oidc_jti,
+                                          expires_at: f36_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f36_client), audiences: [f36_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f36_client),
+                                          subject: OidcSubject.for(
+                                            f36_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f36_client.client_id,
                 )
                 @base_browser_rp_credentials[f36_key] =
                   [f36_access, f36_session.issue_refresh_token!]
@@ -3295,7 +3499,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f37_family}-#{f37_surface}"
                 end
-              f37_token = ClientToken.find_by!(public_id: f37_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f37_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f37_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f37_client = OidcClientRegistry.find!(f37_client_id)
               f37_key = [f37_client.client_id, f37_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -3305,7 +3512,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f37_client.client_id,
                     revoked_at: nil,
                   ))
-                f37_token.rotate_refresh_token! unless f37_token.device_session.current_refresh_token_id
+                f37_token.rotate_refresh_token! unless f37_token.device_session_record.current_refresh_token_id
                 f37_now = Time.current
                 f37_session = ClientRpSession.create!(
                   client_token: f37_token, oidc_client_id: f37_client.client_id, oidc_scope: "openid profile",
@@ -3313,16 +3520,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f37_now + 10.minutes,
                 )
                 f37_access = AuthenticationTokenService.encode(
-                  f37_token.user, host: f37_host, resource_type: "client",
-                                  session_public_id: f37_token.public_id, base_session_public_id: f37_token.public_id,
-                                  oidc_sid: f37_session.public_id, oidc_jti: f37_session.oidc_jti,
-                                  expires_at: f37_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f37_client), audiences: [f37_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f37_client),
-                                  subject: OidcSubject.for(
-                                    f37_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f37_client.client_id,
+                  f37_token.actor_record, host: f37_host, resource_type: "client",
+                                          session_public_id: f37_token.public_id,
+                                          base_session_public_id: f37_token.public_id,
+                                          oidc_sid: f37_session.public_id, oidc_jti: f37_session.oidc_jti,
+                                          expires_at: f37_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f37_client), audiences: [f37_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f37_client),
+                                          subject: OidcSubject.for(
+                                            f37_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f37_client.client_id,
                 )
                 @base_browser_rp_credentials[f37_key] = [f37_access, f37_session.issue_refresh_token!]
               end
@@ -3388,7 +3596,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f38_family}-#{f38_surface}"
                 end
-              f38_token = ClientToken.find_by!(public_id: f38_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f38_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f38_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f38_client = OidcClientRegistry.find!(f38_client_id)
               f38_key = [f38_client.client_id, f38_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -3398,7 +3609,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f38_client.client_id,
                     revoked_at: nil,
                   ))
-                f38_token.rotate_refresh_token! unless f38_token.device_session.current_refresh_token_id
+                f38_token.rotate_refresh_token! unless f38_token.device_session_record.current_refresh_token_id
                 f38_now = Time.current
                 f38_session = ClientRpSession.create!(
                   client_token: f38_token, oidc_client_id: f38_client.client_id, oidc_scope: "openid profile",
@@ -3406,16 +3617,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f38_now + 10.minutes,
                 )
                 f38_access = AuthenticationTokenService.encode(
-                  f38_token.user, host: f38_host, resource_type: "client",
-                                  session_public_id: f38_token.public_id, base_session_public_id: f38_token.public_id,
-                                  oidc_sid: f38_session.public_id, oidc_jti: f38_session.oidc_jti,
-                                  expires_at: f38_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f38_client), audiences: [f38_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f38_client),
-                                  subject: OidcSubject.for(
-                                    f38_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f38_client.client_id,
+                  f38_token.actor_record, host: f38_host, resource_type: "client",
+                                          session_public_id: f38_token.public_id,
+                                          base_session_public_id: f38_token.public_id,
+                                          oidc_sid: f38_session.public_id, oidc_jti: f38_session.oidc_jti,
+                                          expires_at: f38_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f38_client), audiences: [f38_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f38_client),
+                                          subject: OidcSubject.for(
+                                            f38_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f38_client.client_id,
                 )
                 @base_browser_rp_credentials[f38_key] =
                   [f38_access, f38_session.issue_refresh_token!]
@@ -3466,7 +3678,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f39_family}-#{f39_surface}"
                 end
-              f39_token = ClientToken.find_by!(public_id: f39_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f39_token = ClientToken.includes(
+                :user,
+                :device_session,
+              ).find_by!(public_id: f39_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               f39_client = OidcClientRegistry.find!(f39_client_id)
               f39_key = [f39_client.client_id, f39_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -3476,7 +3691,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f39_client.client_id,
                     revoked_at: nil,
                   ))
-                f39_token.rotate_refresh_token! unless f39_token.device_session.current_refresh_token_id
+                f39_token.rotate_refresh_token! unless f39_token.device_session_record.current_refresh_token_id
                 f39_now = Time.current
                 f39_session = ClientRpSession.create!(
                   client_token: f39_token, oidc_client_id: f39_client.client_id, oidc_scope: "openid profile",
@@ -3484,16 +3699,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f39_now + 10.minutes,
                 )
                 f39_access = AuthenticationTokenService.encode(
-                  f39_token.user, host: f39_host, resource_type: "client",
-                                  session_public_id: f39_token.public_id, base_session_public_id: f39_token.public_id,
-                                  oidc_sid: f39_session.public_id, oidc_jti: f39_session.oidc_jti,
-                                  expires_at: f39_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f39_client), audiences: [f39_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f39_client),
-                                  subject: OidcSubject.for(
-                                    f39_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f39_client.client_id,
+                  f39_token.actor_record, host: f39_host, resource_type: "client",
+                                          session_public_id: f39_token.public_id,
+                                          base_session_public_id: f39_token.public_id,
+                                          oidc_sid: f39_session.public_id, oidc_jti: f39_session.oidc_jti,
+                                          expires_at: f39_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f39_client), audiences: [f39_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f39_client),
+                                          subject: OidcSubject.for(
+                                            f39_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f39_client.client_id,
                 )
                 @base_browser_rp_credentials[f39_key] = [f39_access, f39_session.issue_refresh_token!]
               end
@@ -3555,7 +3771,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     when "edit" then "edit-org"
                     else "#{f40_family}-#{f40_surface}"
                     end
-                  f40_token = ClientToken.find_by!(public_id: f40_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                  f40_token = ClientToken.includes(
+                    :user,
+                    :device_session,
+                  ).find_by!(public_id: f40_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                   f40_client = OidcClientRegistry.find!(f40_client_id)
                   f40_key = [f40_client.client_id, f40_token.public_id]
                   @base_browser_rp_credentials ||= {}
@@ -3565,7 +3784,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                         oidc_client_id: f40_client.client_id,
                         revoked_at: nil,
                       ))
-                    f40_token.rotate_refresh_token! unless f40_token.device_session.current_refresh_token_id
+                    f40_token.rotate_refresh_token! unless f40_token.device_session_record.current_refresh_token_id
                     f40_now = Time.current
                     f40_session = ClientRpSession.create!(
                       client_token: f40_token, oidc_client_id: f40_client.client_id, oidc_scope: "openid profile",
@@ -3573,7 +3792,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: f40_now + 10.minutes,
                     )
                     f40_access = AuthenticationTokenService.encode(
-                      f40_token.user,
+                      f40_token.actor_record,
                       host: f40_host,
                       resource_type: "client",
                       session_public_id: f40_token.public_id,
@@ -3586,7 +3805,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       audiences: [f40_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f40_client),
                       subject: OidcSubject.for(
-                        f40_token.user,
+                        f40_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: f40_client.client_id,
@@ -3640,7 +3859,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     when "edit" then "edit-org"
                     else "#{f41_family}-#{f41_surface}"
                     end
-                  f41_token = ClientToken.find_by!(public_id: f41_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                  f41_token = ClientToken.includes(
+                    :user,
+                    :device_session,
+                  ).find_by!(public_id: f41_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                   f41_client = OidcClientRegistry.find!(f41_client_id)
                   f41_key = [f41_client.client_id, f41_token.public_id]
                   @base_browser_rp_credentials ||= {}
@@ -3650,7 +3872,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                         oidc_client_id: f41_client.client_id,
                         revoked_at: nil,
                       ))
-                    f41_token.rotate_refresh_token! unless f41_token.device_session.current_refresh_token_id
+                    f41_token.rotate_refresh_token! unless f41_token.device_session_record.current_refresh_token_id
                     f41_now = Time.current
                     f41_session = ClientRpSession.create!(
                       client_token: f41_token, oidc_client_id: f41_client.client_id, oidc_scope: "openid profile",
@@ -3658,7 +3880,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: f41_now + 10.minutes,
                     )
                     f41_access = AuthenticationTokenService.encode(
-                      f41_token.user,
+                      f41_token.actor_record,
                       host: f41_host,
                       resource_type: "client",
                       session_public_id: f41_token.public_id,
@@ -3671,7 +3893,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       audiences: [f41_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f41_client),
                       subject: OidcSubject.for(
-                        f41_token.user,
+                        f41_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: f41_client.client_id,
@@ -3701,7 +3923,9 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         )
       end
 
-      post base_app_oidc_logout_url(host: @host), headers: begin
+      csrf_token = response.parsed_body.at_css("meta[name='csrf-token']")&.[]("content")
+      assert_withheld("logout confirmation must include a CSRF token") { csrf_token.present? }
+      post base_app_oidc_logout_url(host: @host), params: { authenticity_token: csrf_token }, headers: begin
         fx42_harness =
           begin
             f42_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
@@ -3720,7 +3944,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f42_family}-#{f42_surface}"
                 end
-              f42_token = ClientToken.find_by!(public_id: f42_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f42_token =
+                ClientToken.includes(:user, :device_session).find_by!(
+                  public_id: f42_headers.fetch("X-TEST-SESSION-PUBLIC-ID"),
+                )
               f42_client = OidcClientRegistry.find!(f42_client_id)
               f42_key = [f42_client.client_id, f42_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -3730,7 +3957,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f42_client.client_id,
                     revoked_at: nil,
                   ))
-                f42_token.rotate_refresh_token! unless f42_token.device_session.current_refresh_token_id
+                f42_token.rotate_refresh_token! unless f42_token.device_session_record.current_refresh_token_id
                 f42_now = Time.current
                 f42_session = ClientRpSession.create!(
                   client_token: f42_token, oidc_client_id: f42_client.client_id, oidc_scope: "openid profile",
@@ -3738,16 +3965,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f42_now + 10.minutes,
                 )
                 f42_access = AuthenticationTokenService.encode(
-                  f42_token.user, host: f42_host, resource_type: "client",
-                                  session_public_id: f42_token.public_id, base_session_public_id: f42_token.public_id,
-                                  oidc_sid: f42_session.public_id, oidc_jti: f42_session.oidc_jti,
-                                  expires_at: f42_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f42_client), audiences: [f42_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f42_client),
-                                  subject: OidcSubject.for(
-                                    f42_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f42_client.client_id,
+                  f42_token.actor_record, host: f42_host, resource_type: "client",
+                                          session_public_id: f42_token.public_id,
+                                          base_session_public_id: f42_token.public_id,
+                                          oidc_sid: f42_session.public_id, oidc_jti: f42_session.oidc_jti,
+                                          expires_at: f42_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f42_client), audiences: [f42_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f42_client),
+                                          subject: OidcSubject.for(
+                                            f42_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f42_client.client_id,
                 )
                 @base_browser_rp_credentials[f42_key] = [f42_access, f42_session.issue_refresh_token!]
               end
@@ -3817,7 +4045,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     when "edit" then "edit-org"
                     else "#{f43_family}-#{f43_surface}"
                     end
-                  f43_token = ClientToken.find_by!(public_id: f43_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                  f43_token = ClientToken.includes(
+                    :user,
+                    :device_session,
+                  ).find_by!(public_id: f43_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                   f43_client = OidcClientRegistry.find!(f43_client_id)
                   f43_key = [f43_client.client_id, f43_token.public_id]
                   @base_browser_rp_credentials ||= {}
@@ -3827,7 +4058,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                         oidc_client_id: f43_client.client_id,
                         revoked_at: nil,
                       ))
-                    f43_token.rotate_refresh_token! unless f43_token.device_session.current_refresh_token_id
+                    f43_token.rotate_refresh_token! unless f43_token.device_session_record.current_refresh_token_id
                     f43_now = Time.current
                     f43_session = ClientRpSession.create!(
                       client_token: f43_token, oidc_client_id: f43_client.client_id, oidc_scope: "openid profile",
@@ -3835,7 +4066,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: f43_now + 10.minutes,
                     )
                     f43_access = AuthenticationTokenService.encode(
-                      f43_token.user,
+                      f43_token.actor_record,
                       host: f43_host,
                       resource_type: "client",
                       session_public_id: f43_token.public_id,
@@ -3848,7 +4079,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       audiences: [f43_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f43_client),
                       subject: OidcSubject.for(
-                        f43_token.user,
+                        f43_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: f43_client.client_id,
@@ -3903,7 +4134,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      when "edit" then "edit-org"
                      else "#{f44_family}-#{f44_surface}"
                      end
-                   f44_token = ClientToken.find_by!(public_id: f44_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                   f44_token = ClientToken.includes(
+                     :user,
+                     :device_session,
+                   ).find_by!(public_id: f44_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                    f44_client = OidcClientRegistry.find!(f44_client_id)
                    f44_key = [f44_client.client_id, f44_token.public_id]
                    @base_browser_rp_credentials ||= {}
@@ -3913,7 +4147,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                          oidc_client_id: f44_client.client_id,
                          revoked_at: nil,
                        ))
-                     f44_token.rotate_refresh_token! unless f44_token.device_session.current_refresh_token_id
+                     f44_token.rotate_refresh_token! unless f44_token.device_session_record.current_refresh_token_id
                      f44_now = Time.current
                      f44_session = ClientRpSession.create!(
                        client_token: f44_token, oidc_client_id: f44_client.client_id, oidc_scope: "openid profile",
@@ -3921,7 +4155,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                        refresh_token_expires_at: f44_now + 10.minutes,
                      )
                      f44_access = AuthenticationTokenService.encode(
-                       f44_token.user,
+                       f44_token.actor_record,
                        host: f44_host,
                        resource_type: "client",
                        session_public_id: f44_token.public_id,
@@ -3934,7 +4168,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                        audiences: [f44_client.aud],
                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f44_client),
                        subject: OidcSubject.for(
-                         f44_token.user,
+                         f44_token.actor_record,
                          resource_type: "client",
                        ),
                        client_id: f44_client.client_id,
@@ -4006,7 +4240,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      when "edit" then "edit-org"
                      else "#{f45_family}-#{f45_surface}"
                      end
-                   f45_token = ClientToken.find_by!(public_id: f45_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                   f45_token = ClientToken.includes(
+                     :user,
+                     :device_session,
+                   ).find_by!(public_id: f45_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                    f45_client = OidcClientRegistry.find!(f45_client_id)
                    f45_key = [f45_client.client_id, f45_token.public_id]
                    @base_browser_rp_credentials ||= {}
@@ -4016,7 +4253,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                          oidc_client_id: f45_client.client_id,
                          revoked_at: nil,
                        ))
-                     f45_token.rotate_refresh_token! unless f45_token.device_session.current_refresh_token_id
+                     f45_token.rotate_refresh_token! unless f45_token.device_session_record.current_refresh_token_id
                      f45_now = Time.current
                      f45_session = ClientRpSession.create!(
                        client_token: f45_token, oidc_client_id: f45_client.client_id, oidc_scope: "openid profile",
@@ -4024,7 +4261,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                        refresh_token_expires_at: f45_now + 10.minutes,
                      )
                      f45_access = AuthenticationTokenService.encode(
-                       f45_token.user,
+                       f45_token.actor_record,
                        host: f45_host,
                        resource_type: "client",
                        session_public_id: f45_token.public_id,
@@ -4037,7 +4274,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                        audiences: [f45_client.aud],
                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f45_client),
                        subject: OidcSubject.for(
-                         f45_token.user,
+                         f45_token.actor_record,
                          resource_type: "client",
                        ),
                        client_id: f45_client.client_id,
@@ -4099,7 +4336,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     when "edit" then "edit-org"
                     else "#{f46_family}-#{f46_surface}"
                     end
-                  f46_token = ClientToken.find_by!(public_id: f46_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                  f46_token = ClientToken.includes(
+                    :user,
+                    :device_session,
+                  ).find_by!(public_id: f46_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                   f46_client = OidcClientRegistry.find!(f46_client_id)
                   f46_key = [f46_client.client_id, f46_token.public_id]
                   @base_browser_rp_credentials ||= {}
@@ -4109,7 +4349,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                         oidc_client_id: f46_client.client_id,
                         revoked_at: nil,
                       ))
-                    f46_token.rotate_refresh_token! unless f46_token.device_session.current_refresh_token_id
+                    f46_token.rotate_refresh_token! unless f46_token.device_session_record.current_refresh_token_id
                     f46_now = Time.current
                     f46_session = ClientRpSession.create!(
                       client_token: f46_token, oidc_client_id: f46_client.client_id, oidc_scope: "openid profile",
@@ -4117,7 +4357,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: f46_now + 10.minutes,
                     )
                     f46_access = AuthenticationTokenService.encode(
-                      f46_token.user,
+                      f46_token.actor_record,
                       host: f46_host,
                       resource_type: "client",
                       session_public_id: f46_token.public_id,
@@ -4130,7 +4370,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       audiences: [f46_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f46_client),
                       subject: OidcSubject.for(
-                        f46_token.user,
+                        f46_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: f46_client.client_id,
@@ -4179,7 +4419,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      when "edit" then "edit-org"
                      else "#{f47_family}-#{f47_surface}"
                      end
-                   f47_token = ClientToken.find_by!(public_id: f47_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                   f47_token = ClientToken.includes(
+                     :user,
+                     :device_session,
+                   ).find_by!(public_id: f47_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                    f47_client = OidcClientRegistry.find!(f47_client_id)
                    f47_key = [f47_client.client_id, f47_token.public_id]
                    @base_browser_rp_credentials ||= {}
@@ -4189,7 +4432,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                          oidc_client_id: f47_client.client_id,
                          revoked_at: nil,
                        ))
-                     f47_token.rotate_refresh_token! unless f47_token.device_session.current_refresh_token_id
+                     f47_token.rotate_refresh_token! unless f47_token.device_session_record.current_refresh_token_id
                      f47_now = Time.current
                      f47_session = ClientRpSession.create!(
                        client_token: f47_token, oidc_client_id: f47_client.client_id, oidc_scope: "openid profile",
@@ -4197,7 +4440,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                        refresh_token_expires_at: f47_now + 10.minutes,
                      )
                      f47_access = AuthenticationTokenService.encode(
-                       f47_token.user,
+                       f47_token.actor_record,
                        host: f47_host,
                        resource_type: "client",
                        session_public_id: f47_token.public_id,
@@ -4210,7 +4453,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                        audiences: [f47_client.aud],
                        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f47_client),
                        subject: OidcSubject.for(
-                         f47_token.user,
+                         f47_token.actor_record,
                          resource_type: "client",
                        ),
                        client_id: f47_client.client_id,
@@ -4270,7 +4513,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     when "edit" then "edit-org"
                     else "#{f48_family}-#{f48_surface}"
                     end
-                  f48_token = ClientToken.find_by!(public_id: f48_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                  f48_token = ClientToken.includes(
+                    :user,
+                    :device_session,
+                  ).find_by!(public_id: f48_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                   f48_client = OidcClientRegistry.find!(f48_client_id)
                   f48_key = [f48_client.client_id, f48_token.public_id]
                   @base_browser_rp_credentials ||= {}
@@ -4280,7 +4526,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                         oidc_client_id: f48_client.client_id,
                         revoked_at: nil,
                       ))
-                    f48_token.rotate_refresh_token! unless f48_token.device_session.current_refresh_token_id
+                    f48_token.rotate_refresh_token! unless f48_token.device_session_record.current_refresh_token_id
                     f48_now = Time.current
                     f48_session = ClientRpSession.create!(
                       client_token: f48_token, oidc_client_id: f48_client.client_id, oidc_scope: "openid profile",
@@ -4288,7 +4534,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: f48_now + 10.minutes,
                     )
                     f48_access = AuthenticationTokenService.encode(
-                      f48_token.user,
+                      f48_token.actor_record,
                       host: f48_host,
                       resource_type: "client",
                       session_public_id: f48_token.public_id,
@@ -4301,7 +4547,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                       audiences: [f48_client.aud],
                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f48_client),
                       subject: OidcSubject.for(
-                        f48_token.user,
+                        f48_token.actor_record,
                         resource_type: "client",
                       ),
                       client_id: f48_client.client_id,
@@ -4354,7 +4600,10 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 when "edit" then "edit-org"
                 else "#{f49_family}-#{f49_surface}"
                 end
-              f49_token = ClientToken.find_by!(public_id: f49_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f49_token =
+                ClientToken.includes(:user, :device_session).find_by!(
+                  public_id: f49_headers.fetch("X-TEST-SESSION-PUBLIC-ID"),
+                )
               f49_client = OidcClientRegistry.find!(f49_client_id)
               f49_key = [f49_client.client_id, f49_token.public_id]
               @base_browser_rp_credentials ||= {}
@@ -4364,7 +4613,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f49_client.client_id,
                     revoked_at: nil,
                   ))
-                f49_token.rotate_refresh_token! unless f49_token.device_session.current_refresh_token_id
+                f49_token.rotate_refresh_token! unless f49_token.device_session_record.current_refresh_token_id
                 f49_now = Time.current
                 f49_session = ClientRpSession.create!(
                   client_token: f49_token, oidc_client_id: f49_client.client_id, oidc_scope: "openid profile",
@@ -4372,16 +4621,17 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f49_now + 10.minutes,
                 )
                 f49_access = AuthenticationTokenService.encode(
-                  f49_token.user, host: f49_host, resource_type: "client",
-                                  session_public_id: f49_token.public_id, base_session_public_id: f49_token.public_id,
-                                  oidc_sid: f49_session.public_id, oidc_jti: f49_session.oidc_jti,
-                                  expires_at: f49_now + 10.minutes, scopes: %w(openid profile),
-                                  issuer: OidcIssuer.for_client(f49_client), audiences: [f49_client.aud],
-                                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f49_client),
-                                  subject: OidcSubject.for(
-                                    f49_token.user,
-                                    resource_type: "client",
-                                  ), client_id: f49_client.client_id,
+                  f49_token.actor_record, host: f49_host, resource_type: "client",
+                                          session_public_id: f49_token.public_id,
+                                          base_session_public_id: f49_token.public_id,
+                                          oidc_sid: f49_session.public_id, oidc_jti: f49_session.oidc_jti,
+                                          expires_at: f49_now + 10.minutes, scopes: %w(openid profile),
+                                          issuer: OidcIssuer.for_client(f49_client), audiences: [f49_client.aud],
+                                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f49_client),
+                                          subject: OidcSubject.for(
+                                            f49_token.actor_record,
+                                            resource_type: "client",
+                                          ), client_id: f49_client.client_id,
                 )
                 @base_browser_rp_credentials[f49_key] = [f49_access, f49_session.issue_refresh_token!]
               end

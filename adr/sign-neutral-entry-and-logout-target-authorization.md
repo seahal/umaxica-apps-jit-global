@@ -33,10 +33,12 @@ confirmed that this ended another subject's session (D1,
 3. Continuation of the same live transaction is not a new Sign. It is recognized only from
    server-held stage, subject, browser binding, and expiry.
 4. An `id_token_hint` identifies the session the RP wants ended; it is not authority to end it. Its
-   `sub` and `sid` become the logout target only when they match the verified current session.
-   Without a current session, the request may still clear this browser's state and redirect to a
-   registered `post_logout_redirect_uri`, but revokes nothing and sends no back-channel logout.
-   Coordinated logout stays bound to its stored logout transaction.
+   `sub` and `sid` become the logout target only when they match the verified current IdP session,
+   including the captured IdP `sid`. Without that current session, or when the hint identifies a
+   different subject or session, the request returns a plain localized error with no-store headers,
+   no redirect, no logout intent, no session or token mutation, and no back-channel logout. This
+   refusal applies even when the hint and a registered `post_logout_redirect_uri` are otherwise
+   valid. Coordinated logout stays bound to its stored logout transaction.
 5. Base end-session controllers do not redeclare `protect_from_forgery`. Rails keeps one
    `verify_authenticity_token` callback per controller, so a conditional redeclaration replaces the
    inherited check; that let plain POSTs run with no CSRF check (D2). Coordinated-logout POSTs are
@@ -45,8 +47,9 @@ confirmed that this ended another subject's session (D1,
 ## Consequences
 
 - Cross-RP single sign-on is given up for new logins; users authenticate at each RP's start.
-- Logout from a browser whose Base cookies were already cleared no longer revokes the server-side
-  session named in the hint; that session ends through its own expiry or an authenticated logout.
+- Logout from a browser whose Base cookies were already cleared no longer revokes or clears the
+  server-side session named in the hint; the request stops with a plain error and that session ends
+  through its own expiry or an authenticated logout.
 - Base's root `POST /` with its Sign in / Sign up choice, Auth's context-free bridge to Base, the
   Base SSO code-issuing branch, and the automatic OIDC start from protected pages and failed RP
   callbacks were removed on 2026-10-02. RP callbacks moved from `/sign/callback` to
@@ -67,3 +70,12 @@ binding, and the D-82 Base/Auth exchange is required for ceremony branches. Auth
 ceremony-only. The CSRF, exact-session logout-target, no automatic callback retry, and no silent
 redirect rules are **retained**. The no-SSO rule is **partially superseded** only for the explicit
 Base OP authorization decision above.
+
+## Strict IdP-session amendment (2026-10-14)
+
+The no-session branch is stricter than the earlier target wording: a verified hint cannot create a
+logout intent or redirect the browser when the current IdP session is absent, lacks its captured
+`sid`, or does not match the hint. Base returns the localized plain error without a `Location`
+header and with `Cache-Control: no-store`; JSON callers receive the corresponding
+`login_required` or `invalid_request` response. This preserves the boundary that an identifier
+does not grant authority and leaves the persisted session state unchanged.

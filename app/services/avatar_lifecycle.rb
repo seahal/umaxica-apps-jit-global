@@ -35,7 +35,7 @@ module AvatarLifecycle
     def call
       Avatar.transaction do
         locked_avatar = Avatar.lock.find(avatar.id)
-        from_state = locked_avatar.lifecycle_state
+        from_state = AvatarLifecycleState.find(locked_avatar.lifecycle_state_id)
         to_state = AvatarLifecycleState.find_by!(key: to_state_key)
 
         validate_transition!(from_state.key, to_state.key)

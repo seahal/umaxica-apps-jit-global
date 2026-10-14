@@ -19,7 +19,7 @@ class IdentityStepUpTotpVerificationCommitter
           raise IdentityStepUpCeremonyContract::Error, "actor unavailable" unless actor.login_allowed?
 
           result = TotpWindowConsumer.call(
-            credentials: actor.client_totp_credentials.where(
+            credentials: ClientTotpCredential.where(user_id: actor.id).where(
               user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
             ), token: code, credential_public_id: credential_public_id,
           )
@@ -38,19 +38,20 @@ class IdentityStepUpTotpVerificationCommitter
     private
 
     def validate_binding!(actor, transaction, record)
+      token = ClientToken.find(record.user_token_id) if record.is_a?(ClientStepUpSession)
       unless actor.is_a?(Client) && transaction.is_a?(ClientStepUpCeremonyTransaction) &&
-          record.is_a?(ClientStepUpSession) && record.user_token.user_id == actor.id &&
-          transaction.actor_ref == actor.public_id && transaction.session_ref == record.user_token.public_id &&
+          record.is_a?(ClientStepUpSession) && token.user_id == actor.id &&
+          transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
           record.step_up_ceremony_transaction_ref == transaction.transaction_id
         raise IdentityStepUpCeremonyContract::Error, "TOTP ceremony binding mismatch"
       end
 
       ClientStepUpCeremonyTransaction.connection_owner.connected_to(role: :writing) do
-        record.user_token.with_lock do
+        token.with_lock do
           record.with_lock do
             transaction.with_lock do
               now = ClientStepUpCeremonyTransaction.database_now
-              unless record.user_token.currently_usable?(now) && transaction.purpose == "step_up" &&
+              unless token.currently_usable?(now) && transaction.purpose == "step_up" &&
                   transaction.allowed_methods_array.include?("totp") &&
                   transaction.status == "pending" && !transaction.expired?(now: now) &&
                   record.status == "PENDING" && record.discard_at > now

@@ -70,9 +70,11 @@ class AvatarRegistryTransferFailureTest < ActiveSupport::TestCase
       end
 
       assert_equal before_reservation, reservation.reload.attributes
-      assert_equal before_legacy, avatar.avatar_ownership_periods.reload.order(:id).map(&:attributes)
-      assert_equal before_enterprise, avatar.enterprise_ownership_periods.reload.order(:id).map(&:attributes)
-      assert_equal before_bureau, avatar.bureau_ownership_periods.reload.order(:id).map(&:attributes)
+      assert_equal before_legacy, AvatarOwnershipPeriod.where(avatar_id: avatar.id).order(:id).map(&:attributes)
+      assert_equal before_enterprise,
+                   AvatarEnterpriseOwnershipPeriod.where(avatar_id: avatar.id).order(:id).map(&:attributes)
+      assert_equal before_bureau,
+                   AvatarBureauOwnershipPeriod.where(avatar_id: avatar.id).order(:id).map(&:attributes)
       assert_equal source.collective.public_id, avatar.reload.current_ownership_period.owner_collective_public_id
 
       accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(

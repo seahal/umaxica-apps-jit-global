@@ -45,7 +45,7 @@ module Publishing
     test "a window that would start before the live one became effective is refused" do
       entry = publishing_draft(audience: "app", surface: "docs", slug: "backdated", title: "Backdated")
       publishing_publish(entry: entry, published_at: 1.hour.ago)
-      live = entry.reload.active_publication
+      live = Docs::App::Publication.active.find_by(entry_id: entry.reload.id)
 
       result = PublishEntryOperation.call(
         entry: entry, operator_public_id: "OPERATORPUBLICID1", effective_from: 2.hours.ago,
@@ -56,7 +56,7 @@ module Publishing
         "must be after the current publication became effective",
         result.errors.fetch(:effective_from),
       )
-      assert_equal live, entry.reload.active_publication
+      assert_equal live, Docs::App::Publication.active.find_by(entry_id: entry.reload.id)
       assert_equal 1, entry.publications.count
     end
 
@@ -67,7 +67,8 @@ module Publishing
 
       assert_predicate result, :ok?
       assert_equal "OPERATORPUBLICID1", result.publication.created_by_operator_public_id
-      assert_equal "OPERATORPUBLICID1", entry.reload.versions.sole.created_by_operator_public_id
+      assert_equal "OPERATORPUBLICID1", Docs::App::EntryVersion.find_by!(entry_id: entry.reload.id)
+        .created_by_operator_public_id
     end
   end
 end

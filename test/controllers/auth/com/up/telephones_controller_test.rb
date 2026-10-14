@@ -300,7 +300,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
       "visitor_id", "number_digest", "binding_finalized_at",
       "binding_released_at",
     )
-    first_owner = first_candidate.visitor.reload
+    first_owner = contact_owner_for_test(first_candidate).reload
 
     assert_difference("VisitorTelephone.count", 1) do
       assert_difference("Visitor.count", 1) do
@@ -318,7 +318,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
 
     assert_not_equal first_flow.id, second_flow.id
     assert_not_equal first_candidate.id, second_candidate.id
-    assert_not_equal first_candidate.visitor_id, second_candidate.visitor_id
+    assert_not_equal contact_owner_for_test(first_candidate).id, second_candidate.visitor_id
     assert_equal first_candidate.number_digest, second_candidate.number_digest
     assert_nil first_candidate.binding_finalized_at
     assert_nil second_candidate.binding_finalized_at
@@ -499,7 +499,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     replacement = VisitorTelephone.find(current.pending_contact_id)
 
     assert_not_equal first_candidate.id, replacement.id
-    assert_not_equal first_candidate.visitor_id, replacement.visitor_id
+    assert_not_equal contact_owner_for_test(first_candidate).id, replacement.visitor_id
     assert_equal first_candidate.number_digest, replacement.number_digest
     assert_withheld("original candidate binding facts remain unchanged") {
       first_binding_facts == first_candidate.reload.attributes.slice(
@@ -511,7 +511,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_predicate first_flow, :cleanup_completed?
     assert_operator first_candidate.discard_at, :<=, first_flow.cleanup_completed_at
     assert_operator first_candidate.purge_eligible_at, :>, first_candidate.discard_at
-    retained_owner = first_candidate.visitor.reload
+    retained_owner = contact_owner_for_test(first_candidate).reload
 
     assert_operator retained_owner.discard_at, :<=, first_flow.cleanup_completed_at
     assert_operator retained_owner.purge_eligible_at, :>, retained_owner.discard_at

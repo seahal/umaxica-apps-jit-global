@@ -42,6 +42,7 @@ module JitSecurityJwtRegistry
   REQUIRED_OIDC_CLIENT_NAMESPACES = %w(
     BASE_RP_APP_WW BASE_RP_COM_WW BASE_RP_ORG_WW
     WARP_APP WARP_COM WARP_ORG
+    TECH_ORG
   ).freeze
   # Issuer metadata for surface records without Jump issuer capability. Jump issuer records take
   # JumpRtSurface's PUBLIC_* origin instead, so the record that holds a Jump signing key names the

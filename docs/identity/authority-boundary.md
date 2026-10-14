@@ -6,7 +6,13 @@
 > `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole physical IdP/AS, Auth is a
 > ceremony-only service, and browser RP registrations are surface-specific.
 
-> **Supersession (2026-06-12):** The target component model is now
+> **Participation update (2026-10-13):** The current first-party browser RP set also includes Palm
+> (`palm-app`) and Tech (`tech-org`). Palm's native RP and bearer API roles are retired. Tech is an
+> operator RP that requires `tech.access`. See
+> `adr/tech-and-palm-browser-rp-participation.md` for the accepted contract and its implementation
+> status; this document's older Palm-native and RP-launcher statements are historical.
+
+> **Historical component model (2026-06-12; superseded for Palm on 2026-10-13):** The target component model was
 > `docs/architecture/acme-sign-core-base-port.md` and `adr/acme-sign-core-base-port-boundary.md`.
 > Acme is the only IdP / Authorization Server, Sign is a special RP, Core is the Next.js web RP/BFF,
 > Base is the Rails foundation/control-plane subdomain, and Palm is the native bearer-token API
@@ -61,15 +67,17 @@ mutates session, refresh, preference, dashboard, withdrawal, token, account, or 
 state from a sign-side route, that behavior is a migration gap tracked by the Identity Authority
 inversion plans, not a competing source of truth.
 
-Current browser route contract keeps Acme as the only OP/AS authority. Browser RP start and callback
-routes use `/oidc/authorization` and `/oidc/callback`; Palm is excluded from the browser RP launcher
-contract and retains only its inert native callback compatibility stub. Acme owns the protocol `/oauth/*` surface and
-`/oidc/logout`, while RP local sign-out remains `/sign/out/new`, `/sign/out/edit`, `/sign/out`, and
-`/sign/out/complete` on Auth, Core, Warp, and Palm. Base local sign-out confirms on
-`/sign/out/edit`, mutates on `POST /sign/out`, and completes with `303` to `/lobby`. Social login
-entry points use `/social/:provider/sign/in`, `/social/:provider/sign/up`, and
-`/social/:provider/callback`. `google` and `apple` are canonical provider names; `google_app` is
-retained only in historical or compatibility data.
+Current Rails browser identity contract uses Base as the sole OP/AS and Auth as the credential
+ceremony surface. Core, Warp, Edit, Palm and Tech have host-local relying-party entry and callback
+routes at `/sign` and `/oidc/callback`; the POST `/sign` start requires a valid Rails authenticity
+token even when Fetch Metadata reports `same-origin`. Tech additionally requires `tech.access` for
+protected content. Palm's native registration, bearer API and app-scheme callback are retired.
+RP-local sign-out routes use `/sign/out` and `/sign/out/completion`; implementation of the shared
+parent-and-RP revocation transaction remains incomplete and is tracked in
+`adr/first-party-sign-out-shared-database-without-backchannel-logout.md`. Social login entry points
+use `/social/:provider/sign/in`, `/social/:provider/sign/up`, and `/social/:provider/callback`.
+`google` and `apple` are canonical provider names; `google_app` is retained only in historical or
+compatibility data.
 
 Acme's local browser flow and Base Rails surfaces use the shared browser RP client id
 `base-rails-rp`. Callback ownership is host-local: Acme hosts use Acme `/oidc/callback` endpoints,

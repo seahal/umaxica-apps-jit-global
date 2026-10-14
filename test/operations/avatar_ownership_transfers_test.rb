@@ -130,14 +130,18 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     assert_equal "org", @avatar.reload.current_ownership_period.owner_surface
     assert_equal @target.collective.public_id, @avatar.current_ownership_period.owner_collective_public_id
     assert_not_equal Float::INFINITY, source_period.reload.valid_to
-    assert_equal source_period.valid_to, @avatar.bureau_ownership_periods.current.first.valid_from
+    bureau_periods = AvatarBureauOwnershipPeriod.where(avatar_id: @avatar.id).current
+
+    assert_equal source_period.valid_to, bureau_periods.first.valid_from
     assert_equal @target.collective.public_id,
-                 @avatar.bureau_ownership_periods.current.first.bureau_public_id
+                 bureau_periods.first.bureau_public_id
     assert_equal accepted.completed_at,
-                 accepted.enterprise_to_bureau_detail.reload.accepted_at
-    assert_equal @target_actor.public_id, accepted.enterprise_to_bureau_detail.accept_actor_public_id
+                 AvatarEnterpriseToBureauTransferDetail.find_by!(transfer_reservation_id: accepted.id).accepted_at
     assert_equal @target_actor.public_id,
-                 @avatar.bureau_ownership_periods.current.first.transferred_by_actor_public_id
+                 AvatarEnterpriseToBureauTransferDetail.find_by!(transfer_reservation_id: accepted.id)
+                   .accept_actor_public_id
+    assert_equal @target_actor.public_id,
+                 bureau_periods.first.transferred_by_actor_public_id
   end
 
   test "registry acceptance after cutover writes only the concrete ownership source" do
@@ -171,6 +175,39 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
         cutover_at: Time.utc(2030, 1, 1),
       )
 
+      target_group = GroupManagement::Create.call(
+        account_surface: "org",
+        account_public_id: @target.account.public_id,
+        owner_surface: "org",
+        owner_collective_public_id: @target.collective.public_id,
+        actor: @target_actor,
+        subject_public_id: @target.account.public_id,
+        name: "Concrete destination group",
+      )
+      source_group = GroupManagement::Create.call(
+        account_surface: "app",
+        account_public_id: source.account.public_id,
+        owner_surface: "app",
+        owner_collective_public_id: source.collective.public_id,
+        actor: source_actor,
+        subject_public_id: source.account.public_id,
+        name: "Concrete former-owner group",
+      )
+      target_membership = GroupAvatarMembership.create!(
+        avatar_group: target_group,
+        avatar: avatar,
+        role: GroupAvatarMembership::ROLE,
+        position: 0,
+        state: "active",
+      )
+      source_membership = GroupAvatarMembership.create!(
+        avatar_group: source_group,
+        avatar: avatar,
+        role: GroupAvatarMembership::ROLE,
+        position: 0,
+        state: "active",
+      )
+
       accepted = AvatarOwnershipTransfers::RegistryAcceptOperation.call(
         actor: @target_actor,
         surface: "org",
@@ -179,9 +216,13 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
       )
 
       assert_equal "accepted", accepted.state
-      assert_equal legacy_period_count, avatar.avatar_ownership_periods.reload.count
+      assert_equal legacy_period_count, AvatarOwnershipPeriod.where(avatar_id: avatar.id).count
       assert_equal "org", avatar.current_ownership_period.owner_surface
       assert_equal @target.collective.public_id, avatar.current_ownership_period.owner_collective_public_id
+      assert_equal "active", target_membership.reload.state
+      assert_equal "removed", source_membership.reload.state
+      assert_equal @target.account.public_id, target_group.reload.account_public_id
+      assert_equal source.account.public_id, source_group.reload.account_public_id
       raise ActiveRecord::Rollback
     end
   end
@@ -225,10 +266,12 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     assert_equal accepted.id, replayed.id
     assert_equal "accepted", replayed.state
     assert_equal accepted.completed_at, replayed.completed_at
-    assert_equal legacy_period_count, @avatar.avatar_ownership_periods.reload.count
-    assert_equal bureau_period_count, @avatar.bureau_ownership_periods.reload.count
-    assert_equal accepted.enterprise_to_bureau_detail.reload.accepted_at,
-                 replayed.enterprise_to_bureau_detail.accepted_at
+    assert_equal legacy_period_count, AvatarOwnershipPeriod.where(avatar_id: @avatar.id).count
+    assert_equal bureau_period_count, AvatarBureauOwnershipPeriod.where(avatar_id: @avatar.id).count
+    accepted_detail = AvatarEnterpriseToBureauTransferDetail.find_by!(transfer_reservation_id: accepted.id)
+    replayed_detail = AvatarEnterpriseToBureauTransferDetail.find_by!(transfer_reservation_id: replayed.id)
+
+    assert_equal accepted_detail.accepted_at, replayed_detail.accepted_at
   end
 
   test "registry transfer removes owner-mismatched group membership and preserves target membership" do
@@ -473,7 +516,7 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
 
     assert_equal "pending", reservation.reload.state
     assert_equal Float::INFINITY, source_period.reload.valid_to
-    assert_empty @avatar.bureau_ownership_periods.reload.current
+    assert_empty AvatarBureauOwnershipPeriod.where(avatar_id: @avatar.id).current
   end
 
   test "registry accept rejects an instant that does not advance either ownership history" do
@@ -496,7 +539,7 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     assert_equal "pending", reservation.reload.state
     assert_equal Float::INFINITY, source_period.reload.valid_to
     assert_equal Float::INFINITY, legacy_period.reload.valid_to
-    assert_empty @avatar.bureau_ownership_periods.reload.current
+    assert_empty AvatarBureauOwnershipPeriod.where(avatar_id: @avatar.id).current
   end
 
   test "target owner accepts once and source selection no longer resolves the Avatar" do

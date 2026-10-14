@@ -55,7 +55,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, browser.response.status
-      admitted = binding.reload.admitted_auth_ceremony_session
+      admitted = admitted_auth_ceremony_session_for_test(binding.reload)
       replacement = BaseStepUpCancelAndStartCommitter.call!(
         actor:, token:, previous_transaction: first.transaction,
         requirement: StepUpRequirement.new(
@@ -157,7 +157,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
 
       assert_equal 200, browser.response.status
       csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      continuity = binding.auth_ceremony_session
+      continuity = auth_ceremony_session_for_test(binding)
       original_facts = binding.attributes
       before = continuity.class.count
       cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
@@ -186,19 +186,28 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     [
-      [ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), auth_app_sign_up_email_path(ri: "jp"),
+      ["app", ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), auth_app_sign_up_email_path(ri: "jp"),
        ClientEmail, Client, :client_email, { raw_address: "unadmitted-#{SecureRandom.hex(6)}@example.com" },],
-      [ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), auth_com_sign_up_email_path(ri: "jp"),
+      ["com", ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), auth_com_sign_up_email_path(ri: "jp"),
        VisitorEmail, Visitor, :visitor_email, { raw_address: "unadmitted-#{SecureRandom.hex(6)}@example.com" },],
-      [ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), auth_app_sign_up_telephone_path(ri: "jp"),
+      ["app", ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), auth_app_sign_up_telephone_path(ri: "jp"),
        ClientTelephone, Client, :client_telephone, { raw_number: "+819012345678", confirm_using_mfa: "1" },],
-      [ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), auth_com_sign_up_telephone_path(ri: "jp"),
+      ["com", ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), auth_com_sign_up_telephone_path(ri: "jp"),
        VisitorTelephone, Visitor, :visitor_telephone, { raw_number: "+819012345678", confirm_using_mfa: "1" },],
-    ].each do |host, path, contact_model, actor_model, contact_key, input|
+    ].each do |surface, host, path, contact_model, actor_model, contact_key, input|
       browser = open_session
       browser.host!(host)
       browser.https!
-      headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface:, intent: "sign_in", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+      )
+      browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
+      csrf_token = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      headers = {
+        "Origin" => "https://#{host}",
+        "Sec-Fetch-Site" => "same-origin",
+        "X-CSRF-Token" => csrf_token,
+      }
       assert_no_difference [-> { contact_model.count }, -> { actor_model.count }] do
         browser.post(
           path, params: {
@@ -273,7 +282,8 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal [303, "reauthentication_handoff", "pending", nil],
-                   [browser.response.status, binding.reload.admitted_auth_ceremony_session&.admission_purpose,
+                   [browser.response.status,
+                    admitted_auth_ceremony_session_for_test(binding.reload)&.admission_purpose,
                     issuance.transaction.reload.status, token.reload.last_step_up_at,]
       if surface != "org"
         contact_model = (surface == "app") ? ClientEmail : VisitorEmail
@@ -320,7 +330,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         actor: actor, token: token, previous_transaction: issuance.transaction, requirement: requirement,
         return_to: "/identity/passkeys?ri=jp", base_browser_nonce: base_nonce, base_token: token,
       )
-      admitted = binding.admitted_auth_ceremony_session
+      admitted = admitted_auth_ceremony_session_for_test(binding)
       terminal_facts = [issuance.transaction.reload.status, issuance.transaction.canceled_at]
       browser.get("/verification", params: { transaction_ref: issuance.transaction.transaction_id, ri: "jp" })
 
@@ -733,7 +743,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
 
         assert_equal 200, browser.response.status
         csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        continuity = binding.auth_ceremony_session
+        continuity = auth_ceremony_session_for_test(binding)
         cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
         original_cookie = browser.cookies[cookie_name]
         deadline = binding.expires_at
@@ -750,7 +760,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
           assert_equal 303, browser.response.status
           assert_equal before + 1, session_model.count
           assert_predicate binding.reload, :redeemed?
-          assert_predicate binding.admitted_auth_ceremony_session, :admitted?
+          assert_predicate admitted_auth_ceremony_session_for_test(binding), :admitted?
           assert_not_predicate continuity.reload, :active?
           assert_not_equal original_cookie, browser.cookies[cookie_name]
         else
@@ -848,9 +858,9 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       browser.host!(auth_host)
 
       assert_equal retained_sid, browser.cookies[sid_key]
-      assert_not_predicate binding.auth_ceremony_session, :admitted?
-      assert_equal "pending", binding.authorization_transaction.reload.status
-      assert_equal "pending", sibling.authorization_transaction.reload.status
+      assert_not_predicate auth_ceremony_session_for_test(binding), :admitted?
+      assert_equal "pending", authorization_transaction_for_test(binding).reload.status
+      assert_equal "pending", authorization_transaction_for_test(sibling).reload.status
     ensure
       ActionController::Base.allow_forgery_protection = protection
     end
@@ -963,7 +973,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       assert_equal 200, owner.response.status, surface
       assert_nil owner_binding.reload.redeemed_at
       csrf = owner.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      continuity = owner_binding.auth_ceremony_session
+      continuity = auth_ceremony_session_for_test(owner_binding)
       original_cookie = owner.cookies["__Host-auth_sid"] || owner.cookies["auth_sid"]
       unavailable_store = Valkey::AuthState::OpaqueAdmissionStore.new
       unavailable_store.stub(:consume_reference!, ->(**) { raise Umaxica::Valkey::Unavailable, "unavailable" }) do
@@ -991,8 +1001,9 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
 
       assert_equal 303, owner.response.status, surface
       assert_equal [true, true, false],
-                   [owner_binding.reload.redeemed?, owner_binding.admitted_auth_ceremony_session.admitted?,
-                    owner_binding.auth_ceremony_session.active?,],
+                   [owner_binding.reload.redeemed?,
+                    admitted_auth_ceremony_session_for_test(owner_binding).admitted?,
+                    auth_ceremony_session_for_test(owner_binding).active?,],
                    "redemption atomically records admitted continuity and revokes its predecessor"
       assert_equal entry_path, URI.parse(owner.response.location).path
       assert_not_includes owner.response.location, "entry_ref"

@@ -260,8 +260,9 @@ module PreferenceWebCookieEndpoint
   end
 
   def load_or_create_preference_cookie!(preference)
-    association_name = "#{preference.class.name.underscore}_cookie"
-    cookie = preference.public_send(association_name)
+    record_class = PreferenceClassRegistry.cookie_class(preference_prefix(preference))
+    relation = record_class.where(preference_id: preference.id)
+    cookie = relation.first
     return cookie if cookie.present?
 
     default_attrs = {
@@ -270,7 +271,7 @@ module PreferenceWebCookieEndpoint
       functional: false,
       consented: false,
     }
-    preference.public_send("create_#{association_name}!", default_attrs)
+    relation.create!(default_attrs)
   end
 
   def consented_buffer_expires_at(preference)

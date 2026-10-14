@@ -15,7 +15,7 @@ module Base
         before_action :require_recovery_ceremony!
 
         def show
-          @enforcement_cases = ComEnforcementCase.in_force.where(
+          @enforcement_cases = ComEnforcementCase.in_force.includes(:appeal).where(
             principal_public_id: current_recovery_ceremony.subject.public_id, kind: "security_lock",
             visibility: "visible",
             release_mode: "verification_required",

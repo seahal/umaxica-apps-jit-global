@@ -235,12 +235,12 @@ module PreferenceCore
     association_name = :"#{preference_prefix_underscore}_#{child_type.to_s.underscore}"
     @preferences ||= ensure_preferences_record
 
-    # Access-token loading can leave a child association memoized on @preferences.
-    # Reload it here so preference edit/update screens render the latest DB value
-    # without forcing the generic loader to refresh associations for every caller.
+    # Access-token loading can leave a child association memoized on @preferences. Reset only that
+    # target so the explicit child query below reads the current DB value without association.reload
+    # triggering strict loading for the already-loaded target.
     if @preferences.persisted?
       association = @preferences.association(association_name)
-      association.reload if association.loaded?
+      association.reset if association.loaded?
     end
 
     load_or_create_preference_child(child_type, default_attributes)
@@ -256,7 +256,7 @@ module PreferenceCore
 
     if @preferences.persisted?
       association = @preferences.association(association_name)
-      association.reload if association.loaded?
+      association.reset if association.loaded?
     end
 
     load_or_build_preference_child(child_type, default_attributes)
@@ -264,11 +264,6 @@ module PreferenceCore
 
   def reload_preferences_and_reissue_token!
     @preferences.reload
-    # Force reload all preference associations to ensure they reflect DB state
-    PreferenceClassRegistry::CHILD_RECORD_TYPES.each do |type|
-      assoc_name = "#{preference_prefix_underscore}_#{type}"
-      @preferences.association(assoc_name.to_sym).reload if @preferences.respond_to?(assoc_name)
-    end
     issue_access_token_from(@preferences)
   end
 
@@ -415,11 +410,11 @@ module PreferenceCore
 
   def load_or_build_selectable_preference_child(type)
     type = type.to_sym
-    association_name = :"#{preference_prefix_underscore}_#{type}"
-    child = @preferences.public_send(association_name)
+    record_class = PreferenceClassRegistry.record_class(preference_prefix, type)
+    child = record_class.find_by(preference_id: @preferences.id)
     return child if child.present?
 
-    PreferenceClassRegistry.record_class(preference_prefix, type).new(
+    record_class.new(
       preference: @preferences,
       option_id: PreferenceClassRegistry.default_option_id(preference_prefix, type),
     )
@@ -617,9 +612,9 @@ module PreferenceCore
     return if resource.blank?
 
     case preference_class.name
-    when "AppPreference" then resource.user_preference
-    when "OrgPreference" then resource.staff_preference
-    when "ComPreference" then resource.visitor_preference
+    when "AppPreference" then ClientPreference.find_by(user_id: resource.id)
+    when "OrgPreference" then OperatorPreference.find_by(staff_id: resource.id)
+    when "ComPreference" then VisitorPreference.find_by(visitor_id: resource.id)
     end
   end
 

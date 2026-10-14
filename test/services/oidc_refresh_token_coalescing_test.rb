@@ -14,6 +14,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
       client_token: @root_token,
       oidc_client_id: "core-app",
       oidc_scope: "openid profile",
+      refresh_token_expires_at: 1.hour.from_now,
     )
     @refresh_token = @usage.issue_refresh_token!
   end
@@ -670,6 +671,7 @@ class OidcRefreshTokenCoalescingConcurrencyTest < ActiveSupport::TestCase
       client_token: @root_token,
       oidc_client_id: "core-app",
       oidc_scope: "openid profile",
+      refresh_token_expires_at: 1.hour.from_now,
     )
     @refresh_token = @usage.issue_refresh_token!
   end

@@ -63,6 +63,7 @@ class ClientPersona < AppRpRecord
   end
 
   def current_avatar
-    current_avatar_persona_binding&.avatar
+    binding = current_avatar_persona_binding
+    Avatar.find_by(id: binding&.avatar_id)
   end
 end

@@ -3,13 +3,11 @@
 
 require "test_helper"
 
-# Covers the media type contract on every `/api/v0` boundary: the cookie-authenticated Core BFF, the
-# bearer-authenticated Palm API, and the public content endpoints. Each includes the same concern, so
+# Covers the media type contract on the cookie-authenticated Core BFF and public content endpoints. Each includes the same concern, so
 # a regression in one would otherwise be caught in only one place.
 class ApiContentNegotiationTest < ActionDispatch::IntegrationTest
   CORE_HOST = ENV.fetch("PUBLIC_CORE_SERVICE_URL")
   DOCS_HOST = ENV.fetch("PRIVATE_DOCS_SERVICE_URL")
-  PALM_HOST = ENV.fetch("PUBLIC_PALM_SERVICE_URL")
 
   setup do
     @previous_flag = ENV["CORE_BROWSER_JWT_COOKIE_ENABLED"]
@@ -26,7 +24,6 @@ class ApiContentNegotiationTest < ActionDispatch::IntegrationTest
     {
       CORE_HOST => "/api/v0/session",
       DOCS_HOST => "/api/v0/entries",
-      PALM_HOST => "/api/v0/profile",
     }.each do |host, path|
       host! host
       get path, headers: { "Accept" => "text/html" }
@@ -52,8 +49,8 @@ class ApiContentNegotiationTest < ActionDispatch::IntegrationTest
   end
 
   test "negotiation runs before authentication so a refusal does not depend on credentials" do
-    host! PALM_HOST
-    get "/api/v0/profile", headers: { "Accept" => "text/html" }
+    host! CORE_HOST
+    get "/api/v0/session", headers: { "Accept" => "text/html" }
 
     # Without a bearer token this endpoint answers 401. The media type is settled first.
     assert_response :not_acceptable

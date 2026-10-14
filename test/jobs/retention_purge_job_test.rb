@@ -29,7 +29,7 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
       valid_from: Time.utc(2024, 1, 1),
       valid_to: Time.utc(2025, 1, 1),
     )
-    current_moniker = avatar.current_avatar_moniker
+    current_moniker = AvatarMoniker.current.find_by!(avatar_id: avatar.id)
     avatar.update_columns(purge_eligible_at: 1.hour.ago)
 
     assert_no_difference -> { Avatar.count } do

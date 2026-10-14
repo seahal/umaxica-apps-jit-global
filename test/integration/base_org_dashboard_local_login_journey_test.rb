@@ -103,7 +103,7 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     assert_equal auth_host, target.host
     entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_ref)
-    flow = binding.authorization_transaction
+    flow = authorization_transaction_for_test(binding)
     browser = open_session
     browser.host!(auth_host)
     browser.https!

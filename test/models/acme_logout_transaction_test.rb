@@ -97,6 +97,41 @@ class AcmeLogoutTransactionTest < ActiveSupport::TestCase
     assert_includes transaction.errors[:completed_steps], "contains steps from another logout workflow"
   end
 
+  test "version one Browser RP binding requires all authority facts" do
+    transaction = build_transaction(
+      origin_surface: "core",
+      workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
+      expected_step: AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
+      actor_ref: "actor",
+      session_ref: "rp-session",
+      binding_version: 1,
+      realm: "app",
+      parent_session_ref: "device-session",
+      captured_root_ref: "root-token",
+      root_refresh_family_ref: "refresh-family",
+      captured_root_generation: 0,
+      origin_intent_digest: "d".b * 32,
+    )
+
+    assert_predicate transaction, :valid?
+
+    transaction.origin_intent_digest = "d".b * 31
+
+    assert_not transaction.valid?
+    assert_includes transaction.errors[:origin_intent_digest], "must contain 32 bytes"
+  end
+
+  test "legacy binding version remains valid without Browser RP authority facts" do
+    transaction = build_transaction(
+      origin_surface: "core",
+      workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
+      expected_step: AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
+      binding_version: 0,
+    )
+
+    assert_predicate transaction, :valid?
+  end
+
   test "replaying a completed step is idempotent" do
     transaction = AcmeLogoutTransaction.create!(transaction_attrs(origin_surface: "base"))
 

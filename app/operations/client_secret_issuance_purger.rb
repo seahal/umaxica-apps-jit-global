@@ -19,25 +19,26 @@ class ClientSecretIssuancePurger
 
     def call!(issuance:, executor_job_id:)
       AppZenithRecord.connected_to(role: :writing) do
-        issuance.client.with_lock do
+        client = Client.find(issuance.client_id)
+        client.with_lock do
           issuance.lock!
           now = Client.database_now
           return :pending unless issuance.confirmed_at.nil? && issuance.planned_count.positive? &&
             issuance.encrypted_payload.nil? && issuance.discard_at <= now && issuance.purge_eligible_at <= now
           return :dependent if ClientSecretCredential.exists?(issuance_id: issuance.id)
-          return :held if issuance.client.client_retention_holds.active_at(now).exists? ||
-            AppEnforcementCase.principal_effect_blocking?(issuance.client.public_id, :withdrawal_purge_blocked) ||
-            AppEnforcementCase.principal_effect_blocking?(issuance.client.public_id, :principal_hard_delete_blocked)
+          return :held if client.client_retention_holds.active_at(now).exists? ||
+            AppEnforcementCase.principal_effect_blocking?(client.public_id, :withdrawal_purge_blocked) ||
+            AppEnforcementCase.principal_effect_blocking?(client.public_id, :principal_hard_delete_blocked)
 
           events = ClientSecretAuditOutbox.where(
-            client_ref: issuance.client.public_id, operation_ref: issuance.origin_operation_id, credential_ref: nil,
+            client_ref: client.public_id, operation_ref: issuance.origin_operation_id, credential_ref: nil,
             event_name: %w(secret.discarded secret.issuance_canceled), occurred_at: issuance.discard_at,
           ).lock.to_a
           return :undelivered if events.empty? || events.any? { |event| event.delivered_at.nil? }
 
           return :undelivered unless durable_events?(events)
 
-          delete_with_audit!(issuance, executor_job_id, now)
+          delete_with_audit!(issuance, client, executor_job_id, now)
         end
       end
     end
@@ -52,7 +53,8 @@ class ClientSecretIssuancePurger
       end
 
       AppZenithRecord.connected_to(role: :writing) do
-        issuance.client.with_lock do
+        client = Client.find(issuance.client_id)
+        client.with_lock do
           AppTicketRecord.connected_to(role: :writing) do
             ClientToken.transaction do
               binding = omitted_binding(issuance)
@@ -68,11 +70,11 @@ class ClientSecretIssuancePurger
 
               case expected_state
               when :omitted
-                purge_omitted!(issuance, executor_job_id, retention_after, deadline)
+                purge_omitted!(issuance, client, executor_job_id, retention_after, deadline)
               when :confirmed
-                purge_confirmed!(issuance, executor_job_id, retention_after, deadline)
+                purge_confirmed!(issuance, client, executor_job_id, retention_after, deadline)
               when :terminated_signup
-                purge_terminated_signup!(issuance, executor_job_id, retention_after, binding)
+                purge_terminated_signup!(issuance, client, executor_job_id, retention_after, binding)
               else
                 raise ArgumentError, "Unsupported completed allocation state"
               end
@@ -95,7 +97,7 @@ class ClientSecretIssuancePurger
       end
     end
 
-    def purge_terminated_signup!(issuance, executor_job_id, duration, flow)
+    def purge_terminated_signup!(issuance, client, executor_job_id, duration, flow)
       return :dependent unless flow.is_a?(ClientSignUpFlow) &&
         %w(CANCELLED EXPIRED FAILED HALTED FINALIZED SIGN_IN_HANDOFF_PENDING).include?(
           ClientSignUpFlow::STATUS_NAMES.fetch(flow.status_id),
@@ -105,19 +107,19 @@ class ClientSecretIssuancePurger
       now = Client.database_now
       return :dependent if issuance.signup_completed_at || ClientSecretCredential.exists?(issuance_id: issuance.id)
       return :pending unless retired_signup_deadline?(issuance, flow, duration, now)
-      return :held if issuance_held?(issuance, now)
+      return :held if issuance_held?(client, now)
 
-      events = terminated_signup_audit_events(issuance, flow)
+      events = terminated_signup_audit_events(issuance, client, flow)
       return :undelivered if events.empty? || events.any? { |event| event.delivered_at.nil? }
 
       refs = events.filter_map(&:credential_ref)
       return :dependent if ClientSecretSignInReceipt.exists?(credential_ref: refs)
-      return :undelivered unless durable_events?(events) && durable_credential_purges?(issuance, refs)
+      return :undelivered unless durable_events?(events) && durable_credential_purges?(client, refs)
 
-      delete_with_audit!(issuance, executor_job_id, now)
+      delete_with_audit!(issuance, client, executor_job_id, now)
     end
 
-    def terminated_signup_audit_events(issuance, flow)
+    def terminated_signup_audit_events(issuance, client, flow)
       reason = {
         "CANCELLED" => "flow_canceled",
         "EXPIRED" => "flow_expired",
@@ -135,7 +137,7 @@ class ClientSecretIssuancePurger
         reasons << "payload_unavailable"
       end
       events = ClientSecretAuditOutbox.where(
-        client_ref: issuance.client.public_id, operation_ref: issuance.origin_operation_id,
+        client_ref: client.public_id, operation_ref: issuance.origin_operation_id,
         event_name: %w(secret.discarded secret.issuance_canceled), reason: reasons, occurred_at: issuance.discard_at,
       ).lock.to_a
       allocation_events = events.select { |event| event.credential_ref.nil? }
@@ -147,10 +149,10 @@ class ClientSecretIssuancePurger
       events
     end
 
-    def issuance_held?(issuance, now)
-      issuance.client.client_retention_holds.active_at(now).exists? ||
-        AppEnforcementCase.principal_effect_blocking?(issuance.client.public_id, :withdrawal_purge_blocked) ||
-        AppEnforcementCase.principal_effect_blocking?(issuance.client.public_id, :principal_hard_delete_blocked)
+    def issuance_held?(client, now)
+      client.client_retention_holds.active_at(now).exists? ||
+        AppEnforcementCase.principal_effect_blocking?(client.public_id, :withdrawal_purge_blocked) ||
+        AppEnforcementCase.principal_effect_blocking?(client.public_id, :principal_hard_delete_blocked)
     end
 
     def retired_signup_deadline?(issuance, flow, duration, now)
@@ -160,7 +162,7 @@ class ClientSecretIssuancePurger
         [flow.expires_at, issuance.purge_eligible_at].max + duration <= now
     end
 
-    def purge_confirmed!(issuance, executor_job_id, retention_after, binding_deadline)
+    def purge_confirmed!(issuance, client, executor_job_id, retention_after, binding_deadline)
       issuance.lock!
       now = Client.database_now
       return :pending unless issuance.state(at: now) == :confirmed && issuance.encrypted_payload.nil?
@@ -170,24 +172,24 @@ class ClientSecretIssuancePurger
       facts = [issuance.confirmed_at, issuance.expires_at, issuance.signup_completed_at, binding_deadline]
       deadline = facts.compact.max + retention_after
       return :pending if deadline > now
-      return :held if issuance.client.client_retention_holds.active_at(now).exists? ||
-        AppEnforcementCase.principal_effect_blocking?(issuance.client.public_id, :withdrawal_purge_blocked) ||
-        AppEnforcementCase.principal_effect_blocking?(issuance.client.public_id, :principal_hard_delete_blocked)
+      return :held if client.client_retention_holds.active_at(now).exists? ||
+        AppEnforcementCase.principal_effect_blocking?(client.public_id, :withdrawal_purge_blocked) ||
+        AppEnforcementCase.principal_effect_blocking?(client.public_id, :principal_hard_delete_blocked)
 
-      events = confirmed_audit_events(issuance)
+      events = confirmed_audit_events(issuance, client)
       return :undelivered if events.empty? || events.any? { |event| event.delivered_at.nil? }
 
       refs = events.filter_map(&:credential_ref)
       return :dependent if ClientSecretSignInReceipt.exists?(credential_ref: refs)
       return :undelivered unless durable_events?(events)
-      return :undelivered unless durable_credential_purges?(issuance, refs)
+      return :undelivered unless durable_credential_purges?(client, refs)
 
-      delete_with_audit!(issuance, executor_job_id, now)
+      delete_with_audit!(issuance, client, executor_job_id, now)
     end
 
-    def confirmed_audit_events(issuance)
+    def confirmed_audit_events(issuance, client)
       events = ClientSecretAuditOutbox.where(
-        client_ref: issuance.client.public_id, operation_ref: issuance.origin_operation_id,
+        client_ref: client.public_id, operation_ref: issuance.origin_operation_id,
         event_name: %w(secret.storage_declared secret.created), occurred_at: issuance.confirmed_at,
       ).lock.to_a
       declarations = events.select { |event| event.event_name == "secret.storage_declared" }
@@ -200,7 +202,7 @@ class ClientSecretIssuancePurger
 
       if issuance.sign_up_flow_ref
         completed = ClientSecretAuditOutbox.where(
-          client_ref: issuance.client.public_id, operation_ref: issuance.origin_operation_id,
+          client_ref: client.public_id, operation_ref: issuance.origin_operation_id,
           event_name: "secret.signup_completed", occurred_at: issuance.signup_completed_at,
           item_count: issuance.planned_count,
         ).lock.to_a
@@ -211,17 +213,17 @@ class ClientSecretIssuancePurger
       events
     end
 
-    def durable_credential_purges?(issuance, refs)
+    def durable_credential_purges?(client, refs)
       refs.all? do |ref|
         source = ClientSecretAuditOutbox.where(
-          client_ref: issuance.client.public_id, credential_ref: ref, event_name: "secret.purged",
+          client_ref: client.public_id, credential_ref: ref, event_name: "secret.purged",
         ).lock.to_a
         next false if source.any? { |event| event.delivered_at.nil? }
         next false if source.any? && !durable_events?(source)
 
         ChronicleRecord.connected_to(role: :writing) do
           Chronicle.where(action: "secret.purged", result: "succeeded")
-            .exists?(["metadata @> ?::jsonb", { client_ref: issuance.client.public_id, credential_ref: ref }.to_json])
+            .exists?(["metadata @> ?::jsonb", { client_ref: client.public_id, credential_ref: ref }.to_json])
         end
       end
     end
@@ -236,7 +238,7 @@ class ClientSecretIssuancePurger
       end
     end
 
-    def purge_omitted!(issuance, executor_job_id, retention_after, binding_deadline)
+    def purge_omitted!(issuance, client, executor_job_id, retention_after, binding_deadline)
       issuance.lock!
       now = Client.database_now
       return :pending unless issuance.state(at: now) == :omitted
@@ -245,20 +247,20 @@ class ClientSecretIssuancePurger
 
       deadline = [issuance.created_at, issuance.signup_completed_at, binding_deadline].compact.max + retention_after
       return :pending if deadline > now
-      return :held if issuance.client.client_retention_holds.active_at(now).exists? ||
-        AppEnforcementCase.principal_effect_blocking?(issuance.client.public_id, :withdrawal_purge_blocked) ||
-        AppEnforcementCase.principal_effect_blocking?(issuance.client.public_id, :principal_hard_delete_blocked)
+      return :held if client.client_retention_holds.active_at(now).exists? ||
+        AppEnforcementCase.principal_effect_blocking?(client.public_id, :withdrawal_purge_blocked) ||
+        AppEnforcementCase.principal_effect_blocking?(client.public_id, :principal_hard_delete_blocked)
 
-      events = omitted_audit_events(issuance)
+      events = omitted_audit_events(issuance, client)
       return :undelivered if events.empty? || events.any? { |event| event.delivered_at.nil? }
       return :undelivered unless durable_events?(events)
 
-      delete_with_audit!(issuance, executor_job_id, now)
+      delete_with_audit!(issuance, client, executor_job_id, now)
     end
 
-    def omitted_audit_events(issuance)
+    def omitted_audit_events(issuance, client)
       events = ClientSecretAuditOutbox.where(
-        client_ref: issuance.client.public_id, operation_ref: issuance.origin_operation_id,
+        client_ref: client.public_id, operation_ref: issuance.origin_operation_id,
         credential_ref: nil, event_name: "secret.issuance_omitted", item_count: 0,
         reason: "capacity_full", occurred_at: issuance.created_at,
       ).lock.to_a
@@ -266,7 +268,7 @@ class ClientSecretIssuancePurger
 
       if issuance.sign_up_flow_ref
         completed = ClientSecretAuditOutbox.where(
-          client_ref: issuance.client.public_id, operation_ref: issuance.origin_operation_id,
+          client_ref: client.public_id, operation_ref: issuance.origin_operation_id,
           event_name: "secret.signup_completed", occurred_at: issuance.signup_completed_at, item_count: 0,
         ).lock.to_a
         return [] if completed.empty?
@@ -276,9 +278,9 @@ class ClientSecretIssuancePurger
       events
     end
 
-    def delete_with_audit!(issuance, executor_job_id, now)
+    def delete_with_audit!(issuance, client, executor_job_id, now)
       operation = issuance.origin_operation_id
-      client_ref = issuance.client.public_id
+      client_ref = client.public_id
       count = issuance.planned_count
       snapshot = {
         issuance_origin: issuance.origin,

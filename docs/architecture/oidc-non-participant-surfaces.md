@@ -19,7 +19,6 @@ surfaces are described in `docs/architecture/base-auth-seven-rp-boundary.md`.
 | Core developer face | `config/routes/core.rb` | `Core::Dev::BareController`                        |
 | Base network face   | `config/routes/base.rb` | `Base::Net::ApplicationController`, bare stack     |
 | Core network face   | `config/routes/core.rb` | `Core::Net::BareController`                        |
-| Xper app/com/org    | `config/routes/xper.rb` | Surface-local application and bare stacks          |
 | Diagnostic hosts    | one route file each     | Mounted engine or Rack app                         |
 
 The diagnostic hosts are Mission, Flipper, Blazer, PgHero, Performance, Coverband, and Swagger.
@@ -67,11 +66,11 @@ Mission Control's controllers inherit the root `::ApplicationController`. That c
 declares only the CSRF baseline and `AUTHENTICATION_MODE = :deny_all`. An authentication concern
 added to it would reach the Mission host by inheritance.
 
-### Xper
+### Retired Xper Rails surface
 
-All Xper base controllers inherit `ActionController::Base` directly and declare
-`AUTHENTICATION_MODE = :bare`. Phase 0 exposes a homepage, health, revision, the CSP report sink,
-and temporary robots and sitemap endpoints, with no credential lifecycle.
+Xper was a Rails Non-Participant during Phase 0. Its Rails routes and controllers are retired by
+[`adr/xper-rails-surface-retirement.md`](../../adr/xper-rails-surface-retirement.md); no current
+Rails Xper surface remains. The retirement does not change the OIDC/OAuth participation decision.
 
 ### Auth
 

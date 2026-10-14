@@ -65,7 +65,11 @@ class CredentialSecurityTransition
     tokens.each do |token|
       next unless revoke_session?(token)
 
-      token.revoke!
+      AuthenticationLogoutCurrentSession.call(
+        resource: actor,
+        token: token,
+        reason: "credential_#{reason}",
+      )
       revoked_sessions += 1
     end
 

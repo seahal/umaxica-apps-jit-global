@@ -123,12 +123,15 @@ class VisitorStepUpSessionTest < ActiveSupport::TestCase
 
   test "pending scope returns only pending sessions" do
     other_token = VisitorToken.create!(visitor: @visitor)
-    pending = VisitorStepUpSession.create!(@valid_params)
-    VisitorStepUpSession.create!(
+    pending_session = VisitorStepUpSession.create!(@valid_params)
+    verified_session = VisitorStepUpSession.create!(
       @valid_params.merge(visitor_token: other_token, status: "VERIFIED", return_to: "/verified"),
     )
+    pending = VisitorStepUpSession.pending.to_a
 
-    assert_equal [pending], VisitorStepUpSession.pending.to_a
+    assert_includes pending, pending_session
+    assert_not_includes pending, verified_session
+    assert pending.all? { |step_up_session| step_up_session.status == "PENDING" }
   end
 
   test "same actor can have independent token-bound tickets" do

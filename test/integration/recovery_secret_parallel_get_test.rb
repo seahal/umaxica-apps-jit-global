@@ -19,7 +19,14 @@ class RecoverySecretParallelGetTest < ActionDispatch::IntegrationTest
         owner_column: :visitor_id,
         headers: ->(actor, host) {
           begin
-            rp_headers = as_visitor_headers(actor, host: host)
+            token = VisitorToken.create!(
+              visitor_id: actor.id,
+              visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
+              visitor_token_status_id: VisitorTokenStatus::ACTIVE,
+              visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
+              visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
+            )
+            rp_headers = as_visitor_headers(actor, host: host, session_public_id: token.public_id)
             rp_host = rp_headers["Host"]
             rp_route =
               begin
@@ -43,26 +50,46 @@ class RecoverySecretParallelGetTest < ActionDispatch::IntegrationTest
                   !(rp_token.device_session_id && VisitorRpSession.exists?(
                     device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                   ))
-                rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
                 rp_session = VisitorRpSession.create!(
                   visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                   refresh_token_expires_at: rp_now + 10.minutes,
                 )
+                rp_refresh = rp_session.issue_refresh_token!
+                device_session = rp_session.parent_device_session
+                chain_state = {
+                  device_session_present: device_session.present?,
+                  root_is_current: device_session&.current_refresh_token_id == rp_token.id,
+                  device_session_usable: device_session&.usable? == true,
+                  rp_session_active: rp_session.active?,
+                  parent_active: rp_session.parent_token_active?,
+                }
+                unless chain_state.values.all?
+                  raise RuntimeError, "test generated an inactive Browser RP authority chain: #{chain_state}"
+                end
+
                 rp_access = AuthenticationTokenService.encode(
-                  rp_token.visitor, host: rp_host, resource_type: "visitor",
-                                    session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                    oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                    expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                    issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                    jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                    subject: OidcSubject.for(
-                                      rp_token.visitor,
-                                      resource_type: "visitor",
-                                    ), client_id: rp_client.client_id,
+                  rp_token.actor_record, host: rp_host, resource_type: "visitor",
+                                         session_public_id: rp_token.public_id,
+                                         base_session_public_id: rp_token.public_id,
+                                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                         subject: OidcSubject.for(
+                                           rp_token.actor_record,
+                                           resource_type: "visitor",
+                                         ), client_id: rp_client.client_id,
                 )
-                @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+                unless OidcRpBrowserCredentialContract.decode_access_token(
+                  token: rp_access, host: rp_host, resource_type: "visitor", client_id: rp_client.client_id,
+                )
+                  raise RuntimeError, "test generated an invalid Browser RP access credential"
+                end
+
+                @base_browser_rp_credentials[rp_key] = [rp_access, rp_refresh]
               end
               if @base_browser_rp_credentials[rp_key]
                 rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
@@ -108,11 +135,53 @@ class RecoverySecretParallelGetTest < ActionDispatch::IntegrationTest
         browsers.map do |browser|
           # Independent workers are required to exercise the concurrent database boundary.
           Thread.new do
+            browser.https!
             browser.host!(host)
+            _installed = browser.cookies.merge(
+              session_headers.fetch("Cookie").split(/;\s*/), URI.parse("https://#{host}/"),
+            )
             ready << true
             start.pop
-            browser.get(path, headers: session_headers)
+            browser.get(path, headers: session_headers.except("Cookie", "HTTP_COOKIE"))
             page = Nokogiri::HTML(browser.response.body).at_css("script[data-page='app']")
+            unless page
+              access_token = browser.request.cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE]
+              payload = OidcRpBrowserCredentialContract.decode_access_token(
+                token: access_token,
+                host: browser.request.host,
+                resource_type: "visitor",
+                client_id: "base-com-ww",
+              )
+              session_id = AuthorizationTokenClaims.session_id(payload)
+              rp_session = VisitorRpSession.includes(visitor_device_session: :visitor).find_by(
+                public_id: session_id, oidc_client_id: "base-com-ww",
+              )
+              root_token = rp_session&.parent_token
+              device_session = rp_session&.parent_device_session
+              chain_state = {
+                rp_session_present: rp_session.present?,
+                visitor_present: rp_session&.visitor.present? == true,
+                device_session_present: device_session.present?,
+                root_token_present: root_token.present?,
+                current_root_matches: device_session&.current_refresh_token_id == root_token&.id,
+                device_session_usable: device_session&.usable? == true,
+                root_token_usable: root_token&.currently_usable? == true,
+                rp_session_active: rp_session&.active? == true,
+                base_session_matches: AuthorizationTokenClaims.base_session_id(payload) == root_token&.public_id,
+                subject_matches: AuthorizationTokenClaims.subject(payload) ==
+                  (OidcSubject.for(rp_session.visitor, resource_type: "visitor") if rp_session),
+              }
+              message = [
+                "recovery response was not Inertia: status=#{browser.response.status}",
+                "media_type=#{browser.response.media_type}",
+                "location_path=#{URI.parse(browser.response.location).path if browser.response.location}",
+                "access_cookie_present=#{access_token.present?}",
+                "access_token_valid=#{payload.present?}",
+                "authority_chain=#{chain_state}",
+              ].join(", ")
+              raise RuntimeError, message
+            end
+
             props = JSON.parse(page.text).fetch("props")
             outcomes << { status: browser.response.status, passcodes: props.fetch("passcodes") }
           end

@@ -28,7 +28,10 @@ class VisitorRpSession < ComTicketRecord
   private
 
   def bind_device_session_from_parent_token
-    self.visitor_device_session ||= visitor_token&.device_session
+    return if device_session_id.present?
+
+    token = VisitorToken.find_by(id: visitor_token_id)
+    self.device_session_id = token&.device_session_id
   end
 
   def parent_association_name

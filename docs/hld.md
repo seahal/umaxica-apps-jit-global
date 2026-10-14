@@ -3,7 +3,7 @@
 > Current implementation (2026-10-04): parts of this document describe an earlier shape of the
 > application. The controller namespaces it names (`Top`, `Sign`, `Bff`, `Api`) and the help contact
 > form flow are not in the current code. Current controllers live under `Auth`, `Base`, `Core`,
-> `Warp`, `Palm`, `Edit`, `Xper`, `Guid`, and the content surfaces `Docs`, `Help`, `Info`, and
+> `Warp`, `Palm`, `Edit`, `Guid`, and the content surfaces `Docs`, `Help`, `Info`, and
 > `News`, one route file each in `config/routes/`. Use `README.md` ("Routing") and
 > `docs/architecture/` for the current topology.
 

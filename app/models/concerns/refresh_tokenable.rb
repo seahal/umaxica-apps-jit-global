@@ -218,10 +218,12 @@ module RefreshTokenable
     end
 
     def update_device_session_after_rotation!(previous_token, replacement, now: nil)
-      return unless replacement.respond_to?(:device_session)
+      return unless replacement.has_attribute?(:device_session_id)
 
-      device_session = replacement.device_session || previous_token.try(:device_session)
-      return if device_session.blank?
+      device_session_id = replacement.device_session_id || previous_token.device_session_id
+      return if device_session_id.blank?
+
+      device_session = device_session_class.find(device_session_id)
 
       attrs = {
         current_refresh_token_id: replacement.id,
@@ -263,6 +265,28 @@ module RefreshTokenable
     end
   end
 
+  public
+
+  def device_session_record
+    return if device_session_id.blank?
+
+    device_session_class.find_by(id: device_session_id)
+  end
+
+  def device_session_record!
+    device_session_class.find(device_session_id)
+  end
+
+  def actor_record
+    case self
+    when ClientToken then Client.find_by(id: user_id)
+    when VisitorToken then Visitor.find_by(id: visitor_id)
+    when OperatorToken then Operator.find_by(id: staff_id)
+    else
+      raise FlowConfigurationError, "#{self.class.name} does not define an actor owner"
+    end
+  end
+
   # Whether the refresh token has expired.
   def expired_refresh?
     return true unless SessionAbsoluteExpiryValue.finite?(discard_at)
@@ -294,8 +318,8 @@ module RefreshTokenable
       self.last_used_at = now
       self.refresh_token_generation = Integer(refresh_token_generation.to_s, 10) + 1
       save!
-      if respond_to?(:device_session)
-        self.class.send(:update_device_session_after_rotation!, self, self, now: now)
+      if has_attribute?(:device_session_id)
+        update_device_session_after_rotation!(self, self, now: now)
       end
 
       # Return the combined token for the client.
@@ -324,8 +348,28 @@ module RefreshTokenable
 
   private
 
+  def update_device_session_after_rotation!(previous_token, replacement, now: nil)
+    device_session_id = replacement.device_session_id || previous_token.device_session_id
+    return if device_session_id.blank?
+
+    device_session = device_session_class.find(device_session_id)
+    attrs = {
+      current_refresh_token_id: replacement.id,
+      refresh_token_family_id: replacement.refresh_token_family_id,
+      last_seen_at: now || self.class.database_now,
+    }
+    attrs[:dpop_jkt] = replacement.dpop_jkt if replacement.has_attribute?(:dpop_jkt)
+    # rubocop:disable Rails/SkipsModelValidations
+    device_session.update_columns(attrs)
+    # rubocop:enable Rails/SkipsModelValidations
+  end
+
   def set_initial_device_session_current_token
-    return unless device_session
+    return unless has_attribute?(:device_session_id)
+    return if device_session_id.blank?
+
+    device_session = device_session_class.find(device_session_id)
+    self.device_session = device_session
     return if device_session.current_refresh_token_id.present?
 
     device_session.update!(

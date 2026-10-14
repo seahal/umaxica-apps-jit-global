@@ -31,12 +31,13 @@ module Publishing
 
         version = PromoteRevisionOperation.call(revision: revision)
 
-        single = version.single_taxonomy_assignments.sole
+        cell_models = ContentFamilies.cell_for_entry(entry)
+        single = cell_models.fetch(:version_single).find_by!(entry_version_id: version.id)
 
         assert_equal "guide", single.term_slug_snapshot, cell
         assert_equal "category", single.vocabulary_key_snapshot, cell
 
-        multiple = version.multiple_taxonomy_assignments.sole
+        multiple = cell_models.fetch(:version_multiple).find_by!(entry_version_id: version.id)
 
         assert_equal "ruby", multiple.term_slug_snapshot, cell
         assert_equal "tag", multiple.vocabulary_key_snapshot, cell

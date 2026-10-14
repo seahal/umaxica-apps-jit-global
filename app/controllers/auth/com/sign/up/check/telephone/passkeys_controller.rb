@@ -101,7 +101,7 @@ module Auth
 
               def passkey_registration_actor = @sign_up_actor
 
-              def passkey_registration_passkeys = @sign_up_actor.visitor_passkeys
+              def passkey_registration_passkeys = VisitorPasskey.where(visitor_id: @sign_up_actor.id)
 
               def save_passkey_registration!(passkey)
                 passkey.valid?

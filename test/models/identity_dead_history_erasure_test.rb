@@ -3,6 +3,27 @@
 require "test_helper"
 
 class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
+  CLIENT_ERASURE_ASSOCIATIONS = %i(
+    client_external_identities client_apple_notification_events client_emails client_telephones
+    client_totp_credentials client_passkeys client_withdrawal_ceremonies client_tokens client_device_sessions
+    oidc_connections client_memberships clients client_banners client_members client_member_discoveries
+    client_member_observations client_member_revocations client_member_impersonations client_member_suspensions
+    client_member_deletions owned_members client_bulletins rp_account authority_lock core_app_client_bridge
+    user_preference
+  ).freeze
+  VISITOR_PREFERENCE_ASSOCIATIONS = %i(
+    visitor_preference_language visitor_preference_timezone visitor_preference_region visitor_preference_theme
+    visitor_preference_currency visitor_preference_date_format visitor_preference_time_format
+    visitor_preference_motion visitor_preference_density visitor_preference_page_size
+    visitor_preference_adult_content_gate
+  ).freeze
+  VISITOR_ERASURE_ASSOCIATIONS = [
+    :visitor_emails, :visitor_withdrawal_ceremonies, :visitor_telephones, :visitor_secret_credentials,
+    :visitor_passkeys, :visitor_tokens, :visitor_device_sessions, :authority_lock, :visitor_banners,
+    :oidc_connections, :rp_account, :core_com_visitor_bridge,
+    { visitor_preference: VISITOR_PREFERENCE_ASSOCIATIONS },
+  ].freeze
+
   %w(app com).each do |realm|
     test "#{realm} permitted physical Identity erasure removes only its dead histories" do
       owner_model, email_history, telephone_history, owner_key, email_model, telephone_model =
@@ -33,6 +54,7 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
                    telephone_history.create!(facts.merge(owner_key => owner.id)),]
       peer_history = email_history.create!(facts.merge(owner_key => peer.id))
 
+      owner = preload_for_erasure(owner)
       owner.destroy!
 
       assert_not owner_model.exists?(owner.id)
@@ -56,6 +78,7 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
         owner_key => owner.id, :fingerprint => "retry-history", :attached_at => 3.days.ago,
         :detached_at => 2.days.ago, :created_at => 2.days.ago,
       )
+      owner = preload_for_erasure(owner)
       # Only the database write fails; admission and transaction rollback stay real.
       email_history.connection_class_for_self.connected_to(role: :writing) do
         email_history.connection.stub(
@@ -67,7 +90,8 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
 
       assert owner_model.exists?(owner.id)
       assert email_history.exists?(history.id)
-      owner.reload.destroy!
+      owner = preload_for_erasure(owner)
+      owner.destroy!
 
       assert_not owner_model.exists?(owner.id)
       assert_not email_history.exists?(history.id)
@@ -85,6 +109,7 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
         :detached_at => 2.days.ago, :created_at => 2.days.ago,
       )
       hold = hold_model.create!(hold_key => owner, :reason_code => "legal_hold")
+      owner = preload_for_erasure(owner)
 
       assert_raises(ActiveRecord::RecordNotDestroyed) { owner.destroy! }
       assert owner_model.exists?(owner.id)
@@ -111,6 +136,7 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
         owner_key => owner.id, :fingerprint => "prior-protected-history", :attached_at => 3.days.ago,
         :detached_at => 2.days.ago, :created_at => 2.days.ago,
       )
+      owner = preload_for_erasure(owner)
 
       assert_raises(ActiveRecord::RecordNotDestroyed) { owner.destroy! }
       assert owner_model.exists?(owner.id)
@@ -131,10 +157,21 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
         owner_key => owner.id, :fingerprint => "retained-history", :attached_at => 3.days.ago,
         :detached_at => 2.days.ago, :created_at => 2.days.ago,
       )
+      owner = preload_for_erasure(owner)
 
       assert_raises(ActiveRecord::RecordNotDestroyed) { owner.destroy! }
       assert owner_model.exists?(owner.id)
       assert email_history.exists?(history.id)
+    end
+  end
+
+  private
+
+  def preload_for_erasure(owner)
+    case owner
+    when Client then Client.includes(CLIENT_ERASURE_ASSOCIATIONS).find(owner.id)
+    when Visitor then Visitor.includes(VISITOR_ERASURE_ASSOCIATIONS).find(owner.id)
+    else raise ArgumentError, "unsupported Identity erasure owner"
     end
   end
 end

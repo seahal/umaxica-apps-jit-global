@@ -11,7 +11,7 @@ class PreferenceOptionTamperingTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
 
-    preference = AppPreference.order(:created_at).last
+    preference = AppPreference.includes(:app_preference_theme, :app_preference_timezone).order(:created_at).last
     original_option_id = preference.app_preference_theme.option_id
 
     patch base_app_preference_theme_path(ri: "jp"),
@@ -28,7 +28,7 @@ class PreferenceOptionTamperingTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
 
-    preference = AppPreference.order(:created_at).last
+    preference = AppPreference.includes(:app_preference_theme, :app_preference_timezone).order(:created_at).last
     original_option_id = preference.app_preference_timezone.option_id
 
     patch base_app_preference_timezone_path(ri: "jp"),
@@ -45,7 +45,7 @@ class PreferenceOptionTamperingTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
 
-    preference = AppPreference.order(:created_at).last
+    preference = AppPreference.includes(:app_preference_theme, :app_preference_timezone).order(:created_at).last
 
     %w(Asia/Tokyo ASIA_TOKYO asia_tokyo asia-tokyo).each do |spelling|
       patch base_app_preference_timezone_path(ri: "jp"),
@@ -69,7 +69,7 @@ class PreferenceOptionTamperingTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
 
-    preference = AppPreference.order(:created_at).last
+    preference = AppPreference.includes(:app_preference_theme, :app_preference_timezone).order(:created_at).last
 
     patch base_app_preference_timezone_path(ri: "jp"),
           params: { preference_timezone: { option_id: AppPreferenceTimezoneOption::AMERICA_NEW_YORK.to_s } }
@@ -85,7 +85,7 @@ class PreferenceOptionTamperingTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
 
-    preference = AppPreference.order(:created_at).last
+    preference = AppPreference.includes(:app_preference_theme, :app_preference_timezone).order(:created_at).last
     original_option_id = preference.app_preference_timezone.option_id
 
     %w(INVALID_CONST RAILS_ENV SECRET_KEY_BASE ApplicationController Object Kernel).each do |input|

@@ -252,7 +252,17 @@ module BaseStepUpIntent
   end
 
   def continue_redeemed_step_up_conflict!(binding:, transaction:)
-    admitted = binding.admitted_auth_ceremony_session
+    admitted =
+      case binding
+      when ClientAuthAdmissionBinding
+        ClientAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
+      when VisitorAuthAdmissionBinding
+        VisitorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
+      when OperatorAuthAdmissionBinding
+        OperatorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
+      else
+        raise BaseAuthAdmissionCoordinator::Denied.new("Auth continuation is unavailable", code: "invalid_admission")
+      end
     unless params[:restart_of].nil? && admitted&.active?(now: admitted.class.database_now)
       raise BaseAuthAdmissionCoordinator::Denied.new("Auth continuation is unavailable", code: "invalid_admission")
     end

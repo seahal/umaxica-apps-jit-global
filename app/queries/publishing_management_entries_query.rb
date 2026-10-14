@@ -57,7 +57,7 @@ class PublishingManagementEntriesQuery
   def find!(public_id:)
     scoped.includes(
       :canonical_slug,
-      :active_publication,
+      { active_publication: :entry_version },
       current_revision: %i(media_usages single_taxonomy_assignments multiple_taxonomy_assignments),
     ).find_by!(public_id: public_id)
   end

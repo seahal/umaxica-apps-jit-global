@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 class AuthenticationLogoutCurrentSession
+  class CommitOutcomeUnknown < StandardError; end
+
   def self.call(...)
     new(...).call
   end
@@ -22,11 +24,20 @@ class AuthenticationLogoutCurrentSession
     return true if recent_completed_sign_out_flow?(token_record)
 
     with_token_writing_connection(token_record) do
-      cycle = begin_sign_out_flow(token_record)
+      # An in-memory token is an internal legacy edge case: creating the flow
+      # first persists its token association and establishes the expiry fields
+      # needed by the token status callbacks. Persisted tokens follow the
+      # lock-first order below so concurrent refresh cannot deadlock on the
+      # flow's token foreign key.
+      cycle = begin_sign_out_flow(token_record) unless token_record&.respond_to?(:persisted?) && token_record.persisted?
       begin
-        cycle&.mark_access_discarded!
         revoke_device_session!(token_record)
         revoke_token!(token_record) unless device_session_cascade_handles_token?(token_record)
+        # The parent/device hierarchy is locked before the SignOutFlow insert.
+        # Its token foreign key otherwise takes a key-share lock first and can
+        # deadlock with a concurrent RP refresh taking Device -> root -> RP.
+        cycle ||= begin_sign_out_flow(token_record)
+        cycle&.mark_access_discarded!
         cycle&.mark_logically_revoked!
         cycle&.complete_sign_out!
       rescue StandardError
@@ -95,7 +106,83 @@ class AuthenticationLogoutCurrentSession
     owner = connection_owner_for(token_record&.class || token_class)
     return yield if owner.blank?
 
-    owner.connected_to(role: :writing, &)
+    transaction_body_completed = false
+    owner.connected_to(role: :writing) do
+      owner.transaction(requires_new: true) do
+        yield
+        transaction_body_completed = true
+      end
+    end
+  rescue StandardError => e
+    raise unless transaction_body_completed && commit_outcome_error?(e)
+
+    resolve_commit_outcome!(token_record, e)
+  end
+
+  def commit_outcome_error?(error)
+    [error, error.cause].compact.any? do |candidate|
+      candidate.is_a?(ActiveRecord::ConnectionFailed) ||
+        candidate.is_a?(ActiveRecord::ConnectionNotEstablished) ||
+        candidate.is_a?(PG::ConnectionBad)
+    end
+  end
+
+  def resolve_commit_outcome!(token_record, commit_error)
+    if parent_revocation_persisted?(token_record)
+      Rails.logger.info(
+        JitLogEvent.format(
+          "auth.logout_current_session.commit_confirmed_after_connection_error",
+          reason: reason,
+          token_class: token_record&.class&.name,
+          error_class: commit_error.class.name,
+        ),
+      )
+      return true
+    end
+
+    Rails.logger.error(
+      JitLogEvent.format(
+        "auth.logout_current_session.commit_outcome_unknown",
+        reason: reason,
+        token_class: token_record&.class&.name,
+        error_class: commit_error.class.name,
+      ),
+    )
+    raise CommitOutcomeUnknown, "sign-out commit outcome is indeterminate"
+  rescue CommitOutcomeUnknown
+    raise
+  rescue StandardError => e
+    Rails.logger.error(
+      JitLogEvent.format(
+        "auth.logout_current_session.commit_outcome_unreadable",
+        reason: reason,
+        token_class: token_record&.class&.name,
+        error_class: e.class.name,
+      ),
+    )
+    raise CommitOutcomeUnknown, "sign-out commit outcome is indeterminate", cause: e
+  end
+
+  def parent_revocation_persisted?(token_record)
+    return false unless token_record&.respond_to?(:id) && token_record.id.present?
+
+    owner = connection_owner_for(token_record.class)
+    return false if owner.blank?
+
+    owner.connected_to(role: :writing) do
+      owner.connection_pool.with_connection do
+        persisted_token = token_record.class.unscoped.find_by(id: token_record.id)
+        next false unless persisted_token&.respond_to?(:revoked?) && persisted_token.revoked?
+
+        device_session =
+          case persisted_token
+          when ClientToken then ClientDeviceSession.find_by(id: persisted_token.device_session_id)
+          when VisitorToken then VisitorDeviceSession.find_by(id: persisted_token.device_session_id)
+          when OperatorToken then OperatorDeviceSession.find_by(id: persisted_token.device_session_id)
+          end
+        device_session&.revoked? == true
+      end
+    end
   end
 
   def connection_owner_for(klass)
@@ -107,11 +194,6 @@ class AuthenticationLogoutCurrentSession
   end
 
   def device_session_class
-    if token&.respond_to?(:association_cached?) && token.association_cached?(:device_session) &&
-        token.device_session.present?
-      return token.device_session.class
-    end
-
     case token_class&.name
     when "ClientToken" then ClientDeviceSession
     when "OperatorToken" then OperatorDeviceSession
@@ -120,11 +202,10 @@ class AuthenticationLogoutCurrentSession
   end
 
   def revoke_device_session!(token_record)
-    return true if token_record.respond_to?(:revoked?) && token_record.revoked?
-
     device_session = device_session_for_token(token_record) || find_device_session
     return if device_session.blank?
 
+    revoke_browser_rp_sessions!(token_record)
     device_session.revoke!(reason: reason)
     return unless cascade_device_session_tokens
 
@@ -147,11 +228,22 @@ class AuthenticationLogoutCurrentSession
         error_message: e.message,
       ),
     )
-    # Never let a device-session revoke failure leave the current session
-    # usable: revoke the session token directly so sign-out still takes effect.
-    # The caller skips the token revoke when a device session is present, so
-    # without this the session would silently survive sign-out.
-    revoke_token!(token_record)
+    # A failed parent revoke must remain observable. Revoking only the token
+    # would leave the parent and its children in a contradictory state.
+    raise
+  end
+
+  def revoke_browser_rp_sessions!(token_record)
+    return if token_record.blank?
+    return unless token_record.is_a?(ClientToken) ||
+      token_record.is_a?(VisitorToken) || token_record.is_a?(OperatorToken)
+
+    RpSessionRevoker.call(
+      scope: :browser_session,
+      record: token_record,
+      status: "success",
+      allow_missing_current_root: true,
+    )
   end
 
   # Revocation either takes effect or raises. A row that is already gone is
@@ -183,23 +275,9 @@ class AuthenticationLogoutCurrentSession
   end
 
   def device_session_for_token(token_record)
-    return if token_record.blank?
-
-    if token_record.respond_to?(:association_cached?) && token_record.association_cached?(:device_session)
-      return token_record.device_session
-    end
-
-    device_session_id = token_record.try(:device_session_id)
-    return if device_session_id.blank?
-
-    device_session_class_for_token(token_record)&.find_by(id: device_session_id)
-  end
-
-  def device_session_class_for_token(token_record)
-    case token_record.class.name
-    when "ClientToken" then ClientDeviceSession
-    when "OperatorToken" then OperatorDeviceSession
-    when "VisitorToken" then VisitorDeviceSession
+    case token_record
+    when ClientToken, VisitorToken, OperatorToken
+      token_record.device_session_record
     end
   end
 
@@ -235,7 +313,7 @@ class AuthenticationLogoutCurrentSession
         error_class: e.class.name,
       ),
     )
-    nil
+    raise
   end
 
   def recent_completed_sign_out_flow?(token_record)
@@ -244,12 +322,35 @@ class AuthenticationLogoutCurrentSession
     cycle_class = sign_out_flow_class_for(token_record)
     return false if cycle_class.blank?
 
-    cycle_class.where(token_id: token_record.id)
+    completed = cycle_class.where(token_id: token_record.id)
       .where(status_id: cycle_class.status_id_for("COMPLETED"))
       .where(cycle_class.arel_table[:completed_at].gt(5.minutes.ago))
       .exists?
+    return false unless completed
+    return false if unrevoked_browser_rp_sessions?(token_record)
+
+    true
   rescue ActiveRecord::ActiveRecordError, ArgumentError
     false
+  end
+
+  def unrevoked_browser_rp_sessions?(token_record)
+    owner = connection_owner_for(token_record.class)
+    return false if owner.blank?
+
+    owner.connected_to(role: :writing) do
+      device_session = device_session_for_token(token_record)
+      next false if device_session.blank?
+
+      relation =
+        case token_record
+        when ClientToken then ClientRpSession
+        when VisitorToken then VisitorRpSession
+        when OperatorToken then OperatorRpSession
+        else next false
+        end
+      relation.exists?(device_session_id: device_session.id, revoked_at: nil)
+    end
   end
 
   def fail_sign_out_flow(cycle)

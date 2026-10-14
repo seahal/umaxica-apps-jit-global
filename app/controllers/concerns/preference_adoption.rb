@@ -11,7 +11,8 @@ module PreferenceAdoption
 
   # Called after login to sync preferences between AppPreference/OrgPreference
   # and ClientPreference/OperatorPreference. Uses updated_at to determine which is newer.
-  # Non-fatal: never blocks login on failure.
+  # Ordinary reconciliation failures are logged and left non-fatal. A database connection failure
+  # propagates because the request cannot confirm whether the actor mirror was persisted.
   def adopt_preference_for!(resource)
     return unless adoptable_preference_class?
     return if resource.blank? || @preferences.blank?
@@ -20,6 +21,8 @@ module PreferenceAdoption
     return if resource_pref.blank?
 
     sync_preferences!(resource_pref)
+  rescue ActiveRecord::ConnectionNotEstablished
+    raise
   rescue StandardError => e
     Rails.logger.info(JitLogEvent.format("preference.adoption.error", error: e.class.name, message: e.message))
   end
@@ -61,11 +64,11 @@ module PreferenceAdoption
     with_preference_writing_connection(resource) do
       case preference_class.name
       when "AppPreference"
-        resource.user_preference
+        ClientPreference.find_by(user_id: resource.id)
       when "OrgPreference"
-        resource.staff_preference
+        OperatorPreference.find_by(staff_id: resource.id)
       when "ComPreference"
-        resource.visitor_preference
+        VisitorPreference.find_by(visitor_id: resource.id)
       end
     end
   end
@@ -190,13 +193,13 @@ module PreferenceAdoption
     :principal
   end
 
-  def preference_child_for(preference, type, _prefix)
+  def preference_child_for(preference, type, prefix)
     return if preference.blank?
 
-    association_prefix = preference_child_association_prefix(preference)
-    return unless preference.respond_to?("#{association_prefix}_#{type}")
-
-    with_preference_writing_connection(preference) { preference.public_send("#{association_prefix}_#{type}") }
+    record_class = PreferenceClassRegistry.record_class(prefix, type)
+    with_preference_writing_connection(record_class) do
+      record_class.includes(:option).find_by(preference_id: preference.id)
+    end
   end
 
   # Copy a single child record's option_id from source to target, creating the
@@ -205,16 +208,17 @@ module PreferenceAdoption
   def copy_single_child!(_source, target, target_prefix, type, source_child:, mark_explicit:)
     return if source_child.blank? || source_child.option_id.blank?
 
-    target_assoc = preference_child_association_prefix(target)
-    return unless target.respond_to?("#{target_assoc}_#{type}") || target.respond_to?("create_#{target_assoc}_#{type}!")
+    target_record_class = PreferenceClassRegistry.record_class(target_prefix, type)
 
-    target_child = with_preference_writing_connection(target) { target.public_send("#{target_assoc}_#{type}") } ||
+    target_child = with_preference_writing_connection(target_record_class) do
+      target_record_class.includes(:option).find_by(preference_id: target.id)
+    end ||
       begin
         option_class = PreferenceClassRegistry.option_class(target_prefix, type)
         with_preference_writing_connection(option_class) { option_class.ensure_defaults! }
-        with_preference_writing_connection(target) do
-          target.public_send(
-            "create_#{target_assoc}_#{type}!",
+        with_preference_writing_connection(target_record_class) do
+          target_record_class.create!(
+            preference_id: target.id,
             option_id: PreferenceClassRegistry.default_option_id(target_prefix, type),
           )
         end
@@ -297,10 +301,11 @@ module PreferenceAdoption
     if preference.respond_to?(:consented)
       COOKIE_CONSENT_FIELDS.index_with { |f| preference.public_send(f) }.merge(consented_at: preference.consented_at)
     else
-      assoc_name = "#{preference.class.name.underscore}_cookie"
-      return unless preference.respond_to?(assoc_name)
-
-      cookie = with_preference_writing_connection(preference) { preference.public_send(assoc_name) }
+      cookie_class = PreferenceClassRegistry.cookie_class(preference_prefix(preference))
+      cookie =
+        with_preference_writing_connection(cookie_class) do
+          cookie_class.find_by(preference_id: preference.id)
+        end
       return if cookie.blank?
 
       COOKIE_CONSENT_FIELDS.index_with { |f| cookie.public_send(f) }.merge(consented_at: cookie.consented_at)
@@ -316,11 +321,13 @@ module PreferenceAdoption
       return
     end
 
-    assoc_name = "#{target.class.name.underscore}_cookie"
-    return unless target.respond_to?(assoc_name)
-
-    cookie = with_preference_writing_connection(target) { target.public_send(assoc_name) } ||
-      with_preference_writing_connection(target) { target.public_send("create_#{assoc_name}!") }
+    cookie_class = PreferenceClassRegistry.cookie_class(preference_prefix(target))
+    cookie = with_preference_writing_connection(cookie_class) do
+      cookie_class.find_by(preference_id: target.id)
+    end ||
+      with_preference_writing_connection(cookie_class) do
+        cookie_class.create!(preference_id: target.id)
+      end
     connection_class = preference_connection_class(target)
     connection_class ? connection_class.connected_to(role: :writing) {
       cookie.update!(snapshot)
@@ -329,24 +336,20 @@ module PreferenceAdoption
 
   # Copy child record option_ids and cookie consent from source to target.
   def copy_preference_values!(source, target, target_prefix)
-    source_assoc = preference_child_association_prefix(source)
-    target_assoc = preference_child_association_prefix(target)
-
     CHILD_RECORD_TYPES.each do |type|
-      next unless source.respond_to?("#{source_assoc}_#{type}")
-
-      source_child = with_preference_writing_connection(source) { source.public_send("#{source_assoc}_#{type}") }
+      source_child = preference_child_for(source, type, preference_prefix(source))
       next unless source_child&.option_id
-      next unless target.respond_to?("#{target_assoc}_#{type}") ||
-        target.respond_to?("create_#{target_assoc}_#{type}!")
 
-      target_child = with_preference_writing_connection(target) { target.public_send("#{target_assoc}_#{type}") } ||
+      target_record_class = PreferenceClassRegistry.record_class(target_prefix, type)
+      target_child = with_preference_writing_connection(target_record_class) do
+        target_record_class.includes(:option).find_by(preference_id: target.id)
+      end ||
         begin
           option_class = PreferenceClassRegistry.option_class(target_prefix, type)
           with_preference_writing_connection(option_class) { option_class.ensure_defaults! }
-          with_preference_writing_connection(target) do
-            target.public_send(
-              "create_#{target_assoc}_#{type}!",
+          with_preference_writing_connection(target_record_class) do
+            target_record_class.create!(
+              preference_id: target.id,
               option_id: PreferenceClassRegistry.default_option_id(target_prefix, type),
             )
           end
@@ -368,7 +371,7 @@ module PreferenceAdoption
     end
 
     copy_flat_preference_values!(source, target)
-    copy_cookie_consent!(source, target, source_assoc, target_assoc)
+    copy_cookie_consent!(source, target, preference_prefix(source), target_prefix)
     touch_target!(target)
   end
 
@@ -382,39 +385,31 @@ module PreferenceAdoption
   end
 
   def force_r18_stopper_child!(preference, prefix)
-    association_prefix = preference_child_association_prefix(preference)
     record_class = PreferenceClassRegistry.record_class(prefix, :adult_content_gate)
     option_class = PreferenceClassRegistry.option_class(prefix, :adult_content_gate)
     with_preference_writing_connection(option_class) { option_class.ensure_defaults! }
     denied_id = option_class::DENY
 
     child =
-      with_preference_writing_connection(preference) do
-        preference.public_send(r18_stopper_association_name(preference, association_prefix))
+      with_preference_writing_connection(record_class) do
+        record_class.find_by(preference_id: preference.id)
       end
 
     if child
       with_preference_writing_connection(child) { child.update!(option_id: denied_id) }
     else
       with_preference_writing_connection(record_class) do
-        record_class.create!(preference: preference, option_id: denied_id)
+        record_class.create!(preference_id: preference.id, option_id: denied_id)
       end
     end
   end
 
   def preference_resource_for(resource_pref)
     case resource_pref
-    when ClientPreference then resource_pref.user
-    when OperatorPreference then resource_pref.staff
-    when VisitorPreference then resource_pref.visitor
+    when ClientPreference then Client.find(resource_pref.user_id)
+    when OperatorPreference then Operator.find(resource_pref.staff_id)
+    when VisitorPreference then Visitor.find(resource_pref.visitor_id)
     end
-  end
-
-  def r18_stopper_association_name(preference, association_prefix)
-    prefixed = "#{association_prefix}_adult_content_gate"
-    return prefixed if preference.respond_to?(prefixed)
-
-    "#{preference.class.name.underscore}_adult_content_gate"
   end
 
   def resolve_cross_db_option_id(source_child, target_option_class)
@@ -432,13 +427,16 @@ module PreferenceAdoption
     nil
   end
 
-  def copy_cookie_consent!(source, target, _source_assoc, _target_assoc)
+  def copy_cookie_consent!(source, target, source_prefix, target_prefix)
     if source.respond_to?(:consented)
       # Source is ClientPreference/OperatorPreference (direct columns)
       source_consent = COOKIE_CONSENT_FIELDS.index_with { |f| source.public_send(f) }
     else
-      source_assoc_name = source.class.name.underscore
-      source_cookie = with_preference_writing_connection(source) { source.public_send("#{source_assoc_name}_cookie") }
+      source_cookie_class = PreferenceClassRegistry.cookie_class(source_prefix)
+      source_cookie =
+        with_preference_writing_connection(source_cookie_class) do
+          source_cookie_class.find_by(preference_id: source.id)
+        end
       return unless source_cookie
 
       source_consent = COOKIE_CONSENT_FIELDS.index_with { |f| source_cookie.public_send(f) }
@@ -453,11 +451,13 @@ module PreferenceAdoption
         target.update!(source_consent)
       end
     else
-      target_assoc_name = target.class.name.underscore
-      target_cookie = with_preference_writing_connection(target) {
-        target.public_send("#{target_assoc_name}_cookie")
+      target_cookie_class = PreferenceClassRegistry.cookie_class(target_prefix)
+      target_cookie = with_preference_writing_connection(target_cookie_class) {
+        target_cookie_class.find_by(preference_id: target.id)
       } ||
-        with_preference_writing_connection(target) { target.public_send("create_#{target_assoc_name}_cookie!") }
+        with_preference_writing_connection(target_cookie_class) do
+          target_cookie_class.create!(preference_id: target.id)
+        end
       connection_class = preference_connection_class(target)
       if connection_class
         connection_class.connected_to(role: :writing) { target_cookie.update!(source_consent) }
@@ -492,13 +492,8 @@ module PreferenceAdoption
       end.compact
     end
 
-    association_prefix = preference.class.name.underscore
-
     CHILD_RECORD_TYPES.each_with_object({}) do |type, snapshot|
-      child =
-        with_preference_writing_connection(preference) {
-          preference.public_send("#{association_prefix}_#{type}")
-        }
+      child = preference_child_for(preference, type, preference_prefix(preference))
       value = with_preference_writing_connection(child) { child&.option&.name }
       value = value&.downcase if %i(language region currency).include?(type)
       value = preference_theme_short_code(value) if type == :theme
@@ -551,19 +546,6 @@ module PreferenceAdoption
     when "AppPreference" then "Client"
     when "OrgPreference" then "Operator"
     when "ComPreference" then "Visitor"
-    end
-  end
-
-  def preference_child_association_prefix(preference)
-    case preference
-    when ClientPreference
-      "user_preference"
-    when OperatorPreference
-      "staff_preference"
-    when VisitorPreference
-      "visitor_preference"
-    else
-      preference.class.name.underscore
     end
   end
 

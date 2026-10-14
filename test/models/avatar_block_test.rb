@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # typed: false
 # == Schema Information
 #
@@ -23,7 +24,6 @@
 #  fk_rails_...  (blocker_avatar_id => avatars.id) ON DELETE => cascade
 #
 
-# frozen_string_literal: true
 
 require "test_helper"
 require_relative "../support/avatar_test_factory"
@@ -86,6 +86,7 @@ class AvatarBlockTest < ActiveSupport::TestCase
     blocked = create_avatar("Incoming Blocked")
 
     blocker.outgoing_blocks.create!(blocked_avatar: blocked)
+    blocked = Avatar.includes(incoming_blocks: :blocker_avatar, blocking_avatars: []).find(blocked.id)
 
     assert_includes blocked.incoming_blocks.map(&:blocker_avatar), blocker
     assert_includes blocked.blocking_avatars, blocker

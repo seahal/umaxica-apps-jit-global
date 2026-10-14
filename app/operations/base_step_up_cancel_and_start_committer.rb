@@ -13,7 +13,8 @@ class BaseStepUpCancelAndStartCommitter
         actor.with_lock do
           previous_transaction.class.connection_owner.connected_to(role: :writing) do
             previous_transaction.class.connection_owner.transaction do
-              token.device_session.with_lock do
+              device_session = token.device_session_record!
+              device_session.with_lock do
                 token.with_lock do
                   validate_browser_context!(
                     actor:, token:, previous_transaction:, base_browser_nonce:, base_token:,

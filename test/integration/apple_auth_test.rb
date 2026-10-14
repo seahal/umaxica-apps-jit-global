@@ -453,10 +453,11 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
       end
     end
 
-    user = ClientExternalIdentity.find_by(provider: "apple", subject: "apple_uid_new").user
+    identity = ClientExternalIdentity.find_by!(provider: "apple", subject: "apple_uid_new")
+    user = Client.find(identity.client_id)
 
     assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, user.status_id
-    assert_nil ClientEmail.find_by(user: user)
+    assert_nil ClientEmail.find_by(user_id: user.id)
   end
 
   test "callback initializes preference timezone options when missing" do
@@ -1252,12 +1253,12 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
     identity = ClientExternalIdentity.find_by(provider: "apple", subject: uid)
 
     assert_not_nil identity, "ClientAppleIdentity identity should exist"
-    assert_not_nil identity.user, "Client should be associated with identity"
+    assert_predicate identity.client_id, :present?, "Client should be associated with identity"
 
     # CRITICAL: Verify NO email was saved
-    user = identity.user
+    user = Client.find(identity.client_id)
 
-    assert_nil ClientEmail.find_by(user: user), "NO ClientEmail should exist for social login user"
+    assert_nil ClientEmail.find_by(user_id: user.id), "NO ClientEmail should exist for social login user"
   end
 
   test "Apple login without email does not save email to ClientAppleIdentity after confirmation" do
@@ -2113,7 +2114,7 @@ class AppleAuthTest < ActionDispatch::IntegrationTest
     identity = ClientExternalIdentity.find_by(provider: "google", subject: uid)
 
     assert_not_nil identity
-    assert_nil ClientEmail.find_by(user: identity.user), "NO ClientEmail for Google login user"
+    assert_nil ClientEmail.find_by(user_id: identity.client_id), "NO ClientEmail for Google login user"
 
     # Verify email column is NOT populated
     if identity.respond_to?(:email)

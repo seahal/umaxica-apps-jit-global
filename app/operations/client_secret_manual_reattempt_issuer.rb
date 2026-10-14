@@ -61,7 +61,7 @@ class ClientSecretManualReattemptIssuer
       raise Denied, "Only manual Secret allocations can be reattempted" unless predecessor.origin == "manual"
       raise Denied,
             "Secret reattempt requires the original session" unless predecessor.browser_session_ref == current.public_id
-      raise Denied, "Secret reattempt requires the exact predecessor" unless payload_failed?(predecessor)
+      raise Denied, "Secret reattempt requires the exact predecessor" unless payload_failed?(predecessor, actor)
     end
 
     def find_successor(actor, predecessor, successor_attempt)
@@ -120,9 +120,9 @@ class ClientSecretManualReattemptIssuer
       successor
     end
 
-    def payload_failed?(issuance)
+    def payload_failed?(issuance, actor)
       issuance.canceled_at.present? && ClientSecretAuditOutbox.exists?(
-        client_ref: issuance.client.public_id, operation_ref: issuance.origin_operation_id,
+        client_ref: actor.public_id, operation_ref: issuance.origin_operation_id,
         event_name: "secret.issuance_canceled", reason: "payload_unavailable",
         occurred_at: issuance.canceled_at, item_count: issuance.planned_count,
       )

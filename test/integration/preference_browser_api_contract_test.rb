@@ -213,7 +213,7 @@ class PreferenceBrowserApiContractTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "a PATCH without a valid CSRF token preserves standard refusal and changes nothing" do
+  test "a cross-site PATCH without a valid CSRF token is forbidden and changes nothing" do
     with_forgery_protection do
       ENDPOINTS.each do |endpoint|
         host! endpoint.fetch(:host)
@@ -222,7 +222,7 @@ class PreferenceBrowserApiContractTest < ActionDispatch::IntegrationTest
          [endpoint.fetch(:cookie), { cookie: { consented: true } }],].each do |path, body|
           patch path, params: body.to_json, headers: JSON_HEADERS.merge("Sec-Fetch-Site" => "cross-site")
 
-          if endpoint.fetch(:label).start_with?("auth/")
+          if endpoint.fetch(:label).start_with?("auth/", "base/")
             assert_response :forbidden, "#{endpoint.fetch(:label)} #{path}"
             assert_problem("csrf-verification-failed", 403)
           else

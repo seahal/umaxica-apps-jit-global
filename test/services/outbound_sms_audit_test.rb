@@ -78,6 +78,8 @@ class OutboundSmsAuditTest < ActiveSupport::TestCase
   test "records successful enqueue without treating it as provider delivery" do
     enqueued = nil
     provider = Object.new
+    enqueued_count = Chronicle.where(action: "notification.delivery.sms.enqueued").count
+    accepted_count = Chronicle.where(action: "notification.delivery.sms.provider_accepted").count
 
     OutboundSms.stub(:provider, provider) do
       Outbound::SmsDeliveryJob.stub(
@@ -95,8 +97,8 @@ class OutboundSmsAuditTest < ActiveSupport::TestCase
     end
 
     assert_predicate enqueued, :present?
-    assert_equal 1, Chronicle.where(action: "notification.delivery.sms.enqueued").count
-    assert_equal 0, Chronicle.where(action: "notification.delivery.sms.provider_accepted").count
+    assert_equal enqueued_count + 1, Chronicle.where(action: "notification.delivery.sms.enqueued").count
+    assert_equal accepted_count, Chronicle.where(action: "notification.delivery.sms.provider_accepted").count
   end
 
   test "does not turn an audit persistence failure into a duplicate delivery" do

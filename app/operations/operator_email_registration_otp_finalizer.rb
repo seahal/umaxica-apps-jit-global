@@ -44,10 +44,14 @@ class OperatorEmailRegistrationOtpFinalizer
 
   attr_reader :actor, :actor_context, :token, :email, :transaction, :browser_nonce, :code, :requirement
 
+  def token_device_session
+    @token_device_session ||= token.device_session_record!
+  end
+
   def finalize_source(session_ref)
     Operator.connection_class_for_self.connected_to(role: :writing) do
       actor.with_lock do
-        token.device_session.with_lock do
+        token_device_session.with_lock do
           token.with_lock do
             email.with_lock do
               transaction.with_lock do
@@ -69,13 +73,13 @@ class OperatorEmailRegistrationOtpFinalizer
 
   def source_current?
     actor.login_allowed? && actor.accessible?(Operator.database_now) &&
-      token.staff_id == actor.id && token.device_session.staff_id == actor.id && email.staff_id == actor.id
+      token.staff_id == actor.id && token_device_session.staff_id == actor.id && email.staff_id == actor.id
   end
 
   def root_current?
     now = OperatorEmailCeremonyTransaction.database_now
-    token.currently_usable?(now) && token.device_session.usable? &&
-      token.device_session.current_refresh_token_id == token.id
+    token.currently_usable?(now) && token_device_session.usable? &&
+      token_device_session.current_refresh_token_id == token.id
   end
 
   def current_policy?

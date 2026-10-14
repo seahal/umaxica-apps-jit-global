@@ -21,6 +21,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "form[action*=?][method=?]", core_app_sign_out_path, "post"
+    assert_select "form[action='#{core_app_sign_out_path}'] input[name=_method][value=delete]", count: 0
     assert_predicate token.reload, :currently_usable?
   end
 
@@ -63,6 +64,34 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_predicate query["logout_challenge"], :present?
     assert_equal "jp", query["ri"]
     assert_predicate @rp_session.reload, :active?
+  end
+
+  test "reuses an unfinished Browser RP intent for the same RP session" do
+    user = clients(:one)
+    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    authenticate_rp!(user, token)
+
+    before_count = AcmeLogoutTransaction.count
+    post core_app_sign_out_url(ri: "jp")
+
+    assert_response :see_other
+    first_location = URI.parse(response.location)
+    first_challenge = Rack::Utils.parse_nested_query(first_location.query.to_s).fetch("logout_challenge")
+    first_transaction = AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: first_challenge)
+
+    assert_equal before_count + 1, AcmeLogoutTransaction.count
+
+    post core_app_sign_out_url(ri: "jp")
+
+    assert_response :see_other
+    second_location = URI.parse(response.location)
+    second_challenge = Rack::Utils.parse_nested_query(second_location.query.to_s).fetch("logout_challenge")
+
+    assert_equal first_challenge, second_challenge
+    assert_equal before_count + 1, AcmeLogoutTransaction.count
+    assert_equal first_transaction.parent_session_ref,
+                 request.session.fetch(AcmeLogoutTransactionable::BROWSER_RP_LOGOUT_PROOFS_SESSION_KEY)
+                   .fetch(first_challenge).fetch("parent_session_ref")
   end
 
   test "post sign out leaves parent and RP rows unchanged until authority confirmation" do

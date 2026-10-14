@@ -40,6 +40,35 @@ class GroupAvatarMembershipPolicyTest < ActiveSupport::TestCase
     assert_predicate policy, :destroy?
   end
 
+  test "post-cutover membership policy resolves concrete group and Avatar owners" do
+    membership = new_membership(avatar: @bootstrap.avatar)
+
+    AvatarRecord.transaction(joinable: false) do
+      legacy_owner = AvatarGroupOwnershipPeriod.find_by!(avatar_group_id: @group.id)
+      AvatarGroupConcreteOwnershipPeriod.create!(
+        avatar_group: @group,
+        owner_surface: legacy_owner.owner_surface,
+        owner_collective_public_id: legacy_owner.owner_collective_public_id,
+        valid_from: legacy_owner.valid_from,
+      )
+      AvatarOwnershipCutover.create!(
+        id: AvatarOwnershipCutover::CUTOVER_ID,
+        cutover_at: Time.utc(2030, 1, 1),
+      )
+
+      policy = GroupAvatarMembershipPolicy.new(membership, user: @user)
+
+      assert_predicate policy, :create?
+      assert_predicate policy, :update?
+      assert_predicate policy, :destroy?
+      assert_instance_of AvatarGroupConcreteOwnershipPeriod, @group.current_ownership_period
+      assert_instance_of AvatarEnterpriseOwnershipPeriod, @bootstrap.avatar.current_ownership_period
+
+      # Roll back the marker and synthetic graph through the ordinary test transaction.
+      raise ActiveRecord::Rollback
+    end
+  end
+
   test "non-owner wrong account and com surface are denied" do
     wrong_group = AvatarGroup.create!(
       account_surface: "app", account_public_id: "other-account", name: "Other", state: "active",

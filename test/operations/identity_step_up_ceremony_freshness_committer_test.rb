@@ -124,7 +124,8 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
         )
       end
       event = replacement.reload.last_step_up_at
-      replacement.device_session.revoke!(reason: "user_logout")
+      device_session = replacement.device_session_record!
+      device_session.revoke!(reason: "user_logout")
 
       assert_raises(IdentityStepUpCeremonyContract::Error) do
         IdentityStepUpCeremonyFreshnessCommitter.call!(

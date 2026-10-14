@@ -28,7 +28,7 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
     assert_predicate cycle, :withdrawal_requested?
     assert_equal ClientWithdrawalFlowStatus::REQUESTED, cycle.status_id
 
-    event = cycle.client_withdrawal_flow_events.sole
+    event = ClientWithdrawalFlowEvent.find_by!(client_withdrawal_flow_id: cycle.id)
 
     assert_equal ClientWithdrawalFlowStatus::NOTHING, event.from_status_id
     assert_equal ClientWithdrawalFlowStatus::REQUESTED, event.to_status_id
@@ -54,7 +54,7 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
 
     assert_predicate cycle, :withdrawal_discarded?
 
-    events = cycle.client_withdrawal_flow_events.order(:occurred_at, :id).to_a
+    events = ClientWithdrawalFlowEvent.where(client_withdrawal_flow_id: cycle.id).order(:occurred_at, :id).to_a
 
     assert_equal 3, events.size
     assert_equal ClientWithdrawalFlowStatus::CLOSING, events.second.to_status_id
@@ -69,7 +69,7 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
     cycle.fail_withdrawal!(reason: "manual-stop")
 
     assert_predicate cycle, :withdrawal_failed?
-    assert_predicate cycle.client_withdrawal_flow_events.last, :present?
+    assert_predicate ClientWithdrawalFlowEvent.where(client_withdrawal_flow_id: cycle.id).last, :present?
   end
 
   test "withdrawal recovery completes the cycle and records completion time" do
@@ -87,7 +87,7 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
     assert_predicate cycle, :withdrawal_recovered?
     assert_equal now, cycle.completed_at
 
-    event = cycle.client_withdrawal_flow_events.order(:id).last
+    event = ClientWithdrawalFlowEvent.where(client_withdrawal_flow_id: cycle.id).order(:id).last
 
     assert_equal ClientWithdrawalFlowStatus::RECOVERED, event.to_status_id
     assert_equal "recovered", event.reason
@@ -108,7 +108,7 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
     assert_predicate cycle, :withdrawal_terminated?
     assert_equal now, cycle.completed_at
 
-    event = cycle.visitor_withdrawal_flow_events.order(:id).last
+    event = VisitorWithdrawalFlowEvent.where(visitor_withdrawal_flow_id: cycle.id).order(:id).last
 
     assert_equal VisitorWithdrawalFlowStatus::TERMINATED, event.to_status_id
     assert_equal "purged", event.reason

@@ -9,13 +9,10 @@ module OidcClientStoresStaticClientStore
 
   def clients
     first_party_browser_rp_clients
-      .merge(native_rp_clients)
       .freeze
   end
 
-  # Ten currently active first-party browser RPs. The approved thirteen-client regional target is
-  # kept in AuthBoundaryAuthorityMap during expand-and-contract migration; it is not active here
-  # until exact caller, URI, audience, key, and RP-session bindings are implemented.
+  # First-party Browser RP clients use independent audiences, keys, callbacks, and RP sessions.
   def first_party_browser_rp_clients
     FIRST_PARTY_RP_SPECS.to_h { |client_id, spec| [client_id, face_rp_client(**spec)] }
   end
@@ -74,6 +71,23 @@ module OidcClientStoresStaticClientStore
       name: "Edit Org RP",
       jwt_namespace: "EDIT_ORG",
     },
+    "palm-app" => {
+      env_key: "PUBLIC_PALM_SERVICE_URL",
+      resource_type: "client",
+      aud: "palm-app",
+      name: "Palm App RP",
+      jwt_namespace: "PALM_APP",
+      backchannel_logout: false,
+    },
+    "tech-org" => {
+      env_key: %w(PUBLIC_TECH_STAFF_URL PRIVATE_TECH_STAFF_URL),
+      resource_type: "operator",
+      aud: "tech-org",
+      name: "Tech Org RP",
+      jwt_namespace: "TECH_ORG",
+      backchannel_logout: false,
+      required_operator_capability: OperatorCapabilityGrant::TECH_ACCESS,
+    },
     "base-app-ww" => {
       env_key: "BASE_SERVICE_URL",
       resource_type: "client",
@@ -97,22 +111,10 @@ module OidcClientStoresStaticClientStore
     },
   }.freeze
 
-  def native_rp_clients
-    {
-      "app-ios-rp" => native_rp_client(build_redirect_uris("PUBLIC_PALM_SERVICE_URL"), "App iOS RP"),
-      "app-android-rp" => native_rp_client(build_redirect_uris("PUBLIC_PALM_SERVICE_URL"), "App Android RP"),
-    }
-  end
-
-  # App delivery follows Palm's verified HTTPS callback. These are not Base redirect URIs.
-  NATIVE_COMPLETION_URIS = {
-    "app-ios-rp" => "umaxica://oidc/callback",
-    "app-android-rp" => "com.umaxica.app:/oidc/callback",
-  }.freeze
-
   def face_rp_client(env_key:, resource_type:, aud:, name:, jwt_namespace:, default_host: nil,
                      callback_path: AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH,
-                     sign_out_path: AuthBoundaryAuthorityMap::CANONICAL_RP_SIGN_OUT_PATH)
+                     sign_out_path: AuthBoundaryAuthorityMap::CANONICAL_RP_SIGN_OUT_PATH,
+                     backchannel_logout: true, required_operator_capability: nil)
     {
       redirect_uris_by_realm: {
         resource_type => build_redirect_uris(env_key, default_host, path: callback_path),
@@ -120,25 +122,15 @@ module OidcClientStoresStaticClientStore
       post_logout_redirect_uris: build_post_logout_redirect_uris(
         env_key, default_host, path: sign_out_path,
       ),
-      backchannel_logout_uris: build_logout_uris(env_key, "backchannel/logout", default_host),
-      backchannel_logout_session_required: true,
+      backchannel_logout_uris: backchannel_logout ? build_logout_uris(env_key, "backchannel/logout", default_host) : [],
+      backchannel_logout_session_required: backchannel_logout,
       aud: aud,
       resource_type: resource_type,
       name: name,
       allowed_scopes: OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
       token_endpoint_auth_method: "private_key_jwt",
       jwt_namespace: jwt_namespace,
-    }
-  end
-
-  def native_rp_client(redirect_uris, name)
-    {
-      redirect_uris: redirect_uris,
-      aud: "palm-api",
-      resource_type: "client",
-      name: name,
-      allowed_scopes: OidcClientRegistry::PALM_ALLOWED_SCOPES,
-      token_endpoint_auth_method: "none",
+      required_operator_capability: required_operator_capability,
     }
   end
 
@@ -152,11 +144,14 @@ module OidcClientStoresStaticClientStore
     end
   end
 
-  def build_post_logout_redirect_uris(env_key, default_host = nil, path: "/sign/out")
-    configured_hosts_for(env_key, default_host).map do |host|
+  def build_post_logout_redirect_uris(env_key, default_host = nil,
+                                      path: AuthBoundaryAuthorityMap::CANONICAL_RP_SIGN_OUT_PATH)
+    configured_hosts_for(env_key, default_host).flat_map do |host|
       protocol = (Rails.env.production? || public_host?(host)) ? "https" : "http"
       port_suffix = (Rails.env.production? || public_host?(host)) ? "" : ":3000"
-      "#{protocol}://#{host}#{port_suffix}#{path}"
+      RequestContextContract.allowed_regions.map do |region|
+        "#{protocol}://#{host}#{port_suffix}#{path}?ri=#{region}"
+      end
     end
   end
 
@@ -177,11 +172,13 @@ module OidcClientStoresStaticClientStore
     false
   end
 
-  def configured_hosts_for(env_key, default_host = nil)
-    hosts = [
-      ENV.fetch(env_key, nil).presence,
-      boot_host_for(env_key, default_host),
-    ].compact
+  def configured_hosts_for(env_keys, default_host = nil)
+    hosts = []
+    Array(env_keys).each do |env_key|
+      env_host = ENV[env_key]
+      hosts << env_host if env_host.present?
+      hosts << boot_host_for(env_key, default_host)
+    end
     hosts.map! { |host| normalize_host(host) }
     hosts.uniq!
     hosts
@@ -204,6 +201,7 @@ module OidcClientStoresStaticClientStore
       when "PUBLIC_CORE_STAFF_URL", "CORE_STAFF_URL" then hosts.core_staff.to_s
       when "PUBLIC_CORE_CORPORATE_URL", "CORE_CORPORATE_URL" then hosts.core_corporate.to_s
       when "PUBLIC_PALM_SERVICE_URL" then hosts.palm_service.to_s
+      when "PUBLIC_TECH_STAFF_URL", "PRIVATE_TECH_STAFF_URL" then hosts.tech_staff.to_s
       else
         raise KeyError, "No boot host mapping for #{env_key} and no default host given" if default_host.blank?
 
@@ -220,8 +218,8 @@ module OidcClientStoresStaticClientStore
     host.to_s
   end
 
-  private_class_method :first_party_browser_rp_clients, :native_rp_clients, :native_rp_client,
-                       :face_rp_client, :build_redirect_uris, :build_post_logout_redirect_uris,
+  private_class_method :first_party_browser_rp_clients, :face_rp_client, :build_redirect_uris,
+                       :build_post_logout_redirect_uris,
                        :build_logout_uris, :public_host?, :configured_hosts_for, :boot_host_for,
                        :normalize_host
 end

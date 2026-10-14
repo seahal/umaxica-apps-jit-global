@@ -41,6 +41,13 @@ class VisitorPreference < ComPrincipalRecord
   include ::PublicId
   include ::PreferenceExplicitFields
 
+  DESTROY_DEPENDENT_ASSOCIATIONS = %i(
+    visitor_preference_language visitor_preference_timezone visitor_preference_region visitor_preference_theme
+    visitor_preference_currency visitor_preference_date_format visitor_preference_time_format
+    visitor_preference_motion visitor_preference_density visitor_preference_page_size
+    visitor_preference_adult_content_gate
+  ).freeze
+
   belongs_to :visitor, inverse_of: :visitor_preference
 
   has_one :visitor_preference_language,
@@ -94,12 +101,19 @@ class VisitorPreference < ComPrincipalRecord
   validates :performant, inclusion: { in: [true, false] }
   validates :targetable, inclusion: { in: [true, false] }
   after_initialize :set_defaults
+  before_destroy :preload_dependent_associations, prepend: true
 
   def adult_content_gate
     visitor_preference_adult_content_gate&.option&.name || "nothing"
   end
 
   private
+
+  def preload_dependent_associations
+    ActiveRecord::Associations::Preloader.new(
+      records: [self], associations: DESTROY_DEPENDENT_ASSOCIATIONS,
+    ).call
+  end
 
   def set_defaults
     return unless new_record?

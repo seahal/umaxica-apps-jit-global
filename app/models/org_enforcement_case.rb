@@ -28,4 +28,9 @@ class OrgEnforcementCase < OrgPrincipalRecord
   def self.realm
     "org"
   end
+  public
+
+  def principal_effect_record
+    OrgEnforcementPrincipalEffect.find_by(org_enforcement_case_id: id)
+  end
 end

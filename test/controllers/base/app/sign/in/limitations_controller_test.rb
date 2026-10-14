@@ -259,8 +259,10 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
 
     assert_response :see_other
     assert_not_nil @flow.reload.completed_at
-    assert_equal event_at, @flow.token.authentication_event_at
-    assert_equal "email", @flow.token.established_authentication_method
+    token = ClientToken.find_by!(id: @flow.token_id, user_id: @actor.id)
+
+    assert_equal event_at, token.authentication_event_at
+    assert_equal "email", token.established_authentication_method
     assert_not_nil ceremony.reload.completed_at
   end
 

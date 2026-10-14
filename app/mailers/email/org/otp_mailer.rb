@@ -32,7 +32,7 @@ module Email::Org
       return yield unless binding
 
       transaction = OperatorEmailCeremonyTransaction.find_by(transaction_id: binding.contact_ceremony_transaction_ref)
-      email = OperatorEmail.find_by(public_id: params[:public_id])
+      email = OperatorEmail.includes(:staff).find_by(public_id: params[:public_id])
       delivered = transaction && email && EmailCredentialRegistrationOtpDeliveryGuard.call(
         transaction: transaction, email: email, generation: binding.contact_otp_generation,
         destination: params[:email_address], code: @pass_code,
@@ -67,7 +67,7 @@ module Email::Org
       return false unless transaction && transaction.operation == params[:purpose].to_s &&
         transaction.purpose == params[:purpose].to_s
 
-      email = OperatorEmail.find_by(public_id: params[:public_id])
+      email = OperatorEmail.includes(:staff).find_by(public_id: params[:public_id])
       return false unless email
 
       email.with_lock do

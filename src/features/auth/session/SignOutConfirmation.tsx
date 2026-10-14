@@ -23,11 +23,12 @@ export type SignOutConfirmationProps = {
   form: {
     action: string;
     logout_challenge: string | null;
+    logout_intent_proof: string | null;
   };
   cancel: {
     label: string;
     action: string;
-  };
+  } | null;
   home_link: SignOutLink;
 };
 
@@ -41,7 +42,10 @@ export default function SignOutConfirmation({
   cancel,
   home_link: homeLink,
 }: SignOutConfirmationProps) {
-  const confirmation = useForm({ logout_challenge: form.logout_challenge ?? "" });
+  const confirmation = useForm({
+    logout_challenge: form.logout_challenge ?? "",
+    logout_intent_proof: form.logout_intent_proof ?? "",
+  });
   const cancellation = useForm({});
 
   const submitConfirmation = (event: React.SyntheticEvent<HTMLFormElement>) => {
@@ -51,7 +55,7 @@ export default function SignOutConfirmation({
 
   const submitCancellation = (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
-    cancellation.delete(cancel.action);
+    if (cancel) cancellation.delete(cancel.action);
   };
 
   return (
@@ -76,24 +80,26 @@ export default function SignOutConfirmation({
                 {submitLabel}
               </Button>
             </form>
-            <form
-              action={cancel.action}
-              method="post"
-              onSubmit={submitCancellation}
-            >
-              <input
-                type="hidden"
-                name="_method"
-                value="delete"
-              />
-              <Button
-                type="submit"
-                variant="secondary"
-                isDisabled={cancellation.processing}
+            {cancel ? (
+              <form
+                action={cancel.action}
+                method="post"
+                onSubmit={submitCancellation}
               >
-                {cancel.label}
-              </Button>
-            </form>
+                <input
+                  type="hidden"
+                  name="_method"
+                  value="delete"
+                />
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  isDisabled={cancellation.processing}
+                >
+                  {cancel.label}
+                </Button>
+              </form>
+            ) : null}
           </div>
         </>
       ) : (

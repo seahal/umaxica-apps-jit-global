@@ -41,7 +41,7 @@ class AvatarPolicy < ApplicationPolicy
 
     surface = avatar_surface
     return false unless ownership.owner_surface == surface
-    return false unless record.lifecycle_state&.key == "active" && record.accessible?
+    return false unless AvatarLifecycleState.exists?(id: record.lifecycle_state_id, key: "active") && record.accessible?
 
     AvatarPermissionResolver.call(
       actor: user,

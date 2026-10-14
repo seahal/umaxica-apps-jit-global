@@ -20,6 +20,10 @@ const { default: AuthAppSignOutEdit } = await import("@/pages/auth/app/sign/outs
 const { default: AuthAppSignOutComplete } = await import("@/pages/auth/app/sign/outs/complete");
 const { default: AuthAppSignOutUnavailable } =
   await import("@/pages/auth/app/sign/outs/unavailable");
+const { default: PalmAppSignOutEdit } = await import("@/pages/palm/app/sign/outs/edit");
+const { default: PalmAppSignOutComplete } = await import("@/pages/palm/app/sign/outs/complete");
+const { default: PalmAppSignOutUnavailable } =
+  await import("@/pages/palm/app/sign/outs/unavailable");
 
 const confirmationProps = {
   title: "ログアウトしますか？",
@@ -28,7 +32,7 @@ const confirmationProps = {
   confirm_description: "一度ログアウトすると、再度ログインが必要になります。",
   already_signed_out: "すでにサインアウトしています。",
   submit_label: "ログアウトします",
-  form: { action: "/sign/out?ri=jp", logout_challenge: null },
+  form: { action: "/sign/out?ri=jp", logout_challenge: null, logout_intent_proof: null },
   cancel: { label: "キャンセル", action: "/sign/out?ri=jp" },
   home_link: { label: "ホームへ戻る", href: "/?ri=jp" },
 };
@@ -112,6 +116,16 @@ describe("auth/app sign-out pages", () => {
     ["edit", AuthAppSignOutEdit, SignOutConfirmation],
     ["complete", AuthAppSignOutComplete, SignOutCompleted],
     ["unavailable", AuthAppSignOutUnavailable, SignOutUnavailable],
+  ])("%s re-exports the shared component", (_action, Page, Component) => {
+    expect(Page).toBe(Component);
+  });
+});
+
+describe("palm/app sign-out pages", () => {
+  it.each([
+    ["edit", PalmAppSignOutEdit, SignOutConfirmation],
+    ["complete", PalmAppSignOutComplete, SignOutCompleted],
+    ["unavailable", PalmAppSignOutUnavailable, SignOutUnavailable],
   ])("%s re-exports the shared component", (_action, Page, Component) => {
     expect(Page).toBe(Component);
   });

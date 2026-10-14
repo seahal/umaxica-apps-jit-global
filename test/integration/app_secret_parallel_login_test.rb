@@ -39,7 +39,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
       ClientSecretIssuance.where(client_id: @actor.id).find_each(&:destroy!)
       # An Identity is physically erased only once it has lapsed and is purgeable.
       @actor.reload.update!(discard_at: @actor.created_at, purge_eligible_at: @actor.created_at)
-      @actor.reload.destroy!
+      destroy_test_client_after_cross_database_cleanup!(@actor)
     end
   end
 
@@ -123,7 +123,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
           end
         entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
         admission = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
-        transaction = admission.authorization_transaction
+        transaction = ClientOidcAuthorizationTransaction.find(admission.authorization_transaction_id)
         auth = open_session
         auth.host!(auth_host)
         auth.https!
@@ -369,8 +369,11 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     assert_equal [303, 422], statuses.sort
     assert_equal initial_count, ClientToken.where(user_id: @actor.id).count
     base, auth, transaction, = browsers.find { |_, browser, _, _| browser.response.status == 303 }
-    flow = transaction.reload.secret_sign_in_flow
-    @flows = browsers.filter_map { |_, _, authorization, _| authorization.reload.secret_sign_in_flow }
+    flow = ClientSignInFlow.find_by(id: transaction.reload.secret_sign_in_flow_id)
+    @flows =
+      browsers.filter_map do |_, _, authorization, _|
+        ClientSignInFlow.find_by(id: authorization.reload.secret_sign_in_flow_id)
+      end
     auth.follow_redirect!
     auth.follow_redirect! if auth.response.redirect?
     auth.host!(auth_host)
@@ -399,6 +402,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     @oidc_action = result_form["action"]
     @result_ref = result_form.at_css('input[name="result_ref"]')["value"]
     @transaction_ref = result_form.at_css('input[name="transaction_ref"]')["value"]
+    @authenticity_token = result_form.at_css('input[name="authenticity_token"]')["value"]
     @base_host, @auth_host, @issuance, @raw = base_host, auth_host, issuance, raw
   ensure
     2.times { release << true } if release
@@ -426,7 +430,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
             begin
               fv5005 = browser
               fv5005.post(
-                @oidc_action, params: { result_ref: @result_ref, transaction_ref: @transaction_ref },
+                @oidc_action, params: { result_ref: @result_ref,
+                                        transaction_ref: @transaction_ref,
+                                        authenticity_token: @authenticity_token, },
                               headers: { "Origin" => "https://#{@base_host}", "Sec-Fetch-Site" => "same-origin" },
               )
             end
@@ -453,8 +459,10 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     receipt = ClientSecretSignInReceipt.find_by!(credential_ref: credential.public_id)
 
     assert_equal 1, ClientSecretSignInReceipt.where(credential_ref: credential.public_id).count
-    assert_equal @flow.reload.token.public_id, receipt.root_token_ref
-    assert_predicate @flow.token, :currently_usable?
+    root = ClientToken.find_by!(id: @flow.reload.token_id, user_id: @actor.id)
+
+    assert_equal root.public_id, receipt.root_token_ref
+    assert_predicate root, :currently_usable?
     assert_equal @actor.public_id, receipt.client_ref
     assert credential.reload.consumed_at
     assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
@@ -465,7 +473,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
 
     assert_raises(FlowInvalidTransition) { @flow.expire_sign_in! }
     assert_predicate @flow.reload, :sign_in_completed?
-    assert_equal receipt.root_token_ref, @flow.token.public_id
+    root = ClientToken.find_by!(id: @flow.token_id, user_id: @actor.id)
+
+    assert_equal receipt.root_token_ref, root.public_id
   ensure
     2.times { release << true } if release
     futures&.each { |future| future.wait(10) }
@@ -476,7 +486,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     begin
       fv5004 = @base
       fv5004.post(
-        @oidc_action, params: { result_ref: @result_ref, transaction_ref: @transaction_ref },
+        @oidc_action, params: { result_ref: @result_ref,
+                                transaction_ref: @transaction_ref,
+                                authenticity_token: @authenticity_token, },
                       headers: { "Origin" => "https://#{@base_host}", "Sec-Fetch-Site" => "same-origin" },
       )
     end
@@ -509,7 +521,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     begin
       fv5003 = stale_browser
       fv5003.post(
-        @oidc_action, params: { result_ref: @result_ref, transaction_ref: @transaction_ref },
+        @oidc_action, params: { result_ref: @result_ref,
+                                transaction_ref: @transaction_ref,
+                                authenticity_token: @authenticity_token, },
                       headers: { "Origin" => "https://#{@base_host}", "Sec-Fetch-Site" => "same-origin" },
       )
     end
@@ -530,7 +544,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     begin
       fv5002 = @base
       fv5002.post(
-        @oidc_action, params: { result_ref: @result_ref, transaction_ref: @transaction_ref },
+        @oidc_action, params: { result_ref: @result_ref,
+                                transaction_ref: @transaction_ref,
+                                authenticity_token: @authenticity_token, },
                       headers: { "Origin" => "https://#{@base_host}", "Sec-Fetch-Site" => "same-origin" },
       )
     end
@@ -555,7 +571,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     begin
       fv5001 = @base
       fv5001.post(
-        @oidc_action, params: { result_ref: @result_ref, transaction_ref: @transaction_ref },
+        @oidc_action, params: { result_ref: @result_ref,
+                                transaction_ref: @transaction_ref,
+                                authenticity_token: @authenticity_token, },
                       headers: { "Origin" => "https://#{@base_host}", "Sec-Fetch-Site" => "same-origin" },
       )
     end
@@ -570,7 +588,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     begin
       fv5000 = @base
       fv5000.post(
-        @oidc_action, params: { result_ref: @result_ref, transaction_ref: @transaction_ref },
+        @oidc_action, params: { result_ref: @result_ref,
+                                transaction_ref: @transaction_ref,
+                                authenticity_token: @authenticity_token, },
                       headers: { "Origin" => "https://#{@base_host}", "Sec-Fetch-Site" => "same-origin" },
       )
     end
@@ -612,8 +632,10 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     assert credential.reload.consumed_at
     receipt = ClientSecretSignInReceipt.find_by!(credential_ref: credential.public_id)
 
-    assert_equal @flow.token.public_id, receipt.root_token_ref
-    assert_predicate @flow.token, :currently_usable?
+    root = ClientToken.find_by!(id: @flow.token_id, user_id: @actor.id)
+
+    assert_equal root.public_id, receipt.root_token_ref
+    assert_predicate root, :currently_usable?
     assert_equal 2, ClientToken.currently_usable_at.where(user_id: @actor.id).count
     assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
   end

@@ -28,6 +28,8 @@ module OidcRpLogoutAuthority
   end
 
   def create_browser_rp_logout_authority!
+    origin_proof_state = session[AcmeLogoutTransactionable::BROWSER_RP_LOGOUT_PROOFS_SESSION_KEY]
+    origin_proof_state = origin_proof_state.dup if origin_proof_state.is_a?(Hash)
     transaction = browser_rp_logout_transaction
     return render_browser_rp_logout_rejected! unless transaction
 
@@ -35,8 +37,13 @@ module OidcRpLogoutAuthority
     @logout_transaction = current_transaction
     if current_transaction.expected_step == AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED
       session_record = find_browser_rp_logout_session(current_transaction)
-      unless session_record && browser_rp_logout_authority_matches?(current_transaction, session_record)
-        return reject_oidc_logout_challenge!("authority_mismatch")
+      return render_browser_rp_logout_rejected! unless session_record
+
+      # The durable challenge identifies the intended parent but does not authenticate the
+      # confirmation. A missing or different current IdP session is the REQ-009 error stop: keep
+      # the transaction and every session unchanged, and do not redirect to the origin.
+      unless browser_rp_logout_authority_matches?(current_transaction, session_record)
+        return render_oidc_end_session_session_missing_error
       end
 
       current_transaction = revoke_browser_rp_authority!(current_transaction, session_record)
@@ -51,8 +58,21 @@ module OidcRpLogoutAuthority
     end
 
     redirect_to(browser_rp_logout_origin_url(current_transaction), allow_other_host: true, status: :see_other)
+  rescue AuthenticationLogoutCurrentSession::CommitOutcomeUnknown => e
+    warn_sign_out_event(
+      "auth.sign_out.commit_outcome_indeterminate",
+      transaction: @logout_transaction,
+      cleanup_performed: false,
+      result: "indeterminate",
+      error_class: e.class.name,
+    )
+    render_sign_out_indeterminate!
   rescue ActiveRecord::RecordNotFound, ActiveRecord::RecordInvalid, RpSession::IssuanceRejected
     render_browser_rp_logout_rejected!
+  ensure
+    if origin_proof_state.is_a?(Hash) && origin_proof_state.present?
+      session[AcmeLogoutTransactionable::BROWSER_RP_LOGOUT_PROOFS_SESSION_KEY] = origin_proof_state
+    end
   end
 
   private
@@ -88,6 +108,7 @@ module OidcRpLogoutAuthority
   def browser_rp_logout_authority_matches?(transaction, session_record)
     target_resource = browser_rp_logout_resource(session_record)
     return false unless transaction.actor_ref == target_resource.public_id
+    return false unless browser_rp_logout_binding_matches?(transaction, session_record)
 
     authority_resource = current_resource
     resource_matches = authority_resource&.class == target_resource.class && authority_resource.id == target_resource.id
@@ -98,6 +119,30 @@ module OidcRpLogoutAuthority
     return false unless authority_token && target_root_token && authority_token.class == target_root_token.class
 
     authority_token.device_session_id.present? && authority_token.device_session_id == session_record.device_session_id
+  end
+
+  def browser_rp_logout_binding_matches?(transaction, session_record)
+    return false unless transaction.browser_rp_binding_v1?
+
+    expected_realm =
+      case session_record
+      when ClientRpSession then "app"
+      when VisitorRpSession then "com"
+      when OperatorRpSession then "org"
+      else return false
+      end
+    return false unless transaction.realm == expected_realm
+
+    device_session = session_record.parent_device_session
+    root_token = session_record.parent_token
+    return false unless device_session && root_token
+    return false unless transaction.parent_session_ref == device_session.public_id
+
+    current_family = root_token.refresh_token_family_id.presence || device_session.refresh_token_family_id.presence
+    return false unless current_family.present? && transaction.root_refresh_family_ref == current_family
+
+    generation = root_token.refresh_token_generation
+    generation.is_a?(Integer) && generation >= transaction.captured_root_generation.to_i
   end
 
   def clear_base_authority_cookies!
@@ -120,15 +165,24 @@ module OidcRpLogoutAuthority
     case resource_type
     when "client"
       AppTicketRecord.connected_to(role: :writing) do
-        ClientRpSession.find_by(public_id: transaction.session_ref, oidc_client_id: client.client_id)
+        ClientRpSession.includes(client_device_session: :user).find_by(
+          public_id: transaction.session_ref,
+          oidc_client_id: client.client_id,
+        )
       end
     when "visitor"
       ComTicketRecord.connected_to(role: :writing) do
-        VisitorRpSession.find_by(public_id: transaction.session_ref, oidc_client_id: client.client_id)
+        VisitorRpSession.includes(visitor_device_session: :visitor).find_by(
+          public_id: transaction.session_ref,
+          oidc_client_id: client.client_id,
+        )
       end
     when "operator"
       OrgTicketRecord.connected_to(role: :writing) do
-        OperatorRpSession.find_by(public_id: transaction.session_ref, oidc_client_id: client.client_id)
+        OperatorRpSession.includes(operator_device_session: :staff).find_by(
+          public_id: transaction.session_ref,
+          oidc_client_id: client.client_id,
+        )
       end
     else
       raise ArgumentError, "unsupported Browser RP logout resource type"

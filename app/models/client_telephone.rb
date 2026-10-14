@@ -125,11 +125,16 @@ class ClientTelephone < AppPrincipalRecord
 
   def sign_up_consumed_ceremony_matches?(flow, transaction)
     expected_session = Digest::SHA256.hexdigest(JSON.generate(["telephone_sign_up", flow.public_id, flow.nonce_digest]))
+    client_ref = Client.where(id: user_id).pick(:public_id)
     transaction.surface == "app" && transaction.operation == "sign_up" && transaction.purpose == "sign_up" &&
-      transaction.actor_ref == user.public_id && transaction.session_ref == expected_session &&
+      client_ref.present? && transaction.actor_ref == client_ref && transaction.session_ref == expected_session &&
       transaction.telephone_candidate_ref == public_id && transaction.normalized_number_digest == number_digest &&
       transaction.expires_at == flow.expires_at && transaction.status == "pending" && !transaction.consumed_at &&
-      !transaction.otp_cancelled_at && transaction.otp_verifier.nil? &&
+      sign_up_otp_consumed_as_expected?(transaction)
+  end
+
+  def sign_up_otp_consumed_as_expected?(transaction)
+    !transaction.otp_cancelled_at && transaction.otp_verifier.nil? &&
       transaction.otp_consumed_at.is_a?(Time) && transaction.otp_consumed_at <= transaction.class.database_now &&
       transaction.otp_expires_at.is_a?(Time) && transaction.otp_consumed_at < transaction.otp_expires_at &&
       transaction.otp_receipt_verifier.present? && transaction.otp_generation.present?

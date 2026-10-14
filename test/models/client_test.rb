@@ -67,6 +67,14 @@ class ClientTest < ActiveSupport::TestCase
   include ExternalIdentityTestHelper
 
   NIL_UUID = "00000000-0000-0000-0000-000000000000"
+  CLIENT_DESTRUCTIVE_ASSOCIATIONS = %i(
+    client_external_identities client_apple_notification_events client_emails client_telephones
+    client_totp_credentials client_passkeys client_withdrawal_ceremonies client_tokens client_device_sessions
+    oidc_connections client_memberships clients client_banners client_members client_member_discoveries
+    client_member_observations client_member_revocations client_member_impersonations client_member_suspensions
+    client_member_deletions owned_members client_bulletins rp_account authority_lock core_app_client_bridge
+    user_preference
+  ).freeze
 
   def setup
     Prosopite.pause do
@@ -219,6 +227,7 @@ class ClientTest < ActiveSupport::TestCase
   test "association deletion: destroys dependent client_emails" do
     email = ClientEmail.create!(user: @user, address: "delete_test@example.com")
     assert_difference("ClientEmail.count", -1) do
+      @user = Client.includes(CLIENT_DESTRUCTIVE_ASSOCIATIONS).find(@user.id)
       # An Identity is physically erased only once it has lapsed and is purgeable.
       @user.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
       @user.destroy
@@ -229,6 +238,7 @@ class ClientTest < ActiveSupport::TestCase
   test "association deletion: destroys dependent client_telephones" do
     phone = ClientTelephone.create!(user: @user, number: "+15551234567")
     assert_difference("ClientTelephone.count", -1) do
+      @user = Client.includes(CLIENT_DESTRUCTIVE_ASSOCIATIONS).find(@user.id)
       # An Identity is physically erased only once it has lapsed and is purgeable.
       @user.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
       @user.destroy
@@ -242,6 +252,7 @@ class ClientTest < ActiveSupport::TestCase
       discard_at: 1.day.from_now,
     )
     assert_difference("ClientToken.count", -@user.client_tokens.count) do
+      @user = Client.includes(CLIENT_DESTRUCTIVE_ASSOCIATIONS).find(@user.id)
       # An Identity is physically erased only once it has lapsed and is purgeable.
       @user.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
       @user.destroy
@@ -323,7 +334,11 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "login_methods_remaining? returns false when no methods" do
-    assert_not @user.login_methods_remaining?
+    client = Client.create!(
+      id: 8_000_000_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+    )
+
+    assert_not client.login_methods_remaining?
   end
 
   test "login_methods_remaining? returns true when email verified" do
@@ -389,7 +404,7 @@ class ClientTest < ActiveSupport::TestCase
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
     ).tap(&:finalize_binding!)
 
-    @user.client_telephones.load
+    @user = Client.includes(:client_telephones).find(@user.id)
 
     assert_predicate @user, :verified_telephone?
   end
@@ -470,6 +485,8 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "remaining_social_unlink_methods ignores stale social association cache" do
+    @user = Client.includes(:client_external_identities).find(@user.id)
+
     assert_empty @user.client_external_identities.to_a
 
     create_active_external_identity(client: @user, provider: "apple", subject: "cached_apple_uid")
@@ -506,6 +523,8 @@ class ClientTest < ActiveSupport::TestCase
       webauthn_id: "test_webauthn_id",
       description: "My Passkey",
     )
+
+    @user.reload
 
     assert_predicate @user, :passkey_login_available?
   end
@@ -567,7 +586,7 @@ class ClientTest < ActiveSupport::TestCase
       user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
 
-    @user.client_totp_credentials.load
+    @user = Client.includes(:client_totp_credentials).find(@user.id)
 
     assert_predicate @user, :totp_enabled?
   end
@@ -578,7 +597,7 @@ class ClientTest < ActiveSupport::TestCase
       user_identity_totp_credential_status_id: ClientTotpCredentialStatus::INACTIVE,
     )
 
-    @user.client_totp_credentials.load
+    @user = Client.includes(:client_totp_credentials).find(@user.id)
 
     assert_not @user.totp_enabled?
   end
@@ -647,7 +666,7 @@ class ClientTest < ActiveSupport::TestCase
       confirm_policy: "1",
     ).tap(&:finalize_binding!)
 
-    @user.client_emails.load
+    @user = Client.includes(:client_emails).find(@user.id)
 
     assert_predicate @user, :verified_email?
   end
@@ -705,7 +724,7 @@ class ClientTest < ActiveSupport::TestCase
       description: "My Passkey",
     )
 
-    @user.client_passkeys.load
+    @user = Client.includes(:client_passkeys, :client_telephones).find(@user.id)
 
     assert_predicate @user, :passkey_login_available?
   end

@@ -13,7 +13,7 @@ class PasskeyMutationConcurrencyTest < ActiveSupport::TestCase
 
   %i(rename removal).each do |operation|
     test "#{operation} waits for device revocation and refuses the stale authority after the lock is released" do
-      actor = Client.create!
+      actor = Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
       key = actor.client_passkeys.create!(
         webauthn_id: SecureRandom.uuid, public_key: "target-key", description: "Original", uv_verified_at: Time.current,
       )
@@ -76,10 +76,15 @@ class PasskeyMutationConcurrencyTest < ActiveSupport::TestCase
         Timeout.timeout(10) do
           loop do
             waiting_on_device =
-              ClientToken.connection_pool.with_connection do |connection|
-                connection.select_value(
-                  ClientToken.sanitize_sql_array(["SELECT ? = ANY(pg_blocking_pids(?))", blocker, backend]),
-                )
+              ClientToken.uncached do
+                ClientToken.connection_pool.with_connection do |connection|
+                  connection.select_value(
+                    ClientToken.sanitize_sql_array(
+                      ["SELECT ? = ANY(pg_blocking_pids(?))", blocker,
+                       backend,],
+                    ),
+                  )
+                end
               end
             if worker.complete?
               worker.value!

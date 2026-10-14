@@ -69,7 +69,7 @@ class BaseSocialLinkCompletionTest < ActionDispatch::IntegrationTest
                         oidc_client_id: rp_client.client_id,
                         revoked_at: nil,
                       ))
-                    rp_token.rotate_refresh_token! unless rp_token.device_session.current_refresh_token_id
+                    rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                     rp_now = Time.current
                     rp_session = ClientRpSession.create!(
                       client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
@@ -77,16 +77,17 @@ class BaseSocialLinkCompletionTest < ActionDispatch::IntegrationTest
                       refresh_token_expires_at: rp_now + 10.minutes,
                     )
                     rp_access = AuthenticationTokenService.encode(
-                      rp_token.user, host: rp_host, resource_type: "client",
-                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
-                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
-                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
-                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
-                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
-                                     subject: OidcSubject.for(
-                                       rp_token.user,
-                                       resource_type: "client",
-                                     ), client_id: rp_client.client_id,
+                      rp_token.actor_record, host: rp_host, resource_type: "client",
+                                             session_public_id: rp_token.public_id,
+                                             base_session_public_id: rp_token.public_id,
+                                             oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                             expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                             issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                             subject: OidcSubject.for(
+                                               rp_token.actor_record,
+                                               resource_type: "client",
+                                             ), client_id: rp_client.client_id,
                     )
                     @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
                   end
@@ -127,7 +128,7 @@ class BaseSocialLinkCompletionTest < ActionDispatch::IntegrationTest
                     oidc_client_id: f0_client.client_id,
                     revoked_at: nil,
                   ))
-                f0_token.rotate_refresh_token! unless f0_token.device_session.current_refresh_token_id
+                f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                 f0_now = Time.current
                 f0_session = ClientRpSession.create!(
                   client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
@@ -135,16 +136,17 @@ class BaseSocialLinkCompletionTest < ActionDispatch::IntegrationTest
                   refresh_token_expires_at: f0_now + 10.minutes,
                 )
                 f0_access = AuthenticationTokenService.encode(
-                  f0_token.user, host: f0_host, resource_type: "client",
-                                 session_public_id: f0_token.public_id, base_session_public_id: f0_token.public_id,
-                                 oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
-                                 expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
-                                 issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
-                                 jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
-                                 subject: OidcSubject.for(
-                                   f0_token.user,
-                                   resource_type: "client",
-                                 ), client_id: f0_client.client_id,
+                  f0_token.actor_record, host: f0_host, resource_type: "client",
+                                         session_public_id: f0_token.public_id,
+                                         base_session_public_id: f0_token.public_id,
+                                         oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
+                                         expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
+                                         subject: OidcSubject.for(
+                                           f0_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: f0_client.client_id,
                 )
                 @base_browser_rp_credentials[f0_key] =
                   [f0_access, f0_session.issue_refresh_token!]
@@ -166,7 +168,7 @@ class BaseSocialLinkCompletionTest < ActionDispatch::IntegrationTest
           end
         fx0_token_public_id = fx0_user_headers.fetch("X-TEST-SESSION-PUBLIC-ID")
         fx0_token = ClientToken.find_by(public_id: fx0_token_public_id)
-        fx0_session_public_id = fx0_token&.try(:device_session)&.public_id.presence || fx0_token_public_id
+        fx0_session_public_id = fx0_token&.device_session_record&.public_id.presence || fx0_token_public_id
         mark_token_step_up_satisfied_for_test(
           fx0_token,
           scope: SocialAuth::SOCIAL_LINK_SCOPE,
@@ -419,8 +421,8 @@ class BaseSocialLinkCompletionTest
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)
     _, scope = at, scope || SocialAuth::SOCIAL_LINK_SCOPE
-    actor = token.user
-    token.rotate_refresh_token! unless token.device_session.current_refresh_token_id
+    actor = token.actor_record
+    token.rotate_refresh_token! unless token.device_session_record&.current_refresh_token_id
     credential = actor.client_totp_credentials.find_by(
       user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     ) || ClientTotpCredential.create_for_user!(

@@ -30,7 +30,7 @@ class AuthorityResourceLifecycleBackfillOperationTest < ActiveSupport::TestCase
 
     assert_equal :manual_review, result.status
     assert_equal :explicit_lifecycle_state_required, result.reason
-    assert_nil @persona.reload.lifecycle
+    assert_not ClientPersonaLifecycle.exists?(client_persona_id: @persona.id)
   end
 
   test "creates an explicit lifecycle row and is idempotent" do
@@ -49,7 +49,8 @@ class AuthorityResourceLifecycleBackfillOperationTest < ActiveSupport::TestCase
 
     assert_equal :applied, first.status
     assert_equal :already_applied, second.status
-    assert_equal AuthorityResourceLifecycleStateValue::ACTIVE, @persona.reload.lifecycle.state
+    assert_equal AuthorityResourceLifecycleStateValue::ACTIVE,
+                 ClientPersonaLifecycle.find_by!(client_persona_id: @persona.id).state
   end
 
   test "does not replace an existing lifecycle state" do
@@ -67,7 +68,9 @@ class AuthorityResourceLifecycleBackfillOperationTest < ActiveSupport::TestCase
       )
     end
 
-    assert_equal AuthorityResourceLifecycleStateValue::RETAINED, @persona.reload.lifecycle.state
+    lifecycle = ClientPersonaLifecycle.find_by!(client_persona_id: @persona.id)
+
+    assert_equal AuthorityResourceLifecycleStateValue::RETAINED, lifecycle.state
   end
 
   test "rejects an unsupported lifecycle state before writing" do
@@ -80,6 +83,6 @@ class AuthorityResourceLifecycleBackfillOperationTest < ActiveSupport::TestCase
       )
     end
 
-    assert_nil @persona.reload.lifecycle
+    assert_not ClientPersonaLifecycle.exists?(client_persona_id: @persona.id)
   end
 end

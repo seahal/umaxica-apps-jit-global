@@ -312,9 +312,10 @@ all four. A dated verification run is evidence, not a substitute for re-checking
 change.
 
 That run also found that `palm-jp.umaxica.app` currently carries an interactive Access application.
-Palm is a bearer-token API surface whose authenticator rejects any request carrying a cookie, and
-Access forwards its `CF_Authorization` cookie to the origin, so interactive Access breaks both
-browser and native clients there. Resolve that before treating Palm as published.
+The observation predates Palm's move to a Browser RP: the former bearer API is retired. Before
+publishing the current browser flow, re-verify Access behavior, cookie forwarding, and private-origin
+reachability against the deployed route and callback contract. Local Rails routing does not establish
+that production or development edge routing has been published.
 
 The Docs, Help, and News families are not published through the tunnel. `PUBLIC_DOCS_*_URL` names a
 private `*.localhost` origin and no `PUBLIC_HELP_*`/`PUBLIC_NEWS_*` value is set, so the former

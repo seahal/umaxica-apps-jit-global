@@ -37,7 +37,7 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     assert_response :see_other
     @primary_sign_in_binding = SignInFlowBindingCodec.encode(
       flow: VisitorSignInFlow.find_by!(
-        public_id: binding.reload.admitted_auth_ceremony_session.local_sign_in_flow_ref,
+        public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
       ),
       surface: "com", phase: "PRIMARY_PENDING",
     )
@@ -149,6 +149,8 @@ class Auth::Com::Sign::In::ChallengesControllerTest
   end
 
   test "show tells an email-authenticated visitor with no passkey that no method is available" do
+    assert_empty VisitorPasskey.active.where(visitor_id: @visitor.id)
+
     establish_pending_mfa!
     follow_redirect!
 
@@ -543,7 +545,11 @@ class Auth::Com::Sign::In::ChallengesControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      id: 8_000_000_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+      status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

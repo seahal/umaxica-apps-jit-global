@@ -37,7 +37,8 @@ class EnforcementCaseEndOperation
             end_reason: reason,
             ended_by_operator_public_id: ended_by_operator_public_id,
           )
-          enforcement_case.principal_effect&.update!(ended_at: now)
+          effect = enforcement_case.principal_effect_record
+          effect&.update!(ended_at: now)
           # rubocop:disable Rails/SkipsModelValidations
           enforcement_case.authentication_method_effects.where(ended_at: nil).update_all(ended_at: now)
           enforcement_case.identifier_effects.where(ended_at: nil).update_all(ended_at: now)
@@ -79,7 +80,7 @@ class EnforcementCaseEndOperation
   end
 
   def release_principal_access_effect!
-    effect = enforcement_case.principal_effect
+    effect = enforcement_case.principal_effect_record
     return unless effect&.access_blocking?
     return if other_blocking_case_in_force?
 

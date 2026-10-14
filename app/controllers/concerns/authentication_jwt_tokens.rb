@@ -91,8 +91,22 @@ module AuthenticationJwtTokens
   end
 
   def token_session_public_id(token_record)
-    token_record&.try(:device_session)&.public_id.presence ||
-      token_record&.public_id
+    device_session = token_device_session(token_record)
+    device_session&.public_id.presence || token_record&.public_id
+  end
+
+  def token_device_session(token_record)
+    return unless token_record&.has_attribute?(:device_session_id)
+
+    device_session_id = token_record.device_session_id
+    return if device_session_id.blank?
+
+    case token_record
+    when ClientToken then ClientDeviceSession.find(device_session_id)
+    when OperatorToken then OperatorDeviceSession.find(device_session_id)
+    when VisitorToken then VisitorDeviceSession.find(device_session_id)
+    else raise ArgumentError, "unsupported authentication token record"
+    end
   end
 
   def token_record_attribute(token_record, attribute)

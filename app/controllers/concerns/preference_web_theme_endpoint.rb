@@ -110,11 +110,12 @@ module PreferenceWebThemeEndpoint
   end
 
   def load_or_create_theme_child(preference)
-    association_name = "#{preference.class.name.underscore}_theme"
-    child = preference.public_send(association_name)
+    record_class = PreferenceClassRegistry.record_class(preference_prefix(preference), :theme)
+    relation = record_class.where(preference_id: preference.id)
+    child = relation.first
     return child if child.present?
 
     option_class = PreferenceClassRegistry.option_class(preference_prefix, :theme)
-    preference.public_send("create_#{association_name}!", option_id: option_class::SYSTEM)
+    relation.create!(option_id: option_class::SYSTEM)
   end
 end

@@ -17,12 +17,13 @@ module AuthBoundaryAuthorityMap
     base-app-ww
     base-com-ww
     base-org-ww
+    palm-app
+    tech-org
   ).freeze
 
   BASE_SELF_RP_CLIENT_IDS = %w(base-app-ww base-com-ww base-org-ww).freeze
 
-  # Approved expand-and-contract target. The active ten-client registry above remains in place
-  # until each caller, URI, key namespace, and RP-session binding has migrated.
+  # Approved RP faces include regional cells and global first-party surfaces.
   REGIONAL_RP_CLIENT_IDS = %w(
     core-app-jp
     core-app-us
@@ -38,7 +39,7 @@ module AuthBoundaryAuthorityMap
     warp-org-us
   ).freeze
 
-  APPROVED_RP_CLIENT_IDS = (REGIONAL_RP_CLIENT_IDS + ["edit-org"]).freeze
+  APPROVED_RP_CLIENT_IDS = (REGIONAL_RP_CLIENT_IDS + %w(edit-org palm-app tech-org)).freeze
 
   APPROVED_RP_FACES = {
     "core-app-jp" => { surface: "core", face: "app", region: "jp", actor: "client" },
@@ -54,6 +55,8 @@ module AuthBoundaryAuthorityMap
     "warp-org-jp" => { surface: "warp", face: "org", region: "jp", actor: "operator" },
     "warp-org-us" => { surface: "warp", face: "org", region: "us", actor: "operator" },
     "edit-org" => { surface: "edit", face: "org", region: nil, actor: "operator" },
+    "palm-app" => { surface: "palm", face: "app", region: nil, actor: "client" },
+    "tech-org" => { surface: "tech", face: "org", region: nil, actor: "operator" },
   }.freeze
 
   DEPRECATED_SHARED_BROWSER_CLIENT_IDS = %w(
@@ -81,11 +84,13 @@ module AuthBoundaryAuthorityMap
     "base-app-ww" => { surface: "base", face: "app", actor: "client" },
     "base-com-ww" => { surface: "base", face: "com", actor: "visitor" },
     "base-org-ww" => { surface: "base", face: "org", actor: "operator" },
+    "palm-app" => { surface: "palm", face: "app", actor: "client" },
+    "tech-org" => { surface: "tech", face: "org", actor: "operator" },
   }.freeze
 
   CANONICAL_RP_CALLBACK_PATH = "/oidc/callback"
   CANONICAL_RP_SIGN_IN_PATH = "/sign"
-  CANONICAL_RP_SIGN_OUT_PATH = "/sign/out"
+  CANONICAL_RP_SIGN_OUT_PATH = "/sign/out/completion"
 
   AUTH_CEREMONY_FACES = %w(app com org).freeze
   BASE_AUTHORITY_FACES = %w(app com org).freeze
