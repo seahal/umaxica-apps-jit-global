@@ -28,7 +28,18 @@ class DeprecationNotificationSubscriber
 
   public
 
+  # Production reports deprecations through :notify; an exception here would reach the deprecated
+  # call site and fail an unrelated request, so a record that cannot be built is reported as an
+  # error record carrying only the error class.
   def emit(event)
+    Rails.logger.warn(deprecation_record(event))
+  rescue ArgumentError, KeyError, RangeError => e
+    Rails.logger.error(JitLogEvent.format("#{LOG_EVENT_NAME}.unrecordable", error_class: e.class.name))
+  end
+
+  private
+
+  def deprecation_record(event)
     unless event.name.is_a?(String) && NOTIFICATION_PATTERN.match?(event.name)
       raise ArgumentError, "unsupported deprecation notification"
     end
@@ -56,10 +67,8 @@ class DeprecationNotificationSubscriber
       horizon_changed, horizon_truncated, callsite_changed, callsite_truncated,
     ].any?
 
-    Rails.logger.warn(bounded_json(fields))
+    bounded_json(fields)
   end
-
-  private
 
   def normalized_text(value)
     raise ArgumentError, "deprecation field must be a String" unless value.is_a?(String)

@@ -3,6 +3,30 @@
 require "test_helper"
 
 class DeprecationNotificationSubscriberTest < ActiveSupport::TestCase
+  # Production reports deprecations through :notify, so a subscriber exception would reach the
+  # deprecated call site and fail an unrelated request. A record that cannot be built is reported as
+  # an error record that carries only the error class.
+  test "a notification whose payload cannot be recorded logs an error record and does not raise" do
+    errors = []
+
+    Rails.logger.stub(:error, ->(entry) { errors << entry }) do
+      ActiveSupport::Notifications.instrument(
+        "deprecation.library",
+        message: "Deprecated token=do-not-log-this",
+        callstack: [],
+        gem_name: "Library",
+        deprecation_horizon: "3.0",
+      )
+    end
+
+    assert_equal 1, errors.length
+    record = JSON.parse(errors.first)
+
+    assert_equal "rails.deprecation.unrecordable", record.fetch("event")
+    assert_equal "ArgumentError", record.dig("data", "error_class")
+    assert_not_includes errors.first, "do-not-log-this"
+  end
+
   test "all values in an unquoted Cookie header are removed before logging" do
     logged_messages = []
 
