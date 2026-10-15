@@ -13,6 +13,7 @@ module Palm
         declare_authentication_mode! :open
         before_action :reject_authenticated_rp_start!
         prepend_before_action :apply_sign_entry_cache_policy!
+        ensure_fqdn_gate_first!
         helper_method :neutral_sign_form_url
 
         private
