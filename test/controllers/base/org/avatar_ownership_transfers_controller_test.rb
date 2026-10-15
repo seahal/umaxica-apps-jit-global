@@ -47,6 +47,22 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_not AvatarOwnershipCutover.established?
   end
 
+  test "keyless legacy request is refused after the ownership cutover" do
+    select_source_avatar!
+    establish_avatar_ownership_cutover!
+    grant_step_up!("avatar_transfer_request")
+
+    assert_no_difference [-> { AvatarOwnershipTransfer.count }, -> { AvatarTransferReservation.count }] do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: { target_surface: "app", target_collective_public_id: @target.collective.public_id },
+           headers: base_browser_headers,
+           as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_equal "legacy Avatar transfer operations are unavailable after cutover", response.body
+  end
+
   test "registry accept transport is refused before the verified ownership cutover" do
     reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
       actor: @target_client,

@@ -64,6 +64,70 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_equal 1, AvatarTransferReservation.where(idempotency_key: key).count
   end
 
+  test "registry request refuses a reused idempotency key with different input" do
+    establish_avatar_ownership_cutover!
+    grant_step_up!("avatar_transfer_request")
+    key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a53"
+    headers = base_browser_headers.merge("Idempotency-Key" => key)
+    post base_app_avatar_ownership_transfers_url(host: @host, ri: "jp"),
+         params: request_params, headers: headers, as: :json
+
+    assert_response :success
+    recorded = AvatarTransferReservation.find_by!(idempotency_key: key).attributes
+    other_operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    other_target = BaseSelectorBootstrapAuthority.call(surface: :org, principal: other_operator)
+    grant_step_up!("avatar_transfer_request")
+
+    assert_no_difference -> { AvatarTransferReservation.count } do
+      post base_app_avatar_ownership_transfers_url(host: @host, ri: "jp"),
+           params: { target_surface: "org", target_collective_public_id: other_target.collective.public_id },
+           headers: headers,
+           as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_equal recorded, AvatarTransferReservation.find_by!(idempotency_key: key).attributes
+  end
+
+  test "registry request refuses a reused idempotency key from a different initiator" do
+    establish_avatar_ownership_cutover!
+    grant_step_up!("avatar_transfer_request")
+    key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a54"
+    post base_app_avatar_ownership_transfers_url(host: @host, ri: "jp"),
+         params: request_params, headers: base_browser_headers.merge("Idempotency-Key" => key), as: :json
+
+    assert_response :success
+    recorded = AvatarTransferReservation.find_by!(idempotency_key: key).attributes
+    other_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: other_client)
+    other_token = ClientToken.create!(user: other_client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    BaseSelectorAuthority.prepare(surface: :app, principal: other_client, session: other_token)
+    grant_step_up!("avatar_transfer_request", token: other_token)
+
+    assert_no_difference -> { AvatarTransferReservation.count } do
+      post base_app_avatar_ownership_transfers_url(host: @host, ri: "jp"),
+           params: request_params,
+           headers: base_browser_headers(principal: other_client, token: other_token).merge("Idempotency-Key" => key),
+           as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_equal recorded, AvatarTransferReservation.find_by!(idempotency_key: key).attributes
+  end
+
+  test "keyless legacy request is refused after the ownership cutover" do
+    establish_avatar_ownership_cutover!
+    grant_step_up!("avatar_transfer_request")
+
+    assert_no_difference [-> { AvatarOwnershipTransfer.count }, -> { AvatarTransferReservation.count }] do
+      post base_app_avatar_ownership_transfers_url(host: @host, ri: "jp"),
+           params: request_params, headers: base_browser_headers, as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_equal "legacy Avatar transfer operations are unavailable after cutover", response.body
+  end
+
   test "registry cancel transport is refused before the verified ownership cutover" do
     reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
       actor: @client,

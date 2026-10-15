@@ -217,8 +217,11 @@ writer quiescence or the P12b marker.
   [app controller tests](../../test/controllers/base/app/avatar_ownership_transfers_controller_test.rb)
   and
   [org controller tests](../../test/controllers/base/org/avatar_ownership_transfers_controller_test.rb).
-  The remaining HTTP create/cancel matrix, initiator/authority replay cases and client-transition
-  coverage are planned where absent.
+  HTTP tests now also refuse a reused key with a different target or from a different initiator
+  (APP) without changing the recorded reservation, and refuse keyless legacy requests after the
+  cutover marker (APP and ORG); see
+  [`evidence/2026-10-15-step17-step18-followups-M2T6.md`](../../evidence/2026-10-15-step17-step18-followups-M2T6.md).
+  Client-transition coverage for existing keyless callers remains planned.
 
 ## AV-6 — Transfer acceptance is one local transition
 
