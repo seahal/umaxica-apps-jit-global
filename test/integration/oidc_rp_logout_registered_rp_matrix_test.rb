@@ -70,8 +70,6 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
       assert_not_predicate @root_token.reload, :currently_usable?
     end
 
-    next if AuthBoundaryAuthorityMap.rp_faces.fetch(client_id).fetch(:actor) == "visitor"
-
     test "#{client_id}: a different account at the IdP revokes neither account's parent" do
       setup_rp(client_id)
       other_actor = second_actor
@@ -124,7 +122,9 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
   end
 
   def second_actor
-    { "client" => clients(:two), "operator" => operators(:two) }.fetch(@resource_type)
+    # The com realm has a single Visitor fixture, so its second account is created here.
+    { "client" => -> { clients(:two) }, "visitor" => -> { Visitor.create! }, "operator" => -> { operators(:two) } }
+      .fetch(@resource_type).call
   end
 
   def create_root(actor)
