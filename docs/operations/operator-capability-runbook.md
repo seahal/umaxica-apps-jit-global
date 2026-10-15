@@ -9,9 +9,9 @@ target environment; nothing here is exposed through the console.
 Support session revocation, IAM grant and revoke, and bootstrap write a Chronicle intent row first
 and refuse to start (HTTP 503, or a raised error for the task) when they cannot. The intent needs a
 `chronicle_retention_policies` row with code `compliance`. Migration
-`db/chronicle_migrate/20260926130000_insert_compliance_chronicle_retention_policy.rb` inserts it with
-365 days (decided 2026-09-26). A database built by loading `db/chronicle_structure.sql` instead of
-running migrations does not get the row; running the migration inserts it. To change the period
+`db/chronicle_migrate/20260926130000_insert_compliance_chronicle_retention_policy.rb` inserts it
+with 365 days (decided 2026-09-26). A database built by loading `db/chronicle_structure.sql` instead
+of running migrations does not get the row; running the migration inserts it. To change the period
 later, add a migration that updates the row.
 
 Enforcement operations audit to `enforcement_events` and do not need this row.
@@ -31,7 +31,8 @@ bin/rails operator_capabilities:bootstrap \
 ```
 
 See `docs/operations/org-control-plane-production-readiness.md` for the recommended initial
-assignment. Run it first with `DRY_RUN=true`: that validates every input and every grant and writes nothing.
+assignment. Run it first with `DRY_RUN=true`: that validates every input and every grant and writes
+nothing.
 
 The task fails without granting anything when any input is missing; the operator is locked,
 withdrawing, withdrawn, deactivated, or past retention; a capability is not in the catalog
@@ -46,6 +47,10 @@ operator becoming ineligible. When nobody holds them any more, bootstrap again.
 
 Grant every other capability through `/iam/grants/new`, which requires Step-Up and lets a granter
 delegate only what they hold.
+
+Tech's initial `tech.access` grant and publication prerequisites are described in the
+[Tech Browser RP runbook](tech-browser-rp-runbook.md). Its initial development grant uses the same
+audited bootstrap; subsequent delegation requires the granter's own current `tech.access`.
 
 ## Checking grants
 

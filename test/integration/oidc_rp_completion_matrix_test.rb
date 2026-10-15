@@ -3,7 +3,7 @@
 require "test_helper"
 
 class OidcRpCompletionMatrixTest < ActionDispatch::IntegrationTest
-  test "every first-party Browser RP reads and completes its own logout challenge" do
+  test "every first-party Browser RP reads and completes its own logout challenge" do # rubocop:disable Minitest/MultipleAssertions -- Each registered client exercises the same ordered refusal and completion contract.
     previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
     client_actor = clients(:one)
@@ -143,13 +143,41 @@ class OidcRpCompletionMatrixTest < ActionDispatch::IntegrationTest
       browser.host!(completion_uri.host)
       browser.https! if completion_uri.scheme == "https"
 
+      transaction_before_get = transaction.reload.attributes
       browser.get(completion_uri.request_uri)
 
       assert_equal 200, browser.response.status, "#{client_id} challenge GET"
+      assert_equal transaction_before_get, transaction.reload.attributes,
+                   "#{client_id} GET preserves all transaction fields"
+      unbound_page = browser.response.parsed_body
+      csrf = unbound_page.at_css('meta[name="csrf-token"]')&.[]("content") ||
+        unbound_page.at_css('input[name="authenticity_token"]')&.[]("value")
+
+      assert_predicate csrf, :present?, "#{client_id} unbound form CSRF"
+      step_before_unbound_post = transaction.reload.expected_step
+      browser.post(
+        completion_uri.request_uri,
+        params: { logout_challenge: transaction.logout_challenge, ri: "jp", authenticity_token: csrf },
+        headers: {
+          "Origin" => "#{completion_uri.scheme}://#{completion_uri.host}",
+          "Sec-Fetch-Site" => "same-origin",
+          "X-CSRF-Token" => csrf,
+        },
+      )
+
+      assert_includes [403, 422], browser.response.status, "#{client_id} unbound continuation refusal"
+      assert_includes browser.response.headers["Cache-Control"].split(",").map(&:strip), "no-store",
+                      "#{client_id} unbound refusal cache policy"
+      assert_equal step_before_unbound_post, transaction.reload.expected_step,
+                   "#{client_id} unbound POST preserves transaction"
+      assert_not_predicate transaction, :finalized?, "#{client_id} unbound POST cannot complete"
       install_browser_rp_logout_proof!(browser, transaction, origin_intent_proof)
+      transaction_before_bound_get = transaction.reload.attributes
       browser.get(completion_uri.request_uri)
 
       assert_equal 200, browser.response.status, "#{client_id} challenge GET with bound proof"
+      assert_equal transaction_before_bound_get, transaction.reload.attributes,
+                   "#{client_id} bound GET preserves all transaction fields"
       page = browser.response.parsed_body
       html_form = page.at_css("form")
       if html_form
@@ -191,10 +219,97 @@ class OidcRpCompletionMatrixTest < ActionDispatch::IntegrationTest
       assert_predicate rp_session.reload, :revoked?, "#{client_id} GET RP session state"
       assert_not_predicate root_token.reload, :currently_usable?, "#{client_id} GET root token state"
 
+      wrong_proof = origin_intent_proof.dup
+      wrong_proof.setbyte(0, wrong_proof.getbyte(0) ^ 1)
+      browser.post(
+        form_action.request_uri,
+        params: form_fields.merge("logout_intent_proof" => Base64.strict_encode64(wrong_proof)),
+        headers: {
+          "Origin" => "#{form_action.scheme}://#{form_action.host}",
+          "Sec-Fetch-Site" => "same-origin",
+          "X-CSRF-Token" => csrf_token,
+        },
+      )
+
+      assert_equal 422, browser.response.status, "#{client_id} mismatched proof refusal"
+      assert_includes browser.response.headers["Cache-Control"].split(",").map(&:strip), "no-store",
+                      "#{client_id} proof refusal cache policy"
+      assert_equal AcmeLogoutTransaction::STEP_ORIGIN_CLEANUP_ISSUED, transaction.reload.expected_step,
+                   "#{client_id} mismatched proof preserves transaction"
+      assert_not_predicate transaction, :finalized?, "#{client_id} mismatched proof cannot complete"
+
+      browser.post(
+        form_action.request_uri,
+        params: form_fields.merge("authenticity_token" => "invalid-token"),
+        headers: {
+          "Origin" => "#{form_action.scheme}://#{form_action.host}",
+          "Sec-Fetch-Site" => "same-origin",
+          "X-CSRF-Token" => "invalid-token",
+        },
+      )
+
+      assert_equal 422, browser.response.status, "#{client_id} invalid CSRF continuation refusal"
+      assert_equal AcmeLogoutTransaction::STEP_ORIGIN_CLEANUP_ISSUED, transaction.reload.expected_step,
+                   "#{client_id} invalid CSRF preserves transaction"
+
+      browser.post(
+        form_action.request_uri,
+        params: form_fields.except("authenticity_token"),
+        headers: {
+          "Origin" => "#{form_action.scheme}://#{form_action.host}",
+          "Sec-Fetch-Site" => "same-origin",
+        },
+      )
+
+      assert_equal 422, browser.response.status, "#{client_id} missing CSRF continuation refusal"
+      assert_equal AcmeLogoutTransaction::STEP_ORIGIN_CLEANUP_ISSUED, transaction.reload.expected_step,
+                   "#{client_id} missing CSRF preserves transaction"
+
+      browser.post(
+        form_action.request_uri, params: form_fields,
+                                 headers: {
+                                   "Origin" => "https://foreign.invalid",
+                                   "Sec-Fetch-Site" => "same-origin",
+                                   "X-CSRF-Token" => csrf_token,
+                                 },
+      )
+
+      assert_equal 422, browser.response.status, "#{client_id} foreign Origin continuation refusal"
+      assert_equal AcmeLogoutTransaction::STEP_ORIGIN_CLEANUP_ISSUED, transaction.reload.expected_step,
+                   "#{client_id} foreign Origin preserves transaction"
+
+      browser.post(
+        form_action.request_uri,
+        params: form_fields.merge("authenticity_token" => "invalid-token"),
+        headers: {
+          "Origin" => "#{form_action.scheme}://#{form_action.host}",
+          "Sec-Fetch-Site" => "same-origin",
+          "X-CSRF-Token" => "invalid-token",
+        },
+        as: :json,
+      )
+
+      assert_equal 403, browser.response.status, "#{client_id} JSON invalid token refusal"
+      assert_equal AcmeLogoutTransaction::STEP_ORIGIN_CLEANUP_ISSUED, transaction.reload.expected_step,
+                   "#{client_id} JSON invalid token preserves transaction"
+
+      browser.post(
+        form_action.request_uri,
+        params: form_fields.merge("authenticity_token" => "invalid-token"),
+        headers: {
+          "Origin" => "#{form_action.scheme}://#{form_action.host}",
+          "X-CSRF-Token" => "invalid-token",
+        },
+        as: :json,
+      )
+
+      assert_equal 403, browser.response.status, "#{client_id} JSON refusal without Fetch Metadata"
+      assert_equal AcmeLogoutTransaction::STEP_ORIGIN_CLEANUP_ISSUED, transaction.reload.expected_step,
+                   "#{client_id} absent Fetch Metadata refusal preserves transaction"
+
       browser.post(
         form_action.request_uri, params: form_fields, headers: {
           "Origin" => "#{form_action.scheme}://#{form_action.host}",
-          "Sec-Fetch-Site" => "same-origin",
           "X-CSRF-Token" => csrf_token,
         },
       )

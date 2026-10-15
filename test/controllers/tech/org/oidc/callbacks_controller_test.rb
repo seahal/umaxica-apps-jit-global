@@ -155,4 +155,194 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
     assert_predicate @operator_token.reload, :currently_usable?
     assert_not OperatorOidcIdentityBinding.exists?(audience: @client.aud)
   end
+
+  test "revocation after a successful callback refuses the next protected request without ending the parent" do
+    OidcRpTokenClient.stub(:call, @token_result) do
+      OidcRpUserInfoClient.stub(:call, @userinfo_result) do
+        get "/oidc/callback", params: {
+          code: @code.code,
+          state: @state,
+          iss: OidcIssuer.for_resource_type("operator"),
+        }
+      end
+    end
+
+    assert_response :redirect
+
+    get tech_org_dashboard_path(ri: "jp")
+
+    assert_response :success
+    assert_select "h1", I18n.t("tech.org.dashboard.heading")
+    generation = @candidate_session.reload.refresh_generation
+
+    @grant.update!(revoked_at: Time.current, revoked_by_operator: operators(:two), revoke_reason_code: "duty_ended")
+    get tech_org_dashboard_path(ri: "jp")
+
+    assert_response :forbidden
+    assert_equal "no-store", response.headers["Cache-Control"]
+    assert_select "h1", I18n.t("tech.org.access_denial.heading")
+    assert_select "form[action^=?][method=post]", tech_org_sign_out_path
+    assert_not_includes response.body, I18n.t("tech.org.dashboard.empty_state")
+    assert_equal generation, @candidate_session.reload.refresh_generation
+    assert_predicate @operator_token.reload, :currently_usable?
+    assert_not_predicate @candidate_session, :revoked?
+  end
+
+  test "a consumed Tech callback cannot exchange its code again or replace its established credentials" do
+    exchange_calls = 0
+    token_transport =
+      ->(**) {
+        exchange_calls += 1
+        @token_result
+      }
+    OidcRpTokenClient.stub(:call, token_transport) do
+      OidcRpUserInfoClient.stub(:call, @userinfo_result) do
+        get "/oidc/callback", params: {
+          code: @code.code, state: @state, iss: OidcIssuer.for_resource_type("operator"),
+        }
+
+        assert_response :redirect
+
+        get "/oidc/callback", params: {
+          code: @code.code, state: @state, iss: OidcIssuer.for_resource_type("operator"),
+        }
+
+        assert_response :unprocessable_entity
+      end
+    end
+
+    assert_equal 1, exchange_calls
+    assert_predicate @candidate_session.reload, :active?
+    assert_predicate @operator_token.reload, :currently_usable?
+
+    get tech_org_dashboard_path(ri: "jp")
+
+    assert_response :success
+  end
+
+  test "an unknown callback state refuses exchange and preserves the legitimate pending Tech flow" do
+    exchanges = 0
+    transport =
+      ->(**) {
+        exchanges += 1
+        @token_result
+      }
+    OidcRpTokenClient.stub(:call, transport) do
+      get "/oidc/callback", params: {
+        code: @code.code, state: "foreign-state", iss: OidcIssuer.for_resource_type("operator"),
+      }
+
+      assert_response :unprocessable_entity
+      assert_equal 0, exchanges
+      assert_no_set_cookie OidcRpBrowserCredentialContract::ACCESS_COOKIE
+      assert_no_set_cookie OidcRpBrowserCredentialContract::REFRESH_COOKIE
+      assert session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).key?(@state)
+
+      OidcRpUserInfoClient.stub(:call, @userinfo_result) do
+        get "/oidc/callback", params: {
+          code: @code.code, state: @state, iss: OidcIssuer.for_resource_type("operator"),
+        }
+      end
+
+      assert_response :redirect
+      assert_equal 1, exchanges
+    end
+  end
+
+  test "a foreign authorization response issuer is refused before code exchange" do
+    exchanges = 0
+    transport =
+      ->(**) {
+        exchanges += 1
+        @token_result
+      }
+    OidcRpTokenClient.stub(:call, transport) do
+      get "/oidc/callback", params: {
+        code: @code.code, state: @state, iss: "https://foreign.invalid",
+      }
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal 0, exchanges
+    assert_equal "no-store", response.headers["Cache-Control"]
+    assert_no_set_cookie OidcRpBrowserCredentialContract::ACCESS_COOKIE
+    assert_no_set_cookie OidcRpBrowserCredentialContract::REFRESH_COOKIE
+    assert_predicate @operator_token.reload, :currently_usable?
+    assert_predicate @candidate_session.reload, :active?
+    assert_not OperatorOidcIdentityBinding.exists?(audience: @client.aud)
+  end
+
+  test "a correctly signed ID Token with a foreign nonce cannot establish Tech credentials" do
+    payload, = JWT.decode(@token_response.fetch(:id_token), nil, false)
+    payload["nonce"] = "foreign-nonce"
+    foreign_nonce_token = SecurityJwtOidcIdTokenCodec.encode(
+      payload, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("operator"),
+    )
+    token_result = OidcRpTokenClient::Result.new(
+      success: true,
+      token_response: @token_response.merge(id_token: foreign_nonce_token),
+      error: nil,
+    )
+
+    OidcRpTokenClient.stub(:call, token_result) do
+      get "/oidc/callback", params: {
+        code: @code.code, state: @state, iss: OidcIssuer.for_resource_type("operator"),
+      }
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal "no-store", response.headers["Cache-Control"]
+    assert_no_set_cookie OidcRpBrowserCredentialContract::ACCESS_COOKIE
+    assert_no_set_cookie OidcRpBrowserCredentialContract::REFRESH_COOKIE
+    assert_not OperatorOidcIdentityBinding.exists?(audience: @client.aud)
+    assert_predicate @operator_token.reload, :currently_usable?
+    assert_predicate @candidate_session.reload, :active?
+  end
+
+  test "a correctly signed Edit audience ID Token cannot establish Tech credentials" do
+    payload, = JWT.decode(@token_response.fetch(:id_token), nil, false)
+    payload["aud"] = ["edit-org"]
+    foreign_token = SecurityJwtOidcIdTokenCodec.encode(
+      payload, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("operator"),
+    )
+    token_result = OidcRpTokenClient::Result.new(
+      success: true, token_response: @token_response.merge(id_token: foreign_token), error: nil,
+    )
+
+    OidcRpTokenClient.stub(:call, token_result) do
+      get "/oidc/callback", params: {
+        code: @code.code, state: @state, iss: OidcIssuer.for_resource_type("operator"),
+      }
+    end
+
+    assert_response :unprocessable_entity
+    assert_no_set_cookie OidcRpBrowserCredentialContract::ACCESS_COOKIE
+    assert_no_set_cookie OidcRpBrowserCredentialContract::REFRESH_COOKIE
+    assert_not OperatorOidcIdentityBinding.exists?(audience: @client.aud)
+    assert_predicate @operator_token.reload, :currently_usable?
+    assert_predicate @candidate_session.reload, :active?
+  end
+
+  test "an altered ID Token signature cannot establish Tech credentials" do
+    parts = @token_response.fetch(:id_token).split(".")
+    signature = Base64.urlsafe_decode64(parts.fetch(2))
+    signature.setbyte(0, signature.getbyte(0) ^ 1)
+    parts[2] = Base64.urlsafe_encode64(signature, padding: false)
+    token_result = OidcRpTokenClient::Result.new(
+      success: true, token_response: @token_response.merge(id_token: parts.join(".")), error: nil,
+    )
+
+    OidcRpTokenClient.stub(:call, token_result) do
+      get "/oidc/callback", params: {
+        code: @code.code, state: @state, iss: OidcIssuer.for_resource_type("operator"),
+      }
+    end
+
+    assert_response :unprocessable_entity
+    assert_no_set_cookie OidcRpBrowserCredentialContract::ACCESS_COOKIE
+    assert_no_set_cookie OidcRpBrowserCredentialContract::REFRESH_COOKIE
+    assert_not OperatorOidcIdentityBinding.exists?(audience: @client.aud)
+    assert_predicate @operator_token.reload, :currently_usable?
+    assert_predicate @candidate_session.reload, :active?
+  end
 end

@@ -132,4 +132,31 @@ class OperatorCapabilityPoliciesTest < ActiveSupport::TestCase
     assert_not OperatorCapabilityGrantPolicy.new(iam, user: @operator).create?
     assert_not OperatorCapabilityGrantPolicy.new(unknown, user: @operator).create?
   end
+
+  test "Tech delegation requires current Tech access and rejects self grant" do
+    OperatorCapabilityGrant.bootstrap!(
+      operator: @operator,
+      capabilities: [OperatorCapabilityGrant::IAM_CAPABILITY_READ, OperatorCapabilityGrant::IAM_CAPABILITY_GRANT],
+      ticket_id: "TECH-DELEGATION-TEST",
+      expires_at: 1.day.from_now,
+    )
+    target = OperatorCapabilityGrant.new(operator: @other, capability: OperatorCapabilityGrant::TECH_ACCESS)
+
+    assert_not OperatorCapabilityGrantPolicy.new(target, user: @operator).create?
+
+    grant = OperatorCapabilityGrant.create!(
+      operator: @operator, granted_by_operator: @other, origin: "grant",
+      capability: OperatorCapabilityGrant::TECH_ACCESS, reason_code: "duty_assignment",
+      starts_at: 1.minute.ago, expires_at: 1.day.from_now,
+    )
+
+    assert_predicate OperatorCapabilityGrantPolicy.new(target, user: @operator), :create?
+    self_grant = OperatorCapabilityGrant.new(operator: @operator, capability: OperatorCapabilityGrant::TECH_ACCESS)
+
+    assert_not OperatorCapabilityGrantPolicy.new(self_grant, user: @operator).create?
+
+    grant.update!(revoked_at: Time.current, revoked_by_operator: @other, revoke_reason_code: "duty_ended")
+
+    assert_not OperatorCapabilityGrantPolicy.new(target, user: @operator).create?
+  end
 end

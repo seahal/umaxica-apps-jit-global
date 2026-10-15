@@ -43,9 +43,9 @@ module SignOutInertiaPages
         action: sign_out_confirmation_form_path,
         logout_challenge: params[:logout_challenge].presence,
         logout_intent_proof: if params[:logout_challenge].present? &&
-          respond_to?(:browser_rp_logout_intent_proof_for, true)
-          browser_rp_logout_intent_proof_for(@logout_transaction)
-        end,
+            respond_to?(:browser_rp_logout_intent_proof_for, true)
+                               browser_rp_logout_intent_proof_for(@logout_transaction)
+                             end,
       },
       cancel: browser_rp_flow ? nil : {
         label: t("actions.cancel"),
@@ -105,11 +105,8 @@ module SignOutInertiaPages
            clear_history: true
   end
 
-  # The surface guard is the one `OidcRpLogoutLauncher` applies: only the app surface answers an
-  # incomplete RP logout with the unavailable screen, the other surfaces answer with completion.
+  # An unverified or incomplete continuation must not present a successful completion in any realm.
   def render_oidc_rp_logout_unavailable
-    return render_oidc_rp_logout_completion unless logout_surface_name == "app"
-
     render inertia: sign_out_page_component("unavailable"),
            props: sign_out_unavailable_props,
            status: :unprocessable_content

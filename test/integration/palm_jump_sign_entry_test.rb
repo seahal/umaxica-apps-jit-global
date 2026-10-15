@@ -48,6 +48,25 @@ class PalmJumpSignEntryTest < ActionDispatch::IntegrationTest
     assert_nil session[OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY]
   end
 
+  test "JSON sign POST rejects missing and invalid CSRF tokens before flow creation" do
+    previous = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    [nil, "invalid-token"].each do |token|
+      post(
+        "/sign?ri=jp",
+        params: { authenticity_token: token },
+        headers: { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" },
+        as: :json,
+      )
+
+      assert_response :forbidden
+      assert_equal "no-store", response.headers["Cache-Control"]
+      assert_nil session[OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY]
+    end
+  ensure
+    ActionController::Base.allow_forgery_protection = previous
+  end
+
   test "CSRF-protected POST starts the server-owned Palm browser flow through Jump" do
     with_forgery_protection do
       get "/sign", params: { ri: "jp" }

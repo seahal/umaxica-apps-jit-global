@@ -1,18 +1,18 @@
 # Logout Sequence
 
-> **Current implementation status (2026-10-14):** The accepted first-party Browser RP target and
-> its remaining gates are recorded in
+> **Current implementation status (2026-10-14):** The accepted first-party Browser RP target and its
+> remaining gates are recorded in
 > `adr/first-party-sign-out-shared-database-without-backchannel-logout.md`. The historical Acme
 > ownership, `/sign/out/complete`, and future-native Palm sections below do not describe the current
 > Browser RP flow. All 12 registered first-party Browser RPs register exact
 > `GET/POST /sign/out/completion?ri=jp` and `?ri=us` URIs on their own host. GET is read-only; a
 > protected POST with a Rails authenticity token advances the captured logout challenge. Direct
-> `/sign/out` is rejected as a registered post-logout return URI. The
-> integration matrix covers the challenge continuation for all 12 client IDs after parent/RP
-> revocation, including HTML and Inertia at `ri=jp`. The shared parent-and-RP transaction is
-> locally implemented and focused-tested; first-party BCL removal, full IdP authority flow,
-> independent-connection race evidence and real browser acceptance remain incomplete. See
-> `docs/security/logout-session-management.md` and
+> `/sign/out` is rejected as a registered post-logout return URI. The integration matrix covers the
+> challenge continuation for all 12 client IDs after parent/RP revocation, including HTML and
+> Inertia at `ri=jp`. The shared parent-and-RP transaction is locally implemented and
+> focused-tested. Local authority-first HTTP tests and the independent sign-out/refresh race pass;
+> first-party BCL removal, complete all-RP authority-flow coverage and real browser acceptance
+> remain incomplete. See `docs/security/logout-session-management.md` and
 > `evidence/2026-10-13-first-party-rp-completion-uri-matrix-P7V4.md` for current route and
 > registration evidence.
 
@@ -26,11 +26,11 @@ the challenge. It does not verify the full IdP authority round trip. No DELETE c
 available during this continuation. The path, host and helper remain surface-local for Core, Warp,
 Edit, Base, Palm and Tech.
 
-Before a logout intent is staged, Base requires a live IdP session with a captured `sid` that matches
-the verified `id_token_hint` when one is supplied. An absent session, missing captured `sid`, or
-subject/session mismatch returns a plain localized error with no-store headers and no `Location`;
-it creates no intent, revokes no session or token, and does not redirect to the RP. A valid hint and
-registered return URI do not bypass this authority check.
+Before a logout intent is staged, Base requires a live IdP session with a captured `sid` that
+matches the verified `id_token_hint` when one is supplied. An absent session, missing captured
+`sid`, or subject/session mismatch returns a plain localized error with no-store headers and no
+`Location`; it creates no intent, revokes no session or token, and does not redirect to the RP. A
+valid hint and registered return URI do not bypass this authority check.
 
 > **Lifecycle vocabulary:** Status, event, and result names in this document are current runtime
 > vocabulary. Future canonical lifecycle terminology (`ACTIVE`, `COMPLETED`, `CANCELLED`, `EXPIRED`,
@@ -150,7 +150,8 @@ never be redirected to.
 ## Palm Contract
 
 The former native/app-link contract below is retired. Palm is now a first-party Browser RP; its
-current sign-out continuation is `GET/POST /sign/out/completion`. The previous completion target was:
+current sign-out continuation is `GET/POST /sign/out/completion`. The previous completion target
+was:
 
 `https://<palm-host>/sign/out/complete`
 
@@ -168,7 +169,7 @@ That URI is historical and must not be restored.
 
 The canonical current graph is the Base authority-first logout sequence: authenticate the logout
 request, lock and revoke the parent Browser Session at the commit point, perform authority/origin
-cleanup, revoke the initiating RP session, and finalize the local ceremony. `COMPLETED`,
-`CANCELLED` and `EXPIRED` are absorbing facts in the delivered lifecycle. The earlier “not
-implemented yet” lifecycle paragraph and Acme ownership description above are historical and
-superseded by `adr/authentication-state-machine-normalization.md`.
+cleanup, revoke the initiating RP session, and finalize the local ceremony. `COMPLETED`, `CANCELLED`
+and `EXPIRED` are absorbing facts in the delivered lifecycle. The earlier “not implemented yet”
+lifecycle paragraph and Acme ownership description above are historical and superseded by
+`adr/authentication-state-machine-normalization.md`.

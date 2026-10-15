@@ -21,6 +21,25 @@ class Tech::Org::Sign::EntriesControllerTest < ActionDispatch::IntegrationTest
     assert_nil session[OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY]
   end
 
+  test "JSON sign POST rejects missing and invalid CSRF tokens before flow creation" do
+    previous = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    [nil, "invalid-token"].each do |token|
+      post(
+        tech_org_sign_create_path(ri: "jp"),
+        params: { authenticity_token: token },
+        headers: { "Origin" => "http://#{@host}", "Sec-Fetch-Site" => "same-origin" },
+        as: :json,
+      )
+
+      assert_response :forbidden
+      assert_equal "no-store", response.headers["Cache-Control"]
+      assert_nil session[OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY]
+    end
+  ensure
+    ActionController::Base.allow_forgery_protection = previous
+  end
+
   test "same-origin POST without an authenticity token is refused before flow creation" do
     previous = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true

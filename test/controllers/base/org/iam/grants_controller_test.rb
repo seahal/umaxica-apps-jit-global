@@ -92,7 +92,7 @@ class Base::Org::Iam::GrantsControllerTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
   end
 
-  test "a granter delegates a capability they hold to another operator, with Step-Up and an audit record" do
+  test "a granter delegates Tech access to another operator with Step-Up and an audit record" do
     [OperatorCapabilityGrant::IAM_CAPABILITY_READ, OperatorCapabilityGrant::IAM_CAPABILITY_GRANT].each do |capability|
       OperatorCapabilityGrant.create!(
         operator: @granter,
@@ -107,7 +107,7 @@ class Base::Org::Iam::GrantsControllerTest < ActionDispatch::IntegrationTest
       operator: @granter,
       granted_by_operator: @grantee,
       origin: "grant",
-      capability: OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
+      capability: OperatorCapabilityGrant::TECH_ACCESS,
       reason_code: "duty_assignment",
       starts_at: 1.minute.ago,
       expires_at: 1.day.from_now,
@@ -186,7 +186,7 @@ class Base::Org::Iam::GrantsControllerTest < ActionDispatch::IntegrationTest
       end
     post base_org_iam_grants_url(host: @host),
          params: { operator_public_id: @grantee.public_id,
-                   capability: OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
+                   capability: OperatorCapabilityGrant::TECH_ACCESS,
                    reason_code: "duty_assignment",
                    duration_days: "30",
                    operation_id: operation_id, },
@@ -195,11 +195,11 @@ class Base::Org::Iam::GrantsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     grant = OperatorCapabilityGrant.find_by!(
       operator: @grantee,
-      capability: OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
+      capability: OperatorCapabilityGrant::TECH_ACCESS,
     )
 
     assert_equal @granter, Operator.find(grant.granted_by_operator_id)
-    assert @grantee.capability?(OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP)
+    assert @grantee.capability?(OperatorCapabilityGrant::TECH_ACCESS)
     chronicle = Chronicle.find_by!(event_uuid: operation_id)
 
     assert_equal ["iam.capability.granted", "succeeded"], [chronicle.action, chronicle.result]

@@ -163,6 +163,18 @@ module Palm
 
           assert_equal @user.id,
                        ClientToken.find(persisted_session.client_token_id).user_id
+
+          OidcRpTokenClient.stub(:call, ->(**) { flunk("consumed callback must not exchange again") }) do
+            get palm_app_oidc_callback_url, params: {
+              code: authorization_code.code, state: state, iss: OidcIssuer.for_resource_type("client"),
+            }
+          end
+
+          assert_response :unprocessable_content
+          assert_equal token_response.fetch(:access_token), cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE]
+          assert_equal token_response.fetch(:refresh_token), cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE]
+          assert_predicate candidate_session.reload, :active?
+          assert_predicate root_token.reload, :currently_usable?
         end
 
         private

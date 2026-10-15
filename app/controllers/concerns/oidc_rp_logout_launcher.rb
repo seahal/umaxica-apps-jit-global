@@ -94,6 +94,12 @@ module OidcRpLogoutLauncher
   end
 
   def continue_browser_rp_logout!
+    response.set_header("Cache-Control", "no-store")
+    if !request.get? && !request.head? && protect_against_forgery? && !any_authenticity_token_valid?
+      instrument_unverified_request
+      handle_unverified_request
+      return
+    end
     transaction = browser_rp_logout_transaction_for_origin
     return head(:not_found) unless transaction
 
@@ -671,8 +677,6 @@ module OidcRpLogoutLauncher
   end
 
   def render_oidc_rp_logout_unavailable
-    return render_oidc_rp_logout_completion unless logout_surface_name == "app"
-
     render "auth/shared/sign_outs/unavailable", status: :unprocessable_content
   end
 

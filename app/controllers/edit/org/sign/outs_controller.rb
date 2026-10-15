@@ -12,6 +12,9 @@ module Edit
         include ::SignOutNotice
         include ::OidcRpLogoutLauncher
         include ::SignOutClearSiteData
+        include ::SignErrorResponses
+
+        rescue_from ActionController::InvalidCrossOriginRequest, with: :handle_csrf_failure
 
         AUTHENTICATION_MODE = :open
         after_action :verify_private_action_authorized!
