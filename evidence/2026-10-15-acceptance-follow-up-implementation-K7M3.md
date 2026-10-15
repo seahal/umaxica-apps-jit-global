@@ -50,15 +50,18 @@
   `migrations_paths`; applied migrations differ from the baseline only by the frozen string
   directive; two new migrations were added by the plan.
 - Avatar tests (75 files): 467 runs, 0 failures, 14 errors, all the excluded guard.
+- AT-062/063/065 selectors (`avatar_retention_purge_test`, `avatar_ownership_transfers_test`,
+  `avatar_transfer_reservation_test`, the three backfill tests): 51 runs, 0 failures, 2 errors; both
+  errors are the concurrent cases stopped by the excluded guard.
 
 ## Updated results
 
-| Result                                                          | Cases                                                                                                                                                                                           |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PASS                                                            | AT-002, 003, 009 (automated parts), 012, 013, 014, 016, 018–023, 026, 030, 031, 032, 034–038, 040–042, 045, 046, 047, 048, 049, 050, 051, 052, 054, 055, 056, 057, 058, 061, 064, 066, 070, 071 |
-| Automated part passes; user browser or production check remains | AT-001, 004, 005, 006, 007, 008, 010, 011, 015, 017, 024, 025, 029, 074, 075, 078                                                                                                               |
-| EXCLUDED (CHG-009)                                              | AT-053, 059, 060, 067, 068, 069, 072, AT-039 migration replay, fleet parts of 062, 063, 065, 073                                                                                                |
-| Open                                                            | AT-062, 063, 065 non-fleet parts were not separately mapped to tests; AT-073 closure; AT-076 needs an independent reviewer; AT-077 has three earlier `[CHECKPOINT]` commits                     |
+| Result                                                          | Cases                                                                                                                                                                                                                                                                       |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PASS                                                            | AT-002, 003, 009 (automated parts), 012, 013, 014, 016, 018–023, 026, 030, 031, 032, 034–038, 040–042, 045, 046, 047, 048, 049, 050, 051, 052, 054, 055, 056, 057, 058, 061, 062, 063, 064, 065, 066, 070, 071 (062, 063, 065: sequential cases; concurrent cases EXCLUDED) |
+| Automated part passes; user browser or production check remains | AT-001, 004, 005, 006, 007, 008, 010, 011, 015, 017, 024, 025, 029, 074, 075, 078                                                                                                                                                                                           |
+| EXCLUDED (CHG-009)                                              | AT-053, 059, 060, 067, 068, 069, 072, AT-039 migration replay, fleet parts of 062, 063, 065, 073                                                                                                                                                                            |
+| Open                                                            | AT-073 closure; AT-076 needs an independent reviewer; AT-077 has three earlier `[CHECKPOINT]` commits                                                                                                                                                                       |
 
 ## Not changed, for the user's decision
 
