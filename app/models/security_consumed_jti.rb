@@ -12,12 +12,16 @@ class SecurityConsumedJti < AppTicketRecord
     def consume!(purpose:, issuer:, jti:, expires_at:)
       return false if purpose.to_s.blank? || issuer.to_s.blank? || jti.to_s.blank?
 
-      create!(
-        purpose: purpose.to_s,
-        issuer: issuer.to_s,
-        jti_digest: digest_jti(jti),
-        expires_at: expires_at,
-      )
+      # A replay record is always a write, also when the caller is serving a safe request on the
+      # reading role.
+      connection_class_for_self.connected_to(role: :writing) do
+        create!(
+          purpose: purpose.to_s,
+          issuer: issuer.to_s,
+          jti_digest: digest_jti(jti),
+          expires_at: expires_at,
+        )
+      end
       true
     rescue ActiveRecord::RecordNotUnique
       false
