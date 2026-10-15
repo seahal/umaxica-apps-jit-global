@@ -67,6 +67,10 @@ module OidcRpLogoutAuthority
       error_class: e.class.name,
     )
     render_sign_out_indeterminate!
+  rescue AuthenticationLogoutCurrentSession::PreconditionFailed
+    # The authority or binding changed between the first check and the parent lock. Nothing was
+    # revoked; this is the same REQ-009 error stop as a missing or different IdP session.
+    render_oidc_end_session_session_missing_error
   rescue ActiveRecord::ActiveRecordError, RpSession::IssuanceRejected => e
     render_browser_rp_logout_failure!(e)
   ensure
@@ -101,8 +105,14 @@ module OidcRpLogoutAuthority
       token_class: root_token.class,
       session_public_id: root_token.public_id,
       reason: "rp_initiated_logout",
+      precondition: -> { browser_rp_logout_authority_still_matches?(transaction) },
     )
     advance_browser_rp_logout!(transaction, AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED)
+  end
+
+  def browser_rp_logout_authority_still_matches?(transaction)
+    fresh_session_record = find_browser_rp_logout_session(transaction)
+    fresh_session_record.present? && browser_rp_logout_authority_matches?(transaction, fresh_session_record)
   end
 
   def browser_rp_logout_authority_matches?(transaction, session_record)

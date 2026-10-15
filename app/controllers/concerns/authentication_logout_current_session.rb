@@ -4,12 +4,14 @@
 class AuthenticationLogoutCurrentSession
   class CommitOutcomeUnknown < StandardError; end
 
+  class PreconditionFailed < StandardError; end
+
   def self.call(...)
     new(...).call
   end
 
   def initialize(current: nil, resource: nil, token: nil, token_class: nil, session_public_id: nil,
-                 reason: "user_logout", cascade_device_session_tokens: true)
+                 reason: "user_logout", cascade_device_session_tokens: true, precondition: nil)
     @current = current
     @resource = resource
     @token = token
@@ -17,6 +19,7 @@ class AuthenticationLogoutCurrentSession
     @session_public_id = session_public_id.presence || current_session_from_current
     @reason = reason
     @cascade_device_session_tokens = cascade_device_session_tokens
+    @precondition = precondition
   end
 
   def call
@@ -31,6 +34,7 @@ class AuthenticationLogoutCurrentSession
       # flow's token foreign key.
       cycle = begin_sign_out_flow(token_record) unless token_record&.respond_to?(:persisted?) && token_record.persisted?
       begin
+        verify_precondition_under_parent_lock!(token_record)
         revoke_device_session!(token_record)
         revoke_token!(token_record) unless device_session_cascade_handles_token?(token_record)
         # The parent/device hierarchy is locked before the SignOutFlow insert.
@@ -51,7 +55,17 @@ class AuthenticationLogoutCurrentSession
   private
 
   attr_reader :current, :resource, :token, :token_class, :session_public_id, :reason,
-              :cascade_device_session_tokens
+              :cascade_device_session_tokens, :precondition
+
+  # REQ-002: a caller's authority decision is re-checked inside the revoking transaction after the
+  # parent Device Session row is locked, the first lock of the Device -> root -> RP order. A
+  # concurrent rotation or revocation therefore cannot slip between the check and the COMMIT.
+  def verify_precondition_under_parent_lock!(token_record)
+    return if precondition.nil?
+
+    device_session_for_token(token_record)&.lock!
+    raise PreconditionFailed, "sign-out precondition no longer holds" unless precondition.call
+  end
 
   def current_session_from_current
     return unless current.respond_to?(:session)

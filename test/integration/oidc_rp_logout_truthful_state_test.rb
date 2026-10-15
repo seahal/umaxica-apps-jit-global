@@ -55,6 +55,42 @@ class OidcRpLogoutTruthfulStateTest < ActionDispatch::IntegrationTest
     assert_not_predicate @root_token.reload, :currently_usable?
   end
 
+  test "an authority that no longer holds under the parent lock stops with the IdP session error" do
+    challenge, origin_session_cookie = start_sign_out
+    changed = ->(**) { raise AuthenticationLogoutCurrentSession::PreconditionFailed }
+
+    AuthenticationLogoutCurrentSession.stub(:call, changed) do
+      confirm_at_authority(challenge, origin_session_cookie)
+    end
+
+    assert_response :bad_request
+    assert_equal I18n.t("sign.shared.sign_out.idp_session_error"), response.body
+    assert_nil response.location
+    assert_predicate @root_token.reload, :currently_usable?
+    assert_predicate @core_session.reload, :active?
+    assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
+                 AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: challenge).expected_step
+  end
+
+  test "the authority confirmation re-checks the binding inside the revoking transaction" do
+    challenge, origin_session_cookie = start_sign_out
+    received = nil
+    original_call = AuthenticationLogoutCurrentSession.method(:call)
+    spy =
+      lambda do |**options|
+        received = options[:precondition]
+        original_call.call(**options)
+      end
+
+    AuthenticationLogoutCurrentSession.stub(:call, spy) do
+      confirm_at_authority(challenge, origin_session_cookie)
+    end
+
+    assert_response :see_other
+    assert_respond_to received, :call
+    assert_not_predicate @root_token.reload, :currently_usable?
+  end
+
   test "an unknown COMMIT outcome is shown as indeterminate, never as success or failure" do
     challenge, origin_session_cookie = start_sign_out
     raise_unknown = ->(**) { raise AuthenticationLogoutCurrentSession::CommitOutcomeUnknown }

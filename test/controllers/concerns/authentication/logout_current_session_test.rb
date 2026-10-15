@@ -126,6 +126,53 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     assert_equal "success", session.last_logout_status
   end
 
+  test "a precondition that fails under the parent lock revokes nothing" do
+    user = clients(:one)
+    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    rp_session = ClientRpSession.create!(
+      client_token: token,
+      oidc_client_id: "core-app",
+      oidc_scope: "openid profile",
+      refresh_token_expires_at: 1.hour.from_now,
+    )
+    flows_before = ClientSignOutFlow.count
+
+    assert_raises(AuthenticationLogoutCurrentSession::PreconditionFailed) do
+      AuthenticationLogoutCurrentSession.call(
+        resource: user, token: token, reason: "rp_initiated_logout", precondition: -> { false },
+      )
+    end
+
+    assert_not_predicate token.reload, :revoked?
+    assert_not_predicate token.device_session.reload, :revoked?
+    assert_predicate rp_session.reload, :active?
+    assert_equal flows_before, ClientSignOutFlow.count
+  end
+
+  test "a precondition is evaluated while the parent Device Session row is locked" do
+    user = clients(:one)
+    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    device_session = token.device_session
+    locked = nil
+    precondition =
+      lambda do
+        locked = ClientDeviceSession.connection.select_value(<<~SQL.squish)
+          SELECT count(*) FROM pg_locks l JOIN pg_class c ON c.oid = l.relation
+          WHERE c.relname = '#{ClientDeviceSession.table_name}' AND l.mode = 'RowShareLock'
+            AND l.pid = pg_backend_pid()
+        SQL
+        true
+      end
+
+    AuthenticationLogoutCurrentSession.call(
+      resource: user, token: token, reason: "rp_initiated_logout", precondition: precondition,
+    )
+
+    assert_operator locked.to_i, :>=, 1
+    assert_predicate device_session.reload, :revoked?
+    assert_predicate token.reload, :revoked?
+  end
+
   test "revokes current user session token by oidc sid" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
