@@ -129,6 +129,12 @@ jobs:
           cache-version: 1
       - name: Run RuboCop
         run: bundle exec rubocop --fail-fast --fail-level convention --format github
+      - name: Check frozen string literal placement
+        run: ruby scripts/check_frozen_string_literal_directives.rb
+      - name: Check frozen string literals
+        run: >-
+          bundle exec rubocop --config .rubocop_frozen_string_literal.yml --only
+          Style/FrozenStringLiteralComment,Style/DisableCopsWithinSourceCodeDirective .
       - name: Run ERB Lint
         run: bundle exec erb_lint --lint-all
   # ====================
