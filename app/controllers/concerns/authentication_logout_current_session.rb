@@ -221,11 +221,8 @@ class AuthenticationLogoutCurrentSession
         "auth.logout_current_session.device_session_failed",
         reason: reason,
         resource_class: resource&.class&.name,
-        resource_id: resource&.id,
         token_class: token_record&.class&.name,
-        token_id: token_record&.try(:public_id),
         error_class: e.class.name,
-        error_message: e.message,
       ),
     )
     # A failed parent revoke must remain observable. Revoking only the token
@@ -266,9 +263,7 @@ class AuthenticationLogoutCurrentSession
         "auth.logout_current_session.token_already_gone",
         reason: reason,
         resource_class: resource&.class&.name,
-        resource_id: resource&.id,
         token_class: token_record&.class&.name,
-        token_id: token_record&.try(:public_id),
       ),
     )
     true
@@ -307,9 +302,7 @@ class AuthenticationLogoutCurrentSession
         "auth.logout_current_session.cycle_unavailable",
         reason: reason,
         resource_class: resource&.class&.name,
-        resource_id: resource&.id,
         token_class: token_record&.class&.name,
-        token_id: token_record&.try(:public_id),
         error_class: e.class.name,
       ),
     )

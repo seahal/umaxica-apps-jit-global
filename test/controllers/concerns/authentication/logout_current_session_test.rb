@@ -496,6 +496,31 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     assert_not device_session.reload.revoked?
   end
 
+  test "failure logs carry no actor reference, token identifier or error message" do
+    user = clients(:one)
+    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    output = StringIO.new
+    original_logger = Rails.logger
+    original_revoke = ClientDeviceSession.instance_method(:revoke!)
+    ClientDeviceSession.define_method(:revoke!) { |*| raise ActiveRecord::StatementInvalid, "secret-bearing detail" }
+    Rails.logger = ActiveSupport::Logger.new(output)
+
+    assert_raises(ActiveRecord::StatementInvalid) do
+      AuthenticationLogoutCurrentSession.call(resource: user, token: token, reason: "user_logout")
+    ensure
+      Rails.logger = original_logger
+      ClientDeviceSession.define_method(:revoke!, original_revoke)
+    end
+
+    log = output.string
+
+    assert_includes log, "auth.logout_current_session.device_session_failed"
+    assert_not_includes log, "secret-bearing detail"
+    assert_not_includes log, token.public_id
+    assert_no_match(/resource_id=#{user.id}\b|"resource_id":#{user.id}\b/, log)
+    assert_no_match(/token_id/, log)
+  end
+
   # ------------------------------------------------------------------
   # revoke_token!: destroy fallback and rescue logging. Targets lines 167,
   # 171, 183 and (resource variants) then/else@175-178.
