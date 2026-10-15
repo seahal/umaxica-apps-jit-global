@@ -34,6 +34,20 @@ present and absent Fetch Metadata; see
 [immutable GET and Origin checks](../../evidence/2026-10-15-completion-origin-get-invariants-F9B2.md),
 and [Fetch Metadata verification](../../evidence/2026-10-15-completion-fetch-metadata-N3Q6.md).
 
+Every display after the authority step is derived from the parent Device Session on the realm Ticket
+writer (`AcmeLogoutTransactionCoordinator.parent_revoked?`), never from the AppTicket progress
+record:
+
+- revoked parent and finished cleanup: the global completion wording, which states no end time;
+- revoked parent and a failed origin cleanup or progress write, at Base or at the origin: the same
+  completion page with the "cleanup incomplete" wording and `200`, never "not completed" or `404`;
+- unreadable parent or a lost COMMIT response: the indeterminate page, `503`, with no retry button;
+- parent still active: the existing refusal (`422` at the origin, `404` at Base).
+
+Base re-checks the authority and the root binding inside the revoking transaction after locking the
+parent Device Session; a binding that no longer holds stops with the IdP session error and revokes
+nothing.
+
 Base stages a logout intent only after confirming a live IdP session and its captured `sid`. A
 missing session, missing `sid`, or mismatched `id_token_hint` is a plain localized no-store error;
 the request has no redirect and changes no session, token, or intent state.
