@@ -25,6 +25,19 @@ Current Inertia decision:
   `config/initializers/inertia_rails.rb` (gem-named); upstream's `inertia.rb` example is merged
   into it, never added as a second file.
 
+Current authentication Security Mode decision (accepted; not implemented):
+
+- `adr/authentication-security-mode.md` — `mfa_level_id` becomes `security_mode_id` with `NORMAL=3`
+  and `ADVANCED=7`; owner-held mode with no Operator downgrade, per-mode step-up methods and
+  windows, passkey lifecycle without session revocation, Recovery Key/no-key recovery cases, and
+  the open decisions that remain before implementation.
+
+- `adr/authentication-security-cycle-consolidation-2026-10-15.md` — WU-1..WU-9 cycle
+  record (`XU-N` = `WU-N`): two-passkey `ADVANCED` minimum, owner downgrade rule, ORG Emergency
+  intent and 2 hour target, `required_aal` retirement, WebAuthn race invariants; recovery, ORG
+  sign-up, `acr`/`amr`, WU-3/5/8/9 Pending or deferred. Partially supersedes the Security Mode ADR
+  above. Decisions only; not implemented.
+
 Current org federated sign-in decision:
 
 - `adr/org-entra-id-sign-in-boundary.md` — accepted decision for org-surface Microsoft Entra ID SSO:
@@ -197,6 +210,8 @@ Current API design decisions:
   `RateLimit-Policy` field names (an unpublished draft, adopted with no client dependency
   permitted), and OpenAPI 3.2.x. Records the areas where no standard exists, keeping
   `docs/reference/api-design-standards.md` limited to specification-backed rules.
+- `adr/webhook-entry-point-namespace-reservation.md` — reserves `/hook/v{n}` on every surface for
+  inbound webhook receivers, kept separate from `/api/v{n}`; no receiver is implemented yet.
 - `adr/api-route-vocabulary-consolidation.md` — accepted naming direction consolidating `/web/v0`
   and `/edge/v0` under `/api/v0`; its 2026-09-15 amendment records the reviewed Core preference API
   migration, and its 2026-10-02 amendment the pre-deployment cutover of the Base, Auth, and Warp

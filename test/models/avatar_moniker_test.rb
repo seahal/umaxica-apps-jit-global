@@ -25,9 +25,10 @@
 #
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarMonikerTest < ActiveSupport::TestCase
-  fixtures :avatars
+  fixtures :handles
 
   test "accepts the byte-size boundary immediately below and at 128 bytes" do
     below = AvatarMoniker.new(moniker: ("あ\u0300\uFE0F" * 15) + "a\uFE0F\uFE0F")
@@ -194,8 +195,8 @@ class AvatarMonikerTest < ActiveSupport::TestCase
     assert_empty moniker_indexes
   end
 
-  test "Rails encrypted fixtures persist ciphertext while exposing plaintext through the model" do
-    fixture = avatar_monikers(:one)
+  test "encrypted monikers persist ciphertext while exposing plaintext through the model" do
+    fixture = AvatarTestFactory.create_standard!(active_handle: handles(:one)).avatar_monikers.current.sole
     encrypted_value = AvatarMoniker.connection.select_value(
       AvatarMoniker.sanitize_sql_array(["SELECT moniker FROM avatar_monikers WHERE id = ?", fixture.id]), # rubocop:disable I18n/RailsI18n/DecorateString -- Parameterized SQL.
     )
@@ -206,7 +207,7 @@ class AvatarMonikerTest < ActiveSupport::TestCase
   end
 
   test "database temporal constraint accepts equality and rejects a reversed interval" do
-    avatar = avatars(:one)
+    avatar = AvatarTestFactory.create_standard!(active_handle: handles(:one))
     boundary = Time.utc(2026, 1, 1)
     equal_interval = AvatarMoniker.create!(
       avatar: avatar,

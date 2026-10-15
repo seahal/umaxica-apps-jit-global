@@ -41,6 +41,8 @@ the remaining entries matching the task.
   `project/surfaces.mdc`, `project/controller-inheritance.mdc`, `project/browser-rp-contract.mdc`,
   `generic/authentication-boundaries.mdc`, `docs/architecture/controller-lifecycle.md`
 - React components and hooks: `docs/reference/react.md`, `docs/design.md`
+- UI/UX, visual appearance, layout, styling, or interaction design: `DESIGN.md` — the canonical
+  owner of these concerns; follow it over other guidance for appearance and experience
 - JSON API endpoints, error responses, or API versioning: `docs/reference/api-design-standards.md`
 - Minitest or behavior changes: `generic/testing.mdc`, `generic/no-test-only-code.mdc`,
   `project/static-invariant-guards.mdc`

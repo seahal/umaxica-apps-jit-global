@@ -147,6 +147,9 @@ services:
       POSTGRES_INITDB_WAL_LEVEL: replica
       POSTGRES_INITDB_MAX_WAL_SENDERS: 10
       POSTGRES_INITDB_MAX_REPLICATION_SLOTS: 10
+      # postgres 18+ images default PGDATA to /var/lib/postgresql/18/docker and refuse a mount at
+      # the old path unless PGDATA names it; /var/lib/postgresql itself must stay off the volume.
+      PGDATA: /var/lib/postgresql/data
     volumes:
       - primary-data:/var/lib/postgresql/data
       # `:z` adds an SELinux shared label so Fedora/RHEL hosts permit container
@@ -204,6 +207,9 @@ services:
       POSTGRES_REPLICATION_USER: replicator
       POSTGRES_REPLICATION_PASSWORD: replication
       TZ: UTC
+      # postgres 18+ images default PGDATA to /var/lib/postgresql/18/docker and refuse a mount at
+      # the old path unless PGDATA names it; /var/lib/postgresql itself must stay off the volume.
+      PGDATA: /var/lib/postgresql/data
     volumes:
       - replica-data:/var/lib/postgresql/data
       - "./podman/psql-sub/entrypoint.sh:/entrypoint.sh:ro,z"

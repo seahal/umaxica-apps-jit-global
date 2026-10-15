@@ -9,6 +9,15 @@
 > reintroduce sign-side sessions, refresh tokens, preference writes, dashboards, account lifecycle,
 > downstream token issuance, authorization decisions, or step-up freshness.
 
+> **Amendment (2026-10-15):** `adr/authentication-security-mode.md` sets per-Security-Mode step-up
+> method sets and a maximum validity of 15 minutes (`NORMAL`) or 5 minutes (`ADVANCED`), and
+> replaces scope-level reuse (C5) with operation-, target-, actor- and session-bound evidence
+> consumed once. Not yet implemented.
+
+> **Amendment (2026-10-15, later):** `adr/authentication-security-cycle-consolidation-2026-10-15.md` section 5 removes any
+> runtime use of a required AAL level; step-up requirements are concrete (methods, phishing
+> resistance, UV, TTL, scope, binding). `required_aal` is deprecated for staged removal.
+
 **Correction (2026-05-19):** The current route contract for `settings_mfa` is
 `/settings/mfa/challenge` on every sign surface. WebAuthn challenge state remains in the Rails
 session store; only email OTP step-up state uses the cache-backed `step_up_session:*` keys.

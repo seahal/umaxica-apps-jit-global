@@ -2,6 +2,18 @@
 
 **Status:** Accepted (2026-05-18)
 
+> **Amendment (2026-10-15):** `adr/authentication-security-mode.md` section F replaces the single
+> 72 hour path for `ADVANCED` actors: Recovery Key cases need Operator approval and 24 hours;
+> cases with no passkey and no Recovery Key need Operator approval, strict independent identity
+> verification and 72 hours. Recovery issues only an `ADVANCED` recovery session limited to passkey
+> re-registration, never an ordinary session, and never downgrades the Security Mode. Not yet
+> implemented.
+
+> **Withdrawal (2026-10-15, later):** `adr/authentication-security-cycle-consolidation-2026-10-15.md` withdraws the
+> amendment above. `ADVANCED` recovery conditions, including the 24/72 hour proposal, are Pending.
+> The general safety principles below remain; their 72 hour wait and Operator approval are not
+> re-approved as the final rule for every recovery case.
+
 ## Context
 
 The step-up mechanism protects sensitive signed-in operations by requiring a fresh verification with

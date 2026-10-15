@@ -260,40 +260,45 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
   end
 
   test "database enforces the five-day reservation validity boundary" do
-    avatar = AvatarTestFactory.create!(
-      moniker: "Boundary",
-      capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
-      active_handle: Handle.create!(handle: "boundary-registry-#{SecureRandom.hex(4)}", cooldown_until: Time.current),
-    )
-    requested_at = Time.utc(2026, 10, 1, 12, 30, 0)
-
+    # The owned Avatar must roll back too: ownership periods are append-only, so a committed one
+    # could never be removed from the worker database.
     AvatarRecord.transaction do
-      reservation = AvatarTransferReservation.create!(
-        avatar: avatar,
-        operation_kind: "enterprise_to_bureau",
-        idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a34",
-        request_fingerprint: Digest::SHA256.hexdigest("boundary-valid"),
-        requested_at: requested_at,
-        expires_at: requested_at + 5.days,
+      avatar = AvatarTestFactory.create!(
+        moniker: "Boundary",
+        capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
+        active_handle: Handle.create!(handle: "boundary-registry-#{SecureRandom.hex(4)}", cooldown_until: Time.current),
       )
+      requested_at = Time.utc(2026, 10, 1, 12, 30, 0)
 
-      assert_equal requested_at + 5.days, reservation.expires_at
-      raise ActiveRecord::Rollback
-    end
+      AvatarRecord.transaction(requires_new: true) do
+        reservation = AvatarTransferReservation.create!(
+          avatar: avatar,
+          operation_kind: "enterprise_to_bureau",
+          idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a34",
+          request_fingerprint: Digest::SHA256.hexdigest("boundary-valid"),
+          requested_at: requested_at,
+          expires_at: requested_at + 5.days,
+        )
 
-    AvatarRecord.transaction do
-      error =
-        assert_raises(ActiveRecord::StatementInvalid) do
-          AvatarTransferReservation.create!(
-            avatar: avatar,
-            operation_kind: "enterprise_to_bureau",
-            idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a35",
-            request_fingerprint: Digest::SHA256.hexdigest("boundary-invalid"),
-            requested_at: requested_at,
-            expires_at: requested_at + 5.days + 1.second,
-          )
-        end
-      assert_match(/check|expiry|validity/i, error.message)
+        assert_equal requested_at + 5.days, reservation.expires_at
+        raise ActiveRecord::Rollback
+      end
+
+      AvatarRecord.transaction(requires_new: true) do
+        error =
+          assert_raises(ActiveRecord::StatementInvalid) do
+            AvatarTransferReservation.create!(
+              avatar: avatar,
+              operation_kind: "enterprise_to_bureau",
+              idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a35",
+              request_fingerprint: Digest::SHA256.hexdigest("boundary-invalid"),
+              requested_at: requested_at,
+              expires_at: requested_at + 5.days + 1.second,
+            )
+          end
+        assert_match(/check|expiry|validity/i, error.message)
+        raise ActiveRecord::Rollback
+      end
       raise ActiveRecord::Rollback
     end
   end

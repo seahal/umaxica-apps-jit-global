@@ -4,10 +4,11 @@ require "test_helper"
 require_relative "../support/avatar_test_factory"
 
 class AvatarMonikerWriterOperationTest < ActiveSupport::TestCase
-  fixtures :avatars
+  fixtures :handles
 
   test "replaces the current moniker with one contiguous temporal transition" do
-    avatar = avatars(:one)
+    # The initial moniker must start before the stubbed transition times below.
+    avatar = travel_to(Time.utc(2025, 1, 1)) { AvatarTestFactory.create_standard!(active_handle: handles(:one)) }
     previous = AvatarMoniker.current.find_by!(avatar_id: avatar.id)
     effective_at = Time.utc(2026, 9, 24, 12, 0, 0)
 
@@ -42,7 +43,7 @@ class AvatarMonikerWriterOperationTest < ActiveSupport::TestCase
   end
 
   test "same normalized moniker is a no-op and does not add history" do
-    avatar = avatars(:one)
+    avatar = AvatarTestFactory.create_standard!(active_handle: handles(:one))
     current = AvatarMoniker.current.find_by!(avatar_id: avatar.id)
     count_before = AvatarMoniker.count
 
@@ -59,7 +60,7 @@ class AvatarMonikerWriterOperationTest < ActiveSupport::TestCase
   end
 
   test "canonically equivalent Unicode input resolves to the existing NFC value" do
-    avatar = avatars(:one)
+    avatar = AvatarTestFactory.create_standard!(active_handle: handles(:one))
     changed = AvatarMonikerWriterOperation.call(
       avatar: avatar,
       moniker: "é",
@@ -82,7 +83,7 @@ class AvatarMonikerWriterOperationTest < ActiveSupport::TestCase
   end
 
   test "invalid replacement rolls back closing the existing current row" do
-    avatar = avatars(:one)
+    avatar = AvatarTestFactory.create_standard!(active_handle: handles(:one))
     current = AvatarMoniker.current.find_by!(avatar_id: avatar.id)
     moniker_count = AvatarMoniker.count
 
@@ -100,7 +101,7 @@ class AvatarMonikerWriterOperationTest < ActiveSupport::TestCase
   end
 
   test "expected current state and enum inputs fail closed" do
-    avatar = avatars(:one)
+    avatar = AvatarTestFactory.create_standard!(active_handle: handles(:one))
 
     assert_raises(ActiveRecord::RecordNotSaved) do
       AvatarMonikerWriterOperation.call(

@@ -237,10 +237,16 @@ ENV TZ=UTC \
 RUN gem update --system \
     && gem install bundler
 
+# PGDG supplies the client matching the PostgreSQL 18 server: Debian trixie ships only 17, and
+# pg_dump refuses to dump a newer server, which breaks db:schema:dump.
 # hadolint ignore=DL3008
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     rm -f /etc/apt/apt.conf.d/docker-clean \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+      -o /usr/share/keyrings/postgresql-archive-keyring.asc \
+    && echo 'deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.asc] https://apt.postgresql.org/pub/repos/apt trixie-pgdg main' \
+      > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update -qq \
     && apt-get install --no-install-recommends -y \
     build-essential \
@@ -254,7 +260,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libvips \
     libxml2-dev \
     libyaml-dev \
-    postgresql-client \
+    postgresql-client-18 \
     tzdata \
     unzip \
     zlib1g-dev \

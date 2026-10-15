@@ -41,7 +41,7 @@ require "test_helper"
 require_relative "../support/avatar_test_factory"
 
 class AvatarTest < ActiveSupport::TestCase
-  fixtures :avatar_capabilities, :avatars, :handles
+  fixtures :avatar_capabilities, :handles
 
   setup do
     create_user_and_status
@@ -53,7 +53,8 @@ class AvatarTest < ActiveSupport::TestCase
   end
 
   test "current concrete organization ownership identifies one Enterprise independently of bindings" do
-    avatar = avatars(:one)
+    created = AvatarTestFactory.create_standard!(active_handle: handles(:one))
+    avatar = Avatar.preload(:avatar_persona_binding, :avatar_agent_binding).find(created.id)
 
     assert_equal 1, avatar.enterprise_ownership_periods.current.count
     assert_empty avatar.bureau_ownership_periods.current
