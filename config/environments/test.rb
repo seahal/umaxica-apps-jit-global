@@ -34,7 +34,7 @@ Rails.application.configure do
 
   # Eager-load Rake task environments in CI, matching Rails' generated test configuration.
   ci = ENV["CI"]
-  config.rake_eager_load = ci.nil? ? false : ci.present?
+  config.rake_eager_load = ci.nil? ? false : ci == "true"
 
   # Eager loading loads your entire application before parallel workers fork.
   # Process-based parallelize relies on this so each worker inherits the loaded
