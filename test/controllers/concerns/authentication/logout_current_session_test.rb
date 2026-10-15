@@ -895,7 +895,8 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # Float::INFINITY value. `token:` is passed directly (bypassing lookup),
   # matching how a caller holding an in-memory, not-yet-persisted token
   # object would invoke this concern.
-  test "sign-out cycle refresh expiry is set 100 years out when the token's discard_at is infinite" do
+  # No finite expiry is invented for an infinite one (REQ-008): after sign-out the refresh ends now.
+  test "sign-out cycle refresh expiry is the sign-out time when the token's discard_at is infinite" do
     user = clients(:one)
     token = ClientToken.new(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
@@ -905,7 +906,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
     cycle = ClientSignOutFlow.recent_first.find_by!(token_id: token.id)
 
-    assert_in_delta 100.years.from_now.to_f, Float(cycle.refresh_expires_at), 5.0
+    assert_in_delta Time.current.to_f, Float(cycle.refresh_expires_at), 5.0
   end
 
   # Targets else@287: the token record does not expose discard_at via

@@ -392,7 +392,9 @@ class AuthenticationLogoutCurrentSession
 
   def sign_out_refresh_expires_at(token_record)
     discard_at = token_record.discard_at if token_record.respond_to?(:discard_at)
-    return 100.years.from_now if discard_at.respond_to?(:infinite?) && discard_at.infinite?
+    # An infinite expiry is never replaced by an invented finite one; after sign-out the refresh
+    # ends now (REQ-008).
+    return Time.current if discard_at.respond_to?(:infinite?) && discard_at.infinite?
     return discard_at if discard_at.present? && discard_at > Time.current
 
     Time.current
