@@ -62,10 +62,10 @@ class DeprecationNotificationSubscriber
       callsite: callsite,
       at: Time.now.utc.iso8601(6),
     }
-    fields[:truncated] = true if [
-      message_changed, message_truncated, gem_name_changed, gem_name_truncated,
-      horizon_changed, horizon_truncated, callsite_changed, callsite_truncated,
-    ].any?
+    # Removing secrets or control characters is not shortening: the two markers stay distinct so a
+    # reader never mistakes a redacted record for a cut one (AT-029, CHG-010).
+    fields[:redacted] = true if [message_changed, gem_name_changed, horizon_changed, callsite_changed].any?
+    fields[:truncated] = true if [message_truncated, gem_name_truncated, horizon_truncated, callsite_truncated].any?
 
     bounded_json(fields)
   end

@@ -27,6 +27,45 @@ class DeprecationNotificationSubscriberTest < ActiveSupport::TestCase
     assert_not_includes errors.first, "do-not-log-this"
   end
 
+  test "redaction alone marks the record redacted and not truncated" do
+    logged_messages = []
+
+    Rails.logger.stub(:warn, ->(entry) { logged_messages << entry }) do
+      ActiveSupport::Notifications.instrument(
+        "deprecation.library",
+        message: "Deprecated token=do-not-log-this",
+        callstack: ["vendor/library.rb:8"],
+        gem_name: "Library",
+        deprecation_horizon: "3.0",
+      )
+    end
+
+    data = JSON.parse(logged_messages.fetch(0)).fetch("data")
+
+    assert data.fetch("redacted")
+    assert_not data.key?("truncated")
+    assert_not_includes logged_messages.first, "do-not-log-this"
+  end
+
+  test "a record without secrets carries neither marker" do
+    logged_messages = []
+
+    Rails.logger.stub(:warn, ->(entry) { logged_messages << entry }) do
+      ActiveSupport::Notifications.instrument(
+        "deprecation.library",
+        message: "Deprecated plain call",
+        callstack: ["vendor/library.rb:8"],
+        gem_name: "Library",
+        deprecation_horizon: "3.0",
+      )
+    end
+
+    data = JSON.parse(logged_messages.fetch(0)).fetch("data")
+
+    assert_not data.key?("redacted")
+    assert_not data.key?("truncated")
+  end
+
   test "all values in an unquoted Cookie header are removed before logging" do
     logged_messages = []
 
