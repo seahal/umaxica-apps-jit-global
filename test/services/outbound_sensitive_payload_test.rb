@@ -17,11 +17,7 @@ class OutboundSensitivePayloadTest < ActiveSupport::TestCase
 
     error =
       assert_raises(ArgumentError) do
-        OutboundSensitivePayload.decrypt_envelope(
-          token,
-          purpose: OutboundSensitivePayload::SMS_DELIVERY_PURPOSE,
-          required_keys: %w(version to title body),
-        )
+        OutboundSensitivePayload.decrypt_sms_delivery(token)
       end
 
     assert_equal "Invalid encrypted sensitive payload", error.message

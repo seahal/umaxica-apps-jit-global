@@ -77,7 +77,6 @@ module OidcClientStoresStaticClientStore
       aud: "palm-app",
       name: "Palm App RP",
       jwt_namespace: "PALM_APP",
-      backchannel_logout: false,
     },
     "tech-org" => {
       env_key: %w(PUBLIC_TECH_STAFF_URL PRIVATE_TECH_STAFF_URL),
@@ -85,7 +84,6 @@ module OidcClientStoresStaticClientStore
       aud: "tech-org",
       name: "Tech Org RP",
       jwt_namespace: "TECH_ORG",
-      backchannel_logout: false,
       required_operator_capability: OperatorCapabilityGrant::TECH_ACCESS,
     },
     "base-app-ww" => {
@@ -114,7 +112,7 @@ module OidcClientStoresStaticClientStore
   def face_rp_client(env_key:, resource_type:, aud:, name:, jwt_namespace:, default_host: nil,
                      callback_path: AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH,
                      sign_out_path: AuthBoundaryAuthorityMap::CANONICAL_RP_SIGN_OUT_PATH,
-                     backchannel_logout: true, required_operator_capability: nil)
+                     required_operator_capability: nil)
     {
       redirect_uris_by_realm: {
         resource_type => build_redirect_uris(env_key, default_host, path: callback_path),
@@ -122,8 +120,6 @@ module OidcClientStoresStaticClientStore
       post_logout_redirect_uris: build_post_logout_redirect_uris(
         env_key, default_host, path: sign_out_path,
       ),
-      backchannel_logout_uris: backchannel_logout ? build_logout_uris(env_key, "backchannel/logout", default_host) : [],
-      backchannel_logout_session_required: backchannel_logout,
       aud: aud,
       resource_type: resource_type,
       name: name,
@@ -152,14 +148,6 @@ module OidcClientStoresStaticClientStore
       RequestContextContract.allowed_regions.map do |region|
         "#{protocol}://#{host}#{port_suffix}#{path}?ri=#{region}"
       end
-    end
-  end
-
-  def build_logout_uris(env_key, endpoint, default_host = nil)
-    configured_hosts_for(env_key, default_host).map do |host|
-      protocol = (Rails.env.production? || public_host?(host)) ? "https" : "http"
-      port_suffix = (Rails.env.production? || public_host?(host)) ? "" : ":3000"
-      "#{protocol}://#{host}#{port_suffix}/oidc/#{endpoint}"
     end
   end
 
@@ -220,6 +208,6 @@ module OidcClientStoresStaticClientStore
 
   private_class_method :first_party_browser_rp_clients, :face_rp_client, :build_redirect_uris,
                        :build_post_logout_redirect_uris,
-                       :build_logout_uris, :public_host?, :configured_hosts_for, :boot_host_for,
+                       :public_host?, :configured_hosts_for, :boot_host_for,
                        :normalize_host
 end

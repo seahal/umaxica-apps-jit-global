@@ -152,11 +152,8 @@ class EditOrgPublishingManagementRouteContractTest < ActionDispatch::Integration
       end
     end
 
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{HOST}/oidc/backchannel/logout",
-      method: :post,
-    )
-
-    assert_equal "edit/org/oidc/backchannel/logouts", recognized.fetch(:controller)
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{HOST}/oidc/backchannel/logout", method: :post)
+    end
   end
 end

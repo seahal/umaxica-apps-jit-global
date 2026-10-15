@@ -6,15 +6,15 @@ unresolved gaps explicit.
 
 ## Remediated Slices
 
-| Slice | Area                        | Repository evidence                                                                                            | Remaining gap                                      |
-| ----- | --------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| F3    | Ceremony cleanup            | `config/recurring.yml` schedules every dedicated ceremony transaction purge job in production.                 | Cleanup observability is still service-specific.   |
-| F1    | Timing protection           | `MinimumResponseBudget` defaults on when included; credential endpoint contract tests pin coverage.            | Additional endpoint families need review as added. |
-| F7    | OP route contract           | Base routes expose discovery, JWKS, `/oauth/*`, and `/oidc/logout` through existing OP controllers.            | Deployment naming still uses transitional `base`.  |
-| F2    | Flash removal               | `auth/app/sign/in/sessions` now uses explicit render state instead of Rails flash.                             | Other auth/base surfaces still need migration.     |
-| F5/F6 | Route terminology and TODOs | Route comments no longer describe Base as a credential gateway, and stale degraded-entrypoint text is removed. | None for the comments changed in this slice.       |
-| F4    | Session commit seam         | App sign-in and app social completion route through `AuthenticationSessionCommitter`.                          | Full authority migration remains transitional.     |
-| F7b   | Admission control key shape | Telephone verification pacing uses IP plus telephone blind-index digest, never the raw number.                 | Other credential rate-limit keys need review.      |
+| Slice | Area                        | Repository evidence                                                                                                                                                                                                                                                                    | Remaining gap                                                                                                                  |
+| ----- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| F3    | Ceremony cleanup            | `config/recurring.yml` schedules every dedicated ceremony transaction purge job in production.                                                                                                                                                                                         | Cleanup observability is still service-specific.                                                                               |
+| F1    | Timing protection           | `MinimumResponseBudget` defaults on when included; credential endpoint contract tests pin coverage.                                                                                                                                                                                    | Additional endpoint families need review as added.                                                                             |
+| F7    | OP route contract           | Base routes expose discovery, JWKS, `/oauth/*`, and `/oidc/logout` through existing OP controllers.                                                                                                                                                                                    | Deployment naming still uses transitional `base`.                                                                              |
+| F2    | Flash removal               | `auth/app/sign/in/sessions` now uses explicit render state instead of Rails flash.                                                                                                                                                                                                     | Other auth/base surfaces still need migration.                                                                                 |
+| F5/F6 | Route terminology and TODOs | Route comments no longer describe Base as a credential gateway, and stale degraded-entrypoint text is removed.                                                                                                                                                                         | None for the comments changed in this slice.                                                                                   |
+| F4    | Session commit seam         | App sign-in and app social completion route through `AuthenticationSessionCommitter`.                                                                                                                                                                                                  | Full authority migration remains transitional.                                                                                 |
+| F7b   | Admission control key shape | Telephone verification pacing uses IP plus telephone blind-index digest, never the raw number.                                                                                                                                                                                         | Other credential rate-limit keys need review.                                                                                  |
 | F8    | Auth security events        | `AuthenticationSecurityEventEmitter` writes sanitized events to `Chronicle` under the existing security retention policy and also emits a redacted operational log; the existing SMS transport records enqueue/provider acceptance/failure facts without recipient or message content. | Email provider receipts, provider callback/retry contracts, and taxonomy-wide caller migration remain separate follow-up work. |
 
 ## Current Route Matrix
@@ -29,7 +29,6 @@ unresolved gaps explicit.
 | `/oauth/revoke`                     | `base`                   | OP token revocation endpoint.                                     |
 | `/oidc/authorization`               | `base`                   | First-party RP authorization start.                               |
 | `/oidc/callback`                    | `base`                   | First-party RP callback.                                          |
-| `/oidc/backchannel/logout`          | `base`                   | RP backchannel logout consumer.                                   |
 | `/oidc/logout`                      | `base`                   | OP logout endpoint.                                               |
 | `/social/:provider/sign/in`         | `auth`                   | Sign ceremony entry into social sign-in.                          |
 | `/social/:provider/sign/up`         | `auth`                   | Sign ceremony entry into social sign-up.                          |
@@ -79,10 +78,10 @@ Deferred checks:
 ## Logging And Audit Evidence And Gaps
 
 The repository has chronicle policies, JWT anomaly persistence, CSP violation logging, social nonce
-failure logging, and Redis credential masking tests. `AuthenticationSecurityEventEmitter` defines the
-current authentication security-event taxonomy, writes the sanitized event to `Chronicle` using the
-existing `security` retention policy, and emits a separately redacted operational log. Chronicle is
-the retained audit record; the application log remains diagnostic and is not a substitute for it.
+failure logging, and Redis credential masking tests. `AuthenticationSecurityEventEmitter` defines
+the current authentication security-event taxonomy, writes the sanitized event to `Chronicle` using
+the existing `security` retention policy, and emits a separately redacted operational log. Chronicle
+is the retained audit record; the application log remains diagnostic and is not a substitute for it.
 
 Deferred checks:
 

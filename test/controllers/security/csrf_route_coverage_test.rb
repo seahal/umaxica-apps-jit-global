@@ -15,8 +15,6 @@ module Security
     PROTOCOL_ENDPOINTS = [
       %r{\A/oauth/token(?:\(\.:format\))?\z},
       %r{\A/oauth/revoke(?:\(\.:format\))?\z},
-      # OIDC back-channel logout: machine-to-machine from IdP, no browser CSRF token.
-      %r{\A/oidc/backchannel/logout(?:\(\.:format\))?\z},
       # Apple Server Notifications: machine-to-machine from Apple, JWS-signature verified, no browser CSRF token.
       %r{\A/apple/notifications(?:\(\.:format\))?\z},
     ].freeze

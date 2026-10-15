@@ -475,7 +475,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/core/app/health/readinesses_controller.rb: 1
   app/controllers/core/app/health/startups_controller.rb: 1
   app/controllers/core/app/healths_controller.rb: 1
-  app/controllers/core/app/oidc/backchannel/logouts_controller.rb: 1
   app/controllers/core/app/revisions_controller.rb: 1
   app/controllers/core/app/roots_controller.rb: 1
   app/controllers/core/app/sign/outs_controller.rb: 4
@@ -489,7 +488,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/core/com/health/readinesses_controller.rb: 1
   app/controllers/core/com/health/startups_controller.rb: 1
   app/controllers/core/com/healths_controller.rb: 1
-  app/controllers/core/com/oidc/backchannel/logouts_controller.rb: 1
   app/controllers/core/com/revisions_controller.rb: 1
   app/controllers/core/com/roots_controller.rb: 1
   app/controllers/core/com/sign/outs_controller.rb: 4
@@ -521,7 +519,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/core/org/health/readinesses_controller.rb: 1
   app/controllers/core/org/health/startups_controller.rb: 1
   app/controllers/core/org/healths_controller.rb: 1
-  app/controllers/core/org/oidc/backchannel/logouts_controller.rb: 1
   app/controllers/core/org/revisions_controller.rb: 1
   app/controllers/core/org/roots_controller.rb: 1
   app/controllers/core/org/sign/outs_controller.rb: 4
@@ -727,7 +724,6 @@ Umaxica/ExplicitMethodVisibility:
   app/jobs/email_ceremony_transaction_purge_job.rb: 1
   app/jobs/enforcement_expiry_job.rb: 1
   app/jobs/enforcement_reconciliation_job.rb: 1
-  app/jobs/oidc_backchannel_logout_delivery_job.rb: 1
   app/jobs/outbound/sms_delivery_job.rb: 1
   app/jobs/passkey_ceremony_transaction_purge_job.rb: 1
   app/jobs/processor_erasure_notification_job.rb: 1
@@ -1234,11 +1230,9 @@ Umaxica/ExplicitMethodVisibility:
   app/services/identity_totp_ceremony_replay_store.rb: 3
   app/services/oidc_access_token_authenticator.rb: 1
   app/services/oidc_authorize_coordinator.rb: 1
-  app/services/oidc_backchannel_logout_notifier.rb: 1
   app/services/oidc_end_session_request.rb: 1
   app/services/oidc_id_token_verifier.rb: 1
   app/services/oidc_logout_request.rb: 2
-  app/services/oidc_rp_session_logout.rb: 1
   app/services/oidc_rp_token_client.rb: 1
   app/services/oidc_token_exchange_coordinator.rb: 1
   app/services/operator_entra_identity_activation.rb: 1
@@ -1335,7 +1329,6 @@ Umaxica/ExplicitMethodVisibility:
   app/values/jump_rt_return_verifier.rb: 2
   app/values/mcp_surface_identity.rb: 5
   app/values/oidc/acme_service_origin.rb: 8
-  app/values/oidc_logout_token_codec.rb: 2
   app/values/problem_type.rb: 7
   app/values/publishing/taxonomy_kind/multiple_ordered_flat.rb: 4
   app/values/publishing/taxonomy_kind/single_hierarchical.rb: 4

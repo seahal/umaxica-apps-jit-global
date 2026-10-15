@@ -54,7 +54,6 @@ module Security
         Help::Org::BareController,
         Base::App::Oauth::TokensController,
         Auth::App::Apple::NotificationsController,
-        Edit::Org::Oidc::Backchannel::LogoutsController,
       ].freeze
 
       EXCLUDED_ROOTS = [

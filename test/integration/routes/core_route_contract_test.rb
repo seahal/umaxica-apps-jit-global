@@ -212,10 +212,9 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
       Rails.application.routes.recognize_path("http://#{CORE_APP_HOST}/auth/acme/callback", method: :get)
     end
 
-    assert_recognizes(
-      { controller: "core/app/oidc/backchannel/logouts", action: "create" },
-      { path: "http://#{CORE_APP_HOST}/oidc/backchannel/logout", method: :post },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{CORE_APP_HOST}/oidc/backchannel/logout", method: :post)
+    end
   end
 
   test "core com route contract" do
@@ -346,10 +345,9 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
       Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/auth/acme/callback", method: :get)
     end
 
-    assert_recognizes(
-      { controller: "core/com/oidc/backchannel/logouts", action: "create" },
-      { path: "http://#{CORE_COM_HOST}/oidc/backchannel/logout", method: :post },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/oidc/backchannel/logout", method: :post)
+    end
   end
 
   test "core org route contract" do
@@ -480,10 +478,9 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
       Rails.application.routes.recognize_path("http://#{CORE_ORG_HOST}/auth/acme/callback", method: :get)
     end
 
-    assert_recognizes(
-      { controller: "core/org/oidc/backchannel/logouts", action: "create" },
-      { path: "http://#{CORE_ORG_HOST}/oidc/backchannel/logout", method: :post },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{CORE_ORG_HOST}/oidc/backchannel/logout", method: :post)
+    end
   end
   test "core net route contract" do
     recognized = Rails.application.routes.recognize_path(

@@ -32,8 +32,6 @@ class OidcSevenFirstPartyRpIsolationTest < ActiveSupport::TestCase
 
     assert_equal "client", palm.resource_type
     assert_equal "palm-app", palm.aud
-    assert_empty palm.backchannel_logout_uris
-    assert_not palm.backchannel_logout_session_required
     assert_not_equal core_org.redirect_uris, palm.redirect_uris
     assert_not_equal core_org.jwt_namespace, palm.jwt_namespace
 
@@ -42,8 +40,6 @@ class OidcSevenFirstPartyRpIsolationTest < ActiveSupport::TestCase
     assert_equal "operator", tech.resource_type
     assert_equal "tech-org", tech.aud
     assert_equal OperatorCapabilityGrant::TECH_ACCESS, tech.required_operator_capability
-    assert_empty tech.backchannel_logout_uris
-    assert_not tech.backchannel_logout_session_required
     assert_not_equal edit.redirect_uris, tech.redirect_uris
     assert_not_equal edit.jwt_namespace, tech.jwt_namespace
   end

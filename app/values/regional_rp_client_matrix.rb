@@ -19,7 +19,6 @@ module RegionalRpClientMatrix
 
   CALLBACK_PATH = "/oidc/callback"
   POST_LOGOUT_PATH = "/sign/out/completion"
-  BACKCHANNEL_LOGOUT_PATH = "/oidc/backchannel/logout"
 
   CLIENT_IDS = (AuthBoundaryAuthorityMap::REGIONAL_RP_CLIENT_IDS + ["edit-org"]).freeze
 
@@ -96,7 +95,6 @@ module RegionalRpClientMatrix
         base_uri,
         "#{POST_LOGOUT_PATH}?ri=#{metadata.fetch(:region).presence || RequestContextContract.default_region}",
       ),
-      backchannel_logout_uri: join_uri(base_uri, BACKCHANNEL_LOGOUT_PATH),
     }.freeze
   end
 
@@ -134,10 +132,6 @@ module RegionalRpClientMatrix
 
     unless registered_client.post_logout_redirect_uris.include?(uri_binding.fetch(:post_logout_redirect_uri))
       raise InvalidCanonicalRegistration, "registry post-logout URI mismatch for #{expected_client_id}"
-    end
-
-    unless registered_client.backchannel_logout_uris.include?(uri_binding.fetch(:backchannel_logout_uri))
-      raise InvalidCanonicalRegistration, "registry backchannel URI mismatch for #{expected_client_id}"
     end
 
     unless registered_client.jwt_namespace == uri_binding.fetch(:jwt_namespace)

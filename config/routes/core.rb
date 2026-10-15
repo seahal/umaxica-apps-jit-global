@@ -64,13 +64,10 @@ scope module: :core, as: :core do
         end
       end
 
-      # RP back-channel receiver. Browser entry is the neutral /sign contract.
+      # RP callback. Browser entry is the neutral /sign contract.
       namespace :oidc do
         # Authorization-code callback (redirect_uri); see RegionalRpClientMatrix::CALLBACK_PATH.
         resource :callback, only: :show
-        namespace :backchannel do
-          resource :logout, only: :create
-        end
       end
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
@@ -148,13 +145,10 @@ scope module: :core, as: :core do
         end
       end
 
-      # RP back-channel receiver. Browser entry is the neutral /sign contract.
+      # RP callback. Browser entry is the neutral /sign contract.
       namespace :oidc do
         # Authorization-code callback (redirect_uri); see RegionalRpClientMatrix::CALLBACK_PATH.
         resource :callback, only: :show
-        namespace :backchannel do
-          resource :logout, only: :create
-        end
       end
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
@@ -232,13 +226,10 @@ scope module: :core, as: :core do
         end
       end
 
-      # RP back-channel receiver. Browser entry is the neutral /sign contract.
+      # RP callback. Browser entry is the neutral /sign contract.
       namespace :oidc do
         # Authorization-code callback (redirect_uri); see RegionalRpClientMatrix::CALLBACK_PATH.
         resource :callback, only: :show
-        namespace :backchannel do
-          resource :logout, only: :create
-        end
       end
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).

@@ -37,10 +37,9 @@ For `jp.umaxica.app`:
 | `/_next/*`               | Next.js Core     | remove entire `Cookie` header |
 | `/` and all other paths  | Next.js Core     | remove entire `Cookie` header |
 
-`/oidc/*` covers `/oidc/authorization`, `/oidc/callback`, and `/oidc/backchannel/logout`.
-`/oidc/callback` and `/sign/out*` are the paths that set and clear the credential cookies, so
-stripping `Cookie` from them breaks sign-in and sign-out. They must not be allowed to fall into the
-"all other paths" row.
+`/oidc/*` covers `/oidc/callback`. `/oidc/callback` and `/sign/out*` are the paths that set and
+clear the credential cookies, so stripping `Cookie` from them breaks sign-in and sign-out. They must
+not be allowed to fall into the "all other paths" row.
 
 ### Paths deliberately absent from this table
 

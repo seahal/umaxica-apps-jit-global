@@ -190,7 +190,6 @@ module SignOidcLogout
     prepare_sign_out_completion_notice!
     logout_oidc_current_session!(result)
     issue_sign_out_notice!
-    notify_oidc_rps_of_logout(result)
 
     if result.post_logout_redirect_uri.present?
       redirect_to_jump_url(post_logout_redirect_uri_with_state(result), status: :see_other)
@@ -379,30 +378,6 @@ module SignOidcLogout
     query["state"] = result.state
     uri.query = query.to_query
     uri.to_s
-  end
-
-  def notify_oidc_rps_of_logout(result)
-    OidcBackchannelLogoutNotifier.call(
-      resource_type: oidc_logout_resource_type,
-      subject: result.subject,
-      sid: result.sid,
-      initiating_client_id: result.client_id,
-    )
-  end
-
-  def oidc_logout_resource_type
-    host = request.host.to_s
-    return "operator" if oidc_logout_host_matches?(host, OidcIssuer.host_for_resource_type("operator"))
-    return "visitor" if oidc_logout_host_matches?(host, OidcIssuer.host_for_resource_type("visitor"))
-
-    "client"
-  end
-
-  def oidc_logout_host_matches?(request_host, configured_host)
-    configured = URI.parse("//#{configured_host}").host.to_s
-    request_host == configured
-  rescue URI::InvalidURIError
-    request_host == configured_host.to_s
   end
 
   def sign_surface_name

@@ -1,13 +1,14 @@
 # Logout And Session Management
 
-> **Current first-party status (2026-10-14):** The accepted current contract is
+> **Current first-party status (2026-10-15):** The accepted current contract is
 > `adr/first-party-sign-out-shared-database-without-backchannel-logout.md`. The older Acme/Sign
 > ownership and `/sign/out/complete` descriptions below are retained as migration history. The
 > all-12 completion continuation matrix now covers challenge GET, token-bearing POST and one-shot
 > completion after parent/RP revocation. The shared parent-and-RP revocation transaction is locally
 > implemented and focused-tested. Local authority-first HTTP tests and an independent-connection
-> sign-out/refresh race pass. First-party BCL removal, the complete all-RP authority-flow matrix and
-> real browser acceptance remain open.
+> sign-out/refresh race pass. First-party BCL has been removed: no sender, receiver, client
+> declaration or discovery claim remains. The complete all-RP authority-flow matrix and real browser
+> acceptance remain open.
 
 ## Browser RP logout implementation
 
@@ -79,8 +80,8 @@ cookies. The all-client continuation matrix verifies the completion boundary aft
 and RP-session revocation. The focused service selection covers the local parent-and-sibling-RP
 transaction and rollback behavior. Local authority-first HTTP tests cover the existing Base APP/COM,
 Base self-RP and Edit sequences; an independent-connection race covers concurrent sign-out and RP
-refresh. The complete all-RP authority-flow and issuance-race matrix, BCL removal and real-browser
-acceptance remain open. See
+refresh. The complete all-RP authority-flow and issuance-race matrix and real-browser acceptance
+remain open. See
 [current verification](../../evidence/2026-10-15-logout-current-doc-reconciliation-E6Q8.md). The
 older Acme-only ownership statements above are retained as migration history, not as the active
 boundary.

@@ -5,7 +5,6 @@ module OutboundSensitivePayload
   EMAIL_OTP_PURPOSE = "outbound.email.otp"
   EMAIL_VERIFICATION_TOKEN_PURPOSE = "outbound.email.verification_token"
   SMS_DELIVERY_PURPOSE = "outbound.sms.delivery.v1"
-  OIDC_BACKCHANNEL_LOGOUT_PURPOSE = "outbound.oidc.backchannel_logout.v1"
   ENVELOPE_VERSION = 1
   ENCRYPTOR_CACHE = Concurrent::Map.new
 
@@ -112,29 +111,6 @@ module OutboundSensitivePayload
     raise ArgumentError, "Telephone registration SMS message mismatch"
   end
 
-  def encrypt_oidc_backchannel_logout(uri:, client_id:, resource_type:, subject:, sid:)
-    encrypt_envelope(
-      {
-        "version" => ENVELOPE_VERSION,
-        "uri" => uri,
-        "client_id" => client_id,
-        "resource_type" => resource_type,
-        "subject" => subject,
-        "sid" => sid,
-      },
-      purpose: OIDC_BACKCHANNEL_LOGOUT_PURPOSE,
-      required_keys: %w(version uri client_id resource_type subject sid),
-    )
-  end
-
-  def decrypt_oidc_backchannel_logout(token)
-    decrypt_envelope(
-      token,
-      purpose: OIDC_BACKCHANNEL_LOGOUT_PURPOSE,
-      required_keys: %w(version uri client_id resource_type subject sid),
-    )
-  end
-
   def encrypt_email_otp(hotp_token)
     encrypt(hotp_token, purpose: EMAIL_OTP_PURPOSE)
   end
@@ -156,21 +132,13 @@ module OutboundSensitivePayload
     encrypt(JSON.generate(payload), purpose:)
   end
 
-  def decrypt_envelope(token, purpose:, required_keys:)
-    payload = JSON.parse(decrypt(token, purpose:))
-    validate_envelope!(payload, required_keys:)
-    payload.symbolize_keys
-  rescue JSON::ParserError, TypeError
-    raise ArgumentError, "Invalid encrypted sensitive payload"
-  end
-
   def validate_envelope!(payload, required_keys:)
     unless payload.is_a?(Hash) && payload.keys.sort == required_keys.sort
       raise ArgumentError, "Invalid sensitive payload schema"
     end
     raise ArgumentError, "Unsupported sensitive payload version" unless payload["version"] == ENVELOPE_VERSION
 
-    required_keys.excluding("version", "subject").each do |key|
+    required_keys.excluding("version").each do |key|
       raise ArgumentError, "Sensitive payload field #{key} cannot be blank" if payload[key].blank?
     end
   end

@@ -1958,7 +1958,6 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_not_predicate other_token.reload, :revoked?
     assert_not_predicate @token.reload, :revoked?
-    assert_empty enqueued_jobs.select { |job| job["job_class"] == "OidcBackchannelLogoutDeliveryJob" }
   end
 
   test "D1 authenticated browser presenting another subject's hint ends neither session" do
@@ -2064,92 +2063,90 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       assert_nil response.location
       assert_includes response.headers["Cache-Control"].to_s, "no-store"
 
-      assert_no_enqueued_jobs(only: OidcBackchannelLogoutDeliveryJob) do
-        post base_app_oidc_logout_url(host: @host),
-             params: { id_token_hint: other_hint, post_logout_redirect_uri: redirect_uri, ri: "jp" },
-             headers: begin
-               fx21_harness =
-                 begin
-                   f21_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
-                   f21_host = f21_headers["Host"]
-                   f21_route =
-                     begin
-                       Rails.application.routes.recognize_path("https://#{f21_host}/") if f21_host.present?
-                     rescue ActionController::RoutingError
-                       nil
-                     end
-                   f21_family, f21_surface = f21_route&.fetch(:controller)&.split("/")
-                   if %w(base warp core edit).include?(f21_family) && f21_surface == "app"
-                     f21_client_id =
-                       case f21_family
-                       when "base" then "base-#{f21_surface}-ww"
-                       when "edit" then "edit-org"
-                       else "#{f21_family}-#{f21_surface}"
-                       end
-                     f21_token = ClientToken.includes(
-                       :user,
-                       :device_session,
-                     ).find_by!(public_id: f21_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
-                     f21_client = OidcClientRegistry.find!(f21_client_id)
-                     f21_key = [f21_client.client_id, f21_token.public_id]
-                     @base_browser_rp_credentials ||= {}
-                     if !@base_browser_rp_credentials[f21_key] && f21_token.currently_usable? &&
-                         !(f21_token.device_session_id && ClientRpSession.exists?(
-                           device_session_id: f21_token.device_session_id,
-                           oidc_client_id: f21_client.client_id,
-                           revoked_at: nil,
-                         ))
-                       f21_token.rotate_refresh_token! unless f21_token.device_session_record.current_refresh_token_id
-                       f21_now = Time.current
-                       f21_session = ClientRpSession.create!(
-                         client_token: f21_token, oidc_client_id: f21_client.client_id, oidc_scope: "openid profile",
-                         oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f21_now,
-                         refresh_token_expires_at: f21_now + 10.minutes,
-                       )
-                       f21_access = AuthenticationTokenService.encode(
-                         f21_token.actor_record,
-                         host: f21_host,
-                         resource_type: "client",
-                         session_public_id: f21_token.public_id,
-                         base_session_public_id: f21_token.public_id,
-                         oidc_sid: f21_session.public_id,
-                         oidc_jti: f21_session.oidc_jti,
-                         expires_at: f21_now + 10.minutes,
-                         scopes: %w(openid profile),
-                         issuer: OidcIssuer.for_client(f21_client),
-                         audiences: [f21_client.aud],
-                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f21_client),
-                         subject: OidcSubject.for(
-                           f21_token.actor_record,
-                           resource_type: "client",
-                         ),
-                         client_id: f21_client.client_id,
-                       )
-                       @base_browser_rp_credentials[f21_key] =
-                         [f21_access, f21_session.issue_refresh_token!]
-                     end
-                     if @base_browser_rp_credentials[f21_key]
-                       f21_access, f21_refresh = @base_browser_rp_credentials.fetch(f21_key)
-                       f21_cookie = [
-                         f21_headers.fetch("Cookie"),
-                         "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f21_access)}",
-                         "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f21_refresh)}",
-                       ].join("; ")
-                       f21_headers = f21_headers.merge(
-                         "Cookie" => f21_cookie,
-                         "HTTP_COOKIE" => f21_cookie,
-                       )
-                     end
+      post base_app_oidc_logout_url(host: @host),
+           params: { id_token_hint: other_hint, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+           headers: begin
+             fx21_harness =
+               begin
+                 f21_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
+                 f21_host = f21_headers["Host"]
+                 f21_route =
+                   begin
+                     Rails.application.routes.recognize_path("https://#{f21_host}/") if f21_host.present?
+                   rescue ActionController::RoutingError
+                     nil
                    end
-                   f21_headers
+                 f21_family, f21_surface = f21_route&.fetch(:controller)&.split("/")
+                 if %w(base warp core edit).include?(f21_family) && f21_surface == "app"
+                   f21_client_id =
+                     case f21_family
+                     when "base" then "base-#{f21_surface}-ww"
+                     when "edit" then "edit-org"
+                     else "#{f21_family}-#{f21_surface}"
+                     end
+                   f21_token = ClientToken.includes(
+                     :user,
+                     :device_session,
+                   ).find_by!(public_id: f21_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                   f21_client = OidcClientRegistry.find!(f21_client_id)
+                   f21_key = [f21_client.client_id, f21_token.public_id]
+                   @base_browser_rp_credentials ||= {}
+                   if !@base_browser_rp_credentials[f21_key] && f21_token.currently_usable? &&
+                       !(f21_token.device_session_id && ClientRpSession.exists?(
+                         device_session_id: f21_token.device_session_id,
+                         oidc_client_id: f21_client.client_id,
+                         revoked_at: nil,
+                       ))
+                     f21_token.rotate_refresh_token! unless f21_token.device_session_record.current_refresh_token_id
+                     f21_now = Time.current
+                     f21_session = ClientRpSession.create!(
+                       client_token: f21_token, oidc_client_id: f21_client.client_id, oidc_scope: "openid profile",
+                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f21_now,
+                       refresh_token_expires_at: f21_now + 10.minutes,
+                     )
+                     f21_access = AuthenticationTokenService.encode(
+                       f21_token.actor_record,
+                       host: f21_host,
+                       resource_type: "client",
+                       session_public_id: f21_token.public_id,
+                       base_session_public_id: f21_token.public_id,
+                       oidc_sid: f21_session.public_id,
+                       oidc_jti: f21_session.oidc_jti,
+                       expires_at: f21_now + 10.minutes,
+                       scopes: %w(openid profile),
+                       issuer: OidcIssuer.for_client(f21_client),
+                       audiences: [f21_client.aud],
+                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f21_client),
+                       subject: OidcSubject.for(
+                         f21_token.actor_record,
+                         resource_type: "client",
+                       ),
+                       client_id: f21_client.client_id,
+                     )
+                     @base_browser_rp_credentials[f21_key] =
+                       [f21_access, f21_session.issue_refresh_token!]
+                   end
+                   if @base_browser_rp_credentials[f21_key]
+                     f21_access, f21_refresh = @base_browser_rp_credentials.fetch(f21_key)
+                     f21_cookie = [
+                       f21_headers.fetch("Cookie"),
+                       "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f21_access)}",
+                       "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f21_refresh)}",
+                     ].join("; ")
+                     f21_headers = f21_headers.merge(
+                       "Cookie" => f21_cookie,
+                       "HTTP_COOKIE" => f21_cookie,
+                     )
+                   end
                  end
-               fx21_harness.fetch("Cookie").split("; ").each do |pair|
-                 name, value = pair.split("=", 2)
-                 cookies[name] = Rack::Utils.unescape(value)
+                 f21_headers
                end
-               browser_headers.merge(fx21_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
-             end.merge("Sec-Fetch-Site" => "same-origin")
-      end
+             fx21_harness.fetch("Cookie").split("; ").each do |pair|
+               name, value = pair.split("=", 2)
+               cookies[name] = Rack::Utils.unescape(value)
+             end
+             browser_headers.merge(fx21_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
+           end.merge("Sec-Fetch-Site" => "same-origin")
     end
 
     assert_not_predicate other_token.reload, :revoked?
@@ -2364,7 +2361,6 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_not_predicate sibling_token.reload, :revoked?
-    assert_empty enqueued_jobs.select { |job| job["job_class"] == "OidcBackchannelLogoutDeliveryJob" }
   end
 
   test "D1 swapping in another subject's hint on the POST ends neither session" do
@@ -2552,7 +2548,6 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_not_predicate other_token.reload, :revoked?
     assert_not_predicate @token.reload, :revoked?
-    assert_empty enqueued_jobs.select { |job| job["job_class"] == "OidcBackchannelLogoutDeliveryJob" }
   end
 
   # BVA on the 5-minute staged-request lifetime: the stored expires_at is second-precision ISO 8601
@@ -3737,7 +3732,6 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     post base_app_oidc_logout_url(host: @host), headers: http_headers_0
 
     assert_not_predicate @token.reload, :revoked?
-    assert_empty enqueued_jobs.select { |job| job["job_class"] == "OidcBackchannelLogoutDeliveryJob" }
   end
 
   test "D1 control: own-session logout ends only that session and leaves another subject's session active" do
@@ -4485,7 +4479,6 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_not_predicate @token.reload, :revoked?
-    assert_empty enqueued_jobs.select { |job| job["job_class"] == "OidcBackchannelLogoutDeliveryJob" }
   end
 
   test "D2 same-origin POST without logout_challenge still ends the staged session" do

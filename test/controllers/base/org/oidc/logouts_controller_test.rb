@@ -1326,7 +1326,6 @@ class Base::Org::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_not_predicate @token.reload, :revoked?
-    assert_empty enqueued_jobs.select { |job| job["job_class"] == "OidcBackchannelLogoutDeliveryJob" }
   end
 
   test "D2 same-origin POST without logout_challenge still ends the staged session" do

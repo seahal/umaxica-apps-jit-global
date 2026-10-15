@@ -60,10 +60,9 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
         { controller: surface.fetch(:sign_out_controller), action: "create" },
       )
 
-      assert_routing(
-        { method: :post, path: "http://#{host}/oidc/backchannel/logout" },
-        { controller: "core/#{surface.fetch(:controller).split("/")[1]}/oidc/backchannel/logouts", action: "create" },
-      )
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path("http://#{host}/oidc/backchannel/logout", method: :post)
+      end
     end
   end
 
@@ -99,18 +98,6 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
       assert_includes response.body, 'id="sign-out-handoff-form"' if handoff_rendered
     ensure
       RpSessionRevoker.call(scope: :rp_session, record: rp_session) if rp_session
-    end
-  end
-
-  test "back-channel logout rejects invalid tokens without mutating session state" do
-    SURFACES.each do |surface|
-      host = surface.fetch(:host)
-      host! host
-
-      post "https://#{host}/oidc/backchannel/logout", params: { logout_token: "invalid" }
-
-      assert_response :bad_request
-      assert_equal "invalid_logout_token", response.body
     end
   end
 

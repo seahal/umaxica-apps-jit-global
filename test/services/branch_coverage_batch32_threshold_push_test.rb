@@ -30,12 +30,6 @@ class BranchCoverageBatch32ThresholdPushTest < ActiveSupport::TestCase
                  DbscVerificationService.new(record: missing_key, session_id: "s", proof: "p").call[:error_code]
   end
 
-  test "OidcBackchannelLogoutNotifier blank sid subject early return" do
-    count = OidcBackchannelLogoutNotifier.new(resource_type: "client", subject: nil, sid: nil).call
-
-    assert_equal 0, count
-  end
-
   test "Health ok? status string arms" do
     ok = Health::CheckResult.new(check: :liveness, status: :ok, surface: "app")
     unready = Health::CheckResult.new(check: :liveness, status: :unready, surface: "app")

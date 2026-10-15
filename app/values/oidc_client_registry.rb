@@ -17,8 +17,7 @@ module OidcClientRegistry
       :client_id, :client_secret, :redirect_uris, :redirect_uris_by_realm, :post_logout_redirect_uris,
       :aud, :resource_type,
       :name, :domains, :allowed_scopes, :registered_token_endpoint_auth_method,
-      :metadata_token_endpoint_auth_method, :jwt_namespace, :backchannel_logout_uris,
-      :backchannel_logout_session_required, :required_operator_capability,
+      :metadata_token_endpoint_auth_method, :jwt_namespace, :required_operator_capability,
     ) do
       def public_client?
         registered_token_endpoint_auth_method == "none"
@@ -57,8 +56,6 @@ module OidcClientRegistry
       redirect_uris: all_redirect_uris,
       redirect_uris_by_realm: redirect_uris_by_realm,
       post_logout_redirect_uris: (config[:post_logout_redirect_uris] || []).uniq,
-      backchannel_logout_uris: (config[:backchannel_logout_uris] || []).uniq,
-      backchannel_logout_session_required: config.fetch(:backchannel_logout_session_required, false),
       required_operator_capability: config[:required_operator_capability],
       aud: config[:aud],
       resource_type: config[:resource_type],
@@ -96,18 +93,6 @@ module OidcClientRegistry
     # Registered post_logout URIs mix all three realms in one list; a logout on
     # one surface must not redirect to another surface's host.
     logout_uri_resource_type(uri) == normalize_resource_type(resource_type)
-  end
-
-  def backchannel_logout_uris_for(client_id:, resource_type: nil)
-    filter_logout_uris(find(client_id)&.backchannel_logout_uris || [], resource_type)
-  end
-
-  def logout_clients_for_resource_type(resource_type)
-    clients.filter_map do |client_id, config|
-      next if filter_logout_uris(Array(config[:backchannel_logout_uris]), resource_type).blank?
-
-      find(client_id)
-    end
   end
 
   # @param client_id [String]
@@ -234,15 +219,6 @@ module OidcClientRegistry
     []
   end
 
-  def filter_logout_uris(uris, resource_type)
-    return uris if resource_type.blank?
-
-    normalized_resource_type = normalize_resource_type(resource_type)
-    uris.select do |uri|
-      logout_uri_resource_type(uri) == normalized_resource_type
-    end
-  end
-
   def logout_uri_resource_type(uri)
     host = URI.parse(uri.to_s).host.to_s
     return "operator" if logout_hosts_for("operator").include?(host)
@@ -333,7 +309,7 @@ module OidcClientRegistry
   private_class_method :clients, :build_clients, :client_config_signature,
                        :resolve_secret_credential, :domains_from_redirect_uris,
                        :redirect_uris_by_realm_for,
-                       :filter_logout_uris, :logout_uri_resource_type, :logout_hosts_for,
+                       :logout_uri_resource_type, :logout_hosts_for,
                        :normalize_resource_type, :metadata_auth_method, :normalize_allowed_scopes,
                        :normalize_host
 end

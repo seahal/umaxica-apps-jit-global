@@ -154,40 +154,11 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     end
   end
 
-  test "sign and core clients expose registered logout receiver uris" do
-    app = OidcClientRegistry.find!("core-app")
-    core = OidcClientRegistry.find!("core-app")
-
-    assert app.backchannel_logout_uris.all? { |uri| URI.parse(uri).path == "/oidc/backchannel/logout" }
-    assert core.backchannel_logout_uris.all? { |uri| URI.parse(uri).path == "/oidc/backchannel/logout" }
-  end
-
-  test "logout receiver uris can be filtered by acme resource type" do
-    {
-      "core-app" => "client",
-      "core-com" => "visitor",
-      "core-org" => "operator",
-    }.each do |client_id, resource_type|
-      client = OidcClientRegistry.find!(client_id)
-
-      assert_equal client.backchannel_logout_uris,
-                   OidcClientRegistry.backchannel_logout_uris_for(
-                     client_id: client_id, resource_type: resource_type,
-                   )
-
-      (%w(client visitor operator) - [resource_type]).each do |other_resource_type|
-        assert_empty OidcClientRegistry.backchannel_logout_uris_for(
-          client_id: client_id, resource_type: other_resource_type,
-        )
-      end
+  test "no first-party client declares a back-channel logout receiver" do
+    OidcClientStoresStaticClientStore.clients.each do |client_id, client_config|
+      assert_not client_config.key?(:backchannel_logout_uris), client_id
+      assert_not client_config.key?(:backchannel_logout_session_required), client_id
     end
-  end
-
-  test "Palm browser client has no back-channel logout receiver" do
-    client = OidcClientRegistry.find!("palm-app")
-
-    assert_empty client.backchannel_logout_uris
-    assert_not client.backchannel_logout_session_required
   end
 
   test "Tech operator client has its own host, key namespace, and required capability" do
@@ -203,12 +174,6 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
       end
 
     assert_equal expected_hosts.uniq.sort, client.redirect_uris.map { |uri| URI.parse(uri).host }.uniq.sort
-    assert_empty client.backchannel_logout_uris
-    assert_not client.backchannel_logout_session_required
-  end
-
-  test "sign and core clients require back-channel session logout" do
-    assert OidcClientRegistry.find!("core-app").backchannel_logout_session_required
   end
 
   test "all expected clients are registered" do
@@ -416,8 +381,6 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
       redirect_uris: ["https://client.example/auth/callback"],
       redirect_uris_by_realm: { "client" => ["https://client.example/auth/callback"] },
       post_logout_redirect_uris: ["https://client.example/signed-out"],
-      backchannel_logout_uris: [],
-      backchannel_logout_session_required: false,
       aud: "test-audience",
       resource_type: "client",
       name: "Test Client",

@@ -200,19 +200,20 @@ The local Rails application exposes a surface-local read-only GET and protected 
 exact completion URIs for both allowed `ri` values, and coordinator destinations match those entries
 exactly. Core, Warp, Edit and Base reuse their surface-local sign-out controllers; Palm and Tech
 retain dedicated completion controllers. Tech sign-out remains available after `tech.access` is
-revoked. Route and registration tests cover every client at both allowed `ri` values. The integration
-matrix exercises the challenge GET, protected POST and one-shot final notice for all 12 first-party
-client IDs. Each case begins after same-realm parent and RP-session revocation, checks that GET
-leaves the transaction unchanged, and submits the HTML form or Inertia props with the Rails token.
-It covers both response styles at `ri=jp`, but not the full IdP authority flow or real browser
-behavior. The static registration test also verifies that `/sign/out` is refused as a post-logout
-return URI for every registered first-party client. See
+revoked. Route and registration tests cover every client at both allowed `ri` values. The
+integration matrix exercises the challenge GET, protected POST and one-shot final notice for all 12
+first-party client IDs. Each case begins after same-realm parent and RP-session revocation, checks
+that GET leaves the transaction unchanged, and submits the HTML form or Inertia props with the Rails
+token. It covers both response styles at `ri=jp`, but not the full IdP authority flow or real
+browser behavior. The static registration test also verifies that `/sign/out` is refused as a
+post-logout return URI for every registered first-party client. See
 `evidence/2026-10-13-first-party-rp-completion-uri-matrix-P7V4.md` and
 `evidence/2026-10-14-first-party-rp-postlogout-uri-P4K8.md`.
 
 This does not mean the target contract is complete. The shared parent-and-all-RP revocation
 transaction is locally implemented and focused-tested, but the full authority round trip,
-independent-connection race evidence and final acceptance remain open. First-party BCL
-senders/receivers/declarations remain pending the required consumer confirmation, and real
-browser/manual acceptance is open. No production deployment or external key provisioning is
-claimed. Follow the current implementation notes in `four.md` for step-level gates.
+independent-connection race evidence and final acceptance remain open. First-party BCL senders,
+receivers, client declarations and discovery claims were removed on 2026-10-15 after the user
+confirmed that no external or production RP consumes them. Real browser/manual acceptance is open.
+No production deployment or external key provisioning is claimed. Follow the current implementation
+notes in `four.md` for step-level gates.

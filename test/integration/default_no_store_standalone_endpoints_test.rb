@@ -26,13 +26,4 @@ class DefaultNoStoreStandaloneEndpointsTest < ActionDispatch::IntegrationTest
     assert_response :unsupported_media_type
     assert_equal "no-store", response.headers.fetch("Cache-Control")
   end
-
-  test "Edit OIDC back-channel logout with an invalid logout token is no-store" do
-    host!("edit.org.localhost")
-
-    post("/oidc/backchannel/logout", params: { logout_token: "not-a-jwt" })
-
-    assert_response :bad_request
-    assert_equal "no-store", response.headers.fetch("Cache-Control")
-  end
 end

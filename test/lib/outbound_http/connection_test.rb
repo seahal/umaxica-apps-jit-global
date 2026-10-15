@@ -52,7 +52,7 @@ class OutboundHttpConnectionTest < ActiveSupport::TestCase
 
   test "a call site that allows plain http gets a connection for it" do
     connection = OutboundHttp::Connection.build(
-      url: URI.parse("http://rp.example/backchannel"),
+      url: URI.parse("http://rp.example/endpoint"),
       open_timeout: 2,
       read_timeout: 5,
       require_https: false,

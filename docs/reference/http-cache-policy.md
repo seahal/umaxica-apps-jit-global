@@ -68,9 +68,9 @@ are outside it.
    this policy that cacheability exists because the entries actions opt in, not because the surface
    is public.
 
-`test/security/invariants/default_no_store_policy_invariant_test.rb` enforces rules 1, 2, and 4, and checks
-that excluded roots do not carry the policy. It does not assert that excluded roots never send
-`no-store`; several do for their own reasons.
+`test/security/invariants/default_no_store_policy_invariant_test.rb` enforces rules 1, 2, and 4, and
+checks that excluded roots do not carry the policy. It does not assert that excluded roots never
+send `no-store`; several do for their own reasons.
 
 ## Policy-root inventory
 
@@ -80,36 +80,36 @@ redirect-only controllers that inherit the repository-wide `ApplicationControlle
 `ActionController::API` controller in an in-scope namespace, which is a standalone root of its own.
 Subclass counts are from the 2026-10-01 inventory and drift as controllers are added.
 
-| Policy root                          | Plane      | Subclasses | Representative routes                          |
-| ------------------------------------ | ---------- | ---------- | ---------------------------------------------- |
-| `Auth::App::ApplicationController`   | Global     | 60         | `/`, `/sign/in`, `/preference`                 |
-| `Auth::Com::ApplicationController`   | Global     | 44         | `/`, `/sign/in`                                |
-| `Auth::Org::ApplicationController`   | Global     | 36         | `/`, `/sign/in`                                |
-| `Auth::{App,Com,Org}::BareController` | Global    | 11 each    | `/health`, `/revision`, `/edge/v0/token/check` |
-| `Auth::RedirectOnlyController`       | Global     | 8          | `/iam`, `/billings`, `/accounts` (redirects)    |
-| `Base::App::ApplicationController`   | Global     | 71         | `/`, `/configuration`, dashboard pages         |
-| `Base::Com::ApplicationController`   | Global     | 59         | `/`, `/configuration`                          |
-| `Base::Org::ApplicationController`   | Global     | 70         | `/`, `/iam`, `/support`                        |
-| `Base::{Dev,Net}::ApplicationController` | Global | 1 each     | `/`                                            |
-| `Base::{App,Com,Org}::BareController` | Global    | 17–18      | `/health`, `/revision`, `/robots.txt`, `/edge/v0/token/*` |
-| `Base::{Dev,Net}::BareController`    | Global     | 8 each     | `/health`, `/revision`                         |
-| `Edit::Org::ApplicationController`   | Publishing | 40         | `/`, `/publishing/*/entries`                   |
-| `Edit::Org::BareController`          | Publishing | 9          | `/health`, `/revision`                         |
-| `Guid::Net::BareController`          | Global     | 10         | `/`, `/api/v0/resources/:guid`, `/health`      |
-| `{Info,Docs,News,Help}::{App,Com,Org}::BareController` | Publishing | 10 each | `/`, `/api/v0/entries`, `/health` |
+| Policy root                                            | Plane      | Subclasses | Representative routes                                     |
+| ------------------------------------------------------ | ---------- | ---------- | --------------------------------------------------------- |
+| `Auth::App::ApplicationController`                     | Global     | 60         | `/`, `/sign/in`, `/preference`                            |
+| `Auth::Com::ApplicationController`                     | Global     | 44         | `/`, `/sign/in`                                           |
+| `Auth::Org::ApplicationController`                     | Global     | 36         | `/`, `/sign/in`                                           |
+| `Auth::{App,Com,Org}::BareController`                  | Global     | 11 each    | `/health`, `/revision`, `/edge/v0/token/check`            |
+| `Auth::RedirectOnlyController`                         | Global     | 8          | `/iam`, `/billings`, `/accounts` (redirects)              |
+| `Base::App::ApplicationController`                     | Global     | 71         | `/`, `/configuration`, dashboard pages                    |
+| `Base::Com::ApplicationController`                     | Global     | 59         | `/`, `/configuration`                                     |
+| `Base::Org::ApplicationController`                     | Global     | 70         | `/`, `/iam`, `/support`                                   |
+| `Base::{Dev,Net}::ApplicationController`               | Global     | 1 each     | `/`                                                       |
+| `Base::{App,Com,Org}::BareController`                  | Global     | 17–18      | `/health`, `/revision`, `/robots.txt`, `/edge/v0/token/*` |
+| `Base::{Dev,Net}::BareController`                      | Global     | 8 each     | `/health`, `/revision`                                    |
+| `Edit::Org::ApplicationController`                     | Publishing | 40         | `/`, `/publishing/*/entries`                              |
+| `Edit::Org::BareController`                            | Publishing | 9          | `/health`, `/revision`                                    |
+| `Guid::Net::BareController`                            | Global     | 10         | `/`, `/api/v0/resources/:guid`, `/health`                 |
+| `{Info,Docs,News,Help}::{App,Com,Org}::BareController` | Publishing | 10 each    | `/`, `/api/v0/entries`, `/health`                         |
 
 Publishing management controllers inherit `Edit::Org::ApplicationController` and public Publishing
 delivery controllers inherit the surface-local `BareController`; neither re-declares the policy.
 
 ### Excluded roots
 
-| Root                                                                 | Reason                             |
-| -------------------------------------------------------------------- | ---------------------------------- |
-| `Core::*::ApplicationController`, `Core::*::BareController`, `Core::*::Api::V0::BaseController`, `Core::*::Oidc::Backchannel::LogoutsController` | Regional (`core`) |
-| `Palm::App::ApplicationController`, `Palm::App::BareController`, `Palm::App::Api::V0::BaseController` | Regional (`palm`) |
-| `Warp::{App,Com,Org}::ApplicationController`, `Warp::{App,Com,Org}::BareController` | Regional (`side`, now Warp) |
-| Repository-wide `ApplicationController`                              | Shared by mounted engines and `UnknownHostsController`; no surface owns it |
-| Mounted engine and framework controllers (Blazer, Mission Control, PgHero, Rails Performance, Active Storage, Action Mailbox, `Rails::PwaController`) | Not application surfaces |
+| Root                                                                                                                                                  | Reason                                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `Core::*::ApplicationController`, `Core::*::BareController`, `Core::*::Api::V0::BaseController`                                                       | Regional (`core`)                                                          |
+| `Palm::App::ApplicationController`, `Palm::App::BareController`, `Palm::App::Api::V0::BaseController`                                                 | Regional (`palm`)                                                          |
+| `Warp::{App,Com,Org}::ApplicationController`, `Warp::{App,Com,Org}::BareController`                                                                   | Regional (`side`, now Warp)                                                |
+| Repository-wide `ApplicationController`                                                                                                               | Shared by mounted engines and `UnknownHostsController`; no surface owns it |
+| Mounted engine and framework controllers (Blazer, Mission Control, PgHero, Rails Performance, Active Storage, Action Mailbox, `Rails::PwaController`) | Not application surfaces                                                   |
 
 ### Standalone API roots
 
@@ -121,25 +121,24 @@ policy itself. Their existing protocol headers are kept:
   halted before the action, such as rate-limit rejections.
 - `Auth::App::Apple::NotificationsController`: previously sent `no-store` only on success; the
   default covers its error statuses.
-- `Edit::Org::Oidc::Backchannel::LogoutsController`: previously sent no directive.
 
 ## Explicit cacheable actions
 
-| Action                                                          | Contract                                                   |
-| --------------------------------------------------------------- | ---------------------------------------------------------- |
-| Publishing `/api/v0/entries` and `/api/v0/entries/:public_id` (`PublishingContentRendering`) | `expires_in` public `max-age`, `stale?` with `ETag` and `Last-Modified` |
-| JWKS documents (`AuthenticationJwksRendering`)                  | `expires_in 1.hour, public: true`                          |
-| Base dashboard avatar images                                    | `stale?` with `ETag`, private                              |
-| `/sitemap.xml` on surfaces that include `Sitemap`               | `expires_in 5.minutes, public: true` with `s-maxage=600` and `Surrogate-Control` |
+| Action                                                                                       | Contract                                                                         |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Publishing `/api/v0/entries` and `/api/v0/entries/:public_id` (`PublishingContentRendering`) | `expires_in` public `max-age`, `stale?` with `ETag` and `Last-Modified`          |
+| JWKS documents (`AuthenticationJwksRendering`)                                               | `expires_in 1.hour, public: true`                                                |
+| Base dashboard avatar images                                                                 | `stale?` with `ETag`, private                                                    |
+| `/sitemap.xml` on surfaces that include `Sitemap`                                            | `expires_in 5.minutes, public: true` with `s-maxage=600` and `Surrogate-Control` |
 
 ## Existing explicit `no-store` contracts
 
 These were in place before the default and are kept unchanged: health and revision responses
-(`HealthCheckRendering`, `ApplicationRevisionRendering`, `MachineJsonNegotiation`), edge token
-check and refresh endpoints, OIDC callback and sign entry (`OidcCallback`, `OidcRpSignEntry`), DBSC
+(`HealthCheckRendering`, `ApplicationRevisionRendering`, `MachineJsonNegotiation`), edge token check
+and refresh endpoints, OIDC callback and sign entry (`OidcCallback`, `OidcRpSignEntry`), DBSC
 registration, jump-return verification, authentication-mode switch guard, MCP, sign-up checkpoint
 pages, sign-out notice, ceremony admission, secret-credential pages
-(`SignSettingsSecretCredentialCacheControl`, which also sends `Pragma: no-cache` and
-`Expires: 0`), Base org IAM and support pages, root pages that set `private, no-store`, the GUID
-resolver, the request body size limit middleware response, and
+(`SignSettingsSecretCredentialCacheControl`, which also sends `Pragma: no-cache` and `Expires: 0`),
+Base org IAM and support pages, root pages that set `private, no-store`, the GUID resolver, the
+request body size limit middleware response, and
 `AuthenticationBase#apply_authenticated_page_cache_policy!`.

@@ -7,8 +7,6 @@ class AppRailsEdgeOwnershipContractTest < ActiveSupport::TestCase
     [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/", "core/app/roots", "index"],
     [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/sign", "core/app/sign/entries", "show"],
     [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/oidc/callback", "core/app/oidc/callbacks", "show"],
-    [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :post, "/oidc/backchannel/logout", "core/app/oidc/backchannel/logouts",
-     "create",],
     [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/api/v0/session", "core/app/api/v0/sessions", "show"],
     [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :post, "/api/v0/token/refresh", "core/app/api/v0/token/refreshes",
      "create",],

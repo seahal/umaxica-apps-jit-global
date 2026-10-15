@@ -3080,8 +3080,6 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       redirect_uris: ["https://client.example/auth/callback"],
       redirect_uris_by_realm: { "client" => ["https://client.example/auth/callback"] },
       post_logout_redirect_uris: ["https://client.example/signed-out"],
-      backchannel_logout_uris: [],
-      backchannel_logout_session_required: false,
       aud: "test-audience",
       resource_type: "client",
       name: "Test Client",

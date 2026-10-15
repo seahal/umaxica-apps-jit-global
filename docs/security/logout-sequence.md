@@ -1,6 +1,6 @@
 # Logout Sequence
 
-> **Current implementation status (2026-10-14):** The accepted first-party Browser RP target and its
+> **Current implementation status (2026-10-15):** The accepted first-party Browser RP target and its
 > remaining gates are recorded in
 > `adr/first-party-sign-out-shared-database-without-backchannel-logout.md`. The historical Acme
 > ownership, `/sign/out/complete`, and future-native Palm sections below do not describe the current
@@ -10,9 +10,9 @@
 > `/sign/out` is rejected as a registered post-logout return URI. The integration matrix covers the
 > challenge continuation for all 12 client IDs after parent/RP revocation, including HTML and
 > Inertia at `ri=jp`. The shared parent-and-RP transaction is locally implemented and
-> focused-tested. Local authority-first HTTP tests and the independent sign-out/refresh race pass;
-> first-party BCL removal, complete all-RP authority-flow coverage and real browser acceptance
-> remain incomplete. See `docs/security/logout-session-management.md` and
+> focused-tested. Local authority-first HTTP tests and the independent sign-out/refresh race pass.
+> First-party BCL has been removed (2026-10-15). Complete all-RP authority-flow coverage and real
+> browser acceptance remain incomplete. See `docs/security/logout-session-management.md` and
 > `evidence/2026-10-13-first-party-rp-completion-uri-matrix-P7V4.md` for current route and
 > registration evidence.
 

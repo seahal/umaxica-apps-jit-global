@@ -4,9 +4,9 @@
 > below is retained as historical architecture context. For the current Rails browser OIDC
 > authority, RP registrations, and ceremony ownership, use
 > `adr/base-auth-ceremony-and-seven-rp-boundary.md` and
-> `plans/backlog/2026-09-17-integrated-hardening-plan.md`. Base is the sole physical IdP/AS, Auth
-> is ceremony-only, and `sign-rp`, `base-rails-rp`, and `side-rails-rp` are not current local
-> browser registrations. Do not use the historical client list below to add a new registration.
+> `plans/backlog/2026-09-17-integrated-hardening-plan.md`. Base is the sole physical IdP/AS, Auth is
+> ceremony-only, and `sign-rp`, `base-rails-rp`, and `side-rails-rp` are not current local browser
+> registrations. Do not use the historical client list below to add a new registration.
 
 > **Participation update (2026-10-13):** Palm is now a first-party browser RP (`palm-app`); its
 > native RP and bearer API roles have been retired. Tech is an operator browser RP (`tech-org`) and
@@ -56,8 +56,8 @@ Protocol URL contract:
 
 - Acme OP / Authorization Server uses `/.well-known/openid-configuration`, `/.well-known/jwks.json`,
   `/oauth/authorize`, `/oauth/token`, `/oauth/userinfo`, `/oauth/revoke`, and `/oidc/logout`.
-- First-party browser RP flows use `/oidc/authorization`, `/oidc/callback`, and
-  `/oidc/backchannel/logout` where the RP consumes Acme login state. Palm is not a browser RP
+- First-party browser RP flows use `/oidc/authorization` and `/oidc/callback` where the RP consumes
+  Acme login state; first-party RPs have no back-channel logout receiver. Palm is not a browser RP
   launcher; it retains only an inert native callback compatibility stub until a native client
   registration and concrete flow are separately approved.
 - Social federation flows use `/social/:provider/sign/in`, `/social/:provider/sign/up`, and

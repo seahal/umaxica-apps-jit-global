@@ -69,12 +69,6 @@ class BranchCoverageBatch34MassReturnsTest < ActiveSupport::TestCase
     end
   end
 
-  test "OidcBackchannelLogoutNotifier blank identifiers" do
-    count = OidcBackchannelLogoutNotifier.new(resource_type: "client", subject: nil, sid: nil).call
-
-    assert_equal 0, count
-  end
-
   test "AcmeSelectableContext authorization helpers" do
     helper = Class.new do
       include AcmeSelectableContext

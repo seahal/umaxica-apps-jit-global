@@ -12,7 +12,6 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
     {
       host: ENV.fetch("PUBLIC_CORE_SERVICE_URL", Rails.configuration.x.boot_config.fetch(:hosts).core_service.host),
       acme_host: Rails.configuration.x.boot_config.fetch(:hosts).acme_service.host,
-      backchannel_logout_path: "/oidc/backchannel/logout",
       token_refresh_path: "/api/v0/token/refresh",
       jwt_issuer_id: "surface:CORE_APP",
       resource_type: "client",
@@ -21,7 +20,6 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
     {
       host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", Rails.configuration.x.boot_config.fetch(:hosts).core_corporate.host),
       acme_host: Rails.configuration.x.boot_config.fetch(:hosts).acme_corporate.host,
-      backchannel_logout_path: "/oidc/backchannel/logout",
       token_refresh_path: "/api/v0/token/refresh",
       jwt_issuer_id: "surface:CORE_COM",
       resource_type: "visitor",
@@ -30,7 +28,6 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
     {
       host: ENV.fetch("PUBLIC_CORE_STAFF_URL", Rails.configuration.x.boot_config.fetch(:hosts).core_staff.host),
       acme_host: Rails.configuration.x.boot_config.fetch(:hosts).acme_staff.host,
-      backchannel_logout_path: "/oidc/backchannel/logout",
       token_refresh_path: "/api/v0/token/refresh",
       jwt_issuer_id: "surface:CORE_ORG",
       resource_type: "operator",
@@ -60,11 +57,6 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
 
       assert response.redirect? || handoff_rendered, "expected redirect or handoff success, got #{response.status}"
       assert_includes response.body, 'id="sign-out-handoff-form"' if handoff_rendered
-
-      browser.post(surface.fetch(:backchannel_logout_path), params: { logout_token: "invalid" })
-
-      assert_equal 400, browser.response.status
-      assert_equal "invalid_logout_token", browser.response.body
 
       browser.post(surface.fetch(:token_refresh_path), headers: { "Accept" => "application/json" }, as: :json)
 

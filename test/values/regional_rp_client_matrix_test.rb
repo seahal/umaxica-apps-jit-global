@@ -66,7 +66,6 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
     assert_equal "core-app-jp", binding.fetch(:client_id)
     assert_equal "https://jp.umaxica.app/oidc/callback", binding.fetch(:redirect_uri)
     assert_equal "https://jp.umaxica.app/sign/out/completion?ri=jp", binding.fetch(:post_logout_redirect_uri)
-    assert_equal "https://jp.umaxica.app/oidc/backchannel/logout", binding.fetch(:backchannel_logout_uri)
     assert_equal "CORE_APP_JP", binding.fetch(:jwt_namespace)
     assert_equal "core-app-jp", binding.fetch(:rp_session_client_id)
   end
@@ -98,7 +97,6 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
     assert_equal "warp-app-jp", binding.fetch(:client_id)
     assert_equal "https://www-jp.umaxica.app/oidc/callback", binding.fetch(:redirect_uri)
     assert_equal "https://www-jp.umaxica.app/sign/out/completion?ri=jp", binding.fetch(:post_logout_redirect_uri)
-    assert_equal "https://www-jp.umaxica.app/oidc/backchannel/logout", binding.fetch(:backchannel_logout_uri)
   end
 
   test "derives the global Edit binding from its existing canonical host" do
@@ -376,14 +374,13 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
     redirect_uri = "#{origin}/oidc/callback" if origin != "https://jp.umaxica.app"
     Struct.new(
       :aud, :client_id, :resource_type, :redirect_uris_by_realm, :post_logout_redirect_uris,
-      :backchannel_logout_uris, :jwt_namespace, :private_key_jwt_client?,
+      :jwt_namespace, :private_key_jwt_client?,
     ).new(
       audience,
       client_id,
       resource_type,
       { "client" => [redirect_uri] },
       ["#{origin}#{RegionalRpClientMatrix::POST_LOGOUT_PATH}?ri=#{region}"],
-      ["#{origin}/oidc/backchannel/logout"],
       jwt_namespace,
       private_key_jwt,
     )

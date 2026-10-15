@@ -518,15 +518,6 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     )
 
     assert_not_equal 403, response.status
-
-    post(
-      core_app_oidc_backchannel_logout_url(host: ENV.fetch("PUBLIC_CORE_SERVICE_URL")),
-      params: { logout_token: "invalid" },
-      headers: { "Accept" => "application/json", "Sec-Fetch-Site" => "cross-site" },
-      as: :json,
-    )
-
-    assert_not_equal 403, response.status
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest

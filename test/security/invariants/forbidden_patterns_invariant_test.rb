@@ -149,24 +149,6 @@ module Security
           reason: "OAuth protocol endpoints use client auth or bearer tokens and skip Rails browser session state.",
         },
         {
-          pattern: "csrf null_session",
-          path: "app/controllers/sign/app/oidc/backchannel/logouts_controller.rb",
-          line: /protect_from_forgery with: :null_session/,
-          reason: "OIDC backchannel logout is a server-to-server callback and does not use browser session CSRF.",
-        },
-        {
-          pattern: "csrf null_session",
-          path: "app/controllers/sign/com/oidc/backchannel/logouts_controller.rb",
-          line: /protect_from_forgery with: :null_session/,
-          reason: "OIDC backchannel logout is a server-to-server callback and does not use browser session CSRF.",
-        },
-        {
-          pattern: "csrf null_session",
-          path: "app/controllers/sign/org/oidc/backchannel/logouts_controller.rb",
-          line: /protect_from_forgery with: :null_session/,
-          reason: "OIDC backchannel logout is a server-to-server callback and does not use browser session CSRF.",
-        },
-        {
           pattern: "cross-host redirect escape hatch",
           path: "app/controllers/auth/app/sign/ins_controller.rb",
           line: /\A\s*allow_other_host: true,\s*\z/,

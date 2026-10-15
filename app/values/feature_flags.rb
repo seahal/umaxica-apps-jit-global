@@ -49,11 +49,6 @@ module FeatureFlags
         effect: "Stops APNs/FCM delivery in ApplicationPushNotificationJob.",
       ),
       Flag.new(
-        name: :oidc_backchannel_logout_suspended, polarity: :suspension,
-        effect: "Stops backchannel logout POSTs. Global as a boolean gate, per relying " \
-                "party as an actor gate (OidcClientFlipperActor).",
-      ),
-      Flag.new(
         name: :retention_purge_suspended, polarity: :suspension,
         effect: "Stops the irreversible deletes and anonymization in RetentionPurgeJob.",
       ),

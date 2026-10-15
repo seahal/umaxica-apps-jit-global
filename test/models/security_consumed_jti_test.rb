@@ -42,13 +42,13 @@ class SecurityConsumedJtiTest < ActiveSupport::TestCase
     jti = SecureRandom.uuid
 
     assert SecurityConsumedJti.consume!(
-      purpose: SecurityConsumedJti::PURPOSES.fetch(:oidc_logout_token),
+      purpose: SecurityConsumedJti::PURPOSES.fetch(:oidc_logout_request),
       issuer: "issuer-a",
       jti: jti,
       expires_at: 2.minutes.from_now,
     )
     assert SecurityConsumedJti.consume!(
-      purpose: SecurityConsumedJti::PURPOSES.fetch(:oidc_logout_token),
+      purpose: SecurityConsumedJti::PURPOSES.fetch(:oidc_logout_request),
       issuer: "issuer-b",
       jti: jti,
       expires_at: 2.minutes.from_now,

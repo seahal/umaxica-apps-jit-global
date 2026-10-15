@@ -34,9 +34,6 @@ scope module: :edit, as: :edit do
       namespace :oidc do
         # Authorization-code callback (redirect_uri); see RegionalRpClientMatrix::CALLBACK_PATH.
         resource :callback, only: :show
-        namespace :backchannel do
-          resource :logout, only: :create
-        end
       end
 
       scope path: "sign", as: :sign do

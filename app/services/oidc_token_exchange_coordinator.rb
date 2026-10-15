@@ -1177,8 +1177,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
       redirect_uris: client.redirect_uris,
       redirect_uris_by_realm: client.redirect_uris_by_realm,
       post_logout_redirect_uris: client.post_logout_redirect_uris,
-      backchannel_logout_uris: client.backchannel_logout_uris,
-      backchannel_logout_session_required: client.backchannel_logout_session_required,
       aud: client.aud,
       resource_type: resource_type,
       name: client.name,
