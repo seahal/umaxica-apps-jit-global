@@ -18,10 +18,8 @@ AT-071's replay clauses over HTTP. Added cases:
   transfer operations are unavailable after cutover" and creates no transfer or reservation.
 
 `bin/rails test` on both transfer controller files: 33 runs, 167 assertions, 0 failures, 0 errors.
-RuboCop: no offenses. No application code changed. Still not covered: ORG different-input and
-different-initiator replay, and the "committed success discoverable after a lost response" clause,
-which is covered at the operation level only. AV-3/AV-6 and MIG-2/MIG-4 remain BLOCKED (no isolated
-fleet).
+RuboCop: no offenses. No application code changed. AV-3/AV-6 and MIG-2/MIG-4 remain BLOCKED (no
+isolated fleet).
 
 ## Step 8 — REQ-039 detection
 
@@ -56,3 +54,17 @@ deleted.
 Updated `docs/checklists/avatar-ownership.md` (AV-5) and
 `plans/backlog/avatar-ownership-acceptance-followups.md`. The logout docs and ADR were updated with
 Step 6. `one.md`/`two.md` are unchanged per CHG-008.
+
+## Follow-up on `4792be5769511957cd0e4368ff1b72b634f1cae4`
+
+- ORG HTTP cases added: a replay with a stable key returns the same committed transfer (the
+  lost-response retry), and a reused key with a different target or from a different initiator
+  returns 422 without changing the recorded reservation. The first attempt at the
+  different-initiator case gave 403, because that operator had no selected Avatar and was refused
+  before the key check. The test now provisions and selects an Avatar for that operator so the key
+  check is what refuses it.
+- Both transfer controller files: 36 runs, 191 assertions, 0 failures, 0 errors. RuboCop: no
+  offenses.
+- Full suite on `4792be576` (before these ORG tests): 15,239 runs, 129,298 assertions, 3 failures
+  (`DatabaseReconstructionAuthorityTest`, structure dumps), 14 errors (Avatar worker-receipt guard),
+  0 skips. The FQDN gate failure from the previous run is gone. No new failures.

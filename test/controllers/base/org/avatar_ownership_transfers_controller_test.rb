@@ -47,8 +47,101 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_not AvatarOwnershipCutover.established?
   end
 
+  # A client whose first response was lost retries with the same key and discovers the committed result.
+  test "registry request replays the committed result for a stable idempotency key" do
+    establish_avatar_ownership_cutover!
+    key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a55"
+    headers = base_browser_headers.merge("Idempotency-Key" => key)
+    public_ids =
+      Array.new(2) do
+        grant_step_up!("avatar_transfer_request")
+        post(
+          base_org_avatar_ownership_transfers_url(host: @host),
+          params: org_request_params, headers: headers, as: :json,
+        )
+
+        assert_response :success
+        assert_equal "registry", response.parsed_body.fetch("transfer_kind")
+        response.parsed_body.fetch("transfer_public_id")
+      end
+
+    assert_equal public_ids.first, public_ids.second
+    assert_equal 1, AvatarTransferReservation.where(idempotency_key: key).count
+  end
+
+  test "registry request refuses a reused idempotency key with different input" do
+    establish_avatar_ownership_cutover!
+    grant_step_up!("avatar_transfer_request")
+    key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a56"
+    headers = base_browser_headers.merge("Idempotency-Key" => key)
+    post base_org_avatar_ownership_transfers_url(host: @host),
+         params: org_request_params, headers: headers, as: :json
+
+    assert_response :success
+    recorded = AvatarTransferReservation.find_by!(idempotency_key: key).attributes
+    other_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other_target = BaseSelectorBootstrapAuthority.call(surface: :app, principal: other_client)
+    grant_step_up!("avatar_transfer_request")
+
+    assert_no_difference -> { AvatarTransferReservation.count } do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: { target_surface: "app", target_collective_public_id: other_target.collective.public_id },
+           headers: headers,
+           as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_equal recorded, AvatarTransferReservation.find_by!(idempotency_key: key).attributes
+  end
+
+  test "registry request refuses a reused idempotency key from a different initiator" do
+    establish_avatar_ownership_cutover!
+    grant_step_up!("avatar_transfer_request")
+    key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a57"
+    post base_org_avatar_ownership_transfers_url(host: @host),
+         params: org_request_params, headers: base_browser_headers.merge("Idempotency-Key" => key), as: :json
+
+    assert_response :success
+    recorded = AvatarTransferReservation.find_by!(idempotency_key: key).attributes
+    other_operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    other = BaseSelectorBootstrapAuthority.call(surface: :org, principal: other_operator)
+    other_avatar_result = AvatarProvisioning::Create.call(
+      actor: other_operator,
+      subject_type: :agent,
+      subject: other.account,
+      avatar_params: { moniker: "Other initiator" },
+      handle_params: { handle: "avatar-replay-agent-#{SecureRandom.hex(5)}" },
+      owner_surface: "org",
+      owner_collective_public_id: other.collective.public_id,
+    )
+
+    assert_predicate other_avatar_result, :success?, other_avatar_result.errors.inspect
+    other_token = OperatorToken.create!(staff: other_operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    BaseSwitcherAuthority.switch(
+      surface: :org,
+      principal: other_operator,
+      session: other_token,
+      params: {
+        account_public_id: other.account.public_id,
+        organization_public_id: other.collective.public_id,
+        organization_unit_public_id: other.unit.public_id,
+        avatar_public_id: other_avatar_result.avatar.public_id,
+      },
+    )
+    grant_step_up!("avatar_transfer_request", token: other_token)
+
+    assert_no_difference -> { AvatarTransferReservation.count } do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: org_request_params,
+           headers: base_browser_headers(operator: other_operator, token: other_token).merge("Idempotency-Key" => key),
+           as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_equal recorded, AvatarTransferReservation.find_by!(idempotency_key: key).attributes
+  end
+
   test "keyless legacy request is refused after the ownership cutover" do
-    select_source_avatar!
     establish_avatar_ownership_cutover!
     grant_step_up!("avatar_transfer_request")
 
@@ -623,6 +716,10 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
         target_surface, target_collective_public_id,
       ].join("\0"),
     )
+  end
+
+  def org_request_params
+    { target_surface: "app", target_collective_public_id: @target.collective.public_id }
   end
 
   def establish_avatar_ownership_cutover!
