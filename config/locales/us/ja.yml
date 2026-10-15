@@ -2667,8 +2667,7 @@ ja:
         status_heading: セッション
         title: Palm App
       roots:
-        message:
-          Palm アカウントにサインインして保護されたアプリを開いてください。
+        message: Palm アカウントにサインインして保護されたアプリを開いてください。
         sign_in: サインイン
       sign_out:
         completed: Your Palm session was revoked and the browser logout flow completed.
@@ -2692,7 +2691,8 @@ ja:
       navigation:
         label: Tech のナビゲーション
       roots:
-        description: Tech ワークスペースを開くには、許可されたオペレーターアカウントでサインインしてください。
+        description:
+          Tech ワークスペースを開くには、許可されたオペレーターアカウントでサインインしてください。
         heading: Tech
         sign_in: サインイン
         title: Tech Org
@@ -4253,16 +4253,19 @@ ja:
       sign_out:
         already_signed_out: すでにサインアウトしています。
         button: ログアウトします
-        completed_description: "%{expires_at}以降には確実にアクセスが不可能となります。"
+        cleanup_incomplete_description: "サインアウトしました。このサービスのサインイン情報の削除を完了できませんでしたが、次に利用したときに削除されます。"
+        completed_description: "サインアウトしました。ほかのサービスのセッションは無効になっています。開いたままの画面は、次に通信したときにサインインを求めます。"
         completed_title: サインアウトしました
         confirm_description: 一度ログアウトすると、再度ログインが必要になります。
         handoff_button: サインアウト処理を続行
         handoff_description: この画面は自動的に進みます。
         handoff_title: サインアウト処理を続行しています
         home_link: ホームへ戻る
-        idp_session_error: IdP セッションを確認できませんでした。セッションはサインアウトされていません。
+        idp_session_error:
+          IdP セッションを確認できませんでした。セッションはサインアウトされていません。
+        indeterminate_description: "サインアウトが完了したかを確認できませんでした。このサービスを開き直して、現在の状態を確認してください。"
+        indeterminate_title: "サインアウトの結果を確認できません"
         retry_button: もう一度サインアウトする
-        success: ログアウトの予約を行いました。%{expires_at}以降には確実にアクセスが不可能となります。
         title: ログアウトしますか？
         unavailable_description: 現在のセッションがまだ有効な可能性があります。もう一度サインアウトしてください。
         unavailable_title: サインアウトは完了していません

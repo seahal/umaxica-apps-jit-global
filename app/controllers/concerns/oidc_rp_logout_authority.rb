@@ -67,8 +67,8 @@ module OidcRpLogoutAuthority
       error_class: e.class.name,
     )
     render_sign_out_indeterminate!
-  rescue ActiveRecord::RecordNotFound, ActiveRecord::RecordInvalid, RpSession::IssuanceRejected
-    render_browser_rp_logout_rejected!
+  rescue ActiveRecord::ActiveRecordError, RpSession::IssuanceRejected => e
+    render_browser_rp_logout_failure!(e)
   ensure
     if origin_proof_state.is_a?(Hash) && origin_proof_state.present?
       session[AcmeLogoutTransactionable::BROWSER_RP_LOGOUT_PROOFS_SESSION_KEY] = origin_proof_state
@@ -206,6 +206,43 @@ module OidcRpLogoutAuthority
     uri.to_s
   rescue URI::InvalidURIError
     raise RpSession::IssuanceRejected, "logout completion destination is invalid"
+  end
+
+  # REQ-003: the parent COMMIT and the AppTicket progress are separate facts. When anything fails
+  # after the parent was revoked, the IdP still shows the global result with the origin cleanup
+  # incomplete instead of hiding it behind a rejection; when the parent cannot be read the result
+  # is indeterminate. A failure before COMMIT keeps the existing rejection.
+  def render_browser_rp_logout_failure!(error)
+    parent_state = browser_rp_logout_parent_state
+    return render_sign_out_indeterminate! if parent_state == :unreadable
+
+    unless parent_state == :revoked
+      raise error unless error.is_a?(ActiveRecord::RecordNotFound) || error.is_a?(ActiveRecord::RecordInvalid) ||
+        error.is_a?(RpSession::IssuanceRejected)
+
+      return render_browser_rp_logout_rejected!
+    end
+
+    warn_sign_out_event(
+      "auth.sign_out.authority_progress_failed",
+      transaction: @logout_transaction,
+      cleanup_performed: false,
+      result: "global_cleanup_incomplete",
+      error_class: error.class.name,
+    )
+    clear_base_authority_cookies!
+    response.set_header("Cache-Control", "no-store")
+    @sign_out_cleanup_incomplete = true
+    @render_surface_erb_layout = true
+    render "auth/shared/sign_outs/complete", status: :ok
+  end
+
+  def browser_rp_logout_parent_state
+    return :unknown_transaction if @logout_transaction.blank?
+
+    AcmeLogoutTransactionCoordinator.parent_revoked?(@logout_transaction) ? :revoked : :active
+  rescue ActiveRecord::ActiveRecordError
+    :unreadable
   end
 
   def render_browser_rp_logout_rejected!

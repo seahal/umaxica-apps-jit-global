@@ -22,7 +22,6 @@ module SignOutNotice
   private
 
   def prepare_sign_out_completion_notice!(state: nil)
-    @sign_out_access_expires_at = current_sign_out_access_expires_at
     @sign_out_actor_ref = current_resource.try(:public_id) if respond_to?(:current_resource, true)
     @sign_out_session_public_id = current_session_public_id if respond_to?(:current_session_public_id, true)
     @sign_out_state = state
@@ -105,15 +104,15 @@ module SignOutNotice
   end
 
   # A lost commit response is neither a successful nor a failed sign-out. Keep the response
-  # uncached and use the existing retry-safe unavailable presentation while the caller reports the
-  # indeterminate state in the structured sign-out event.
+  # uncached and say that the result is unknown while the caller reports the indeterminate state in
+  # the structured sign-out event.
   def render_sign_out_indeterminate!
     response.headers["Cache-Control"] = SIGN_OUT_NOTICE_CACHE_CONTROL
     response.headers["Referrer-Policy"] = SIGN_OUT_REFERRER_POLICY
     if respond_to?(:render_oidc_rp_logout_indeterminate, true)
       render_oidc_rp_logout_indeterminate
     else
-      render "auth/shared/sign_outs/unavailable", status: :service_unavailable, layout: false
+      render "auth/shared/sign_outs/indeterminate", status: :service_unavailable, layout: false
     end
   end
 
@@ -211,49 +210,12 @@ module SignOutNotice
     "invalid_request"
   end
 
+  # REQ-008: completion wording states the global result only. It never states an end time, and an
+  # origin whose own cleanup did not finish says so without calling the sign-out a failure.
   def sign_out_completed_description
-    access_expires_at = @sign_out_access_expires_at || @sign_out_notice&.fetch("access_expires_at", nil)
-    return if access_expires_at.blank?
+    return t("sign.shared.sign_out.cleanup_incomplete_description") if @sign_out_cleanup_incomplete
 
-    t(
-      "sign.shared.sign_out.completed_description",
-      expires_at: l(access_expires_at, format: :short),
-    )
-  end
-
-  def current_sign_out_access_expires_at
-    access_expires_at_from_claims(Actor.authn.access_claims) ||
-      access_expires_at_from_current_cookie
-  end
-
-  def access_expires_at_from_current_cookie
-    return unless respond_to?(:extract_access_token, true)
-    return if request&.host.blank?
-    return unless respond_to?(:resource_type, true)
-
-    token = extract_access_token(AuthenticationBase::ACCESS_COOKIE_KEY)
-    return if token.blank?
-
-    payload = AuthenticationTokenService.decode_allow_expired(
-      token,
-      host: request.host,
-      resource_type: resource_type,
-      jwt_issuer_id: auth_jwt_issuer_id_for_sign_out_notice,
-    )
-    access_expires_at_from_claims(payload)
-  end
-
-  def auth_jwt_issuer_id_for_sign_out_notice
-    auth_jwt_issuer_id if respond_to?(:auth_jwt_issuer_id, true)
-  end
-
-  def access_expires_at_from_claims(claims)
-    exp = claims&.dig("exp")
-    return if exp.blank?
-
-    Time.zone.at(Integer(exp))
-  rescue ArgumentError, TypeError
-    nil
+    t("sign.shared.sign_out.completed_description")
   end
 
   def parse_sign_out_notice_time(value)
@@ -269,7 +231,6 @@ module SignOutNotice
       "face" => controller_path.split("/").second,
       "sid" => @sign_out_session_public_id.presence,
       "expires_at" => expires_at.iso8601,
-      "access_expires_at" => @sign_out_access_expires_at&.iso8601,
       "state" => @sign_out_state,
     }
 
@@ -280,10 +241,8 @@ module SignOutNotice
     expires_at = parse_sign_out_notice_time(payload["expires_at"])
     return if expires_at.blank? || expires_at <= Time.current
 
-    access_expires_at = parse_sign_out_notice_time(payload["access_expires_at"])
     {
       expires_at: expires_at,
-      access_expires_at: access_expires_at,
       session_public_id: payload["sid"].presence,
       state: payload["state"].presence,
       actor_ref: payload["actor_ref"].presence,

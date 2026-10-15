@@ -203,7 +203,7 @@ module OidcRpLogoutLauncher
 
     if current_transaction.expected_step == AcmeLogoutTransaction::STEP_FINALIZED
       result = AcmeLogoutTransactionCoordinator.finalize!(logout_challenge: current_transaction.logout_challenge)
-      return render_oidc_rp_logout_unavailable unless result.success?
+      return render_browser_rp_origin_failure!(current_transaction) unless result.success?
 
       current_transaction = result.transaction
       delete_browser_rp_logout_intent_proof!(current_transaction)
@@ -216,9 +216,25 @@ module OidcRpLogoutLauncher
       "auth.sign_out.browser_rp_origin_failed " \
       "error_class=#{e.class.name} " \
       "error_fields=#{e.is_a?(ActiveRecord::RecordInvalid) ? e.record.errors.attribute_names.join(",") : "none"} " \
-      "result=unavailable",
+      "result=origin_cleanup_failed",
     )
-    render_oidc_rp_logout_unavailable
+    render_browser_rp_origin_failure!(transaction)
+  end
+
+  # REQ-003 / DEC-046: a failure at the origin after the parent COMMIT leaves the user signed out.
+  # The display is derived from the parent state, never from the progress record: a revoked parent
+  # is the global result with this origin's cleanup incomplete, an unreadable parent is
+  # indeterminate, and only a parent that is still active is "not signed out".
+  def render_browser_rp_origin_failure!(transaction)
+    response.set_header("Cache-Control", "no-store")
+    unless AcmeLogoutTransactionCoordinator.parent_revoked?(transaction)
+      return render_oidc_rp_logout_unavailable
+    end
+
+    clear_oidc_rp_logout_cookies!
+    render_oidc_rp_logout_cleanup_incomplete
+  rescue ActiveRecord::ActiveRecordError
+    render_sign_out_indeterminate!
   end
 
   def complete_oidc_rp_logout!
@@ -475,17 +491,9 @@ module OidcRpLogoutLauncher
   end
 
   def prepare_browser_rp_sign_out_notice!(transaction)
-    @sign_out_access_expires_at = browser_rp_logout_access_expires_at
     @sign_out_actor_ref = transaction.actor_ref
     @sign_out_session_public_id = transaction.session_ref
     @sign_out_state = transaction.callback_state
-  end
-
-  def browser_rp_logout_access_expires_at
-    value = @oidc_rp_logout_access_payload&.dig("exp")
-    value.present? ? Time.zone.at(Integer(value)) : nil
-  rescue ArgumentError, TypeError
-    nil
   end
 
   def sign_out_notice_issued?
@@ -681,6 +689,11 @@ module OidcRpLogoutLauncher
   end
 
   def render_oidc_rp_logout_completion
+    render "auth/shared/sign_outs/complete", status: :ok
+  end
+
+  def render_oidc_rp_logout_cleanup_incomplete
+    @sign_out_cleanup_incomplete = true
     render "auth/shared/sign_outs/complete", status: :ok
   end
 

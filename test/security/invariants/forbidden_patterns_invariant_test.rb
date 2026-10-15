@@ -323,11 +323,6 @@ module Security
           reason: "AuthenticationBase bridges authenticated resource resolution into Actor authz.",
         },
         {
-          path: "app/controllers/concerns/sign_out_notice.rb",
-          line: /access_expires_at_from_claims\(Actor\.authn\.access_claims\)/,
-          reason: "Sign-out notice derives display expiry from the current token snapshot.",
-        },
-        {
           path: "app/controllers/concerns/sign_up_sequence_controller_support.rb",
           line: /access_claims: Actor\.authn\.access_claims/,
           reason: "Sign-up support passes the authenticated token snapshot through the existing boundary.",

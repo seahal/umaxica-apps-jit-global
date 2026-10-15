@@ -308,7 +308,10 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
       )
     end
 
-    assert_response :unprocessable_entity
+    # The parent is already revoked, so a failed origin cleanup is the global result with this
+    # origin's cleanup incomplete, never "sign-out was not completed" (REQ-008, DEC-046).
+    assert_response :ok
+    assert_includes response.body, I18n.t("sign.shared.sign_out.cleanup_incomplete_description")
     assert_equal AcmeLogoutTransaction::STEP_ORIGIN_RP_SESSION_REVOKED, transaction.reload.expected_step
 
     post core_app_sign_out_completion_path(

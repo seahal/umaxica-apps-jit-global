@@ -115,6 +115,23 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
     Result.new(transaction: transaction, status: :rejected, error: "invalid_request", error_description: e.message)
   end
 
+  # The parent state on the realm Ticket writer is the single source of truth for whether the
+  # sign-out happened (REQ-001, REQ-003). Every display after the authority step is derived from it,
+  # never from the AppTicket progress, which is a separate fact on another database. A database
+  # error propagates: an unreadable parent is an indeterminate result, not a "no".
+  def self.parent_revoked?(transaction)
+    return false unless transaction&.browser_rp_binding_v1?
+
+    device_session_class =
+      { "app" => ClientDeviceSession, "com" => VisitorDeviceSession, "org" => OperatorDeviceSession }
+        .fetch(transaction.realm.to_s)
+    device_session_class.connection_class_for_self.connected_to(role: :writing) do
+      device_session_class.uncached do
+        device_session_class.find_by(public_id: transaction.parent_session_ref)&.revoked? == true
+      end
+    end
+  end
+
   def self.allowed_completion_url?(origin_surface:, completion_url:, surface: "app",
                                    ri: RequestContextContract.default_region)
     expected = completion_url_for(origin_surface: origin_surface, surface: surface, ri: ri)

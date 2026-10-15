@@ -112,9 +112,25 @@ module SignOutInertiaPages
            status: :unprocessable_content
   end
 
+  # A lost COMMIT response is neither success nor failure (REQ-003), so it offers no retry and does
+  # not say the sign-out was not completed.
   def render_oidc_rp_logout_indeterminate
-    render inertia: sign_out_page_component("unavailable"),
-           props: sign_out_unavailable_props,
+    render inertia: sign_out_page_component("complete"),
+           props: {
+             title: t("sign.shared.sign_out.indeterminate_title"),
+             heading: t("sign.shared.sign_out.indeterminate_title"),
+             description: t("sign.shared.sign_out.indeterminate_description"),
+             home_link: sign_out_home_link,
+           },
            status: :service_unavailable
+  end
+
+  # The parent COMMIT happened but this origin's own cleanup did not finish (DEC-046).
+  def render_oidc_rp_logout_cleanup_incomplete
+    @sign_out_cleanup_incomplete = true
+    render inertia: sign_out_page_component("complete"),
+           props: sign_out_completion_props,
+           status: :ok,
+           clear_history: true
   end
 end
