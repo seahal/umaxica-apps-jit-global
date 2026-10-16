@@ -1070,7 +1070,6 @@ Umaxica/ExplicitMethodVisibility:
   app/operations/identity_totp_ceremony_transaction_purger.rb: 1
   app/operations/oidc_authorization_code_issuer.rb: 1
   app/operations/oidc_connection_recorder.rb: 1
-  app/operations/oidc_connection_revoker.rb: 1
   app/operations/oidc_refresh_token_issuer.rb: 2
   app/operations/oidc_token_revoker.rb: 1
   app/operations/operator_entra_identity_provisioner.rb: 1

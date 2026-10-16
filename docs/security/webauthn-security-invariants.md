@@ -62,7 +62,7 @@ previously shipped as defects, so static tests reject their reintroduction.
   then verifies the assertion with that row's saved public key. The browser's `userHandle`, any
   submitted identifier, and client-side metadata are not identity authorities.
 - Verification rechecks ACTIVE credential status, active actor state, verified-PII and existing
-  session-limit or restricted-session rules before establishing a session. A disabled, revoked,
+  session-limit rules (full-access limit, waiting slot, refusal) before establishing a session. A disabled, revoked,
   unknown, or cross-surface credential fails with the existing generic unauthorized contract.
 - App and com registration require a discoverable credential (`residentKey: "required"`) while org
   registration keeps its existing policy. Existing non-discoverable app/com credentials are not

@@ -62,13 +62,17 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       issuer = JitSecurityJwtRegistry.surface("BASE_ORG")
       entry_reference = nil
       2.times do |index|
-        rt = Rack::Utils.parse_query(URI.parse(browser.response.location).query).fetch("rt")
-        payload, = JWT.decode(
-          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        target = URI.parse(payload.fetch("url"))
+        target = URI.parse(browser.response.location)
+        # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+        unless target.host == base_host
+          rt = Rack::Utils.parse_query(target.query).fetch("rt")
+          payload, = JWT.decode(
+            rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+            algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+          )
+          target = URI.parse(payload.fetch("url"))
+        end
 
         assert_equal "https", target.scheme
         assert_equal(index.zero? ? base_host : auth_host, target.host)

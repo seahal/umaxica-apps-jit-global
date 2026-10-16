@@ -13,4 +13,6 @@ stateDiagram-v2
         DeviceSession is locked before token rotation or revocation.
         EXPIRED and RESTRICTED are historical labels; no new writer
         restores them or promotes a terminal row.
+        RESTRICTED (103) was the retired session-limit placeholder; the
+        session-limit waiting unit is a resolution child, never a token row.
     end note

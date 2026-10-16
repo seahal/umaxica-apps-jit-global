@@ -79,16 +79,20 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
           )
           flow0_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow0_index|
-            flow0_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-            flow0_payload, = JWT.decode(
-              flow0_rt, JitSecurityJwtRegistry.public_key_for(
-                flow0_issuer.id,
-                flow0_issuer.current_kid,
-              ), true,
-              algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow0_base_host}",
-              verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-            )
-            flow0_target = URI.parse(flow0_payload.fetch("url"))
+            flow0_target = URI.parse(@base_browser.response.location)
+            # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+            unless flow0_target.host == flow0_base_host
+              flow0_rt = Rack::Utils.parse_query(flow0_target.query).fetch("rt")
+              flow0_payload, = JWT.decode(
+                flow0_rt, JitSecurityJwtRegistry.public_key_for(
+                  flow0_issuer.id,
+                  flow0_issuer.current_kid,
+                ), true,
+                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow0_base_host}",
+                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+              )
+              flow0_target = URI.parse(flow0_payload.fetch("url"))
+            end
             if flow0_index.zero?
               raise RuntimeError,
                     "Base authorization host mismatch" unless flow0_target.host == flow0_base_host
@@ -265,16 +269,20 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
             )
             flow2_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow2_index|
-              flow2_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-              flow2_payload, = JWT.decode(
-                flow2_rt, JitSecurityJwtRegistry.public_key_for(
-                  flow2_issuer.id,
-                  flow2_issuer.current_kid,
-                ), true,
-                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow2_base_host}",
-                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-              )
-              flow2_target = URI.parse(flow2_payload.fetch("url"))
+              flow2_target = URI.parse(@base_browser.response.location)
+              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+              unless flow2_target.host == flow2_base_host
+                flow2_rt = Rack::Utils.parse_query(flow2_target.query).fetch("rt")
+                flow2_payload, = JWT.decode(
+                  flow2_rt, JitSecurityJwtRegistry.public_key_for(
+                    flow2_issuer.id,
+                    flow2_issuer.current_kid,
+                  ), true,
+                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow2_base_host}",
+                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+                )
+                flow2_target = URI.parse(flow2_payload.fetch("url"))
+              end
               if flow2_index.zero?
                 raise RuntimeError,
                       "Base authorization host mismatch" unless flow2_target.host == flow2_base_host
@@ -411,16 +419,20 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
           )
           flow3_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow3_index|
-            flow3_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-            flow3_payload, = JWT.decode(
-              flow3_rt, JitSecurityJwtRegistry.public_key_for(
-                flow3_issuer.id,
-                flow3_issuer.current_kid,
-              ), true,
-              algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow3_base_host}",
-              verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-            )
-            flow3_target = URI.parse(flow3_payload.fetch("url"))
+            flow3_target = URI.parse(@base_browser.response.location)
+            # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+            unless flow3_target.host == flow3_base_host
+              flow3_rt = Rack::Utils.parse_query(flow3_target.query).fetch("rt")
+              flow3_payload, = JWT.decode(
+                flow3_rt, JitSecurityJwtRegistry.public_key_for(
+                  flow3_issuer.id,
+                  flow3_issuer.current_kid,
+                ), true,
+                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow3_base_host}",
+                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+              )
+              flow3_target = URI.parse(flow3_payload.fetch("url"))
+            end
             if flow3_index.zero?
               raise RuntimeError,
                     "Base authorization host mismatch" unless flow3_target.host == flow3_base_host
@@ -591,16 +603,20 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
           )
           flow4_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow4_index|
-            flow4_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-            flow4_payload, = JWT.decode(
-              flow4_rt, JitSecurityJwtRegistry.public_key_for(
-                flow4_issuer.id,
-                flow4_issuer.current_kid,
-              ), true,
-              algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow4_base_host}",
-              verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-            )
-            flow4_target = URI.parse(flow4_payload.fetch("url"))
+            flow4_target = URI.parse(@base_browser.response.location)
+            # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+            unless flow4_target.host == flow4_base_host
+              flow4_rt = Rack::Utils.parse_query(flow4_target.query).fetch("rt")
+              flow4_payload, = JWT.decode(
+                flow4_rt, JitSecurityJwtRegistry.public_key_for(
+                  flow4_issuer.id,
+                  flow4_issuer.current_kid,
+                ), true,
+                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow4_base_host}",
+                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+              )
+              flow4_target = URI.parse(flow4_payload.fetch("url"))
+            end
             if flow4_index.zero?
               raise RuntimeError,
                     "Base authorization host mismatch" unless flow4_target.host == flow4_base_host
@@ -794,16 +810,20 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
             )
             flow6_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow6_index|
-              flow6_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-              flow6_payload, = JWT.decode(
-                flow6_rt, JitSecurityJwtRegistry.public_key_for(
-                  flow6_issuer.id,
-                  flow6_issuer.current_kid,
-                ), true,
-                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow6_base_host}",
-                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-              )
-              flow6_target = URI.parse(flow6_payload.fetch("url"))
+              flow6_target = URI.parse(@base_browser.response.location)
+              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+              unless flow6_target.host == flow6_base_host
+                flow6_rt = Rack::Utils.parse_query(flow6_target.query).fetch("rt")
+                flow6_payload, = JWT.decode(
+                  flow6_rt, JitSecurityJwtRegistry.public_key_for(
+                    flow6_issuer.id,
+                    flow6_issuer.current_kid,
+                  ), true,
+                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow6_base_host}",
+                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+                )
+                flow6_target = URI.parse(flow6_payload.fetch("url"))
+              end
               if flow6_index.zero?
                 raise RuntimeError,
                       "Base authorization host mismatch" unless flow6_target.host == flow6_base_host
@@ -989,16 +1009,20 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
             )
             flow8_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow8_index|
-              flow8_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-              flow8_payload, = JWT.decode(
-                flow8_rt, JitSecurityJwtRegistry.public_key_for(
-                  flow8_issuer.id,
-                  flow8_issuer.current_kid,
-                ), true,
-                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow8_base_host}",
-                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-              )
-              flow8_target = URI.parse(flow8_payload.fetch("url"))
+              flow8_target = URI.parse(@base_browser.response.location)
+              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+              unless flow8_target.host == flow8_base_host
+                flow8_rt = Rack::Utils.parse_query(flow8_target.query).fetch("rt")
+                flow8_payload, = JWT.decode(
+                  flow8_rt, JitSecurityJwtRegistry.public_key_for(
+                    flow8_issuer.id,
+                    flow8_issuer.current_kid,
+                  ), true,
+                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow8_base_host}",
+                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+                )
+                flow8_target = URI.parse(flow8_payload.fetch("url"))
+              end
               if flow8_index.zero?
                 raise RuntimeError,
                       "Base authorization host mismatch" unless flow8_target.host == flow8_base_host
@@ -1190,20 +1214,24 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
           }
         post(flow9_form["action"], params: flow9_fields, headers: flow9_base_headers)
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow9_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow9_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow9_payload, = JWT.decode(
-        flow9_rt, JitSecurityJwtRegistry.public_key_for(flow9_issuer.id, flow9_issuer.current_kid), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow9_base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow9_callback_uri = URI.parse(flow9_payload.fetch("url"))
+      flow9_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow9_callback_uri.host == flow9_base_host
+        flow9_rt = Rack::Utils.parse_query(flow9_callback_uri.query).fetch("rt")
+        flow9_payload, = JWT.decode(
+          flow9_rt, JitSecurityJwtRegistry.public_key_for(flow9_issuer.id, flow9_issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow9_base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow9_callback_uri = URI.parse(flow9_payload.fetch("url"))
+      end
       flow9_protocol_browser = open_session
       flow9_protocol_browser.host!(flow9_base_host)
       flow9_protocol_browser.https!
@@ -1354,16 +1382,20 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
             )
             flow11_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow11_index|
-              flow11_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-              flow11_payload, = JWT.decode(
-                flow11_rt, JitSecurityJwtRegistry.public_key_for(
-                  flow11_issuer.id,
-                  flow11_issuer.current_kid,
-                ), true,
-                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow11_base_host}",
-                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-              )
-              flow11_target = URI.parse(flow11_payload.fetch("url"))
+              flow11_target = URI.parse(@base_browser.response.location)
+              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+              unless flow11_target.host == flow11_base_host
+                flow11_rt = Rack::Utils.parse_query(flow11_target.query).fetch("rt")
+                flow11_payload, = JWT.decode(
+                  flow11_rt, JitSecurityJwtRegistry.public_key_for(
+                    flow11_issuer.id,
+                    flow11_issuer.current_kid,
+                  ), true,
+                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow11_base_host}",
+                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+                )
+                flow11_target = URI.parse(flow11_payload.fetch("url"))
+              end
               if flow11_index.zero?
                 raise RuntimeError,
                       "Base authorization host mismatch" unless flow11_target.host == flow11_base_host
@@ -1537,16 +1569,20 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
             )
             flow13_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow13_index|
-              flow13_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-              flow13_payload, = JWT.decode(
-                flow13_rt, JitSecurityJwtRegistry.public_key_for(
-                  flow13_issuer.id,
-                  flow13_issuer.current_kid,
-                ), true,
-                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow13_base_host}",
-                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-              )
-              flow13_target = URI.parse(flow13_payload.fetch("url"))
+              flow13_target = URI.parse(@base_browser.response.location)
+              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+              unless flow13_target.host == flow13_base_host
+                flow13_rt = Rack::Utils.parse_query(flow13_target.query).fetch("rt")
+                flow13_payload, = JWT.decode(
+                  flow13_rt, JitSecurityJwtRegistry.public_key_for(
+                    flow13_issuer.id,
+                    flow13_issuer.current_kid,
+                  ), true,
+                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow13_base_host}",
+                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+                )
+                flow13_target = URI.parse(flow13_payload.fetch("url"))
+              end
               if flow13_index.zero?
                 raise RuntimeError,
                       "Base authorization host mismatch" unless flow13_target.host == flow13_base_host
@@ -1711,16 +1747,20 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
             )
             flow15_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow15_index|
-              flow15_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-              flow15_payload, = JWT.decode(
-                flow15_rt, JitSecurityJwtRegistry.public_key_for(
-                  flow15_issuer.id,
-                  flow15_issuer.current_kid,
-                ), true,
-                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow15_base_host}",
-                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-              )
-              flow15_target = URI.parse(flow15_payload.fetch("url"))
+              flow15_target = URI.parse(@base_browser.response.location)
+              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+              unless flow15_target.host == flow15_base_host
+                flow15_rt = Rack::Utils.parse_query(flow15_target.query).fetch("rt")
+                flow15_payload, = JWT.decode(
+                  flow15_rt, JitSecurityJwtRegistry.public_key_for(
+                    flow15_issuer.id,
+                    flow15_issuer.current_kid,
+                  ), true,
+                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow15_base_host}",
+                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+                )
+                flow15_target = URI.parse(flow15_payload.fetch("url"))
+              end
               if flow15_index.zero?
                 raise RuntimeError,
                       "Base authorization host mismatch" unless flow15_target.host == flow15_base_host
@@ -1894,16 +1934,20 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
             )
             flow17_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
             2.times do |flow17_index|
-              flow17_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-              flow17_payload, = JWT.decode(
-                flow17_rt, JitSecurityJwtRegistry.public_key_for(
-                  flow17_issuer.id,
-                  flow17_issuer.current_kid,
-                ), true,
-                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow17_base_host}",
-                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-              )
-              flow17_target = URI.parse(flow17_payload.fetch("url"))
+              flow17_target = URI.parse(@base_browser.response.location)
+              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+              unless flow17_target.host == flow17_base_host
+                flow17_rt = Rack::Utils.parse_query(flow17_target.query).fetch("rt")
+                flow17_payload, = JWT.decode(
+                  flow17_rt, JitSecurityJwtRegistry.public_key_for(
+                    flow17_issuer.id,
+                    flow17_issuer.current_kid,
+                  ), true,
+                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow17_base_host}",
+                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+                )
+                flow17_target = URI.parse(flow17_payload.fetch("url"))
+              end
               if flow17_index.zero?
                 raise RuntimeError,
                       "Base authorization host mismatch" unless flow17_target.host == flow17_base_host

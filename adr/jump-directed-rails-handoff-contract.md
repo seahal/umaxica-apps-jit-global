@@ -56,6 +56,14 @@ warp-org-jp -> base-org-ww
 All peers use HTTPS. This is the approved implementation graph, not a restatement of the earlier
 observed inventory. Auth-to-RP, RP-to-RP, self-loops, cross-TLD edges, unregistered regions and Edit
 are absent. Adding an RP requires an explicit decision. Core is `jp.*`; Warp is `www-jp.*`.
+
+Because self-loops are absent, a navigation whose target shares the request's origin (scheme, host
+and port) does not use Jump; the gateway refuses such an rt with `invalid_dst`. The Base self-RPs
+(`base-app-ww`, `base-com-ww`, `base-org-ww`) share their origin with their authority, so the
+`POST /sign` start to `/oauth/authorize`, the authorization code return to `/oidc/callback` and the
+`prompt=none` `login_required` return move by path through
+`CommonRedirect#redirect_to_same_origin_or_jump_url`, which callers opt into explicitly. A
+cross-origin target, including another RP's callback on a Base authority, still goes through Jump.
 `www.jp.*` is rejected, never rewritten to Warp. Node region reflects the deployment; query `ri`
 does not change these origins' identities.
 

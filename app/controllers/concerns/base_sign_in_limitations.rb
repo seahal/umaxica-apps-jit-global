@@ -294,7 +294,8 @@ module BaseSignInLimitations
       authorization_transaction_ref: @oidc_transaction.transaction_id,
     )
     if result.success?
-      redirect_to_jump_url(result.redirect_url)
+      # The Base self-RP callback shares this origin; Jump refuses that self-loop.
+      redirect_to_same_origin_or_jump_url(result.redirect_url)
     else
       render json: { error: result.error, error_description: result.error_description }, status: :bad_request
     end

@@ -12,6 +12,17 @@ module AvatarTestFactory
   # periods are append-only (a trigger rejects DELETE), and Rails reloads every fixture table with
   # DELETE, which fails once a committed test has left an owned Avatar behind. Tests that need one
   # ordinary Avatar create it here inside their own transaction.
+  #
+  # Handles have no fixture file for the same reason: a committed Avatar keeps its committed Handle,
+  # and a fixture reload's DELETE of `handles` would orphan it when the foreign key is re-enforced.
+  def self.create_handle!
+    Handle.create!(
+      handle: "handle-#{SecureRandom.hex(6)}",
+      handle_status_id: HandleStatus::ACTIVE,
+      cooldown_until: Time.current,
+    )
+  end
+
   def self.create_standard!(active_handle:)
     create!(
       moniker: STANDARD_MONIKER,

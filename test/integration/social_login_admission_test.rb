@@ -44,13 +44,17 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, base.response.status
     issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    payload, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    target = URI.parse(payload.fetch("url"))
+    target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless target.host == base_host
+      rt = Rack::Utils.parse_query(target.query).fetch("rt")
+      payload, = JWT.decode(
+        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      target = URI.parse(payload.fetch("url"))
+    end
 
     assert_equal base_host, target.host
     base.get(target.request_uri)
@@ -59,13 +63,17 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
 
     assert_equal 303, base.response.status
-    handoff_rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    handoff_payload, = JWT.decode(
-      handoff_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    auth_target = URI.parse(handoff_payload.fetch("url"))
+    auth_target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless auth_target.host == base_host
+      handoff_rt = Rack::Utils.parse_query(auth_target.query).fetch("rt")
+      handoff_payload, = JWT.decode(
+        handoff_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      auth_target = URI.parse(handoff_payload.fetch("url"))
+    end
 
     assert_equal auth_host, auth_target.host
     entry_reference = Rack::Utils.parse_query(auth_target.query).fetch("entry_ref")
@@ -172,13 +180,17 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, base.response.status
     issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    payload, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    target = URI.parse(payload.fetch("url"))
+    target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless target.host == base_host
+      rt = Rack::Utils.parse_query(target.query).fetch("rt")
+      payload, = JWT.decode(
+        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      target = URI.parse(payload.fetch("url"))
+    end
 
     assert_equal base_host, target.host
     base.get(target.request_uri)
@@ -187,13 +199,17 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
 
     assert_equal 303, base.response.status
-    handoff_rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    handoff_payload, = JWT.decode(
-      handoff_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    auth_target = URI.parse(handoff_payload.fetch("url"))
+    auth_target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless auth_target.host == base_host
+      handoff_rt = Rack::Utils.parse_query(auth_target.query).fetch("rt")
+      handoff_payload, = JWT.decode(
+        handoff_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      auth_target = URI.parse(handoff_payload.fetch("url"))
+    end
 
     assert_equal auth_host, auth_target.host
     entry_reference = Rack::Utils.parse_query(auth_target.query).fetch("entry_ref")
@@ -300,13 +316,17 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, base.response.status
     issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    payload, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    target = URI.parse(payload.fetch("url"))
+    target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless target.host == base_host
+      rt = Rack::Utils.parse_query(target.query).fetch("rt")
+      payload, = JWT.decode(
+        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      target = URI.parse(payload.fetch("url"))
+    end
 
     assert_equal base_host, target.host
     base.get(target.request_uri)
@@ -315,13 +335,17 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
 
     assert_equal 303, base.response.status
-    handoff_rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    handoff_payload, = JWT.decode(
-      handoff_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    auth_target = URI.parse(handoff_payload.fetch("url"))
+    auth_target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless auth_target.host == base_host
+      handoff_rt = Rack::Utils.parse_query(auth_target.query).fetch("rt")
+      handoff_payload, = JWT.decode(
+        handoff_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      auth_target = URI.parse(handoff_payload.fetch("url"))
+    end
 
     assert_equal auth_host, auth_target.host
     entry_reference = Rack::Utils.parse_query(auth_target.query).fetch("entry_ref")
@@ -425,13 +449,17 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, base.response.status
     issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    payload, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    target = URI.parse(payload.fetch("url"))
+    target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless target.host == base_host
+      rt = Rack::Utils.parse_query(target.query).fetch("rt")
+      payload, = JWT.decode(
+        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      target = URI.parse(payload.fetch("url"))
+    end
 
     assert_equal base_host, target.host
     base.get(target.request_uri)
@@ -440,13 +468,17 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
 
     assert_equal 303, base.response.status
-    handoff_rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    handoff_payload, = JWT.decode(
-      handoff_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    auth_target = URI.parse(handoff_payload.fetch("url"))
+    auth_target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless auth_target.host == base_host
+      handoff_rt = Rack::Utils.parse_query(auth_target.query).fetch("rt")
+      handoff_payload, = JWT.decode(
+        handoff_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      auth_target = URI.parse(handoff_payload.fetch("url"))
+    end
 
     assert_equal auth_host, auth_target.host
     entry_reference = Rack::Utils.parse_query(auth_target.query).fetch("entry_ref")
@@ -593,13 +625,17 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, base.response.status
     issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    payload, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    target = URI.parse(payload.fetch("url"))
+    target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless target.host == base_host
+      rt = Rack::Utils.parse_query(target.query).fetch("rt")
+      payload, = JWT.decode(
+        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      target = URI.parse(payload.fetch("url"))
+    end
 
     assert_equal base_host, target.host
     base.get(target.request_uri)
@@ -608,13 +644,17 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     base.post(authorization_form["action"], params: authorization_fields, headers: base_headers)
 
     assert_equal 303, base.response.status
-    handoff_rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    handoff_payload, = JWT.decode(
-      handoff_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    auth_target = URI.parse(handoff_payload.fetch("url"))
+    auth_target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless auth_target.host == base_host
+      handoff_rt = Rack::Utils.parse_query(auth_target.query).fetch("rt")
+      handoff_payload, = JWT.decode(
+        handoff_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      auth_target = URI.parse(handoff_payload.fetch("url"))
+    end
 
     assert_equal auth_host, auth_target.host
     entry_reference = Rack::Utils.parse_query(auth_target.query).fetch("entry_ref")

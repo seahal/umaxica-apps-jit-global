@@ -41,13 +41,17 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     form = response.parsed_body.at_css("form")
     fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
     post(form["action"], params: fields, headers: base_headers)
-    rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-    payload, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(base_issuer.id, base_issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    target = URI.parse(payload.fetch("url"))
+    target = URI.parse(response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless target.host == base_host
+      rt = Rack::Utils.parse_query(target.query).fetch("rt")
+      payload, = JWT.decode(
+        rt, JitSecurityJwtRegistry.public_key_for(base_issuer.id, base_issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      target = URI.parse(payload.fetch("url"))
+    end
 
     assert_equal base_host, target.host
     get(target.request_uri)
@@ -58,13 +62,17 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
         "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
       },
     )
-    handoff_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-    handoff_payload, = JWT.decode(
-      handoff_rt, JitSecurityJwtRegistry.public_key_for(base_issuer.id, base_issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    target = URI.parse(handoff_payload.fetch("url"))
+    target = URI.parse(response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless target.host == base_host
+      handoff_rt = Rack::Utils.parse_query(target.query).fetch("rt")
+      handoff_payload, = JWT.decode(
+        handoff_rt, JitSecurityJwtRegistry.public_key_for(base_issuer.id, base_issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      target = URI.parse(handoff_payload.fetch("url"))
+    end
 
     assert_equal auth_host, target.host
     entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
@@ -217,13 +225,17 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_equal token.public_id, flow.reload.browser_session_ref
     assert_equal established_at, token.reload.root_login_established_at
-    callback_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-    callback_payload, = JWT.decode(
-      callback_rt, JitSecurityJwtRegistry.public_key_for(base_issuer.id, base_issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    callback_uri = URI.parse(callback_payload.fetch("url"))
+    callback_uri = URI.parse(response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless callback_uri.host == base_host
+      callback_rt = Rack::Utils.parse_query(callback_uri.query).fetch("rt")
+      callback_payload, = JWT.decode(
+        callback_rt, JitSecurityJwtRegistry.public_key_for(base_issuer.id, base_issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      callback_uri = URI.parse(callback_payload.fetch("url"))
+    end
     protocol_browser = open_session
     protocol_browser.host!(base_host)
     protocol_browser.https!

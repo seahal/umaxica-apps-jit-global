@@ -918,14 +918,12 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     base_browser.host!(ENV.fetch("PUBLIC_BASE_STAFF_URL"))
     base_browser.https!
     base_browser.post("/sign", params: { ri: "jp" })
-    issuer = JitSecurityJwtRegistry.surface("BASE_ORG")
-    rt = Rack::Utils.parse_query(URI.parse(base_browser.response.location).query).fetch("rt")
-    payload, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{ENV.fetch("PUBLIC_BASE_STAFF_URL")}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    base_browser.get(URI.parse(payload.fetch("url")).request_uri)
+    # The authorize endpoint shares this origin, so the start moves by path without a Jump rt.
+    authorization = URI.parse(base_browser.response.location)
+
+    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), authorization.host
+    assert_nil Rack::Utils.parse_query(authorization.query)["rt"]
+    base_browser.get(authorization.request_uri)
     authorization_form = base_browser.response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
     fields = authorization_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
     base_browser.post(

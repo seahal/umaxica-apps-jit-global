@@ -21,7 +21,7 @@ class AvatarLifecycleEventTest < ActiveSupport::TestCase
 
   test "requires state keys" do
     event = AvatarLifecycleEvent.new(
-      avatar: AvatarTestFactory.create_standard!(active_handle: handles(:one)),
+      avatar: AvatarTestFactory.create_standard!(active_handle: AvatarTestFactory.create_handle!),
       changed_by_type: "moderator", metadata: {},
     )
 

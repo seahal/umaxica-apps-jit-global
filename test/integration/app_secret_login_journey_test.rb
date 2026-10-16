@@ -773,28 +773,10 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
           },
         )
 
-        fv5255 =
-          begin
-            fv5261 = fv5247.response.location
-            fv5257 = fv5246
-            fv5260 = URI.parse(fv5261)
-            fv5259 = Rack::Utils.parse_query(fv5260.query).fetch("rt")
-            fv5258 = JitSecurityJwtRegistry.surface("BASE_APP")
-            fv5256, = JWT.decode(
-              fv5259,
-              JitSecurityJwtRegistry.public_key_for(
-                fv5258.id,
-                fv5258.current_kid,
-              ),
-              true,
-              algorithms: ["ES384"],
-              verify_iss: true,
-              iss: "https://#{fv5257}",
-              verify_aud: true,
-              aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-            )
-            URI.parse(fv5256.fetch("url"))
-          end
+        # The authorize endpoint shares this origin, so the start moves by path without a Jump rt.
+        fv5255 = URI.parse(fv5247.response.location)
+
+        assert_nil Rack::Utils.parse_query(fv5255.query)["rt"]
 
         assert_equal fv5246, fv5255.host
         assert_equal "/oauth/authorize", fv5255.path
@@ -1127,23 +1109,11 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       )
     end
     assert_equal 303, base.response.status
-    callback_uri =
-      begin
-        fv5175 = base.response.location
-        fv5171 = base_host
-        fv5174 = URI.parse(fv5175)
-        fv5173 = Rack::Utils.parse_query(fv5174.query).fetch("rt")
-        fv5172 = JitSecurityJwtRegistry.surface("BASE_APP")
-        fv5170, = JWT.decode(
-          fv5173, JitSecurityJwtRegistry.public_key_for(
-            fv5172.id,
-            fv5172.current_kid,
-          ), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{fv5171}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        URI.parse(fv5170.fetch("url"))
-      end
+    # The base-app-ww callback shares this origin, so the code returns by path without a Jump rt.
+    callback_uri = URI.parse(base.response.location)
+
+    assert_equal base_host, callback_uri.host
+    assert_nil Rack::Utils.parse_query(callback_uri.query)["rt"]
     base.host!(callback_uri.host)
     base.https!
     flow = ClientSignInFlow.find(authorization.reload.secret_sign_in_flow_id)
@@ -1309,13 +1279,21 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
         )
       end
     end
-    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    step_up_jump, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    step_up_target = URI.parse(step_up_jump.fetch("url"))
+    step_up_target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless step_up_target.host == base_host
+      step_up_target = step_up_target
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless step_up_target.host == base_host
+        rt = Rack::Utils.parse_query(step_up_target.query).fetch("rt")
+        step_up_jump, = JWT.decode(
+          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        step_up_target = URI.parse(step_up_jump.fetch("url"))
+      end
+    end
     admission_ref = Rack::Utils.parse_query(step_up_target.query).fetch("entry_ref")
     step_up_browser = open_session
     step_up_browser.host!(auth_host)
@@ -1721,28 +1699,26 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
           },
         )
 
-        fv5080 =
-          begin
-            fv5086 = fv5071.response.location
-            fv5082 = fv5070
-            fv5085 = URI.parse(fv5086)
-            fv5084 = Rack::Utils.parse_query(fv5085.query).fetch("rt")
-            fv5083 = JitSecurityJwtRegistry.surface("BASE_APP")
-            fv5081, = JWT.decode(
-              fv5084,
-              JitSecurityJwtRegistry.public_key_for(
-                fv5083.id,
-                fv5083.current_kid,
-              ),
-              true,
-              algorithms: ["ES384"],
-              verify_iss: true,
-              iss: "https://#{fv5082}",
-              verify_aud: true,
-              aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-            )
-            URI.parse(fv5081.fetch("url"))
-          end
+        fv5080 = URI.parse(fv5071.response.location)
+        # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+        unless fv5080.host == fv5070
+          fv5084 = Rack::Utils.parse_query(fv5080.query).fetch("rt")
+          fv5083 = JitSecurityJwtRegistry.surface("BASE_APP")
+          fv5081, = JWT.decode(
+            fv5084,
+            JitSecurityJwtRegistry.public_key_for(
+              fv5083.id,
+              fv5083.current_kid,
+            ),
+            true,
+            algorithms: ["ES384"],
+            verify_iss: true,
+            iss: "https://#{fv5070}",
+            verify_aud: true,
+            aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+          )
+          fv5080 = URI.parse(fv5081.fetch("url"))
+        end
 
         assert_equal fv5070, fv5080.host
         assert_equal "/oauth/authorize", fv5080.path

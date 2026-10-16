@@ -20,6 +20,15 @@ stateDiagram-v2
         browser binding and challenge are checked under Ticket locks.
         At most one open child exists per parent.
     end note
+    note left of PENDING
+        DECIDED 2026-10-16, code pending (nine.md P-8):
+        the open child is the app waiting unit (N=2, slot N+1).
+        issue! only when the actor holds no other open child
+        (PENDING or SESSION_SELECTED, unexpired); otherwise the
+        sign-in is refused and no child is created.
+        The waiting unit may only select/resolve (purge) or cancel;
+        it never reaches MFA reset or any full-access page.
+    end note
     note right of RESOLVED
         Selected session was revoked before this transition.
         Parent issuance retries through AuthenticationBase#log_in.

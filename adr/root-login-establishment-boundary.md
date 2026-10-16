@@ -197,3 +197,33 @@ terminal facts, retention hold, and actor-owned session selection. It is not aut
 evidence and cannot create a session by itself. The existing establishment point, cooldown,
 actor-before-ticket lock order, post-commit cookie behavior, and prohibition on restricted root
 sessions are **retained**.
+
+## Waiting-slot amendment (2026-10-16)
+
+Status: Accepted by the user on 2026-10-16; implementation pending. Recorded in `nine.md` P-8.
+
+Provenance: this ADR, its "Accepted (2026-10-02)" status and the retirement of `RESTRICTED`
+issuance arrived in checkpoint commit `b74017b51` (2026-10-04); the removal of
+`session_limit_hard_reject` arrived in `c737e51ae` (2026-10-08). Neither carries a recorded user
+decision. The user's intended session-limit design is restored here on the pending-resolution
+mechanism, without reviving the `RESTRICTED` placeholder.
+
+Decision:
+
+- N is the realm limit of full-access login units: `app` 2, `com` 1, `org` 1.
+- At N, a sign-in becomes the waiting unit: one open session-limit resolution with no token,
+  cookie or RP grant. Its only actions are purging one full-access unit and cancelling.
+- While the actor's waiting unit is open (`PENDING` or `SESSION_SELECTED`, unexpired), every
+  further sign-in of that actor is refused outright: nothing is issued, no resolution is created,
+  no purge choice is offered. This supersedes "A pending flow does not block other sign-ins of the
+  account" in "Pending state".
+- Existing full-access units are unaffected by a waiting unit. Promotion to full access happens only
+  when the count drops below N, rechecked under the actor lock.
+- No session below full access, including the waiting unit, may reach MFA reset. The MFA-reset
+  entries in the `RestrictedSessionGuard` allowlist have no recorded user decision and are removed
+  with this change.
+
+Correction: the Consequences statement "com and org Base OIDC resume enforce the one-session limit;
+with no Base limitation ceremony on those surfaces, a full limit is refused with `403`" is stale.
+`Base::Com::Sign::In::LimitationsController` and `Base::Org::Sign::In::LimitationsController` provide
+the same ceremony as app.

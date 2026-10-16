@@ -99,7 +99,8 @@ module Base
           )
 
           if result.success?
-            redirect_to_jump_url(result.redirect_url, status: request.post? ? :see_other : :found)
+            # base-com-ww's callback shares this origin; Jump refuses that self-loop.
+            redirect_to_same_origin_or_jump_url(result.redirect_url, status: request.post? ? :see_other : :found)
           else
             render json: { error: result.error, error_description: result.error_description },
                    status: :bad_request
@@ -236,7 +237,8 @@ module Base
         # The client and redirect_uri were validated above, so the protocol error is returned
         # to the RP callback (OIDC Core 1.0 section 3.1.2.6) instead of being rendered here.
         def redirect_login_required!
-          redirect_to_jump_url(
+          # base-com-ww's callback shares this origin; Jump refuses that self-loop.
+          redirect_to_same_origin_or_jump_url(
             ::OidcAuthorizeCoordinator.error_redirect_url(
               redirect_uri: authorize_params[:redirect_uri].to_s,
               resource_type: resource_type,

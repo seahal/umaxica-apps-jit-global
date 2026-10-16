@@ -8,6 +8,7 @@ class AvatarOwnershipCutoverOperationTest < ActiveSupport::TestCase
 
   setup do
     @capability = AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)
+    avatar
   end
 
   def avatar

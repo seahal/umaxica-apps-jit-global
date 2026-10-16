@@ -28,8 +28,6 @@ require "test_helper"
 require_relative "../support/avatar_test_factory"
 
 class AvatarMonikerTest < ActiveSupport::TestCase
-  fixtures :handles
-
   test "accepts the byte-size boundary immediately below and at 128 bytes" do
     below = AvatarMoniker.new(moniker: ("あ\u0300\uFE0F" * 15) + "a\uFE0F\uFE0F")
     boundary = AvatarMoniker.new(moniker: "あ\u0300\uFE0F" * 16)
@@ -120,7 +118,7 @@ class AvatarMonikerTest < ActiveSupport::TestCase
 
   test "Avatar exposes the row whose valid_to is infinity even when its valid_from is older" do
     avatar = Avatar.create!(
-      active_handle: handles(:one),
+      active_handle: AvatarTestFactory.create_handle!,
       capability: avatar_capabilities(:normal),
       lifecycle_state: avatar_lifecycle_states(:active),
     )
@@ -142,7 +140,7 @@ class AvatarMonikerTest < ActiveSupport::TestCase
 
   test "Avatar moniker read fails when no current temporal row exists and has no writer" do
     avatar = Avatar.create!(
-      active_handle: handles(:one),
+      active_handle: AvatarTestFactory.create_handle!,
       capability: avatar_capabilities(:normal),
       lifecycle_state: avatar_lifecycle_states(:active),
     )
@@ -153,7 +151,7 @@ class AvatarMonikerTest < ActiveSupport::TestCase
 
   test "persists an encrypted 128-byte moniker inside the varchar 512 column" do
     avatar = Avatar.create!(
-      active_handle: handles(:one),
+      active_handle: AvatarTestFactory.create_handle!,
       capability: avatar_capabilities(:normal),
       lifecycle_state: avatar_lifecycle_states(:active),
     )
@@ -196,7 +194,8 @@ class AvatarMonikerTest < ActiveSupport::TestCase
   end
 
   test "encrypted monikers persist ciphertext while exposing plaintext through the model" do
-    fixture = AvatarTestFactory.create_standard!(active_handle: handles(:one)).avatar_monikers.current.sole
+    fixture = AvatarTestFactory.create_standard!(active_handle: AvatarTestFactory.create_handle!)
+      .avatar_monikers.current.sole
     encrypted_value = AvatarMoniker.connection.select_value(
       AvatarMoniker.sanitize_sql_array(["SELECT moniker FROM avatar_monikers WHERE id = ?", fixture.id]), # rubocop:disable I18n/RailsI18n/DecorateString -- Parameterized SQL.
     )
@@ -207,7 +206,7 @@ class AvatarMonikerTest < ActiveSupport::TestCase
   end
 
   test "database temporal constraint accepts equality and rejects a reversed interval" do
-    avatar = AvatarTestFactory.create_standard!(active_handle: handles(:one))
+    avatar = AvatarTestFactory.create_standard!(active_handle: AvatarTestFactory.create_handle!)
     boundary = Time.utc(2026, 1, 1)
     equal_interval = AvatarMoniker.create!(
       avatar: avatar,

@@ -55,16 +55,20 @@ class EmailVerificationFlowTest < ActionDispatch::IntegrationTest
           )
           flow0_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow0_index|
-            flow0_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-            flow0_payload, = JWT.decode(
-              flow0_rt, JitSecurityJwtRegistry.public_key_for(
-                flow0_issuer.id,
-                flow0_issuer.current_kid,
-              ), true,
-              algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow0_base_host}",
-              verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-            )
-            flow0_target = URI.parse(flow0_payload.fetch("url"))
+            flow0_target = URI.parse(@base_browser.response.location)
+            # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+            unless flow0_target.host == flow0_base_host
+              flow0_rt = Rack::Utils.parse_query(flow0_target.query).fetch("rt")
+              flow0_payload, = JWT.decode(
+                flow0_rt, JitSecurityJwtRegistry.public_key_for(
+                  flow0_issuer.id,
+                  flow0_issuer.current_kid,
+                ), true,
+                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow0_base_host}",
+                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+              )
+              flow0_target = URI.parse(flow0_payload.fetch("url"))
+            end
             if flow0_index.zero?
               raise RuntimeError,
                     "Base authorization host mismatch" unless flow0_target.host == flow0_base_host

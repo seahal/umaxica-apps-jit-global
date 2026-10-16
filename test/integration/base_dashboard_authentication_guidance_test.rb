@@ -141,18 +141,14 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
         )
 
         assert_response :see_other
-        # The RP start reaches its own authorization endpoint through the signed Jump gateway.
-        start_issuer = JitSecurityJwtRegistry.surface("BASE_#{surface.upcase}")
-        start_payload, = JWT.decode(
-          Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt"),
-          JitSecurityJwtRegistry.public_key_for(start_issuer.id, start_issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        authorization = URI.parse(start_payload.fetch("url"))
+        # The RP start reaches its own same-origin authorization endpoint by path: Jump refuses an
+        # rt whose url origin equals its iss.
+        authorization = URI.parse(response.location)
 
         assert_equal [host, "/oauth/authorize"], [authorization.host, authorization.path]
         authorization_query = Rack::Utils.parse_query(authorization.query)
+
+        assert_nil authorization_query["rt"]
 
         assert_equal "base-#{surface}-ww", authorization_query.fetch("client_id")
         assert_equal "S256", authorization_query.fetch("code_challenge_method")

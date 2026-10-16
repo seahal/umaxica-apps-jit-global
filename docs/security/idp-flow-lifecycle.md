@@ -42,7 +42,7 @@ Records: `ClientSignInFlow`, `VisitorSignInFlow`, `OperatorSignInFlow` with `Flo
   draw `EXPIRED` and `CANCELLED`; that is diagram vocabulary, not runtime.
 - `fail_sign_in!` moves to `FAILED` from every non-terminal status. Current callers: user
   cancellation of pending MFA (`cancel_pending_mfa!`), user cancellation on the session-limit page,
-  `session_limit_hard_reject` after primary verification, and `SignInSessionLimitManager#cancel!`.
+  the former `session_limit_hard_reject` (removed in `c737e51ae`), and `SignInSessionLimitManager#cancel!`.
 - Result statuses (`SignInResult`): `success`, `mfa_required`, `session_limit_pending`, and the
   terminal-HTTP set `session_limit_hard_reject`, `guardrail_blocked`, `login_forbidden`,
   `credential_rejected`, `credential_failed`, `identity_unavailable`, `transaction_expired`,
@@ -181,7 +181,7 @@ flow is `HALTED` regardless of how the triggering request is reported.
 | -------------------------------------------------------------- | ----------------------------------------------------- |
 | User presses cancel on pending MFA                             | `cancel`, `CANCELLED`                                 |
 | User cancels on the session-limit page                         | `cancel`, `CANCELLED`                                 |
-| Session limit cannot be resolved by policy (hard reject)       | `halt(policy_terminal_block)`, `HALTED`               |
+| Sign-in while the actor's waiting slot is occupied (decided 2026-10-16, pending) | `halt(policy_terminal_block)`, `HALTED` |
 | OTP attempts exhausted and the flow is locked                  | `halt(credential_locked)`, `HALTED`                   |
 | Guardrail forbids continuation                                 | `halt(policy_terminal_block)`, `HALTED`               |
 | Wrong OTP, attempts remain                                     | `rejected`, still `ACTIVE`                            |

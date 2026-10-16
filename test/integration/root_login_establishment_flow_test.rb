@@ -77,13 +77,17 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, base.response.status
     issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    payload, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    target = URI.parse(payload.fetch("url"))
+    target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless target.host == base_host
+      rt = Rack::Utils.parse_query(target.query).fetch("rt")
+      payload, = JWT.decode(
+        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      target = URI.parse(payload.fetch("url"))
+    end
 
     assert_equal base_host, target.host
     base.get(target.request_uri)
@@ -225,25 +229,33 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       post rp_form["action"], params: rp_fields, headers: base_headers
 
       assert_response :redirect
-      rp_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      rp_payload, = JWT.decode(
-        rp_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      authorize_uri = URI.parse(rp_payload.fetch("url"))
+      authorize_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless authorize_uri.host == base_host
+        rp_rt = Rack::Utils.parse_query(authorize_uri.query).fetch("rt")
+        rp_payload, = JWT.decode(
+          rp_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        authorize_uri = URI.parse(rp_payload.fetch("url"))
+      end
 
       assert_equal base_host, authorize_uri.host
       get authorize_uri.request_uri
 
       assert_response :redirect
-      callback_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      callback_payload, = JWT.decode(
-        callback_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      callback_uri = URI.parse(callback_payload.fetch("url"))
+      callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless callback_uri.host == base_host
+        callback_rt = Rack::Utils.parse_query(callback_uri.query).fetch("rt")
+        callback_payload, = JWT.decode(
+          callback_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        callback_uri = URI.parse(callback_payload.fetch("url"))
+      end
 
       assert_equal base_host, callback_uri.host
       protocol_browser = open_session
@@ -347,13 +359,17 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, base.response.status
     issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    payload, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    target = URI.parse(payload.fetch("url"))
+    target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless target.host == base_host
+      rt = Rack::Utils.parse_query(target.query).fetch("rt")
+      payload, = JWT.decode(
+        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      target = URI.parse(payload.fetch("url"))
+    end
 
     assert_equal base_host, target.host
     base.get(target.request_uri)
@@ -508,13 +524,17 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, base.response.status
     issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    payload, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    target = URI.parse(payload.fetch("url"))
+    target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless target.host == base_host
+      rt = Rack::Utils.parse_query(target.query).fetch("rt")
+      payload, = JWT.decode(
+        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      target = URI.parse(payload.fetch("url"))
+    end
 
     assert_equal base_host, target.host
     base.get(target.request_uri)
@@ -673,13 +693,17 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, base.response.status
     issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    payload, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    target = URI.parse(payload.fetch("url"))
+    target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless target.host == base_host
+      rt = Rack::Utils.parse_query(target.query).fetch("rt")
+      payload, = JWT.decode(
+        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      target = URI.parse(payload.fetch("url"))
+    end
 
     assert_equal base_host, target.host
     base.get(target.request_uri)
@@ -855,13 +879,17 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, base.response.status
     issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-    payload, = JWT.decode(
-      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-    )
-    target = URI.parse(payload.fetch("url"))
+    target = URI.parse(base.response.location)
+    # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+    unless target.host == base_host
+      rt = Rack::Utils.parse_query(target.query).fetch("rt")
+      payload, = JWT.decode(
+        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      target = URI.parse(payload.fetch("url"))
+    end
 
     assert_equal base_host, target.host
     base.get(target.request_uri)
@@ -1071,13 +1099,17 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
 
               assert_equal 303, base.response.status
               issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-              rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-              payload, = JWT.decode(
-                rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-                algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-              )
-              target = URI.parse(payload.fetch("url"))
+              target = URI.parse(base.response.location)
+              # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+              unless target.host == base_host
+                rt = Rack::Utils.parse_query(target.query).fetch("rt")
+                payload, = JWT.decode(
+                  rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+                )
+                target = URI.parse(payload.fetch("url"))
+              end
 
               assert_equal base_host, target.host
               base.get(target.request_uri)

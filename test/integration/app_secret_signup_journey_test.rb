@@ -45,14 +45,18 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       post "/sign", params: { ri: "jp", authenticity_token: csrf }, headers: {
         "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
       }
-      rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
       issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      payload, = JWT.decode(
-        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      target = URI.parse(payload.fetch("url"))
+      target = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless target.host == base_host
+        rt = Rack::Utils.parse_query(target.query).fetch("rt")
+        payload, = JWT.decode(
+          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        target = URI.parse(payload.fetch("url"))
+      end
       host!(target.host)
       https!
       headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
@@ -61,14 +65,17 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       base_params = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
       post form["action"], headers: { "Origin" => "https://#{target.host}", "Sec-Fetch-Site" => "same-origin" },
                            params: base_params
-      gateway = URI.parse(response.location)
-      second_rt = Rack::Utils.parse_query(gateway.query).fetch("rt")
-      second_payload, = JWT.decode(
-        second_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      auth_uri = URI.parse(second_payload.fetch("url"))
+      auth_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless auth_uri.host == base_host
+        second_rt = Rack::Utils.parse_query(auth_uri.query).fetch("rt")
+        second_payload, = JWT.decode(
+          second_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        auth_uri = URI.parse(second_payload.fetch("url"))
+      end
       host!(auth_uri.host)
       entry_ref = Rack::Utils.parse_query(auth_uri.query).fetch("entry_ref")
       begin

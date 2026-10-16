@@ -109,8 +109,8 @@ Current exception families:
 
 - social authentication controllers that currently combine open entry actions with private unlink
   actions requiring step-up verification;
-- session-limit gate controllers that are open to a pending or restricted login flow but reject
-  ordinary active sessions;
+- session-limit gate controllers that are open to a pending login flow (the waiting unit) but
+  reject ordinary active sessions; the waiting unit reaches only purge and cancel, never MFA reset;
 - OAuth and OIDC callback controllers protected by provider state, callback guard, PKCE verifier,
   nonce, or session state;
 - OAuth token exchange endpoints that use `null_session` and protocol-level client authentication

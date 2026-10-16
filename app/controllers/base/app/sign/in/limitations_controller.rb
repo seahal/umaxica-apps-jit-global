@@ -378,7 +378,8 @@ module Base
             )
 
             if result.success?
-              redirect_to_jump_url(result.redirect_url)
+              # base-app-ww's callback shares this origin; Jump refuses that self-loop.
+              redirect_to_same_origin_or_jump_url(result.redirect_url)
             else
               render json: { error: result.error, error_description: result.error_description },
                      status: :bad_request

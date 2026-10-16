@@ -51,5 +51,9 @@ stateDiagram-v2
         Capacity is resolved by the separate durable
         client session-limit child transaction.
         The parent never enters SESSION_LIMIT_PENDING.
+        DECIDED 2026-10-16, code pending (nine.md P-8):
+        at N=2 full-access sessions, a second open child
+        for the same actor is never created; this flow
+        takes halt_sign_in! (waiting slot occupied).
         IDs 30, 70 and 80 remain historical tombstones.
     end note

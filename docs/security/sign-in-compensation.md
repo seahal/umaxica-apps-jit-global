@@ -22,7 +22,10 @@ This document does not cover sign-up completion or step-up freshness.
 - MFA-required completion returns a pending MFA state without minting a new login unit.
 - Session-limit completion returns `:session_limit_pending` and the session-management path; it
   issues no token, cookie, or success audit.
-- Hard reject returns a deterministic forbidden response and does not create a new session.
+- A sign-in at the limit while the actor's waiting unit is open is refused with a deterministic
+  forbidden response and creates neither a session nor a resolution (decided 2026-10-16,
+  implementation pending; `docs/security/session-limit.md`). The former `session_limit_hard_reject`
+  result was removed in `c737e51ae`.
 
 ## Retry Behavior
 

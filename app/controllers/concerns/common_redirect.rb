@@ -91,6 +91,23 @@ module CommonRedirect
            status: :unprocessable_content
   end
 
+  # Jump mediates cross-origin navigation only: it refuses an rt whose url origin equals its iss
+  # (adr/secure-jump-link-redirector.md). A target on this request's own origin therefore moves by
+  # path, and every other target goes through Jump unchanged. Callers opt in explicitly.
+  def redirect_to_same_origin_or_jump_url(url, **)
+    return redirect_to(URI.parse(url.to_s).request_uri, allow_other_host: false, **) if request_origin_url?(url)
+
+    redirect_to_jump_url(url, **)
+  end
+
+  def request_origin_url?(url)
+    uri = URI.parse(url.to_s)
+    uri.is_a?(URI::HTTP) && uri.userinfo.nil? &&
+      uri.scheme.casecmp?(request.scheme) && uri.host.to_s.casecmp?(request.host) && uri.port == request.port
+  rescue URI::InvalidURIError
+    false
+  end
+
   def safe_jump_preserved_query_keys(url)
     uri = URI.parse(url.to_s)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)

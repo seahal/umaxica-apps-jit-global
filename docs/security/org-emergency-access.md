@@ -146,8 +146,9 @@ were retired; there is no secret fallback for the normal or emergency org ceremo
   the token keep their existing meanings.
 
 This is deliberately **not** the existing restricted-session state.
-`Actor::Authentication#restricted?` marks a session awaiting session-limit remediation; a session
-can be Normal and session-limit restricted at the same time. The two axes never collapse into one
+`Actor::Authentication#restricted?` reports token status `RESTRICTED` (103), the retired
+session-limit placeholder that is no longer issued; the session-limit waiting unit is a resolution
+with no session (`docs/security/session-limit.md`). The two axes never collapse into one
 flag.
 
 Authentication context and DBSC binding are independent session properties. Session inventory may

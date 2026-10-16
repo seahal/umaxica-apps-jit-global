@@ -97,13 +97,17 @@ class SocialLoginRobustnessTest < ActionDispatch::IntegrationTest
         )
         flow0_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
         2.times do |flow0_index|
-          flow0_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-          flow0_payload, = JWT.decode(
-            flow0_rt, JitSecurityJwtRegistry.public_key_for(flow0_issuer.id, flow0_issuer.current_kid), true,
-            algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow0_base_host}",
-            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-          )
-          flow0_target = URI.parse(flow0_payload.fetch("url"))
+          flow0_target = URI.parse(@base_browser.response.location)
+          # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+          unless flow0_target.host == flow0_base_host
+            flow0_rt = Rack::Utils.parse_query(flow0_target.query).fetch("rt")
+            flow0_payload, = JWT.decode(
+              flow0_rt, JitSecurityJwtRegistry.public_key_for(flow0_issuer.id, flow0_issuer.current_kid), true,
+              algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow0_base_host}",
+              verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+            )
+            flow0_target = URI.parse(flow0_payload.fetch("url"))
+          end
           if flow0_index.zero?
             raise RuntimeError, "Base authorization host mismatch" unless flow0_target.host == flow0_base_host
 
@@ -369,16 +373,20 @@ class SocialLoginRobustnessTest < ActionDispatch::IntegrationTest
           )
           flow1_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow1_index|
-            flow1_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-            flow1_payload, = JWT.decode(
-              flow1_rt, JitSecurityJwtRegistry.public_key_for(
-                flow1_issuer.id,
-                flow1_issuer.current_kid,
-              ), true,
-              algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow1_base_host}",
-              verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-            )
-            flow1_target = URI.parse(flow1_payload.fetch("url"))
+            flow1_target = URI.parse(@base_browser.response.location)
+            # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+            unless flow1_target.host == flow1_base_host
+              flow1_rt = Rack::Utils.parse_query(flow1_target.query).fetch("rt")
+              flow1_payload, = JWT.decode(
+                flow1_rt, JitSecurityJwtRegistry.public_key_for(
+                  flow1_issuer.id,
+                  flow1_issuer.current_kid,
+                ), true,
+                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow1_base_host}",
+                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+              )
+              flow1_target = URI.parse(flow1_payload.fetch("url"))
+            end
             if flow1_index.zero?
               raise RuntimeError,
                     "Base authorization host mismatch" unless flow1_target.host == flow1_base_host
@@ -517,16 +525,20 @@ class SocialLoginRobustnessTest < ActionDispatch::IntegrationTest
           )
           flow2_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
           2.times do |flow2_index|
-            flow2_rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-            flow2_payload, = JWT.decode(
-              flow2_rt, JitSecurityJwtRegistry.public_key_for(
-                flow2_issuer.id,
-                flow2_issuer.current_kid,
-              ), true,
-              algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow2_base_host}",
-              verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-            )
-            flow2_target = URI.parse(flow2_payload.fetch("url"))
+            flow2_target = URI.parse(@base_browser.response.location)
+            # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+            unless flow2_target.host == flow2_base_host
+              flow2_rt = Rack::Utils.parse_query(flow2_target.query).fetch("rt")
+              flow2_payload, = JWT.decode(
+                flow2_rt, JitSecurityJwtRegistry.public_key_for(
+                  flow2_issuer.id,
+                  flow2_issuer.current_kid,
+                ), true,
+                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow2_base_host}",
+                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+              )
+              flow2_target = URI.parse(flow2_payload.fetch("url"))
+            end
             if flow2_index.zero?
               raise RuntimeError,
                     "Base authorization host mismatch" unless flow2_target.host == flow2_base_host

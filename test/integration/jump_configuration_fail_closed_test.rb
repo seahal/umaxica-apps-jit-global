@@ -3,10 +3,10 @@
 
 require "test_helper"
 
-# A Jump configuration failure is a configuration error. The Base sign start is the handoff to Auth
-# that goes through Jump, and it must never absorb a missing signing key or an invalid issuer
-# identity by downgrading to a same-host redirect. (A protected Base page no longer hands off at all:
-# it points at Base's own GET /sign.)
+# A Jump configuration failure is a configuration error. The Base authorization ceremony start is the
+# handoff to Auth that goes through Jump, and it must never absorb a missing signing key or an invalid
+# issuer identity by downgrading to a same-host redirect. (The Base sign start reaches its own
+# same-origin authorize endpoint by path, and a protected Base page points at Base's own GET /sign.)
 class JumpConfigurationFailClosedTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
@@ -16,6 +16,11 @@ class JumpConfigurationFailClosedTest < ActionDispatch::IntegrationTest
     host! "www.umaxica.app"
     https!
     post base_app_sign_show_path(ri: "jp")
+    get URI.parse(response.location).request_uri
+    start_form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+
+    post start_form["action"], params: start_fields
 
     assert_response :redirect
     assert_equal "jump.umaxica.net", URI.parse(response.location).host
@@ -24,9 +29,13 @@ class JumpConfigurationFailClosedTest < ActionDispatch::IntegrationTest
   test "a missing Jump signing key raises instead of downgrading to a same-host redirect" do
     host! "www.umaxica.app"
     https!
+    post base_app_sign_show_path(ri: "jp")
+    get URI.parse(response.location).request_uri
+    start_form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
 
     JumpRtKeyring.stub(:private_key, nil) do
-      assert_raises(JumpRtConfigurationError) { post base_app_sign_show_path(ri: "jp") }
+      assert_raises(JumpRtConfigurationError) { post start_form["action"], params: start_fields }
     end
   end
 
@@ -47,9 +56,13 @@ class JumpConfigurationFailClosedTest < ActionDispatch::IntegrationTest
   test "development Rails signs with its canonical issuer origin instead of rejecting it" do
     host! "www.umaxica.app"
     https!
+    post base_app_sign_show_path(ri: "jp")
+    get URI.parse(response.location).request_uri
+    start_form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    start_fields = start_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
 
     Rails.stub(:env, ActiveSupport::EnvironmentInquirer.new("development")) do
-      post base_app_sign_show_path(ri: "jp")
+      post start_form["action"], params: start_fields
     end
 
     assert_response :redirect

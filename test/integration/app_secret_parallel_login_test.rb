@@ -83,18 +83,21 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
                 "Origin" => "https://#{fv5069}", "Sec-Fetch-Site" => "same-origin",
               },
             )
-            fv5078 = URI.parse(fv5073.response.location)
-            fv5077 = Rack::Utils.parse_query(fv5078.query).fetch("rt")
             fv5070 = JitSecurityJwtRegistry.surface("BASE_APP")
-            fv5076, = JWT.decode(
-              fv5077, JitSecurityJwtRegistry.public_key_for(
-                fv5070.id,
-                fv5070.current_kid,
-              ), true,
-              algorithms: ["ES384"], verify_iss: true, iss: "https://#{fv5069}",
-              verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-            )
-            fv5075 = URI.parse(fv5076.fetch("url"))
+            fv5075 = URI.parse(fv5073.response.location)
+            # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+            unless fv5075.host == fv5069
+              fv5077 = Rack::Utils.parse_query(fv5075.query).fetch("rt")
+              fv5076, = JWT.decode(
+                fv5077, JitSecurityJwtRegistry.public_key_for(
+                  fv5070.id,
+                  fv5070.current_kid,
+                ), true,
+                algorithms: ["ES384"], verify_iss: true, iss: "https://#{fv5069}",
+                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+              )
+              fv5075 = URI.parse(fv5076.fetch("url"))
+            end
             fv5073.host!(fv5075.host)
             fv5073.https!
             fv5073.get(fv5075.request_uri)

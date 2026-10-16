@@ -36,13 +36,17 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     )
     issuer = JitSecurityJwtRegistry.surface("BASE_APP")
     2.times do |index|
-      rt = Rack::Utils.parse_query(URI.parse(@base_browser.response.location).query).fetch("rt")
-      payload, = JWT.decode(
-        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      target = URI.parse(payload.fetch("url"))
+      target = URI.parse(@base_browser.response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless target.host == base_host
+        rt = Rack::Utils.parse_query(target.query).fetch("rt")
+        payload, = JWT.decode(
+          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        target = URI.parse(payload.fetch("url"))
+      end
       if index.zero?
         raise RuntimeError, "Base authorization host mismatch" unless target.host == base_host
 
@@ -395,20 +399,24 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           }
         post(flow0_form["action"], params: flow0_fields, headers: flow0_base_headers)
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow0_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow0_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow0_payload, = JWT.decode(
-        flow0_rt, JitSecurityJwtRegistry.public_key_for(flow0_issuer.id, flow0_issuer.current_kid), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow0_base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow0_callback_uri = URI.parse(flow0_payload.fetch("url"))
+      flow0_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow0_callback_uri.host == flow0_base_host
+        flow0_rt = Rack::Utils.parse_query(flow0_callback_uri.query).fetch("rt")
+        flow0_payload, = JWT.decode(
+          flow0_rt, JitSecurityJwtRegistry.public_key_for(flow0_issuer.id, flow0_issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow0_base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow0_callback_uri = URI.parse(flow0_payload.fetch("url"))
+      end
       flow0_protocol_browser = open_session
       flow0_protocol_browser.host!(flow0_base_host)
       flow0_protocol_browser.https!
@@ -838,23 +846,27 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           }
         post(flow1_form["action"], params: flow1_fields, headers: flow1_base_headers)
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow1_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow1_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow1_payload, = JWT.decode(
-        flow1_rt, JitSecurityJwtRegistry.public_key_for(
-          flow1_issuer.id,
-          flow1_issuer.current_kid,
-        ), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow1_base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow1_callback_uri = URI.parse(flow1_payload.fetch("url"))
+      flow1_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow1_callback_uri.host == flow1_base_host
+        flow1_rt = Rack::Utils.parse_query(flow1_callback_uri.query).fetch("rt")
+        flow1_payload, = JWT.decode(
+          flow1_rt, JitSecurityJwtRegistry.public_key_for(
+            flow1_issuer.id,
+            flow1_issuer.current_kid,
+          ), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow1_base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow1_callback_uri = URI.parse(flow1_payload.fetch("url"))
+      end
       flow1_protocol_browser = open_session
       flow1_protocol_browser.host!(flow1_base_host)
       flow1_protocol_browser.https!
@@ -1275,23 +1287,27 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             headers: flow2_base_headers,
           )
         end
-        break unless response
-          .redirect? && URI.parse(
-            response
-                        .location,
-          ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+        break unless response.redirect?
+        # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+        break unless URI.parse(response.location).path == "/oidc/callback" ||
+          URI.parse(response.location).host ==
+            URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
         flow2_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-        flow2_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-        flow2_payload, = JWT.decode(
-          flow2_rt, JitSecurityJwtRegistry.public_key_for(
-            flow2_issuer.id,
-            flow2_issuer.current_kid,
-          ), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow2_base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        flow2_callback_uri = URI.parse(flow2_payload.fetch("url"))
+        flow2_callback_uri = URI.parse(response.location)
+        # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+        unless flow2_callback_uri.host == flow2_base_host
+          flow2_rt = Rack::Utils.parse_query(flow2_callback_uri.query).fetch("rt")
+          flow2_payload, = JWT.decode(
+            flow2_rt, JitSecurityJwtRegistry.public_key_for(
+              flow2_issuer.id,
+              flow2_issuer.current_kid,
+            ), true,
+            algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow2_base_host}",
+            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+          )
+          flow2_callback_uri = URI.parse(flow2_payload.fetch("url"))
+        end
         flow2_protocol_browser = open_session
         flow2_protocol_browser.host!(flow2_base_host)
         flow2_protocol_browser.https!
@@ -1981,23 +1997,27 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: flow3_base_headers,
         )
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow3_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow3_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow3_payload, = JWT.decode(
-        flow3_rt, JitSecurityJwtRegistry.public_key_for(
-          flow3_issuer.id,
-          flow3_issuer.current_kid,
-        ), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow3_base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow3_callback_uri = URI.parse(flow3_payload.fetch("url"))
+      flow3_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow3_callback_uri.host == flow3_base_host
+        flow3_rt = Rack::Utils.parse_query(flow3_callback_uri.query).fetch("rt")
+        flow3_payload, = JWT.decode(
+          flow3_rt, JitSecurityJwtRegistry.public_key_for(
+            flow3_issuer.id,
+            flow3_issuer.current_kid,
+          ), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow3_base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow3_callback_uri = URI.parse(flow3_payload.fetch("url"))
+      end
       flow3_protocol_browser = open_session
       flow3_protocol_browser.host!(flow3_base_host)
       flow3_protocol_browser.https!
@@ -2392,23 +2412,27 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: flow4_base_headers,
         )
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow4_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow4_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow4_payload, = JWT.decode(
-        flow4_rt, JitSecurityJwtRegistry.public_key_for(
-          flow4_issuer.id,
-          flow4_issuer.current_kid,
-        ), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow4_base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow4_callback_uri = URI.parse(flow4_payload.fetch("url"))
+      flow4_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow4_callback_uri.host == flow4_base_host
+        flow4_rt = Rack::Utils.parse_query(flow4_callback_uri.query).fetch("rt")
+        flow4_payload, = JWT.decode(
+          flow4_rt, JitSecurityJwtRegistry.public_key_for(
+            flow4_issuer.id,
+            flow4_issuer.current_kid,
+          ), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow4_base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow4_callback_uri = URI.parse(flow4_payload.fetch("url"))
+      end
       flow4_protocol_browser = open_session
       flow4_protocol_browser.host!(flow4_base_host)
       flow4_protocol_browser.https!
@@ -2634,28 +2658,32 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: flow5_base_headers,
         )
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow5_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow5_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow5_payload, = JWT.decode(
-        flow5_rt,
-        JitSecurityJwtRegistry.public_key_for(
-          flow5_issuer.id,
-          flow5_issuer.current_kid,
-        ),
-        true,
-        algorithms: ["ES384"],
-        verify_iss: true,
-        iss: "https://#{flow5_base_host}",
-        verify_aud: true,
-        aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow5_callback_uri = URI.parse(flow5_payload.fetch("url"))
+      flow5_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow5_callback_uri.host == flow5_base_host
+        flow5_rt = Rack::Utils.parse_query(flow5_callback_uri.query).fetch("rt")
+        flow5_payload, = JWT.decode(
+          flow5_rt,
+          JitSecurityJwtRegistry.public_key_for(
+            flow5_issuer.id,
+            flow5_issuer.current_kid,
+          ),
+          true,
+          algorithms: ["ES384"],
+          verify_iss: true,
+          iss: "https://#{flow5_base_host}",
+          verify_aud: true,
+          aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow5_callback_uri = URI.parse(flow5_payload.fetch("url"))
+      end
       flow5_protocol_browser = open_session
       flow5_protocol_browser.host!(flow5_base_host)
       flow5_protocol_browser.https!
@@ -3067,28 +3095,32 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: flow6_base_headers,
         )
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow6_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow6_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow6_payload, = JWT.decode(
-        flow6_rt,
-        JitSecurityJwtRegistry.public_key_for(
-          flow6_issuer.id,
-          flow6_issuer.current_kid,
-        ),
-        true,
-        algorithms: ["ES384"],
-        verify_iss: true,
-        iss: "https://#{flow6_base_host}",
-        verify_aud: true,
-        aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow6_callback_uri = URI.parse(flow6_payload.fetch("url"))
+      flow6_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow6_callback_uri.host == flow6_base_host
+        flow6_rt = Rack::Utils.parse_query(flow6_callback_uri.query).fetch("rt")
+        flow6_payload, = JWT.decode(
+          flow6_rt,
+          JitSecurityJwtRegistry.public_key_for(
+            flow6_issuer.id,
+            flow6_issuer.current_kid,
+          ),
+          true,
+          algorithms: ["ES384"],
+          verify_iss: true,
+          iss: "https://#{flow6_base_host}",
+          verify_aud: true,
+          aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow6_callback_uri = URI.parse(flow6_payload.fetch("url"))
+      end
       flow6_protocol_browser = open_session
       flow6_protocol_browser.host!(flow6_base_host)
       flow6_protocol_browser.https!
@@ -3533,28 +3565,32 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: flow7_base_headers,
         )
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow7_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow7_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow7_payload, = JWT.decode(
-        flow7_rt,
-        JitSecurityJwtRegistry.public_key_for(
-          flow7_issuer.id,
-          flow7_issuer.current_kid,
-        ),
-        true,
-        algorithms: ["ES384"],
-        verify_iss: true,
-        iss: "https://#{flow7_base_host}",
-        verify_aud: true,
-        aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow7_callback_uri = URI.parse(flow7_payload.fetch("url"))
+      flow7_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow7_callback_uri.host == flow7_base_host
+        flow7_rt = Rack::Utils.parse_query(flow7_callback_uri.query).fetch("rt")
+        flow7_payload, = JWT.decode(
+          flow7_rt,
+          JitSecurityJwtRegistry.public_key_for(
+            flow7_issuer.id,
+            flow7_issuer.current_kid,
+          ),
+          true,
+          algorithms: ["ES384"],
+          verify_iss: true,
+          iss: "https://#{flow7_base_host}",
+          verify_aud: true,
+          aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow7_callback_uri = URI.parse(flow7_payload.fetch("url"))
+      end
       flow7_protocol_browser = open_session
       flow7_protocol_browser.host!(flow7_base_host)
       flow7_protocol_browser.https!
@@ -4043,28 +4079,32 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: flow8_base_headers,
         )
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow8_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow8_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow8_payload, = JWT.decode(
-        flow8_rt,
-        JitSecurityJwtRegistry.public_key_for(
-          flow8_issuer.id,
-          flow8_issuer.current_kid,
-        ),
-        true,
-        algorithms: ["ES384"],
-        verify_iss: true,
-        iss: "https://#{flow8_base_host}",
-        verify_aud: true,
-        aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow8_callback_uri = URI.parse(flow8_payload.fetch("url"))
+      flow8_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow8_callback_uri.host == flow8_base_host
+        flow8_rt = Rack::Utils.parse_query(flow8_callback_uri.query).fetch("rt")
+        flow8_payload, = JWT.decode(
+          flow8_rt,
+          JitSecurityJwtRegistry.public_key_for(
+            flow8_issuer.id,
+            flow8_issuer.current_kid,
+          ),
+          true,
+          algorithms: ["ES384"],
+          verify_iss: true,
+          iss: "https://#{flow8_base_host}",
+          verify_aud: true,
+          aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow8_callback_uri = URI.parse(flow8_payload.fetch("url"))
+      end
       flow8_protocol_browser = open_session
       flow8_protocol_browser.host!(flow8_base_host)
       flow8_protocol_browser.https!
@@ -4485,28 +4525,32 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: flow9_base_headers,
         )
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow9_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow9_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow9_payload, = JWT.decode(
-        flow9_rt,
-        JitSecurityJwtRegistry.public_key_for(
-          flow9_issuer.id,
-          flow9_issuer.current_kid,
-        ),
-        true,
-        algorithms: ["ES384"],
-        verify_iss: true,
-        iss: "https://#{flow9_base_host}",
-        verify_aud: true,
-        aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow9_callback_uri = URI.parse(flow9_payload.fetch("url"))
+      flow9_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow9_callback_uri.host == flow9_base_host
+        flow9_rt = Rack::Utils.parse_query(flow9_callback_uri.query).fetch("rt")
+        flow9_payload, = JWT.decode(
+          flow9_rt,
+          JitSecurityJwtRegistry.public_key_for(
+            flow9_issuer.id,
+            flow9_issuer.current_kid,
+          ),
+          true,
+          algorithms: ["ES384"],
+          verify_iss: true,
+          iss: "https://#{flow9_base_host}",
+          verify_aud: true,
+          aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow9_callback_uri = URI.parse(flow9_payload.fetch("url"))
+      end
       flow9_protocol_browser = open_session
       flow9_protocol_browser.host!(flow9_base_host)
       flow9_protocol_browser.https!
@@ -4928,28 +4972,32 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: flow10_base_headers,
         )
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow10_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow10_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow10_payload, = JWT.decode(
-        flow10_rt,
-        JitSecurityJwtRegistry.public_key_for(
-          flow10_issuer.id,
-          flow10_issuer.current_kid,
-        ),
-        true,
-        algorithms: ["ES384"],
-        verify_iss: true,
-        iss: "https://#{flow10_base_host}",
-        verify_aud: true,
-        aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow10_callback_uri = URI.parse(flow10_payload.fetch("url"))
+      flow10_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow10_callback_uri.host == flow10_base_host
+        flow10_rt = Rack::Utils.parse_query(flow10_callback_uri.query).fetch("rt")
+        flow10_payload, = JWT.decode(
+          flow10_rt,
+          JitSecurityJwtRegistry.public_key_for(
+            flow10_issuer.id,
+            flow10_issuer.current_kid,
+          ),
+          true,
+          algorithms: ["ES384"],
+          verify_iss: true,
+          iss: "https://#{flow10_base_host}",
+          verify_aud: true,
+          aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow10_callback_uri = URI.parse(flow10_payload.fetch("url"))
+      end
       flow10_protocol_browser = open_session
       flow10_protocol_browser.host!(flow10_base_host)
       flow10_protocol_browser.https!
@@ -5378,23 +5426,27 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: flow11_base_headers,
         )
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow11_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow11_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow11_payload, = JWT.decode(
-        flow11_rt, JitSecurityJwtRegistry.public_key_for(
-          flow11_issuer.id,
-          flow11_issuer.current_kid,
-        ), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow11_base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow11_callback_uri = URI.parse(flow11_payload.fetch("url"))
+      flow11_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow11_callback_uri.host == flow11_base_host
+        flow11_rt = Rack::Utils.parse_query(flow11_callback_uri.query).fetch("rt")
+        flow11_payload, = JWT.decode(
+          flow11_rt, JitSecurityJwtRegistry.public_key_for(
+            flow11_issuer.id,
+            flow11_issuer.current_kid,
+          ), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow11_base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow11_callback_uri = URI.parse(flow11_payload.fetch("url"))
+      end
       flow11_protocol_browser = open_session
       flow11_protocol_browser.host!(flow11_base_host)
       flow11_protocol_browser.https!
@@ -5841,23 +5893,27 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       headers: flow12_base_headers,
                     )
                   end
-                  break unless response
-                    .redirect? && URI.parse(
-                      response
-                                            .location,
-                    ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+                  break unless response.redirect?
+                  # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+                  break unless URI.parse(response.location).path == "/oidc/callback" ||
+                    URI.parse(response.location).host ==
+                      URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
                   flow12_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-                  flow12_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-                  flow12_payload, = JWT.decode(
-                    flow12_rt, JitSecurityJwtRegistry.public_key_for(
-                      flow12_issuer.id,
-                      flow12_issuer.current_kid,
-                    ), true,
-                    algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow12_base_host}",
-                    verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-                  )
-                  flow12_callback_uri = URI.parse(flow12_payload.fetch("url"))
+                  flow12_callback_uri = URI.parse(response.location)
+                  # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+                  unless flow12_callback_uri.host == flow12_base_host
+                    flow12_rt = Rack::Utils.parse_query(flow12_callback_uri.query).fetch("rt")
+                    flow12_payload, = JWT.decode(
+                      flow12_rt, JitSecurityJwtRegistry.public_key_for(
+                        flow12_issuer.id,
+                        flow12_issuer.current_kid,
+                      ), true,
+                      algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow12_base_host}",
+                      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+                    )
+                    flow12_callback_uri = URI.parse(flow12_payload.fetch("url"))
+                  end
                   flow12_protocol_browser = open_session
                   flow12_protocol_browser.host!(flow12_base_host)
                   flow12_protocol_browser.https!
@@ -6335,23 +6391,27 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: flow13_base_headers,
         )
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow13_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow13_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow13_payload, = JWT.decode(
-        flow13_rt, JitSecurityJwtRegistry.public_key_for(
-          flow13_issuer.id,
-          flow13_issuer.current_kid,
-        ), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow13_base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow13_callback_uri = URI.parse(flow13_payload.fetch("url"))
+      flow13_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow13_callback_uri.host == flow13_base_host
+        flow13_rt = Rack::Utils.parse_query(flow13_callback_uri.query).fetch("rt")
+        flow13_payload, = JWT.decode(
+          flow13_rt, JitSecurityJwtRegistry.public_key_for(
+            flow13_issuer.id,
+            flow13_issuer.current_kid,
+          ), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow13_base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow13_callback_uri = URI.parse(flow13_payload.fetch("url"))
+      end
       flow13_protocol_browser = open_session
       flow13_protocol_browser.host!(flow13_base_host)
       flow13_protocol_browser.https!
@@ -7183,23 +7243,27 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: flow14_base_headers,
         )
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow14_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow14_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow14_payload, = JWT.decode(
-        flow14_rt, JitSecurityJwtRegistry.public_key_for(
-          flow14_issuer.id,
-          flow14_issuer.current_kid,
-        ), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow14_base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow14_callback_uri = URI.parse(flow14_payload.fetch("url"))
+      flow14_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow14_callback_uri.host == flow14_base_host
+        flow14_rt = Rack::Utils.parse_query(flow14_callback_uri.query).fetch("rt")
+        flow14_payload, = JWT.decode(
+          flow14_rt, JitSecurityJwtRegistry.public_key_for(
+            flow14_issuer.id,
+            flow14_issuer.current_kid,
+          ), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow14_base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow14_callback_uri = URI.parse(flow14_payload.fetch("url"))
+      end
       flow14_protocol_browser = open_session
       flow14_protocol_browser.host!(flow14_base_host)
       flow14_protocol_browser.https!
@@ -7637,23 +7701,27 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: flow15_base_headers,
         )
       end
-      break unless response
-        .redirect? && URI.parse(
-          response
-                    .location,
-        ).host == URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      break unless response.redirect?
+      # The Base self-RP callback is same-origin and arrives by path; a cross-origin one comes through Jump.
+      break unless URI.parse(response.location).path == "/oidc/callback" ||
+        URI.parse(response.location).host ==
+          URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
 
       flow15_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      flow15_rt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt")
-      flow15_payload, = JWT.decode(
-        flow15_rt, JitSecurityJwtRegistry.public_key_for(
-          flow15_issuer.id,
-          flow15_issuer.current_kid,
-        ), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow15_base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      flow15_callback_uri = URI.parse(flow15_payload.fetch("url"))
+      flow15_callback_uri = URI.parse(response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless flow15_callback_uri.host == flow15_base_host
+        flow15_rt = Rack::Utils.parse_query(flow15_callback_uri.query).fetch("rt")
+        flow15_payload, = JWT.decode(
+          flow15_rt, JitSecurityJwtRegistry.public_key_for(
+            flow15_issuer.id,
+            flow15_issuer.current_kid,
+          ), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow15_base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        flow15_callback_uri = URI.parse(flow15_payload.fetch("url"))
+      end
       flow15_protocol_browser = open_session
       flow15_protocol_browser.host!(flow15_base_host)
       flow15_protocol_browser.https!
