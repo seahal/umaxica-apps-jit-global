@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: members
@@ -29,7 +30,6 @@
 #  fk_rails_...  (status_id => member_statuses.id)
 #  fk_rails_...  (user_id => clients.id) ON DELETE => nullify
 #
-
 
 require "test_helper"
 

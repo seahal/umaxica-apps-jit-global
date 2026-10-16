@@ -316,11 +316,13 @@ class SignFlowTest < ActiveSupport::TestCase
         end
       end
 
-      assert_raises(ActiveRecord::InvalidForeignKey, cycle_class.name) do
-        state_class.transaction(requires_new: true) do
-          state_class.where(id: state_id).delete_all
+      error =
+        assert_raises(ActiveRecord::StatementInvalid, cycle_class.name) do
+          state_class.transaction(requires_new: true) do
+            state_class.where(id: state_id).delete_all
+          end
         end
-      end
+      assert_kind_of PG::RestrictViolation, error.cause, cycle_class.name
     end
   end
 

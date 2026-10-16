@@ -20,7 +20,10 @@ class AvatarLifecycleEventTest < ActiveSupport::TestCase
   end
 
   test "requires state keys" do
-    event = AvatarLifecycleEvent.new(avatar: AvatarTestFactory.create_standard!(active_handle: handles(:one)), changed_by_type: "moderator", metadata: {})
+    event = AvatarLifecycleEvent.new(
+      avatar: AvatarTestFactory.create_standard!(active_handle: handles(:one)),
+      changed_by_type: "moderator", metadata: {},
+    )
 
     assert_not event.valid?
     assert_includes event.errors.attribute_names, :from_state_key

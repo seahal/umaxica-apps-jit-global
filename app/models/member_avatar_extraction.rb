@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: member_avatar_extractions
@@ -20,7 +21,6 @@
 #
 #  fk_rails_...  (avatar_id => avatars.id)
 #
-
 
 class MemberAvatarExtraction < AvatarRecord
   belongs_to :member, inverse_of: :member_avatar_extractions

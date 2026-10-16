@@ -10,7 +10,11 @@ Applies to protected operations on each independently scoped surface.
 - AUTHZ-4: A step-up result authorizes only an operation whose explicit purpose, actor, resource,
   tenant, session, transaction, freshness and method requirements it satisfies; an AAL label alone
   does not authorize an operation.
+- AUTHZ-5: A Tech `tech.access` grant is issued only by an Operator holding `iam.capability.read`,
+  `iam.capability.grant` and their own currently valid `tech.access`, with Step-Up, a reason code
+  and an audit record. Self-grant is refused, and validity is finite and at most 366 days.
 
 Sources: [Action Policy conventions](../security/action-policy-conventions.md),
+[Tech and Palm participation](../../adr/tech-and-palm-browser-rp-participation.md),
 [authentication contract](../../.agents/harnesses/rules/generic/authentication-boundaries.mdc).
 These are required behaviors; their presence is not evidence of execution.

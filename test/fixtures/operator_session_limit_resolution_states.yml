@@ -1,0 +1,25 @@
+# Rows inserted by db/org_tickets_migrate/20261006140002_create_operator_session_limit_resolution_transactions.rb.
+# Structure loads do not replay that data migration.
+_fixture:
+  model_class: OperatorSessionLimitResolutionState
+
+pending:
+  id: 10
+  created_at: 2026-01-01 00:00:00
+  updated_at: 2026-01-01 00:00:00
+session_selected:
+  id: 20
+  created_at: 2026-01-01 00:00:00
+  updated_at: 2026-01-01 00:00:00
+resolved:
+  id: 100
+  created_at: 2026-01-01 00:00:00
+  updated_at: 2026-01-01 00:00:00
+expired:
+  id: 910
+  created_at: 2026-01-01 00:00:00
+  updated_at: 2026-01-01 00:00:00
+cancelled:
+  id: 920
+  created_at: 2026-01-01 00:00:00
+  updated_at: 2026-01-01 00:00:00

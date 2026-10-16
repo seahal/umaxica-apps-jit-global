@@ -815,6 +815,14 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
         end
       end
     end
+    # The transport failure makes Active Record reset the Avatar connection, which discards the
+    # fixture transaction on that database. Reopen it so the retry below is rolled back at teardown
+    # instead of committing an Avatar graph that breaks later fixture loads.
+    avatar_connection = Avatar.lease_connection
+
+    assert_not avatar_connection.transaction_open?
+    avatar_connection.begin_transaction(joinable: false, _lazy: false)
+
     assert_equal [nil, nil, nil, false],
                  [transaction.reload.consumed_at, candidate.reload.consumed_at,
                   signup.reload.principal_id, signup.completed?,]

@@ -6,6 +6,9 @@
 - [Authentication](authentication.md)
 - [Session management](session-management.md)
 - [Authorization](authorization.md)
+- [Sign-out](sign-out.md)
+- [Browser RP surfaces](browser-rp.md)
+- [Jump handoff](jump-handoff.md)
 
 Use one document per functional area, stable local IDs and explicit surface applicability. Link to
 the accepted contract instead of copying implementation details. Use ordinary behavior statements,

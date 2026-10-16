@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: org_preference_cookies
@@ -24,7 +25,6 @@
 #
 #  fk_rails_...  (preference_id => org_preferences.id)
 #
-
 
 class OrgPreferenceCookie < OrgSettingRecord
   belongs_to :preference, class_name: "OrgPreference", inverse_of: :org_preference_cookie

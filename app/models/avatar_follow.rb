@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: avatar_follows
@@ -21,7 +22,6 @@
 #  fk_rails_...  (followed_avatar_id => avatars.id)
 #  fk_rails_...  (follower_avatar_id => avatars.id)
 #
-
 
 class AvatarFollow < AvatarRecord
   belongs_to :follower_avatar,

@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: departments
@@ -25,7 +26,6 @@
 #  fk_rails_...                            (parent_id => departments.id)
 #  fk_rails_...                            (workspace_id => organizations.id) ON DELETE => nullify
 #
-
 
 require "test_helper"
 

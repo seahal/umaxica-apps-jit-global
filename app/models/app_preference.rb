@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: app_preferences
@@ -44,7 +45,6 @@
 #  fk_app_preferences_on_status_id          (status_id => app_preference_statuses.id)
 #  fk_rails_...                             (replaced_by_id => app_preferences.id) ON DELETE => nullify
 #
-
 
 class AppPreference < AppSettingRecord
   include Retainable

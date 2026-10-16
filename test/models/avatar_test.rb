@@ -246,12 +246,13 @@ class AvatarTest < ActiveSupport::TestCase
     )
 
     error =
-      assert_raises(ActiveRecord::InvalidForeignKey) do
+      assert_raises(ActiveRecord::StatementInvalid) do
         Avatar.transaction(requires_new: true) do
           Avatar.where(id: avatar.id).delete_all
         end
       end
 
+    assert_kind_of PG::RestrictViolation, error.cause
     assert_match(/ownership|avatar_enterprise_ownership_periods/i, error.message)
     assert Avatar.exists?(avatar.id)
     assert AvatarEnterpriseOwnershipPeriod.exists?(avatar_id: avatar.id)

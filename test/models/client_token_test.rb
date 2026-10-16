@@ -123,11 +123,13 @@ class ClientTokenTest < ActiveSupport::TestCase
     assert ClientToken.exists?(@token.id)
     assert ClientSignUpFlow.exists?(flow.id)
 
-    assert_raises(ActiveRecord::InvalidForeignKey) do
-      ClientToken.transaction(requires_new: true) do
-        ClientToken.where(id: @token.id).delete_all
+    error =
+      assert_raises(ActiveRecord::StatementInvalid) do
+        ClientToken.transaction(requires_new: true) do
+          ClientToken.where(id: @token.id).delete_all
+        end
       end
-    end
+    assert_kind_of PG::RestrictViolation, error.cause
 
     assert ClientToken.exists?(@token.id)
     assert ClientSignUpFlow.exists?(flow.id)
@@ -211,12 +213,12 @@ class ClientTokenTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::DeleteRestrictionError) { session.destroy! }
 
     error =
-      assert_raises(ActiveRecord::InvalidForeignKey) do
+      assert_raises(ActiveRecord::StatementInvalid) do
         ClientDeviceSession.transaction(requires_new: true) do
           ClientDeviceSession.where(id: session.id).delete_all
         end
       end
-    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "23001", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
     assert_includes %w(fk_client_tokens_on_device_session_id fk_client_tokens_on_user_id_and_device_session_id),
                     error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
 

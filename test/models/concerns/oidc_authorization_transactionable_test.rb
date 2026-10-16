@@ -59,7 +59,9 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     assert_equal @secret_flow.id, transactions.first.reload.secret_sign_in_flow.id
     assert_raises(ActiveRecord::RecordNotUnique) { transactions.last.update!(secret_sign_in_flow: @secret_flow) }
     assert_raises(ActiveRecord::InvalidForeignKey) { transactions.last.update!(secret_sign_in_flow_id: -1) }
-    assert_raises(ActiveRecord::InvalidForeignKey) { @secret_flow.destroy! }
+    error = assert_raises(ActiveRecord::StatementInvalid) { @secret_flow.destroy! }
+
+    assert_kind_of PG::RestrictViolation, error.cause
     assert ClientSignInFlow.exists?(@secret_flow.id)
     due_at = ClientSignInFlow.database_now
     @secret_flow.update!(discard_at: due_at, purge_eligible_at: due_at)

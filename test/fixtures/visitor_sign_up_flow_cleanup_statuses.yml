@@ -1,0 +1,15 @@
+# Rows inserted by db/com_tickets_migrate/20261006160001_seed_com_sign_flow_reference_data.rb.
+# Structure loads do not replay that data migration.
+_fixture:
+  model_class: VisitorSignUpFlowCleanupStatus
+
+nothing:
+  id: 0
+idle:
+  id: 10
+pending:
+  id: 20
+completed:
+  id: 30
+failed:
+  id: 40

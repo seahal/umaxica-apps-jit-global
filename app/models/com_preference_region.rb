@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: com_preference_regions
@@ -21,7 +22,6 @@
 #  fk_com_preference_regions_on_option_id  (option_id => com_preference_region_options.id)
 #  fk_rails_...                            (preference_id => com_preferences.id)
 #
-
 
 class ComPreferenceRegion < ComSettingRecord
   belongs_to :preference, class_name: "ComPreference", inverse_of: :com_preference_region

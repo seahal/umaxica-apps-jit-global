@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: client_member_revocations
@@ -21,7 +22,6 @@
 #  fk_rails_...  (member_id => members.id)
 #  fk_rails_...  (user_id => clients.id)
 #
-
 
 class ClientMemberRevocation < AppPrincipalRecord
   belongs_to :user, class_name: "Client", inverse_of: :client_member_revocations

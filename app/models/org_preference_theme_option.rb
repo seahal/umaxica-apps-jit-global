@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: org_preference_theme_options
@@ -7,7 +8,6 @@
 #
 #  id :bigint           not null, primary key
 #
-
 
 class OrgPreferenceThemeOption < OrgSettingRecord
   # Fixed IDs - do not modify these values

@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: app_preference_cookies
@@ -24,7 +25,6 @@
 #
 #  fk_rails_...  (preference_id => app_preferences.id)
 #
-
 
 class AppPreferenceCookie < AppSettingRecord
   belongs_to :preference,

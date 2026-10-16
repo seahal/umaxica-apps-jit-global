@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: com_preference_cookies
@@ -24,7 +25,6 @@
 #
 #  fk_rails_...  (preference_id => com_preferences.id)
 #
-
 
 class ComPreferenceCookie < ComSettingRecord
   belongs_to :preference, class_name: "ComPreference", inverse_of: :com_preference_cookie

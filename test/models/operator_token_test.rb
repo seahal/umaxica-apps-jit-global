@@ -173,12 +173,12 @@ class OperatorTokenTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::DeleteRestrictionError) { session.destroy! }
 
     error =
-      assert_raises(ActiveRecord::InvalidForeignKey) do
+      assert_raises(ActiveRecord::StatementInvalid) do
         OperatorDeviceSession.transaction(requires_new: true) do
           OperatorDeviceSession.where(id: session.id).delete_all
         end
       end
-    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "23001", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
     assert_includes %w(fk_operator_tokens_on_device_session_id fk_operator_tokens_on_staff_id_and_device_session_id),
                     error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
 

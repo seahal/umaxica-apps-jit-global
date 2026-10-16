@@ -102,6 +102,7 @@ Current content-model references:
 - `docs/security/redirect_targets.md`
 - `docs/operations/container-engine-podman-notes.md`
 - `docs/operations/development-host-port-exposure.md`
+- `docs/operations/postgresql-version-tracking.md`
 - `docs/operations/cloudflare-private-origin.md`
 - `docs/operations/core-nextjs-zero-cookie-edge-contract.md`
 - `docs/operations/jump-rt-key-rotation.md`

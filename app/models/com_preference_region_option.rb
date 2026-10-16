@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: com_preference_region_options
@@ -7,7 +8,6 @@
 #
 #  id :bigint           not null, primary key
 #
-
 
 class ComPreferenceRegionOption < ComSettingRecord
   # Fixed IDs - do not modify these values

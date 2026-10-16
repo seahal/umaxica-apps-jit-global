@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: org_preference_themes
@@ -21,7 +22,6 @@
 #  fk_org_preference_themes_on_option_id  (option_id => org_preference_theme_options.id)
 #  fk_rails_...                           (preference_id => org_preferences.id)
 #
-
 
 require "test_helper"
 

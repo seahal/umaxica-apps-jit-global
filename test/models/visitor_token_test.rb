@@ -120,11 +120,13 @@ class VisitorTokenTest < ActiveSupport::TestCase
     assert VisitorToken.exists?(@token.id)
     assert VisitorSignUpFlow.exists?(flow.id)
 
-    assert_raises(ActiveRecord::InvalidForeignKey) do
-      VisitorToken.transaction(requires_new: true) do
-        VisitorToken.where(id: @token.id).delete_all
+    error =
+      assert_raises(ActiveRecord::StatementInvalid) do
+        VisitorToken.transaction(requires_new: true) do
+          VisitorToken.where(id: @token.id).delete_all
+        end
       end
-    end
+    assert_kind_of PG::RestrictViolation, error.cause
 
     assert VisitorToken.exists?(@token.id)
     assert VisitorSignUpFlow.exists?(flow.id)
@@ -208,12 +210,12 @@ class VisitorTokenTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::DeleteRestrictionError) { session.destroy! }
 
     error =
-      assert_raises(ActiveRecord::InvalidForeignKey) do
+      assert_raises(ActiveRecord::StatementInvalid) do
         VisitorDeviceSession.transaction(requires_new: true) do
           VisitorDeviceSession.where(id: session.id).delete_all
         end
       end
-    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "23001", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
     assert_includes %w(fk_visitor_tokens_on_device_session_id fk_visitor_tokens_on_visitor_id_and_device_session_id),
                     error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
 

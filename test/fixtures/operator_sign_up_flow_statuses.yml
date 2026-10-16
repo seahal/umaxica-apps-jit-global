@@ -1,0 +1,23 @@
+# Rows inserted by db/org_tickets_migrate/20261006160002_seed_org_sign_flow_reference_data.rb.
+# Structure loads do not replay that data migration.
+_fixture:
+  model_class: OperatorSignUpFlowStatus
+
+started:
+  id: 10
+contact_pending:
+  id: 20
+credential_pending:
+  id: 30
+checkpoint_pending:
+  id: 40
+completed:
+  id: 100
+failed:
+  id: 900
+expired:
+  id: 910
+cancelled:
+  id: 920
+halted:
+  id: 930

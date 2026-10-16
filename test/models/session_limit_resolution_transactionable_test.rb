@@ -7,6 +7,19 @@ require "concurrent/executor/simple_executor_service"
 class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
 
+  # Session revocation commits sign-out flows, and no fixture clears those tables. A leftover
+  # flow references a token that the next fixture load deletes, and PostgreSQL 18 re-validates
+  # foreign keys when fixture loading re-enforces them, so every later fixture load fails.
+  SIGN_OUT_FLOW_CLASSES = [ClientSignOutFlow, VisitorSignOutFlow, OperatorSignOutFlow].freeze
+
+  setup do
+    @sign_out_flow_watermarks = SIGN_OUT_FLOW_CLASSES.index_with { |klass| klass.maximum(:id) || 0 }
+  end
+
+  teardown do
+    @sign_out_flow_watermarks&.each { |klass, last_id| klass.where(id: (last_id + 1)..).delete_all }
+  end
+
   test "client resolution binds the parent and revokes only an owned selected session" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     foreign_actor = Client.create!(status_id: ClientStatus::ACTIVE)

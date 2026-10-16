@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: com_preference_chronicles
@@ -38,7 +39,6 @@
 #  fk_rails_...  (event_id => com_preference_chronicle_events.id)
 #  fk_rails_...  (level_id => com_preference_chronicle_levels.id)
 #
-
 
 require "test_helper"
 

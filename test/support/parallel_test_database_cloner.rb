@@ -452,8 +452,12 @@ module ParallelTestDatabaseCloner
   # Every column of every ordinary, partitioned, and view relation in `public`, ordered so the
   # digest does not depend on catalog scan order. Aggregated in PostgreSQL rather than in Ruby: one
   # round trip per base database, and nothing but the 32-byte result crosses the wire.
+  # The base database OID is part of the digest: a base rebuilt under the same name with the same
+  # columns otherwise left workers cloned from the previous base, with its rows, function owners
+  # and role names.
   BASE_SCHEMA_DIGEST_SQL = <<~SQL.squish
-    select coalesce(md5(string_agg(entry, chr(10) order by entry)), '') as digest
+    select (select oid from pg_database where datname = current_database()) || ':' ||
+           coalesce(md5(string_agg(entry, chr(10) order by entry)), '') as digest
     from (
       select c.relname || ':' || a.attname || ':' ||
              format_type(a.atttypid, a.atttypmod) || ':' || a.attnotnull as entry

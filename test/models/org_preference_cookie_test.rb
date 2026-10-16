@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: org_preference_cookies
@@ -24,7 +25,6 @@
 #
 #  fk_rails_...  (preference_id => org_preferences.id)
 #
-
 
 require "test_helper"
 

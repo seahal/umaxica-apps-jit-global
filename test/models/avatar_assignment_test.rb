@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: avatar_assignments
@@ -23,7 +24,6 @@
 #
 #  fk_rails_...  (avatar_id => avatars.id) ON DELETE => cascade
 #
-
 
 require "test_helper"
 require_relative "../support/avatar_test_factory"

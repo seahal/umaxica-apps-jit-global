@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: org_preferences
@@ -44,7 +45,6 @@
 #  fk_org_preferences_on_status_id          (status_id => org_preference_statuses.id)
 #  fk_rails_...                             (replaced_by_id => org_preferences.id) ON DELETE => nullify
 #
-
 
 require "test_helper"
 

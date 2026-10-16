@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: avatar_blocks
@@ -23,7 +24,6 @@
 #  fk_rails_...  (blocked_avatar_id => avatars.id) ON DELETE => cascade
 #  fk_rails_...  (blocker_avatar_id => avatars.id) ON DELETE => cascade
 #
-
 
 require "test_helper"
 require_relative "../support/avatar_test_factory"

@@ -335,6 +335,9 @@ Current infrastructure / environment decisions:
   database backend is deferred** — FakeCloud emulates no RDS or Aurora, so it is chosen when staging
   implementation begins. PostgreSQL major version alignment is deferred; `pg_cron` is kept as an
   unused local PoC and is deliberately not wired into `config/database.yml`.
+- `adr/aurora-postgresql-minor-version-tracking.md` — development PostgreSQL follows each new
+  Aurora PostgreSQL minor release on release day, using the AWS-confirmed community version; misses
+  are recorded; production and major upgrades are decided separately.
 - `adr/fakecloud-podman-staging-environment.md` — staging is a Podman-hosted FakeCloud environment
   provisioned with Terraform (not OpenTofu, not an AWS account); environment-agnostic
   `terraform/modules/` with all emulator specifics in `terraform/environments/<env>/`; staging owns

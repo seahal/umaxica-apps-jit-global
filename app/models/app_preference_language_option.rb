@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: app_preference_language_options
@@ -7,7 +8,6 @@
 #
 #  id :bigint           not null, primary key
 #
-
 
 class AppPreferenceLanguageOption < AppSettingRecord
   # Fixed IDs - do not modify these values
